@@ -1,0 +1,299 @@
+<!--
+  This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+  If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  Copyright (C) 2025 MundoGIS.
+-->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Visor de Tiles</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- Usar CDN jsdelivr con SRI correcto (coincide con contenido servido) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous"/>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <!-- Proj4Leaflet (para CRS distintos a EPSG:3857) -->
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4leaflet@1.0.2/src/proj4leaflet.min.js" crossorigin="anonymous"></script>
+    <style>
+      html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Arial}
+      #map{height:100%;width:100%}
+      .info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.55);color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;backdrop-filter:blur(4px)}
+      .info code{font-size:11px}
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="info" id="info">Cargando…</div>
+    <script>
+      const params = new URLSearchParams(location.search);
+  const layer = params.get('layer');
+  const theme = params.get('theme');
+  const project = params.get('project');
+      const infoEl = document.getElementById('info');
+  if(!layer && !theme){ infoEl.textContent = 'Falta parámetro layer o theme'; }
+  if(!project){ infoEl.textContent = 'Falta parámetro project'; }
+  const tileTemplate = theme
+    ? `/wmts/${encodeURIComponent(project)}/themes/${encodeURIComponent(theme)}/{z}/{x}/{y}.png`
+    : `/wmts/${encodeURIComponent(project)}/${encodeURIComponent(layer)}/{z}/{x}/{y}.png`;
+
+      // Extent y CRS (opcional): intentar leer index.json para centrar
+      async function getLayerMeta(){
+        try{
+          if(!project) return null;
+          const r = await fetch('/cache/' + encodeURIComponent(project) + '/index.json');
+          if(!r.ok) return null;
+          const j = await r.json();
+          const entry = (j.layers||[]).find(l=>{
+            if (!l || !l.name) return false;
+            const kind = l.kind || (l.theme ? 'theme' : 'layer');
+            if (theme) return kind === 'theme' && l.name === theme;
+            return kind !== 'theme' && l.name === layer;
+          });
+          return entry||null;
+        }catch{return null}
+      }
+
+      (async () => {
+        const meta = await getLayerMeta();
+        const crsInfo = meta ?
+          `<div>Zooms: ${meta.zoom_min} - ${meta.zoom_max}</div>`+
+          `<div>Tiles: ${meta.tile_count||'?'} | Capas CRS: ${meta.crs || '¿?'}${meta.tile_crs ? ` | Tiles CRS: ${meta.tile_crs}` : ''}</div>`
+          : '<div>Meta no disponible</div>';
+
+        infoEl.innerHTML = `<div style="font-weight:600">Proyecto: ${project||'(?)'}</div>`+
+          (theme ? `<div>Theme: ${theme}</div>` : `<div>Layer: ${layer||'(?)'}</div>`)+
+          `<div>Template: <code>${tileTemplate.replace('{z}','{z}')}</code></div>`+
+          crsInfo;
+
+        if (typeof L === 'undefined') {
+          infoEl.innerHTML += '<div style="color:#f66">Leaflet no cargó (revisa bloqueo de SRI o CSP)</div>';
+          return;
+        }
+
+        const mapOptions = {
+          preferCanvas: true,
+          zoomControl: true
+        };
+        if (meta) {
+          if (Number.isFinite(meta.zoom_min)) mapOptions.minZoom = meta.zoom_min;
+          if (Number.isFinite(meta.zoom_max)) {
+            mapOptions.maxZoom = Math.min(meta.zoom_max + 6, 23);
+          }
+        }
+
+        const projDefinitions = {
+          'EPSG:3006': '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0 +units=m +no_defs'
+        };
+
+  let crs = null;
+  let extentLatLngBounds = null;
+        const hasCustomCrs = meta && meta.tile_crs && meta.tile_crs !== 'EPSG:3857';
+        if (hasCustomCrs && typeof proj4 !== 'undefined' && typeof L.Proj !== 'undefined') {
+          let def = projDefinitions[meta.tile_crs] || null;
+          if (!def && typeof proj4.defs === 'function') {
+            const existing = proj4.defs(meta.tile_crs);
+            if (existing) def = existing;
+          }
+          if (def && meta.tile_matrix_set && meta.tile_matrix_set.top_left_corner && Array.isArray(meta.tile_matrix_set.matrices)) {
+            const origin = meta.tile_matrix_set.top_left_corner;
+            const matrices = Array.isArray(meta.tile_matrix_set.matrices) ? meta.tile_matrix_set.matrices : [];
+            if (!Array.isArray(origin) || origin.length !== 2 || matrices.length === 0) {
+              infoEl.innerHTML += '<div style="color:#ff9">Tile matrix metadata incompleta; usando EPSG:3857 por defecto.</div>';
+            } else {
+              const matrixZooms = matrices
+                .map(m => (m && typeof m.z === 'number') ? m.z : null)
+                .filter(z => Number.isFinite(z));
+              const highestZoom = Number.isFinite(meta.zoom_max)
+                ? meta.zoom_max
+                : (matrixZooms.length ? Math.max(...matrixZooms) : (Number.isFinite(meta.zoom_min) ? meta.zoom_min : 0));
+              const lowestZoom = Number.isFinite(meta.zoom_min)
+                ? meta.zoom_min
+                : (matrixZooms.length ? Math.min(...matrixZooms) : 0);
+              const resolutions = new Array(Math.max(highestZoom, lowestZoom) + 1).fill(null);
+              const matricesByZoom = new Map();
+              matrices.forEach(m => {
+                if (typeof m?.z !== 'number') return;
+                matricesByZoom.set(m.z, m);
+                let r = null;
+                if (Number.isFinite(m.resolution)) {
+                  r = m.resolution;
+                } else if (Number.isFinite(m.scale_denominator)) {
+                  r = m.scale_denominator * 0.00028;
+                }
+                if (Number.isFinite(r)) {
+                  resolutions[m.z] = r;
+                }
+              });
+              for (let z = resolutions.length - 2; z >= 0; z--) {
+                if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) {
+                  resolutions[z] = resolutions[z + 1] * 2;
+                }
+              }
+              for (let z = 1; z < resolutions.length; z++) {
+                if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) {
+                  resolutions[z] = resolutions[z - 1] / 2;
+                }
+              }
+              const filteredResolutions = resolutions.map(r => Number.isFinite(r) ? r : null);
+              const tileWidth = meta.tile_matrix_set.tile_width || 256;
+              const tileHeight = meta.tile_matrix_set.tile_height || 256;
+              const originX = origin[0];
+              const originY = origin[1];
+              const referenceMatrix = matricesByZoom.get(highestZoom) || matrices[matrices.length - 1];
+              const spanX = (referenceMatrix?.matrix_width || 1) * tileWidth * (referenceMatrix?.resolution || filteredResolutions[highestZoom] || 1);
+              const spanY = (referenceMatrix?.matrix_height || 1) * tileHeight * (referenceMatrix?.resolution || filteredResolutions[highestZoom] || 1);
+              const minx = originX;
+              const maxx = originX + spanX;
+              const maxy = originY;
+              const miny = originY - spanY;
+              const projectedBounds = L.bounds(L.point(minx, miny), L.point(maxx, maxy));
+              const crsOptions = {
+                resolutions: filteredResolutions,
+                origin: [originX, originY],
+                bounds: projectedBounds
+              };
+              crs = new L.Proj.CRS(meta.tile_crs, def, crsOptions);
+              mapOptions.crs = crs;
+              try {
+                const sw = crs.unproject(L.point(minx, miny));
+                const ne = crs.unproject(L.point(maxx, maxy));
+                extentLatLngBounds = L.latLngBounds(sw, ne);
+              } catch (err) {
+                extentLatLngBounds = null;
+              }
+              infoEl.innerHTML += `<div style="margin-top:6px;color:#dff">CRS personalizado (${meta.tile_crs}) – rejilla WMTS local alineada.</div>`;
+            }
+          } else if (def && meta.extent && meta.extent.length === 4) {
+            const matrices = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) ? meta.tile_matrix_set.matrices : [];
+            const matrixZooms = matrices
+              .map(m => (m && typeof m.z === 'number') ? m.z : null)
+              .filter(z => Number.isFinite(z));
+            const highestZoom = Number.isFinite(meta.zoom_max)
+              ? meta.zoom_max
+              : (matrixZooms.length ? Math.max(...matrixZooms) : (Number.isFinite(meta.zoom_min) ? meta.zoom_min : 0));
+            const resolutions = new Array(Math.max(0, highestZoom) + 1).fill(null);
+            matrices.forEach(m => {
+              if (typeof m?.z !== 'number') return;
+              let r = null;
+              if (Number.isFinite(m.resolution)) {
+                r = m.resolution;
+              } else if (Number.isFinite(m.scale_denominator)) {
+                r = m.scale_denominator * 0.00028;
+              }
+              if (Number.isFinite(r)) {
+                resolutions[m.z] = r;
+              }
+            });
+            // Rellenar resoluciones faltantes para mantener continuidad
+            for (let z = resolutions.length - 2; z >= 0; z--) {
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) {
+                resolutions[z] = resolutions[z + 1] * 2;
+              }
+            }
+            for (let z = 1; z < resolutions.length; z++) {
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) {
+                resolutions[z] = resolutions[z - 1] / 2;
+              }
+            }
+
+            const origin = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.top_left_corner)) ? meta.tile_matrix_set.top_left_corner : null;
+            const [minx, miny, maxx, maxy] = meta.extent;
+            const crsOptions = {
+              resolutions: resolutions,
+              origin: origin && origin.length === 2 ? origin : [minx, maxy]
+            };
+            const projectedBounds = L.bounds(L.point(minx, miny), L.point(maxx, maxy));
+            crsOptions.bounds = projectedBounds;
+            crs = new L.Proj.CRS(meta.tile_crs, def, crsOptions);
+            mapOptions.crs = crs;
+
+            try {
+              const sw = crs.unproject(L.point(projectedBounds.min.x, projectedBounds.min.y));
+              const ne = crs.unproject(L.point(projectedBounds.max.x, projectedBounds.max.y));
+              extentLatLngBounds = L.latLngBounds(sw, ne);
+            } catch (err) {
+              extentLatLngBounds = null;
+            }
+            infoEl.innerHTML += `<div style="margin-top:6px;color:#dff">CRS personalizado (${meta.tile_crs}) – rejilla WMTS local alineada.</div>`;
+          } else {
+            infoEl.innerHTML += '<div style="color:#ff9">No se definió Proj4 para este CRS; usando EPSG:3857 por defecto.</div>';
+          }
+        }
+
+        const map = L.map('map', mapOptions);
+
+        if (extentLatLngBounds) {
+          map.fitBounds(extentLatLngBounds);
+          try {
+            map.setMaxBounds(extentLatLngBounds.pad(0.05));
+          } catch (err) {
+            map.setMaxBounds(extentLatLngBounds);
+          }
+        } else if (meta && Array.isArray(meta.extent_wgs84)) {
+          const [eminx, eminy, emaxx, emaxy] = meta.extent_wgs84;
+          map.fitBounds([[eminy, eminx], [emaxy, emaxx]]);
+        } else if (meta && meta.extent && meta.extent.length === 4) {
+          const [minx, miny, maxx, maxy] = meta.extent;
+          map.setView([(miny + maxy) / 2, (minx + maxx) / 2], meta.zoom_min || 0);
+        } else {
+          map.setView([0, 0], meta ? meta.zoom_min || 0 : 0);
+        }
+
+        const layerOptions = {
+          maxZoom: meta ? meta.zoom_max : 6,
+          minZoom: meta ? meta.zoom_min : 0,
+          maxNativeZoom: meta ? meta.zoom_max : undefined,
+          minNativeZoom: meta ? meta.zoom_min : undefined,
+          tileSize: 256,
+          errorTileUrl: '',
+          attribution: 'Local cache',
+          noWrap: true,
+          keepBuffer: 0
+        };
+        if (extentLatLngBounds) {
+          layerOptions.bounds = extentLatLngBounds;
+        }
+        if (!crs) {
+          layerOptions.detectRetina = false;
+        }
+        const matricesByZoom = new Map();
+        if (meta && meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) {
+          meta.tile_matrix_set.matrices.forEach(m => {
+            if (m && typeof m.z === 'number') matricesByZoom.set(m.z, m);
+          });
+        }
+        const layerOptionsFinal = {
+          ...layerOptions,
+          noWrap: true,
+          bounds: extentLatLngBounds || layerOptions.bounds
+        };
+        const CustomTileLayer = L.TileLayer.extend({
+          getTileUrl(coords) {
+            const matrix = matricesByZoom.get(coords.z);
+            if (!matrix) {
+              return L.TileLayer.prototype.getTileUrl.call(this, coords);
+            }
+            const maxX = typeof matrix.matrix_width === 'number' ? matrix.matrix_width - 1 : Number.POSITIVE_INFINITY;
+            const maxY = typeof matrix.matrix_height === 'number' ? matrix.matrix_height - 1 : Number.POSITIVE_INFINITY;
+            if (coords.x < 0 || coords.y < 0 || coords.x > maxX || coords.y > maxY) {
+              return L.Util.emptyImageUrl;
+            }
+            return tileTemplate
+              .replace('{z}', coords.z)
+              .replace('{x}', coords.x)
+              .replace('{y}', coords.y);
+          }
+        });
+  const tiles = new CustomTileLayer(tileTemplate, layerOptionsFinal);
+  tiles.addTo(map);
+
+  L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
+
+        if (meta && meta.scheme && meta.scheme !== 'xyz') {
+          infoEl.innerHTML += '<div style="margin-top:6px;color:#cad">Esquema "'+meta.scheme+'" (WMTS local) – la vista usa la matriz declarada para alinear las teselas.</div>';
+        }
+      })();
+    </script>
+  </body>
+</html>

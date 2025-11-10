@@ -1,0 +1,32 @@
+{
+  "name": "qtiler",
+  "version": "1.0.0",
+  "description": "Qtiler by MundoGIS – tile cache orchestration for QGIS projects",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --max-old-space-size=8192 server.js",
+    "dev": "nodemon --watch . --exec node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "MundoGIS",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/qtiler.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/qtiler/issues"
+  },
+  "homepage": "https://github.com/your-org/qtiler#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "multer": "^1.4.5-lts.1",
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

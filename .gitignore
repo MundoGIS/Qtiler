@@ -1,0 +1,28 @@
+# Node dependencies
+node_modules/
+
+# Build artifacts
+logs/
+cache/
+public/assets/
+qgisprojects/
+
+# Runtime files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Python caches
+__pycache__/
+python/__pycache__/
+*.py[cod]
+
+# Environment files
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db

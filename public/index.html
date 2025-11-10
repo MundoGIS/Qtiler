@@ -1,0 +1,1973 @@
+<!--
+  This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+  If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  Copyright (C) 2025 MundoGIS.
+-->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+  <title>Qtiler · MundoGIS</title>
+    <style>
+      :root{
+        --bg:#f7f8fa; --fg:#0f172a; --muted:#6b7280; --border:#e5e7eb;
+        --card:#ffffff; --primary:#2563eb; --primary-600:#1d4ed8; --danger:#dc2626; --danger-600:#b91c1c;
+        --ok:#065f46; --warn:#92400e; --shadow:0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.06);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#0b1020; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --card:#111827;
+          --primary:#3b82f6; --primary-600:#2563eb; --danger:#ef4444; --danger-600:#dc2626;
+          --ok:#10b981; --warn:#f59e0b; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
+        }
+      }
+      *{box-sizing:border-box}
+      html,body{height:100%}
+      body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:var(--bg); color:var(--fg)}
+      .container{max-width: 1000px; margin: 0 auto; padding:24px}
+      header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px}
+      h1{font-size:24px; margin:0}
+      .muted{color:var(--muted)}
+
+      .toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0}
+      .field{display:flex; align-items:center; gap:8px}
+      input[type=number]{width:80px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px}
+  .language-select{padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); font-weight:600; box-shadow:var(--shadow)}
+
+      #status{margin:12px 0}
+      .status{padding:10px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow: var(--shadow); white-space:pre-wrap}
+      .status.error{border-color: var(--danger); color: var(--danger)}
+
+      .list{display:flex; flex-direction:column; gap:10px}
+      .layer{display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow)}
+      .layer:hover{border-color:#cbd5e1}
+      .layer .meta{font-size:12px; color:var(--muted)}
+  .layer-title{display:flex; align-items:center; gap:8px; font-weight:700}
+  .layer-title-icon{display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--primary)}
+  .layer-title-icon.theme{color:var(--ok); border-color:rgba(37,99,235,.3)}
+  .layer-title-icon.wmts{color:var(--primary-600)}
+  .layer-title-icon svg{width:14px; height:14px; fill:currentColor}
+
+      .actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+      .btn{appearance:none; border:none; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; transition: transform .02s ease, background .2s ease, color .2s ease; box-shadow: var(--shadow); background:#e5e7eb; color:#111827}
+      .btn:hover{transform: translateY(-1px)}
+      .btn:disabled{opacity:.6; cursor:not-allowed}
+      .btn-primary{background: var(--primary); color:#fff}
+      .btn-primary:hover{background: var(--primary-600)}
+      .btn-secondary{background:#e5e7eb; color:#111827}
+      .btn-outline{background:transparent; color:var(--primary); border:1px solid var(--primary)}
+      .btn-danger{background: var(--danger); color:#fff}
+      .btn-danger:hover{background: var(--danger-600)}
+  .btn-icon{width:36px; height:36px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:var(--card); border:1px solid var(--border); color:var(--fg); box-shadow: var(--shadow)}
+  .btn-icon:hover{background: var(--primary); color:#fff; border-color: var(--primary)}
+  .btn-icon:disabled{background: var(--card); color: var(--muted); border-color: var(--border)}
+  .btn-icon svg{width:18px; height:18px; fill:currentColor}
+  .project-heading{display:flex; align-items:center; gap:10px; margin:12px 0}
+  .project-heading h2{margin:0; font-size:20px}
+  .heading-icon{display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:999px; background:var(--primary); color:#fff; box-shadow: var(--shadow)}
+  .btn-icon.btn-primary{background: var(--primary); border-color: var(--primary); color:#fff}
+  .btn-icon.btn-primary:hover{background: var(--primary-600); border-color: var(--primary-600)}
+  .btn-icon.btn-secondary{background:#e5e7eb; border-color: var(--border); color:#111827}
+  .btn-icon.btn-secondary:hover{background:#d1d5db; border-color:#cbd5e1; color:#111827}
+  .btn-icon.btn-danger{background: var(--danger); border-color: var(--danger); color:#fff}
+  .btn-icon.btn-danger:hover{background: var(--danger-600); border-color: var(--danger-600)}
+  .btn-spinner{display:inline-block; width:18px; height:18px; border:2px solid currentColor; border-top-color: transparent; border-radius:50%; animation: btn-spin .75s linear infinite}
+  @keyframes btn-spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+
+      a{color: var(--primary); text-decoration: none}
+      a:hover{text-decoration: underline}
+
+      .progress-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); background: var(--card); border-radius:999px; font-size:12px; color:var(--muted)}
+      .progress-bar{position:relative; width:120px; height:6px; background:#e5e7eb; border-radius:999px; overflow:hidden}
+      .progress-bar > i{display:block; height:100%; width:0%; background: var(--primary)}
+      .jobs{margin:16px 0; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow)}
+      .job{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px dashed var(--border)}
+      .job:first-child{border-top:none}
+      .job .info{font-size:13px; color:var(--muted)}
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div>
+          <h1>Qtiler</h1>
+          <div class="muted" data-i18n="MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.">MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.</div>
+        </div>
+        <div class="toolbar">
+          <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
+          <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
+          <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
+          <button id="open_guide" class="btn btn-outline" data-i18n="User guide">User guide</button>
+          <select id="language_selector" class="language-select" aria-label="Language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="sv">Svenska</option>
+          </select>
+          <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
+          <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
+          <div class="field"><span data-i18n="Mode:">Mode:</span>
+            <select id="cache_mode" style="padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px">
+              <option value="xyz" selected data-i18n="XYZ (EPSG:3857)">XYZ (EPSG:3857)</option>
+              <option value="wmts" data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
+              <option value="custom" data-i18n="Custom subdivision (bbox)">Custom subdivision (bbox)</option>
+            </select>
+          </div>
+          <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
+            <input id="tile_crs" type="text" placeholder="auto" value="EPSG:3857" style="width:120px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px" data-i18n-placeholder="Tile CRS" />
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:4px">
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input id="allow_remote" type="checkbox"> <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span></label>
+            <input id="throttle_ms" type="number" min="0" value="0" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" style="width:90px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px" data-i18n-placeholder="Delay between tiles (ms)" />
+          </div>
+        </div>
+      </header>
+
+      <div id="status"></div>
+    <div id="jobs" class="jobs" style="display:none">
+  <div style="font-weight:700; margin-bottom:8px" data-i18n="Running tasks">Running tasks</div>
+        <div id="jobsList" class="list"></div>
+      </div>
+  <div id="layers" class="list">Loading layers…</div>
+    </div>
+
+    <script>
+      const SUPPORTED_LANGS = ["en", "es", "sv"];
+      const TRANSLATIONS = {
+        es: {
+          "Upload project": "Subir proyecto",
+          "Reload layers": "Recargar capas",
+          "User guide": "Guía de uso",
+          "Min zoom:": "Zoom mínimo:",
+          "Max zoom:": "Zoom máximo:",
+          "Mode:": "Modo:",
+          "XYZ (EPSG:3857)": "XYZ (EPSG:3857)",
+          "WMTS automatic (native CRS)": "WMTS automático (CRS nativo)",
+          "Custom subdivision (bbox)": "Subdivisión personalizada (bbox)",
+          "Tile CRS:": "CRS de tesela:",
+          "Allow remote (WMS/XYZ)": "Permitir remoto (WMS/XYZ)",
+          "Delay between tiles (ms)": "Retardo entre teselas (ms)",
+          "MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.": "Consola de teselado de MundoGIS para proyectos QGIS. Elige una capa y presiona “Generar caché”.",
+          "Loading projects…": "Cargando proyectos…",
+          "No projects in qgisprojects/": "No hay proyectos en qgisprojects/",
+          "Failed to load layers: HTTP {status}": "Error al cargar capas: HTTP {status}",
+          "Details: {text}": "Detalles: {text}",
+          "Network error while loading project layers": "Error de red al cargar las capas del proyecto",
+          "View sample tile": "Ver tesela de ejemplo",
+          "Copy tiles URL": "Copiar URL de teselas",
+          "Tile template copied to clipboard: {url}": "Plantilla de teselas copiada: {url}",
+          "Copy failed: {error}": "Error al copiar: {error}",
+          "Generate cache": "Generar caché",
+          "Recache layer": "Regenerar caché",
+          "Remote layer. Enable \"Allow remote\" to cache.": "Capa remota. Activa \"Permitir remoto\" para cachearla.",
+          "Delete cache": "Eliminar caché",
+          "Open map viewer": "Abrir visor de mapa",
+          "Running tasks": "Tareas en ejecución",
+          "Loading layers…": "Cargando capas…",
+          "Project cache running": "Caché de proyecto en ejecución",
+          "Project cache queued…": "Caché de proyecto en cola…",
+          "Project cache error: {error}": "Error en caché de proyecto: {error}",
+          "Project cache status: {status}": "Estado de caché de proyecto: {status}",
+          "Project cache idle": "Caché de proyecto inactiva",
+          "Last result: {result} at {time}": "Último resultado: {result} a las {time}",
+          "Project cache status unavailable": "Estado de caché de proyecto no disponible",
+          "Project cache status error": "Error al consultar estado de caché de proyecto",
+          "Project cache failed to start: {detail}": "No se pudo iniciar el caché de proyecto: {detail}",
+          "Project cache started (run {runId}).": "Caché de proyecto iniciado (ejecución {runId}).",
+          "Skipped (remote disabled): {names}": "Omitido (remoto deshabilitado): {names}",
+          "Starting project cache for {project} ({count} layers)…": "Iniciando caché de proyecto para {project} ({count} capas)…",
+          "Project cache error: {error}": "Error en caché de proyecto: {error}",
+          "Recache timer disabled for {project}": "Temporizador desactivado para {project}",
+          "Recache timer updated for {project}": "Temporizador actualizado para {project}",
+          "Invalid minutes value for recache interval": "Valor de minutos no válido",
+          "Invalid datetime for next recache run": "Fecha/hora no válida para la próxima ejecución",
+          "No layers available for this project": "No hay capas disponibles para este proyecto",
+          "Starting cache job…": "Iniciando tarea de caché…",
+          "Cache job started: {id}": "Tarea de caché iniciada: {id}",
+          "Cache job queued: {id}": "Tarea de caché en cola: {id}",
+          "Cache job error: {error}": "Error en tarea de caché: {error}",
+          "Cache deleted": "Caché eliminado",
+          "Failed to delete cache: {error}": "Error al eliminar caché: {error}",
+          "Config save failed for {projectId}: {error}": "Error al guardar configuración para {projectId}: {error}",
+          "No extent captured.": "No se ha definido extensión.",
+          "Extent (lon/lat WGS84): {extent}": "Extensión (lon/lat WGS84): {extent}",
+          "Failed to load map library: {error}": "No se pudo cargar la librería del mapa: {error}",
+          "Use current view": "Usar vista actual",
+          "Set current zoom as Min": "Definir zoom actual como mínimo",
+          "Set current zoom as Max": "Definir zoom actual como máximo",
+          "zoom_min set to {zoom}": "zoom_min establecido a {zoom}",
+          "zoom_max set to {zoom}": "zoom_max establecido a {zoom}",
+          "Extent removed": "Extensión eliminada",
+          "Reload layers": "Recargar capas",
+          "Upload succeeded": "Carga completada",
+          "Upload failed: {error}": "Error al subir: {error}",
+          "Unsupported file type (only .qgz/.qgs).": "Tipo de archivo no soportado (solo .qgz/.qgs).",
+          "Upload aborted": "Carga cancelada",
+          "Deleted project {name}": "Proyecto {name} eliminado",
+          "Failed to delete project: {error}": "Error al eliminar proyecto: {error}",
+          "Delete project": "Eliminar proyecto",
+          "Cache all layers": "Cachear todas las capas",
+          "Running tasks": "Tareas en ejecución",
+          "Map themes": "Temas de mapa",
+          "Generate theme cache": "Generar caché de tema",
+          "Copy WMTS URL": "Copiar URL WMTS",
+          "WMTS theme URL copied: {url}": "URL WMTS copiada: {url}",
+          "Loading jobs…": "Cargando tareas…",
+          "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet no cargó (revisa bloqueo de SRI o CSP)",
+          "Show extent map": "Mostrar mapa de extensión",
+          "Hide extent map": "Ocultar mapa de extensión"
+        },
+        sv: {
+          "Upload project": "Ladda upp projekt",
+          "Reload layers": "Ladda om lager",
+          "User guide": "Användarguide",
+          "Min zoom:": "Min zoom:",
+          "Max zoom:": "Max zoom:",
+          "Mode:": "Läge:",
+          "XYZ (EPSG:3857)": "XYZ (EPSG:3857)",
+          "WMTS automatic (native CRS)": "WMTS automatiskt (inbyggt CRS)",
+          "Custom subdivision (bbox)": "Anpassad indelning (bbox)",
+          "Tile CRS:": "Tile-CRS:",
+          "Allow remote (WMS/XYZ)": "Tillåt fjärrlager (WMS/XYZ)",
+          "Delay between tiles (ms)": "Fördröjning mellan tiles (ms)",
+          "MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.": "MundoGIS cachekonsol för QGIS-projekt. Välj ett lager och klicka på ”Generera cache”.",
+          "Loading projects…": "Laddar projekt…",
+          "No projects in qgisprojects/": "Inga projekt i qgisprojects/",
+          "Failed to load layers: HTTP {status}": "Kunde inte läsa lager: HTTP {status}",
+          "Details: {text}": "Detaljer: {text}",
+          "Network error while loading project layers": "Nätverksfel vid inläsning av projektlager",
+          "View sample tile": "Visa exempelruta",
+          "Copy tiles URL": "Kopiera tile-URL",
+          "Tile template copied to clipboard: {url}": "Tile-mall kopierad: {url}",
+          "Copy failed: {error}": "Kopiering misslyckades: {error}",
+          "Generate cache": "Generera cache",
+          "Recache layer": "Generera om cache",
+          "Remote layer. Enable \"Allow remote\" to cache.": "Fjärrlager. Aktivera \"Tillåt fjärrlager\" för att cachea.",
+          "Delete cache": "Ta bort cache",
+          "Open map viewer": "Öppna kartvisare",
+          "Running tasks": "Pågående jobb",
+          "Loading layers…": "Laddar lager…",
+          "Project cache running": "Projektcache körs",
+          "Project cache queued…": "Projektcache i kö…",
+          "Project cache error: {error}": "Projektcache fel: {error}",
+          "Project cache status: {status}": "Projektcache status: {status}",
+          "Project cache idle": "Projektcache inaktiv",
+          "Last result: {result} at {time}": "Senaste resultat: {result} kl {time}",
+          "Project cache status unavailable": "Projektcache-status otillgänglig",
+          "Project cache status error": "Fel vid hämtning av projektcache-status",
+          "Project cache failed to start: {detail}": "Projektcache kunde inte startas: {detail}",
+          "Project cache started (run {runId}).": "Projektcache startad (körning {runId}).",
+          "Skipped (remote disabled): {names}": "Hoppade över (fjärr avstängt): {names}",
+          "Starting project cache for {project} ({count} layers)…": "Startar projektcache för {project} ({count} lager)…",
+          "Project cache error: {error}": "Projektcache fel: {error}",
+          "Recache timer disabled for {project}": "Omkörningstimer avstängd för {project}",
+          "Recache timer updated for {project}": "Omkörningstimer uppdaterad för {project}",
+          "Invalid minutes value for recache interval": "Ogiltigt minutvärde för omkörningsintervall",
+          "Invalid datetime for next recache run": "Ogiltigt datum/tid för nästa körning",
+          "No layers available for this project": "Inga lager tillgängliga för detta projekt",
+          "Starting cache job…": "Startar cachejobb…",
+          "Cache job started: {id}": "Cachejobb startat: {id}",
+          "Cache job queued: {id}": "Cachejobb i kö: {id}",
+          "Cache job error: {error}": "Cachejobb fel: {error}",
+          "Cache deleted": "Cache borttagen",
+          "Failed to delete cache: {error}": "Kunde inte ta bort cache: {error}",
+          "Config save failed for {projectId}: {error}": "Kunde inte spara konfiguration för {projectId}: {error}",
+          "No extent captured.": "Ingen utbredning angiven.",
+          "Extent (lon/lat WGS84): {extent}": "Utbredning (lon/lat WGS84): {extent}",
+          "Failed to load map library: {error}": "Kunde inte ladda kartbibliotek: {error}",
+          "Use current view": "Använd nuvarande vy",
+          "Set current zoom as Min": "Sätt nuvarande zoom som min",
+          "Set current zoom as Max": "Sätt nuvarande zoom som max",
+          "zoom_min set to {zoom}": "zoom_min satt till {zoom}",
+          "zoom_max set to {zoom}": "zoom_max satt till {zoom}",
+          "Extent removed": "Utbredning borttagen",
+          "Upload succeeded": "Uppladdning klar",
+          "Upload failed: {error}": "Uppladdning misslyckades: {error}",
+          "Unsupported file type (only .qgz/.qgs).": "Filtyp stöds inte (endast .qgz/.qgs).",
+          "Upload aborted": "Uppladdning avbruten",
+          "Deleted project {name}": "Projekt {name} borttaget",
+          "Failed to delete project: {error}": "Kunde inte ta bort projekt: {error}",
+          "Delete project": "Ta bort projekt",
+          "Cache all layers": "Cachea alla lager",
+          "Map themes": "Kartteman",
+          "Generate theme cache": "Generera temacache",
+          "Copy WMTS URL": "Kopiera WMTS-URL",
+          "WMTS theme URL copied: {url}": "WMTS-URL kopierad: {url}",
+          "Loading jobs…": "Laddar jobb…",
+          "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet laddades inte (kontrollera SRI eller CSP)",
+          "Show extent map": "Visa utbredningskarta",
+          "Hide extent map": "Dölj utbredningskarta"
+        }
+      };
+
+      const normalizeLang = (value) => {
+        const raw = (value || "").toLowerCase();
+        if (SUPPORTED_LANGS.includes(raw)) return raw;
+        const base = raw.split("-")[0];
+        return SUPPORTED_LANGS.includes(base) ? base : "en";
+      };
+
+      let currentLang = normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
+
+      const tr = (text, replacements = {}) => {
+        if (!text) return "";
+        const table = TRANSLATIONS[currentLang] || {};
+        let template = table[text] || text;
+        return template.replace(/\{(\w+)\}/g, (_, token) => (token in replacements ? replacements[token] : ""));
+      };
+
+      const applyStaticTranslations = () => {
+        document.documentElement.setAttribute("lang", currentLang);
+        document.querySelectorAll("[data-i18n]").forEach(el => {
+          const key = el.getAttribute("data-i18n");
+          if (!key) return;
+          const translated = tr(key);
+          if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+            if (el.hasAttribute("placeholder")) el.placeholder = translated;
+          } else {
+            el.textContent = translated;
+          }
+        });
+        document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+          const key = el.getAttribute("data-i18n-placeholder");
+          if (!key) return;
+          el.placeholder = tr(key);
+        });
+      };
+
+      const setLanguage = (lang) => {
+        currentLang = normalizeLang(lang);
+        localStorage.setItem("qtiler.lang", currentLang);
+        applyStaticTranslations();
+      };
+
+      // --- Project extent maps (per project) ---
+      const extentStates = new Map(); // id -> { extent: [minLon,minLat,maxLon,maxLat], open: bool, map: Leaflet instance, metaInfoEl, config }
+      let leafletReadyPromise = null;
+      const projectConfigs = new Map();
+      const projectConfigPending = new Map();
+      const projectConfigTimers = new Map();
+  const projectBatchFetches = new Map();
+      let activeProjectId = null;
+      let suppressControlSync = false;
+
+      const deepMergeObjects = (target, patch) => {
+        if (!patch || typeof patch !== 'object') return target;
+        for (const key of Object.keys(patch)) {
+          const value = patch[key];
+          if (Array.isArray(value)) {
+            target[key] = value.slice();
+          } else if (value && typeof value === 'object') {
+            const base = target[key] && typeof target[key] === 'object' ? { ...target[key] } : {};
+            target[key] = deepMergeObjects(base, value);
+          } else {
+            target[key] = value;
+          }
+        }
+        return target;
+      };
+
+      async function loadProjectConfig(projectId) {
+        if (projectConfigs.has(projectId)) return projectConfigs.get(projectId);
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config');
+          if (!res.ok) throw new Error(res.statusText || 'config fetch failed');
+          const cfg = await res.json();
+          projectConfigs.set(projectId, cfg);
+          return cfg;
+        } catch (err) {
+          console.warn('Failed to load project config', projectId, err);
+          return null;
+        }
+      }
+
+      function setActiveProject(projectId){
+        if (!projectId) return;
+        activeProjectId = projectId;
+        const cfg = projectConfigs.get(projectId);
+        if (!cfg) return;
+        suppressControlSync = true;
+        try {
+          if (cfg.zoom) {
+            if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = cfg.zoom.min;
+            if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = cfg.zoom.max;
+          }
+          if (cfg.cachePreferences) {
+            if (modeSelect && typeof cfg.cachePreferences.mode === 'string') modeSelect.value = cfg.cachePreferences.mode;
+            if (tileCrsInput && typeof cfg.cachePreferences.tileCrs === 'string') tileCrsInput.value = cfg.cachePreferences.tileCrs;
+            if (allowRemoteCheckbox && typeof cfg.cachePreferences.allowRemote === 'boolean') allowRemoteCheckbox.checked = cfg.cachePreferences.allowRemote;
+            if (throttleInput && cfg.cachePreferences.throttleMs != null) throttleInput.value = cfg.cachePreferences.throttleMs;
+          }
+        } finally {
+          suppressControlSync = false;
+        }
+        syncRemoteButtons();
+      }
+
+      function mergeProjectConfig(projectId, patch){
+        if (!patch || typeof patch !== 'object') return;
+        const current = projectConfigs.get(projectId) || {};
+        const merged = deepMergeObjects({ ...current }, patch);
+        projectConfigs.set(projectId, merged);
+        const state = getProjectState(projectId);
+        if (state) {
+          state.config = merged;
+          if (patch.extent && Object.prototype.hasOwnProperty.call(patch.extent, 'bbox')) {
+            state.extent = Array.isArray(patch.extent.bbox) && patch.extent.bbox.length === 4 ? patch.extent.bbox.slice() : null;
+          }
+        }
+        if (state && state.metaInfoEl) refreshProjectMetaInfo({ id: projectId }, null, merged);
+      }
+
+      async function flushProjectConfigSave(projectId){
+        const patch = projectConfigPending.get(projectId);
+        if (!patch) return;
+        projectConfigPending.delete(projectId);
+        projectConfigTimers.delete(projectId);
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch)
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(()=>null);
+            throw new Error(err?.details || err?.error || res.statusText);
+          }
+          const updated = await res.json();
+          projectConfigs.set(projectId, updated);
+          const state = getProjectState(projectId);
+          if (state) {
+            state.config = updated;
+            if (state.metaInfoEl) refreshProjectMetaInfo({ id: projectId }, null, updated);
+          }
+        } catch (err) {
+          console.warn('Config sync failed for', projectId, err);
+          showStatus(tr('Config save failed for {projectId}: {error}', { projectId, error: err }), true);
+        }
+      }
+
+      function queueProjectConfigSave(projectId, patch, { immediate = false } = {}){
+        if (!projectId || !patch || typeof patch !== 'object') return;
+        mergeProjectConfig(projectId, patch);
+        const pending = projectConfigPending.get(projectId) || {};
+        projectConfigPending.set(projectId, deepMergeObjects(pending, patch));
+        if (immediate) {
+          flushProjectConfigSave(projectId);
+          return;
+        }
+        const existingTimer = projectConfigTimers.get(projectId);
+        if (existingTimer) clearTimeout(existingTimer);
+        const timer = setTimeout(() => flushProjectConfigSave(projectId), 600);
+        projectConfigTimers.set(projectId, timer);
+      }
+
+      async function openRecacheScheduler(project) {
+        if (!project || !project.id) return;
+        const cfg = projectConfigs.get(project.id) || {};
+        const rec = cfg.recache || {};
+        const currentInterval = rec.intervalMinutes;
+        const currentEnabled = rec.enabled;
+        const intervalPrompt = prompt(
+          'Set automatic recache interval in minutes (leave blank to disable).\nCurrent: ' + (currentEnabled && currentInterval ? currentInterval + ' minutes' : 'disabled'),
+          currentEnabled && currentInterval ? String(currentInterval) : ''
+        );
+        if (intervalPrompt === null) return;
+        const trimmed = intervalPrompt.trim();
+        const patch = { recache: {} };
+        if (!trimmed) {
+          patch.recache.enabled = false;
+          patch.recache.intervalMinutes = null;
+          patch.recache.nextRunAt = null;
+          queueProjectConfigSave(project.id, patch, { immediate: true });
+          showStatus('Recache timer disabled for ' + project.id);
+          return;
+        }
+        const minutes = Number(trimmed);
+        if (!Number.isFinite(minutes) || minutes <= 0) {
+          showStatus('Invalid minutes value for recache interval', true);
+          return;
+        }
+        let nextIso = null;
+        const nextPrompt = prompt('Optional: enter next run datetime (ISO or local). Leave blank for automatic.', rec.nextRunAt ? new Date(rec.nextRunAt).toLocaleString() : '');
+        if (nextPrompt != null) {
+          const nextTrim = nextPrompt.trim();
+          if (nextTrim) {
+            const parsed = Date.parse(nextTrim);
+            if (Number.isNaN(parsed)) {
+              showStatus('Invalid datetime for next recache run', true);
+              return;
+            }
+            nextIso = new Date(parsed).toISOString();
+          }
+        }
+        patch.recache.enabled = true;
+        patch.recache.strategy = 'interval';
+        patch.recache.intervalMinutes = minutes;
+        patch.recache.nextRunAt = nextIso;
+        queueProjectConfigSave(project.id, patch, { immediate: true });
+        showStatus('Recache timer updated for ' + project.id);
+      }
+
+      function setProjectBatchPolling(projectId, active){
+        const state = getProjectState(projectId);
+        if (!state) return;
+        if (active) {
+          if (state.batchPoller) return;
+          state.batchPoller = setInterval(() => {
+            refreshProjectBatchStatus(projectId);
+          }, 4000);
+        } else if (state.batchPoller) {
+          clearInterval(state.batchPoller);
+          state.batchPoller = null;
+        }
+      }
+
+      function updateProjectBatchInfo(projectId, payload){
+        const state = getProjectState(projectId);
+        if (!state || !state.batchInfoEl) return;
+        const current = payload?.current || null;
+        const last = payload?.last || null;
+        const lines = [];
+        if (current) {
+          const status = current.status || 'unknown';
+          const startedLabel = current.startedAt ? new Date(current.startedAt).toLocaleString() : null;
+          const layerCount = Array.isArray(current.layers) ? current.layers.length : (typeof current.layers === 'number' ? current.layers : null);
+          if (status === 'running') {
+            lines.push(`Project cache running${layerCount != null ? ` (${layerCount} layers)` : ''}${startedLabel ? ` since ${startedLabel}` : ''}`);
+          } else if (status === 'queued') {
+            lines.push('Project cache queued…');
+          } else if (status === 'error') {
+            lines.push(`Project cache error: ${current.error || 'unknown'}`);
+          } else {
+            lines.push(`Project cache status: ${status}`);
+          }
+        } else {
+          lines.push('Project cache idle');
+        }
+        if (last?.lastRunAt) {
+          const parsed = Date.parse(last.lastRunAt);
+          const label = Number.isNaN(parsed) ? last.lastRunAt : new Date(parsed).toLocaleString();
+          lines.push(`Last result: ${last.lastResult || 'unknown'}${label ? ` at ${label}` : ''}`);
+        }
+        state.batchInfoEl.textContent = lines.join(' · ');
+        const nextStatus = current ? current.status : null;
+        if (state.batchButton) {
+          state.batchButton.disabled = nextStatus === 'running' || nextStatus === 'queued';
+        }
+        const prevStatus = state.lastBatchStatus;
+        state.lastBatchStatus = nextStatus;
+        if (prevStatus === 'running' && nextStatus && nextStatus !== 'running' && nextStatus !== 'queued') {
+          setTimeout(() => { try { loadLayers(); } catch {} }, 800);
+        }
+      }
+
+      async function refreshProjectBatchStatus(projectId){
+        if (!projectId) return;
+        if (projectBatchFetches.get(projectId)) return;
+        projectBatchFetches.set(projectId, true);
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/cache/project');
+          if (!res.ok) {
+            setProjectBatchPolling(projectId, false);
+            const state = getProjectState(projectId);
+            if (state?.batchInfoEl) state.batchInfoEl.textContent = 'Project cache status unavailable';
+            return;
+          }
+          const data = await res.json().catch(() => null) || {};
+          updateProjectBatchInfo(projectId, data);
+          const active = data?.current?.status === 'running';
+          setProjectBatchPolling(projectId, active);
+        } catch (err) {
+          console.warn('Project batch status fetch failed', projectId, err);
+          setProjectBatchPolling(projectId, false);
+          const state = getProjectState(projectId);
+          if (state?.batchInfoEl) state.batchInfoEl.textContent = 'Project cache status error';
+        } finally {
+          projectBatchFetches.delete(projectId);
+        }
+      }
+
+      async function startProjectCache(project, layers, triggerBtn){
+        if (!project?.id) return;
+        if (!Array.isArray(layers) || layers.length === 0) {
+          showStatus('No layers available for this project', true);
+          return;
+        }
+        const allowRemote = allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false;
+        let zoomMin = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
+        let zoomMax = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
+        if (zoomMin < 0) zoomMin = 0;
+        if (zoomMax < 0) zoomMax = 0;
+        if (zoomMin > zoomMax && !(zoomMin === 0 && zoomMax === 0)) {
+          const tmp = zoomMin; zoomMin = zoomMax; zoomMax = tmp;
+        }
+  const mode = modeSelect ? modeSelect.value : 'xyz';
+        const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
+        const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
+        const state = getProjectState(project.id);
+        const extent = state?.extent && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
+        const skipped = [];
+        const payloadLayers = [];
+        layers.forEach(layer => {
+          if (!layer?.name) return;
+          if (layer.cacheable === false && !allowRemote) {
+            skipped.push(layer.name);
+            return;
+          }
+          const params = {
+            project: project.id,
+            layer: layer.name,
+            zoom_min: zoomMin,
+            zoom_max: zoomMax
+          };
+          if (mode === 'xyz') {
+            params.scheme = 'xyz';
+            params.tile_crs = 'EPSG:3857';
+            params.xyz_mode = 'partial';
+          } else if (mode === 'wmts') {
+            params.scheme = 'auto';
+            params.wmts = true;
+            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
+          } else if (mode === 'custom') {
+            params.scheme = 'custom';
+            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
+          } else {
+            // auto mode: let backend choose scheme, but honor explicit CRS overrides
+            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
+          }
+          if (extent) {
+            params.project_extent = extent.join(',');
+            params.extent_crs = 'EPSG:4326';
+          }
+          if (allowRemote) params.allow_remote = true;
+          if (allowRemote && throttleVal > 0) params.throttle_ms = throttleVal;
+          payloadLayers.push({ layer: layer.name, params });
+        });
+        if (payloadLayers.length === 0) {
+          showStatus('No layers eligible for project cache. Enable remote caching or select layers individually.', true);
+          return;
+        }
+        const originalLabel = triggerBtn ? triggerBtn.innerHTML : null;
+        if (triggerBtn) {
+          triggerBtn.disabled = true;
+          triggerBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        }
+        const body = { layers: payloadLayers };
+        showStatus(`Starting project cache for ${project.id} (${payloadLayers.length} layers)…`);
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/cache/project', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const detail = data?.message || data?.error || res.statusText;
+            showStatus('Project cache failed to start: ' + detail, true);
+            return;
+          }
+          showStatus('Project cache started (run ' + (data?.runId || 'unknown') + ').');
+          refreshProjectBatchStatus(project.id);
+          if (skipped.length) {
+            showStatus('Skipped (remote disabled): ' + skipped.join(', '));
+          }
+        } catch (err) {
+          showStatus('Project cache error: ' + err, true);
+        } finally {
+          if (triggerBtn) {
+            triggerBtn.disabled = false;
+            triggerBtn.innerHTML = originalLabel != null ? originalLabel : ICONS.play;
+          }
+        }
+      }
+
+      const ICONS = {
+        project: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5A1.75 1.75 0 0 1 5.5 3.25h4.19c.46 0 .9.18 1.23.5l1.56 1.56c.33.32.77.5 1.23.5h6.29A1.75 1.75 0 0 1 21.5 7.5v10.75A2.75 2.75 0 0 1 18.75 21H5.25A2.75 2.75 0 0 1 2.5 18.25V5.75A.75.75 0 0 1 3.25 5h.5Zm.75 1.5v11.75c0 .69.56 1.25 1.25 1.25h13.5c.69 0 1.25-.56 1.25-1.25V8.5h-6.29c-.83 0-1.63-.33-2.22-.92L10.93 6H5.5a.75.75 0 0 0-.75.75Z"/></svg>',
+        layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
+        wmts: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1.5 2.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 11.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 17v2h3v-2h-3Zm4.5 0v2h4v-2h-4Zm5.5 0v2h3v-2h-3Z"/></svg>',
+        theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
+        play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.27a1 1 0 0 1 1.52-.85l9 5.73a1 1 0 0 1 0 1.7l-9 5.73a1 1 0 0 1-1.52-.85V5.27Z"/></svg>',
+        trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3a1 1 0 0 0-1 1v1H4.75a.75.75 0 0 0 0 1.5h.68l.76 11.24A2.75 2.75 0 0 0 8.93 20.5h6.14a2.75 2.75 0 0 0 2.74-2.76l.76-11.24h.68a.75.75 0 0 0 0-1.5H16V4a1 1 0 0 0-1-1H9Zm1 1.5h4V5H10V4.5Zm-1.82 3h7.64l-.74 11a1.25 1.25 0 0 1-1.24 1.2H8.7a1.25 1.25 0 0 1-1.24-1.2l-.74-11Z"/></svg>',
+        copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.75 4A3.75 3.75 0 0 0 6 7.75v8.5A3.75 3.75 0 0 0 9.75 20h8.5A3.75 3.75 0 0 0 22 16.25v-8.5A3.75 3.75 0 0 0 18.25 4h-8.5Zm0 1.5h8.5A2.25 2.25 0 0 1 20.5 7.75v8.5a2.25 2.25 0 0 1-2.25 2.25h-8.5A2.25 2.25 0 0 1 7.5 16.25v-8.5A2.25 2.25 0 0 1 9.75 5.5ZM4.75 7A.75.75 0 0 1 5.5 7.75v9a.75.75 0 0 1-1.5 0v-9A.75.75 0 0 1 4.75 7Z"/></svg>',
+        eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c4.97 0 9.15 3.16 10.63 7.5C21.15 16.84 16.96 20 12 20s-9.15-3.16-10.63-7.5C2.85 8.16 7.04 5 12 5Zm0 1.5c-4.09 0-7.68 2.5-9.04 6 1.36 3.5 4.95 6 9.04 6 4.09 0 7.68-2.5 9.04-6-1.36-3.5-4.95-6-9.04-6Zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>',
+        link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.06 5.53a3.75 3.75 0 0 1 5.3-.02l.13.13a3.75 3.75 0 0 1 0 5.3l-1.84 1.84a.75.75 0 0 1-1.06-1.06l1.84-1.84a2.25 2.25 0 0 0 0-3.18l-.13-.13a2.25 2.25 0 0 0-3.18 0l-1.84 1.84a.75.75 0 1 1-1.06-1.06l1.84-1.84Zm-6.25 6.23a.75.75 0 0 1 1.06 1.06l-1.84 1.84a2.25 2.25 0 0 0 0 3.18l.13.13a2.25 2.25 0 0 0 3.18 0l1.84-1.84a.75.75 0 0 1 1.06 1.06l-1.84 1.84a3.75 3.75 0 0 1-5.3 0l-.13-.13a3.75 3.75 0 0 1 0-5.3l1.84-1.84Zm6.59-4.13a.75.75 0 0 1 0 1.06l-5.02 5.02a.75.75 0 0 1-1.06-1.06l5.02-5.02a.75.75 0 0 1 1.06 0Z"/></svg>'
+        ,
+        refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 4a.75.75 0 0 1 .75.75v2.19A7.25 7.25 0 0 1 20.02 12a.75.75 0 0 1-1.5 0 5.75 5.75 0 1 0-10.95-2h2.18a.75.75 0 0 1 .53 1.28l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5A.75.75 0 0 1 2.75 11h2.18a7.25 7.25 0 0 1 13.57-3.56V4.75a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-.75.75h-4a.75.75 0 0 1 0-1.5h2.19A5.75 5.75 0 1 0 3.5 12a.75.75 0 0 1-1.5 0A7.25 7.25 0 0 1 5.5 6.94V4.75a.75.75 0 0 1 .75-.75Z"/></svg>'
+      };
+
+      function ensureLeafletReady(){
+        if (typeof L !== 'undefined' && L.Control && L.Control.Draw) return Promise.resolve();
+        if (leafletReadyPromise) return leafletReadyPromise;
+        leafletReadyPromise = new Promise((resolve, reject) => {
+          const fail = (err) => {
+            leafletReadyPromise = null;
+            reject(err || new Error('Failed to load Leaflet'));
+          };
+          const loadDraw = () => {
+            if (typeof L !== 'undefined' && L.Control && L.Control.Draw) {
+              resolve();
+              return;
+            }
+            const drawCss = document.createElement('link');
+            drawCss.rel = 'stylesheet';
+            drawCss.href = 'https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css';
+            document.head.appendChild(drawCss);
+            const drawJs = document.createElement('script');
+            drawJs.src = 'https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js';
+            drawJs.onload = () => resolve();
+            drawJs.onerror = fail;
+            document.head.appendChild(drawJs);
+          };
+          if (typeof L !== 'undefined') {
+            loadDraw();
+            return;
+          }
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+          script.onload = loadDraw;
+          script.onerror = fail;
+          document.head.appendChild(script);
+        });
+        return leafletReadyPromise;
+      }
+
+      function getProjectState(projectId){
+        if (!extentStates.has(projectId)) {
+          extentStates.set(projectId, {
+            extent: null,
+            open: false,
+            map: null,
+            metaInfoEl: null,
+            config: null,
+            projectMeta: null,
+            batchInfoEl: null,
+            batchPoller: null,
+            batchButton: null,
+            lastBatchStatus: null
+          });
+        }
+        return extentStates.get(projectId);
+      }
+
+      function refreshProjectMetaInfo(project, projectMeta, projectConfig){
+        const projectId = project && project.id ? project.id : project;
+        const state = getProjectState(projectId);
+        if (!state.metaInfoEl) return;
+        const metaSource = projectMeta || state.projectMeta || null;
+        const parts = [];
+        parts.push('CRS: ' + (metaSource?.crs || 'Unknown'));
+        if (state.extent && Array.isArray(state.extent) && state.extent.length === 4) {
+          parts.push('Custom extent ready');
+        }
+        const cfg = projectConfig || state.config || projectConfigs.get(projectId);
+        if (cfg && cfg.zoom) {
+          const zMin = cfg.zoom.min != null ? cfg.zoom.min : 'auto';
+          const zMax = cfg.zoom.max != null ? cfg.zoom.max : 'auto';
+          parts.push('Zoom ' + zMin + '–' + zMax);
+        }
+        if (cfg && cfg.recache) {
+          if (cfg.recache.enabled) {
+            let nextLabel = 'pending';
+            if (cfg.recache.nextRunAt) {
+              const parsed = Date.parse(cfg.recache.nextRunAt);
+              if (!Number.isNaN(parsed)) {
+                nextLabel = new Date(parsed).toLocaleString();
+              }
+            }
+            parts.push('Recache: next ' + nextLabel);
+          } else {
+            parts.push('Recache: off');
+          }
+        }
+        state.metaInfoEl.textContent = parts.join(' · ');
+      }
+
+      function makeIconButton(label, iconName, onClick, extraClass = '') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-icon' + (extraClass ? ' ' + extraClass : '');
+        btn.innerHTML = ICONS[iconName] || '';
+        btn.dataset.iconHtml = ICONS[iconName] || '';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        if (typeof onClick === 'function') {
+          btn.addEventListener('click', onClick);
+        }
+        return btn;
+      }
+
+      function toBoundsWgs84(extent){
+        if (!Array.isArray(extent) || extent.length !== 4) return null;
+        const [minLon, minLat, maxLon, maxLat] = extent;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const a = [clamp(minLat, -85, 85), clamp(minLon, -180, 180)];
+        const b = [clamp(maxLat, -85, 85), clamp(maxLon, -180, 180)];
+        const lat1 = Math.min(a[0], b[0]);
+        const lat2 = Math.max(a[0], b[0]);
+        const lon1 = Math.min(a[1], b[1]);
+        const lon2 = Math.max(a[1], b[1]);
+        return [[lat1, lon1], [lat2, lon2]];
+      }
+
+      async function toggleProjectExtentPanel(project, projectMeta, container){
+        const state = getProjectState(project.id);
+        if (container.dataset.open === '1') {
+          container.dataset.open = '0';
+          container.style.display = 'none';
+          if (state.map) {
+            try { state.map.remove(); } catch {}
+            state.map = null;
+          }
+          container.innerHTML = '';
+          state.open = false;
+          refreshProjectMetaInfo(project, projectMeta, state.config);
+          return;
+        }
+        container.dataset.open = '1';
+        container.style.display = 'block';
+        container.innerHTML = '';
+        state.open = true;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.margin = '12px 0';
+        wrapper.style.padding = '12px';
+        wrapper.style.background = 'var(--card)';
+        wrapper.style.border = '1px solid var(--border)';
+        wrapper.style.borderRadius = '12px';
+        wrapper.style.boxShadow = 'var(--shadow)';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.style.marginBottom = '8px';
+        title.textContent = 'Extent capture · ' + (project.name || project.id);
+        wrapper.appendChild(title);
+
+        const mapId = `extent-map-${project.id}-${Date.now()}`;
+        const mapHolder = document.createElement('div');
+        mapHolder.id = mapId;
+        mapHolder.style.height = '340px';
+        mapHolder.style.border = '1px solid var(--border)';
+        mapHolder.style.borderRadius = '8px';
+        mapHolder.style.overflow = 'hidden';
+        mapHolder.style.position = 'relative';
+        wrapper.appendChild(mapHolder);
+
+        const buttons = document.createElement('div');
+        buttons.style.marginTop = '8px';
+        buttons.style.display = 'flex';
+        buttons.style.flexWrap = 'wrap';
+        buttons.style.gap = '8px';
+        wrapper.appendChild(buttons);
+
+        const info = document.createElement('div');
+        info.style.marginTop = '8px';
+        info.style.fontSize = '12px';
+        info.style.color = 'var(--muted)';
+        wrapper.appendChild(info);
+
+        container.appendChild(wrapper);
+
+        const updateInfo = () => {
+          if (state.extent && Array.isArray(state.extent) && state.extent.length === 4) {
+            info.textContent = 'Extent (lon/lat WGS84): ' + JSON.stringify(state.extent.map(v => Number(v.toFixed ? v.toFixed(6) : Number(v).toFixed(6))));
+          } else {
+            info.textContent = 'No extent captured.';
+          }
+          refreshProjectMetaInfo(project, projectMeta, state.config);
+        };
+
+        try {
+          await ensureLeafletReady();
+        } catch (err) {
+          info.textContent = 'Failed to load map: ' + String(err);
+          showStatus('Unable to load map library: ' + err, true);
+          container.dataset.open = '0';
+          container.style.display = 'none';
+          container.innerHTML = '';
+          state.open = false;
+          refreshProjectMetaInfo(project, projectMeta, state.config);
+          return;
+        }
+
+        const map = L.map(mapId, {
+          zoomControl: true,
+          maxZoom: 23,
+          minZoom: 0,
+          zoomSnap: 0.25,
+          wheelPxPerZoomLevel: 80
+        });
+        state.map = map;
+        try {
+          L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23, attribution:'OSM'}).addTo(map);
+        } catch {}
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        const applyExtentRectangle = (extentArr) => {
+          drawnItems.clearLayers();
+          const bounds = toBoundsWgs84(extentArr);
+          if (!bounds) return;
+          try {
+            const rect = L.rectangle(bounds, { color: '#2563eb', weight: 1, fillOpacity: 0.05 });
+            drawnItems.addLayer(rect);
+          } catch {}
+        };
+
+        try {
+          const drawControl = new L.Control.Draw({
+            draw: { polygon:false, polyline:false, circle:false, marker:false, circlemarker:false, rectangle:{ showArea:false } },
+            edit: { featureGroup: drawnItems, remove: true }
+          });
+          map.addControl(drawControl);
+          map.on(L.Draw.Event.CREATED, (e) => {
+            drawnItems.clearLayers();
+            drawnItems.addLayer(e.layer);
+            const b = e.layer.getBounds();
+            state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+            updateInfo();
+            queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+          });
+          map.on('draw:edited', () => {
+            const layer = drawnItems.getLayers()[0];
+            if (!layer) return;
+            const b = layer.getBounds();
+            state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+            updateInfo();
+            queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+          });
+          map.on('draw:deleted', () => {
+            state.extent = null;
+            updateInfo();
+            queueProjectConfigSave(project.id, { extent: { bbox: null, crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+          });
+        } catch {}
+
+        const boundsFromState = toBoundsWgs84(state.extent);
+        const metaBounds = toBoundsWgs84(projectMeta && projectMeta.extent_wgs84);
+        if (boundsFromState) {
+          map.fitBounds(boundsFromState, { maxZoom: 22 });
+          applyExtentRectangle(state.extent);
+        } else if (metaBounds) {
+          map.fitBounds(metaBounds, { maxZoom: 20 });
+        } else {
+          map.setView([0,0], 2);
+        }
+
+        const btnCapture = document.createElement('button');
+        btnCapture.className = 'btn btn-secondary';
+        btnCapture.type = 'button';
+        btnCapture.textContent = 'Use current view';
+        btnCapture.onclick = () => {
+          const b = map.getBounds();
+          state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+          applyExtentRectangle(state.extent);
+          updateInfo();
+          queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+        };
+        buttons.appendChild(btnCapture);
+
+        const btnMin = document.createElement('button');
+        btnMin.className = 'btn btn-secondary';
+        btnMin.type = 'button';
+        btnMin.textContent = 'Set current zoom as Min';
+        btnMin.onclick = () => {
+          document.getElementById('zoom_min').value = map.getZoom();
+          showStatus('zoom_min set to ' + map.getZoom());
+          const currentMaxRaw = document.getElementById('zoom_max').value;
+          const parsedMax = Number(currentMaxRaw);
+          queueProjectConfigSave(project.id, {
+            zoom: {
+              min: Number(map.getZoom()),
+              max: Number.isFinite(parsedMax) ? parsedMax : null,
+              updatedAt: new Date().toISOString()
+            }
+          });
+        };
+        buttons.appendChild(btnMin);
+
+        const btnMax = document.createElement('button');
+        btnMax.className = 'btn btn-secondary';
+        btnMax.type = 'button';
+        btnMax.textContent = 'Set current zoom as Max';
+        btnMax.onclick = () => {
+          document.getElementById('zoom_max').value = map.getZoom();
+          showStatus('zoom_max set to ' + map.getZoom());
+          const currentMinRaw = document.getElementById('zoom_min').value;
+          const parsedMin = Number(currentMinRaw);
+          queueProjectConfigSave(project.id, {
+            zoom: {
+              min: Number.isFinite(parsedMin) ? parsedMin : null,
+              max: Number(map.getZoom()),
+              updatedAt: new Date().toISOString()
+            }
+          });
+        };
+        buttons.appendChild(btnMax);
+
+        const btnClear = document.createElement('button');
+        btnClear.className = 'btn';
+        btnClear.type = 'button';
+        btnClear.textContent = 'Clear extent';
+        btnClear.onclick = () => {
+          state.extent = null;
+          drawnItems.clearLayers();
+          updateInfo();
+          showStatus('Extent cleared.');
+          queueProjectConfigSave(project.id, { extent: { bbox: null, crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+        };
+        buttons.appendChild(btnClear);
+
+        updateInfo();
+      }
+
+      // Helper global para mostrar estado
+      function showStatus(msg, isError = false) {
+        const statusEl = document.getElementById('status');
+        if (!statusEl) return;
+        statusEl.innerHTML = '<div class="status ' + (isError ? 'error' : '') + '">' + String(msg) + '</div>';
+      }
+
+  const layersEl = document.getElementById('layers');
+  const statusEl = document.getElementById('status');
+  const reloadBtn = document.getElementById('reload');
+  const uploadBtn = document.getElementById('upload_project_btn');
+  const uploadInput = document.getElementById('project_upload_input');
+  const languageSelect = document.getElementById('language_selector');
+  const zoomMinInput = document.getElementById('zoom_min');
+  const zoomMaxInput = document.getElementById('zoom_max');
+  const modeSelect = document.getElementById('cache_mode');
+  const tileCrsInput = document.getElementById('tile_crs');
+  const allowRemoteCheckbox = document.getElementById('allow_remote');
+  const throttleInput = document.getElementById('throttle_ms');
+  const guideBtn = document.getElementById('open_guide');
+  const jobsWrap = document.getElementById('jobs');
+  const jobsList = document.getElementById('jobsList');
+      if (guideBtn) {
+        guideBtn.addEventListener('click', () => {
+          window.open('/guide.html', '_blank', 'noopener');
+        });
+      }
+  let loadLayersRunning = false;
+  let loadLayersQueued = false;
+
+      if (languageSelect) {
+        languageSelect.value = currentLang;
+        languageSelect.addEventListener('change', (event) => setLanguage(event.target.value));
+      }
+
+      applyStaticTranslations();
+
+      if (uploadBtn && uploadInput) {
+        uploadBtn.addEventListener('click', () => uploadInput.click());
+        uploadInput.addEventListener('change', async (event) => {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+          await uploadProjectFile(uploadBtn, file);
+          uploadInput.value = '';
+        });
+      }
+
+      function emitControlConfigChange(extraPatch = {}){
+        if (!activeProjectId || suppressControlSync) return;
+        const zoomMinVal = Number(zoomMinInput?.value);
+        const zoomMaxVal = Number(zoomMaxInput?.value);
+        const prefsPatch = {
+          cachePreferences: {
+            mode: modeSelect ? modeSelect.value : 'xyz',
+            tileCrs: tileCrsInput ? tileCrsInput.value.trim() : 'EPSG:3857',
+            allowRemote: allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false,
+            throttleMs: throttleInput && throttleInput.value !== '' ? Number(throttleInput.value) : 0,
+            updatedAt: new Date().toISOString()
+          }
+        };
+        const zoomPatch = {
+          zoom: {
+            min: Number.isFinite(zoomMinVal) ? zoomMinVal : null,
+            max: Number.isFinite(zoomMaxVal) ? zoomMaxVal : null,
+            updatedAt: new Date().toISOString()
+          }
+        };
+        queueProjectConfigSave(activeProjectId, deepMergeObjects(zoomPatch, deepMergeObjects(prefsPatch, extraPatch))); // merge extras afterwards
+      }
+
+      if (zoomMinInput) {
+        zoomMinInput.addEventListener('change', () => emitControlConfigChange());
+        zoomMinInput.addEventListener('blur', () => emitControlConfigChange());
+      }
+      if (zoomMaxInput) {
+        zoomMaxInput.addEventListener('change', () => emitControlConfigChange());
+        zoomMaxInput.addEventListener('blur', () => emitControlConfigChange());
+      }
+      if (modeSelect) {
+        modeSelect.addEventListener('change', () => emitControlConfigChange());
+      }
+      if (tileCrsInput) {
+        tileCrsInput.addEventListener('change', () => emitControlConfigChange());
+        tileCrsInput.addEventListener('blur', () => emitControlConfigChange());
+      }
+      if (allowRemoteCheckbox) {
+        allowRemoteCheckbox.addEventListener('change', () => emitControlConfigChange());
+      }
+      if (throttleInput) {
+        throttleInput.addEventListener('change', () => emitControlConfigChange());
+        throttleInput.addEventListener('blur', () => emitControlConfigChange());
+      }
+
+      function syncRemoteButtons(){
+        if (!allowRemoteCheckbox) return;
+        const active = allowRemoteCheckbox.checked;
+        document.querySelectorAll('button[data-remote="1"]').forEach(btn => {
+          btn.disabled = !active;
+          if (active) {
+            btn.title = 'Generate cache';
+            btn.setAttribute('aria-label', 'Generate cache');
+          } else {
+            btn.title = 'Remote layer. Enable "Allow remote" to cache.';
+            btn.setAttribute('aria-label', 'Remote layer. Enable "Allow remote" to cache.');
+          }
+        });
+      }
+
+      async function loadLayers() {
+  if (loadLayersRunning) {
+    loadLayersQueued = true;
+        return;
+      }
+      loadLayersRunning = true;
+      loadLayersQueued = false;
+  layersEl.textContent = tr('Loading projects…');
+        try {
+          const r = await fetch('/projects');
+          const projects = await r.json();
+          if (!Array.isArray(projects) || projects.length === 0) {
+            layersEl.innerHTML = '<div>' + tr('No projects in qgisprojects/') + '</div>';
+            return;
+          }
+          layersEl.innerHTML = '';
+          // cargar capas por proyecto
+          for (const p of projects) {
+            const wrap = document.createElement('div');
+            wrap.dataset.projectId = p.id;
+            wrap.addEventListener('mouseenter', () => setActiveProject(p.id));
+            wrap.addEventListener('focusin', () => setActiveProject(p.id));
+            const heading = document.createElement('div');
+            heading.className = 'project-heading';
+            const icon = document.createElement('span');
+            icon.className = 'heading-icon';
+            icon.innerHTML = ICONS.project;
+            const title = document.createElement('h2');
+            title.textContent = `Project: ${p.name}`;
+            heading.appendChild(icon);
+            heading.appendChild(title);
+            const headingActions = document.createElement('div');
+            headingActions.style.marginLeft = 'auto';
+            headingActions.style.display = 'flex';
+            headingActions.style.gap = '8px';
+            const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+            deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
+            headingActions.appendChild(deleteProjectBtn);
+            heading.appendChild(headingActions);
+            wrap.appendChild(heading);
+            const listEl = document.createElement('div');
+            listEl.className = 'list';
+            wrap.appendChild(listEl);
+            layersEl.appendChild(wrap);
+            try {
+              const lr = await fetch('/projects/' + encodeURIComponent(p.id) + '/layers');
+              const text = await lr.text();
+              if (!lr.ok) {
+                listEl.innerHTML = '<div class="error">' + tr('Failed to load layers: HTTP {status}', { status: lr.status }) + '</div>';
+                showStatus(tr('Details: {text}', { text }), true);
+                continue;
+              }
+              const json = JSON.parse(text);
+              await renderProjectLayers(p, json, listEl, wrap);
+            } catch (e) {
+              listEl.innerHTML = `<div class="error">${tr('Network error while loading project layers')}</div>`;
+            }
+          }
+          if (!activeProjectId && projects.length) {
+            setActiveProject(projects[0].id);
+          }
+        } catch (err) {
+          layersEl.innerHTML = '<div class="error">Network error: ' + String(err) + '</div>';
+          showStatus('Network error: ' + String(err), true);
+          console.error('Fetch /projects failed', err);
+        }
+        finally {
+          loadLayersRunning = false;
+          syncRemoteButtons();
+          if (loadLayersQueued) {
+            loadLayersQueued = false;
+            setTimeout(loadLayers, 0);
+          }
+        }
+      }
+
+      async function uploadProjectFile(btn, file) {
+        if (!file) return;
+        const originalDisabled = btn.disabled;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Uploading…';
+        showStatus('Uploading project: ' + file.name);
+        try {
+          const form = new FormData();
+          form.append('project', file, file.name);
+          const res = await fetch('/projects', { method: 'POST', body: form });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const detail = data?.error || data?.details || res.statusText;
+            showStatus('Upload failed: ' + detail, true);
+            return;
+          }
+          const projectId = data?.id || null;
+          if (projectId) {
+            extentStates.delete(projectId);
+          }
+          showStatus('Project uploaded: ' + (projectId || file.name));
+          loadLayers();
+        } catch (err) {
+          showStatus('Network error: ' + err, true);
+        } finally {
+          btn.disabled = originalDisabled;
+          btn.textContent = originalText;
+        }
+      }
+
+      // Gestión de jobs activos (persistencia visual tras recarga)
+      const jobMonitors = new Map(); // id -> {timer, elements}
+      function renderJobsList(list){
+        jobsList.innerHTML = '';
+        if (!Array.isArray(list) || list.length === 0) {
+          jobsWrap.style.display = 'none';
+          // limpiar monitores antiguos
+          for (const m of jobMonitors.values()) { try { clearInterval(m.timer); } catch{} }
+          jobMonitors.clear();
+          return;
+        }
+        jobsWrap.style.display = '';
+        const seen = new Set();
+        list.forEach(j => {
+          seen.add(j.id);
+          let row = document.getElementById('job-'+j.id);
+          if (!row) {
+            row = document.createElement('div');
+            row.className = 'job';
+            row.id = 'job-'+j.id;
+            const left = document.createElement('div');
+            left.innerHTML = `<div><strong>${escapeHtml(j.layer)}</strong> <span class="info">· project: ${escapeHtml(j.project||'-')}</span></div>`+
+                             `<div class="info">id: ${j.id}</div>`;
+            const right = document.createElement('div');
+            right.style.display = 'flex';
+            right.style.alignItems = 'center';
+            right.style.gap = '8px';
+            const pill = document.createElement('span');
+            pill.className = 'progress-pill';
+            const bar = document.createElement('span'); bar.className = 'progress-bar'; const inner = document.createElement('i'); bar.appendChild(inner);
+            const txt = document.createElement('span'); txt.textContent = '...';
+            pill.appendChild(bar); pill.appendChild(txt);
+            const abortBtn = document.createElement('button'); abortBtn.className = 'btn btn-danger'; abortBtn.textContent = 'Abort';
+            abortBtn.onclick = async () => {
+              abortBtn.disabled = true;
+              showStatus('Aborting job ' + j.id);
+              try{
+                const r = await fetch('/generate-cache/' + encodeURIComponent(j.id), { method:'DELETE' });
+                if (!r.ok) showStatus('No se pudo abortar job', true);
+              }catch(e){ showStatus('Network error while aborting: ' + e, true); }
+            };
+            right.appendChild(pill); right.appendChild(abortBtn);
+            row.appendChild(left); row.appendChild(right);
+            jobsList.appendChild(row);
+            // monitor
+            const timer = setInterval(async () => {
+              try{
+                const r = await fetch('/generate-cache/' + encodeURIComponent(j.id) + '?tail=50000');
+                if (!r.ok) throw new Error('http ' + r.status);
+                const det = await r.json();
+                let pct = null; let status = det.status;
+                // intentar parsear el último porcentaje de stdout
+                const last = (function(stdout){
+                  if (!stdout) return null;
+                  const lines = stdout.split(/\r?\n/).filter(Boolean);
+                  let last = null; for (const line of lines){
+                    const s = line.indexOf('{'), e = line.lastIndexOf('}');
+                    if (s !== -1 && e !== -1 && e>s){ try{ const o = JSON.parse(line.slice(s,e+1)); if (o && (o.progress||o.status||o.debug)) last = o; }catch{} }
+                  }
+                  return last;
+                })(det.stdout||'');
+                if (last && typeof last.percent === 'number') pct = Math.max(0, Math.min(100, last.percent));
+                if (status === 'completed' && (pct==null || pct<100)) pct = 100;
+                if (pct!=null) inner.style.width = pct + '%';
+                txt.textContent = (pct!=null? (pct+'%'):'...') + (status? (' · ' + status):'');
+                if (status && ['completed','error','aborted'].includes(status)) {
+                  clearInterval(timer);
+                  jobMonitors.delete(j.id);
+                  // quitar fila tras unos segundos
+                  setTimeout(()=>{ try{ row.remove(); }catch{}; if (!jobsList.children.length) jobsWrap.style.display='none'; }, 2000);
+                  // refresh layer list so cache buttons update (delete/view)
+                  try { loadLayers(); } catch {}
+                }
+              }catch{}
+            }, 1200);
+            jobMonitors.set(j.id, { timer });
+          }
+        });
+        // limpiar monitores de jobs que ya no están
+        for (const id of Array.from(jobMonitors.keys())) {
+          if (!seen.has(id)) { try{ clearInterval(jobMonitors.get(id).timer); }catch{} jobMonitors.delete(id); }
+        }
+      }
+
+      async function refreshJobs(){
+        try{
+          const r = await fetch('/generate-cache/running');
+          if (!r.ok) return;
+          const list = await r.json();
+          renderJobsList(list);
+        }catch{}
+      }
+
+  async function renderProjectLayers(project, payload, targetEl, wrapEl) {
+        const projectMeta = (!Array.isArray(payload) && payload && typeof payload === 'object' && Array.isArray(payload.layers)) ? payload.project : null;
+  const layers = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.layers) ? payload.layers : []);
+  const themes = payload && Array.isArray(payload.themes) ? payload.themes : [];
+        const parent = wrapEl || targetEl.parentElement;
+    const state = getProjectState(project.id);
+  state.projectMeta = projectMeta;
+  state.themes = themes;
+
+        const projectConfig = await loadProjectConfig(project.id);
+        if (projectConfig) {
+          state.config = projectConfig;
+          if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox) && projectConfig.extent.bbox.length === 4) {
+            state.extent = projectConfig.extent.bbox.slice();
+          }
+        }
+
+        if (parent) {
+          const existingMeta = parent.querySelector('[data-role="project-meta"]');
+          if (existingMeta) existingMeta.remove();
+          state.metaInfoEl = null;
+          const existingBatch = parent.querySelector('[data-role="project-batch"]');
+          if (existingBatch) existingBatch.remove();
+          state.batchInfoEl = null;
+          state.batchButton = null;
+          state.lastBatchStatus = null;
+          setProjectBatchPolling(project.id, false);
+          const existingExtent = parent.querySelector('[data-role="project-extent"]');
+          if (existingExtent) {
+            if (state.map) {
+              try { state.map.remove(); } catch {}
+              state.map = null;
+            }
+            existingExtent.remove();
+          }
+
+          const extentContainer = document.createElement('div');
+          extentContainer.dataset.role = 'project-extent';
+          extentContainer.dataset.open = '0';
+          extentContainer.style.display = 'none';
+          extentContainer.style.margin = '0 0 12px 0';
+
+
+          const metaRow = document.createElement('div');
+          metaRow.dataset.role = 'project-meta';
+          metaRow.style.display = 'flex';
+          metaRow.style.alignItems = 'center';
+          metaRow.style.justifyContent = 'space-between';
+          metaRow.style.gap = '12px';
+          metaRow.style.margin = '6px 0 8px 0';
+
+          const leftMeta = document.createElement('div');
+          leftMeta.className = 'meta';
+          metaRow.appendChild(leftMeta);
+          state.metaInfoEl = leftMeta;
+          refreshProjectMetaInfo(project, projectMeta, state.config);
+
+          const controlsBox = document.createElement('div');
+          controlsBox.style.display = 'flex';
+          controlsBox.style.gap = '8px';
+
+          const copyWmtsBtn = document.createElement('button');
+          copyWmtsBtn.className = 'btn btn-outline';
+          copyWmtsBtn.type = 'button';
+          copyWmtsBtn.textContent = 'Copy WMTS URL';
+          copyWmtsBtn.addEventListener('click', () => {
+            const wmtsUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+            navigator.clipboard.writeText(wmtsUrl).then(() => {
+              showStatus('WMTS capabilities URL copied: ' + wmtsUrl);
+            }).catch(err => {
+              showStatus('Copy failed: ' + String(err), true);
+            });
+          });
+          controlsBox.appendChild(copyWmtsBtn);
+
+          const scheduleBtn = document.createElement('button');
+          scheduleBtn.className = 'btn btn-outline';
+          scheduleBtn.type = 'button';
+          scheduleBtn.textContent = 'Recache timer';
+          scheduleBtn.addEventListener('click', () => openRecacheScheduler(project));
+          controlsBox.appendChild(scheduleBtn);
+
+          const extentToggle = document.createElement('button');
+          extentToggle.className = 'btn btn-outline';
+          extentToggle.type = 'button';
+          const updateToggleLabel = () => {
+            extentToggle.textContent = extentContainer.dataset.open === '1' ? 'Hide extent map' : 'Show extent map';
+          };
+          extentToggle.onclick = () => {
+            toggleProjectExtentPanel(project, projectMeta, extentContainer)
+              .catch(err => console.error('Extent panel error', err))
+              .finally(updateToggleLabel);
+          };
+          updateToggleLabel();
+          controlsBox.appendChild(extentToggle);
+          metaRow.appendChild(controlsBox);
+
+          parent.insertBefore(metaRow, targetEl);
+          parent.insertBefore(extentContainer, targetEl);
+
+          const batchRow = document.createElement('div');
+          batchRow.dataset.role = 'project-batch';
+          batchRow.style.display = 'flex';
+          batchRow.style.alignItems = 'center';
+          batchRow.style.justifyContent = 'space-between';
+          batchRow.style.gap = '12px';
+          batchRow.style.margin = '4px 0 10px 0';
+          const batchInfo = document.createElement('div');
+          batchInfo.className = 'meta';
+          batchInfo.textContent = 'Project cache idle';
+          const batchActions = document.createElement('div');
+          batchActions.style.display = 'flex';
+          batchActions.style.gap = '8px';
+          const runAllBtn = document.createElement('button');
+          runAllBtn.className = 'btn btn-primary';
+          runAllBtn.type = 'button';
+          runAllBtn.textContent = 'Cache all layers';
+          runAllBtn.addEventListener('click', () => startProjectCache(project, layers, runAllBtn));
+          batchActions.appendChild(runAllBtn);
+          batchRow.appendChild(batchInfo);
+          batchRow.appendChild(batchActions);
+          parent.insertBefore(batchRow, targetEl);
+          state.batchInfoEl = batchInfo;
+          state.batchButton = runAllBtn;
+          refreshProjectBatchStatus(project.id);
+
+          if (state.open) {
+            toggleProjectExtentPanel(project, projectMeta, extentContainer)
+              .catch(err => console.error('Extent panel error', err))
+              .finally(updateToggleLabel);
+          }
+        }
+
+        if (!Array.isArray(layers) || layers.length === 0) {
+          targetEl.innerHTML = '<div>No layers</div>';
+          return;
+        }
+        targetEl.innerHTML = '';
+        // fetch project cache index to know which layers have cached tiles
+  let cacheIndex = null; const cachedByKey = new Map();
+        try {
+          const r = await fetch('/cache/' + encodeURIComponent(project.id) + '/index.json');
+          if (r.ok) {
+            cacheIndex = await r.json();
+            for (const e of (cacheIndex.layers||[])) {
+              if (!e || !e.name) continue;
+              const kind = e.kind || 'layer';
+              cachedByKey.set(kind + ':' + e.name, e);
+            }
+          }
+        } catch {}
+        layers.forEach(l => {
+          const d = document.createElement('div');
+          d.className = 'layer';
+          const info = document.createElement('div');
+          const provider = (l.provider || '').toLowerCase();
+          const cacheable = !!l.cacheable;
+          const badges = [];
+          if (!cacheable) badges.push('<span style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted)">remote</span>');
+          const cachedEntry = cachedByKey.get('layer:' + l.name) || null;
+          const iconKind = cachedEntry && cachedEntry.scheme === 'wmts' ? 'wmts' : 'layer';
+          const iconClass = iconKind === 'layer' ? 'layer-title-icon' : `layer-title-icon ${iconKind}`;
+          const titlePieces = [
+            `<span class="${iconClass}">${ICONS[iconKind] || ICONS.layer}</span>`,
+            `<span>${escapeHtml(l.name)}</span>`
+          ];
+          if (badges.length) titlePieces.push(badges.join(' '));
+          info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` +
+                           '<div class="meta">' + (l.crs ? escapeHtml(l.crs) : '') + (provider? (' · ' + escapeHtml(provider)) : '') + (l.extent ? ' · extent: ' + escapeHtml(JSON.stringify(l.extent)) : '') + '</div>';
+
+          const tileTemplate = `/wmts/${encodeURIComponent(project.id)}/${encodeURIComponent(l.name)}/{z}/{x}/{y}.png`;
+          
+          const exampleLink = document.createElement('a');
+          if (cachedEntry) {
+            exampleLink.href = tileTemplate.replace('{z}', String(cachedEntry.zoom_min ?? 0)).replace('{x}','0').replace('{y}','0');
+            exampleLink.target = '_blank';
+            exampleLink.style.display = 'block';
+            exampleLink.style.fontSize = '12px';
+            exampleLink.style.marginTop = '6px';
+            exampleLink.textContent = 'View sample tile';
+          }
+
+          const copyBtn = makeIconButton('Copy tiles URL', 'copy', () => {
+            const full = window.location.origin + tileTemplate;
+            navigator.clipboard.writeText(full).then(() => {
+              showStatus('Tile template copied to clipboard: ' + full);
+            }).catch(err => {
+              showStatus('Copy failed: ' + String(err), true);
+            });
+          });
+
+          const controls = document.createElement('div');
+          controls.className = 'actions';
+          controls.setAttribute('role', 'group');
+
+          const hasCache = !!cachedEntry;
+          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', () => generateCache(genBtn, project.id, l.name, l, { recache: hasCache, cachedEntry }), 'btn-primary');
+          if (hasCache) {
+            genBtn.title = 'Recache layer (rebuild tiles)';
+          }
+          if (l.cacheable === false) {
+            genBtn.disabled = true;
+            genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
+            // if user toggles allow_remote later, we re-enable dynamically
+            genBtn.dataset.remote = '1';
+          }
+
+          const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
+
+          const viewBtn = makeIconButton('Open map viewer', 'eye', () => {
+            const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
+            window.open(url, '_blank', 'noopener');
+          }, 'btn-secondary');
+
+          controls.appendChild(genBtn);
+          // only show delete/view/example when cache exists
+          if (cachedEntry) {
+            controls.appendChild(delBtn);
+            controls.appendChild(copyBtn);
+            controls.appendChild(viewBtn);
+          } else {
+            controls.appendChild(copyBtn);
+          }
+
+          d.appendChild(info);
+          if (cachedEntry) d.appendChild(exampleLink);
+          d.appendChild(controls);
+          targetEl.appendChild(d);
+        });
+        if (themes && themes.length) {
+          const themeHeader = document.createElement('h3');
+          themeHeader.textContent = 'Map themes';
+          themeHeader.style.margin = '18px 0 8px 0';
+          themeHeader.style.fontSize = '16px';
+          themeHeader.style.fontWeight = '600';
+          targetEl.appendChild(themeHeader);
+          themes.forEach(theme => {
+            if (!theme || !theme.name) return;
+            const themeRow = document.createElement('div');
+            themeRow.className = 'layer';
+            const infoBox = document.createElement('div');
+            const themeHeaderPieces = [
+              `<span class="layer-title-icon theme">${ICONS.theme}</span>`,
+              `<span>${escapeHtml(theme.name)}</span>`,
+              '<span style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted)">theme</span>'
+            ];
+            infoBox.innerHTML = `<div class="layer-title">${themeHeaderPieces.join(' ')}</div>`;
+            const metaBox = document.createElement('div');
+            metaBox.className = 'meta';
+            const configTheme = state.config && state.config.themes ? state.config.themes[theme.name] : null;
+            const cachedTheme = cachedByKey.get('theme:' + theme.name) || null;
+            const cachedSources = cachedTheme && Array.isArray(cachedTheme.source_layers) ? cachedTheme.source_layers : [];
+            const sources = Array.isArray(theme.layers) && theme.layers.length ? theme.layers : (configTheme && Array.isArray(configTheme.sourceLayers) ? configTheme.sourceLayers : cachedSources);
+            const metaParts = [];
+            if (sources.length) metaParts.push('Layers: ' + sources.join(', '));
+            if (configTheme && configTheme.lastRunAt) {
+              const when = new Date(configTheme.lastRunAt);
+              if (!Number.isNaN(when.getTime())) metaParts.push('Last run: ' + when.toLocaleString());
+            }
+            if (configTheme && configTheme.lastResult) metaParts.push('Status: ' + configTheme.lastResult);
+            metaBox.textContent = metaParts.join(' · ') || 'No runs yet';
+            infoBox.appendChild(metaBox);
+            themeRow.appendChild(infoBox);
+
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            actions.setAttribute('role', 'group');
+
+            const themeObj = { name: theme.name, layers: sources };
+            const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
+            actions.appendChild(cacheBtn);
+
+            const copyThemeBtn = makeIconButton('Copy WMTS URL', 'copy', () => {
+              const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
+              navigator.clipboard.writeText(template).then(() => {
+                showStatus('WMTS theme URL copied: ' + template);
+              }).catch(err => {
+                showStatus('Copy failed: ' + String(err), true);
+              });
+            });
+            actions.appendChild(copyThemeBtn);
+
+            const viewThemeBtn = makeIconButton('Open map viewer', 'eye', () => {
+              const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
+              window.open(url, '_blank', 'noopener');
+            }, 'btn-secondary');
+            actions.appendChild(viewThemeBtn);
+
+            themeRow.appendChild(actions);
+            targetEl.appendChild(themeRow);
+          });
+        }
+        syncRemoteButtons();
+      }
+
+      function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+      async function generateCache(btn, projectId, layerName, layerObj, options = {}) {
+        const { recache = false, cachedEntry = null, kind = 'layer' } = options || {};
+        const isTheme = kind === 'theme';
+        const targetLabel = isTheme ? `theme "${layerName}"` : layerName;
+        setActiveProject(projectId);
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+  btn.title = recache ? 'Recaching tiles…' : 'Generating cache…';
+        btn.setAttribute('aria-busy', 'true');
+  showStatus((recache ? 'Starting recache for: ' : 'Starting generation for: ') + targetLabel);
+        try {
+          let zoom_min = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
+          let zoom_max = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
+          if (zoom_min < 0) zoom_min = 0; if (zoom_max < 0) zoom_max = 0;
+          if (zoom_min > zoom_max && !(zoom_min === 0 && zoom_max === 0)) {
+            // intercambiar para ser amigables
+            const tmp = zoom_min; zoom_min = zoom_max; zoom_max = tmp;
+          }
+          const mode = modeSelect ? modeSelect.value : 'xyz';
+          const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
+          const body = { project: projectId, zoom_min, zoom_max };
+          if (isTheme) {
+            body.theme = layerName;
+          } else {
+            body.layer = layerName;
+          }
+          if (mode === 'xyz') {
+            body.scheme = 'xyz';
+            body.tile_crs = 'EPSG:3857'; // forzamos estándar
+            body.xyz_mode = 'partial';
+          } else if (mode === 'wmts') {
+            // usamos auto scheme y flag wmts => python decidirá wmts salvo que sea 3857
+            body.scheme = 'auto';
+            body.wmts = true;
+            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') body.tile_crs = rawTileCrs;
+          } else if (mode === 'custom') {
+            body.scheme = 'custom';
+            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') body.tile_crs = rawTileCrs;
+          }
+          // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
+          const state = extentStates.get(projectId);
+          const captured = state && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
+          if (captured) {
+            body.project_extent = captured.join(',');
+            body.extent_crs = 'EPSG:4326';
+          }
+          // remote opt-in
+          if (allowRemoteCheckbox && allowRemoteCheckbox.checked) {
+            body.allow_remote = true;
+            const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
+            if (throttleVal > 0) body.throttle_ms = throttleVal;
+          } else if (!isTheme && layerObj && layerObj.cacheable === false) {
+            showStatus('Remote layer requires "Allow remote" toggle.', true);
+            restoreButton();
+            return;
+          }
+          const nowIso = new Date().toISOString();
+          const targetConfigPatch = {
+            lastParams: { ...body },
+            lastRequestedAt: nowIso
+          };
+          if (isTheme && layerObj && Array.isArray(layerObj.layers)) {
+            targetConfigPatch.sourceLayers = layerObj.layers.slice(0, 64);
+          }
+          const projectPatch = {
+            zoom: { min: zoom_min, max: zoom_max, updatedAt: nowIso },
+            cachePreferences: {
+              mode,
+              tileCrs: rawTileCrs || (mode === 'xyz' ? 'EPSG:3857' : ''),
+              allowRemote: !!(allowRemoteCheckbox && allowRemoteCheckbox.checked),
+              throttleMs: throttleInput && throttleInput.value !== '' ? Number(throttleInput.value) : 0,
+              updatedAt: nowIso
+            }
+          };
+          if (isTheme) {
+            projectPatch.themes = { [layerName]: targetConfigPatch };
+          } else {
+            projectPatch.layers = { [layerName]: targetConfigPatch };
+          }
+          queueProjectConfigSave(projectId, projectPatch);
+
+          if (recache) {
+            if (isTheme) {
+              showStatus('Recache for themes is not supported yet.', true);
+              restoreButton();
+              return;
+            }
+            try {
+              const delRes = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
+              if (!delRes.ok && delRes.status !== 404) {
+                const delData = await delRes.json().catch(()=>null);
+                throw new Error(delData?.error || delData?.details || delRes.statusText || 'Failed to purge old cache');
+              }
+            } catch (delErr) {
+              showStatus('Recache aborted (purge failed): ' + delErr, true);
+              restoreButton();
+              return;
+            }
+          }
+
+          const res = await fetch('/generate-cache', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json().catch(()=>null);
+          if (!res.ok) {
+            showStatus('Error: ' + (data?.details || res.statusText || JSON.stringify(data)), true);
+            restoreButton();
+          } else {
+            showStatus((recache ? 'Recache' : 'Generation') + ' started for ' + targetLabel + ': job id ' + data.id);
+            // crear botón detener junto al botón original
+            const stopBtn = document.createElement('button');
+            stopBtn.className = 'btn btn-danger';
+            stopBtn.textContent = 'Abort';
+            stopBtn.onclick = async () => {
+              stopBtn.disabled = true;
+              showStatus('Aborting job ' + data.id);
+              try {
+                const r = await fetch('/generate-cache/' + encodeURIComponent(data.id), { method: 'DELETE' });
+                const resjson = await r.json().catch(()=>null);
+                if (!r.ok) {
+                  showStatus('Abort failed: ' + (resjson?.error || r.statusText), true);
+                } else {
+                  showStatus('Job abortado: ' + data.id);
+                }
+              } catch (err) {
+                showStatus('Network error while aborting: ' + err, true);
+              } finally {
+                // dejamos que el polling detecte el estado y cierre UI
+                stopBtn.disabled = true;
+              }
+            };
+            // insertar stopBtn después del botón que inició la generación
+            btn.parentNode && btn.parentNode.appendChild(stopBtn);
+
+            // crear indicador de progreso
+            const progressEl = document.createElement('span');
+            progressEl.className = 'progress-pill';
+            const bar = document.createElement('span');
+            bar.className = 'progress-bar';
+            const barInner = document.createElement('i');
+            bar.appendChild(barInner);
+            const txt = document.createElement('span');
+            txt.textContent = '0%';
+            progressEl.appendChild(bar);
+            progressEl.appendChild(txt);
+            btn.parentNode && btn.parentNode.appendChild(progressEl);
+
+            // polling de estado
+            let polling = true;
+            const parseProgress = (stdout) => {
+              if (!stdout) return null;
+              const lines = stdout.split(/\r?\n/).filter(Boolean);
+              let last = null;
+              for (const line of lines) {
+                const start = line.indexOf('{');
+                const end = line.lastIndexOf('}');
+                if (start !== -1 && end !== -1 && end > start) {
+                  try {
+                    const obj = JSON.parse(line.slice(start, end+1));
+                    if (obj && (obj.progress || obj.status || obj.debug)) last = obj;
+                  } catch {}
+                }
+              }
+              return last;
+            };
+
+            let lastPct = 0;
+            const clamp = (v) => Math.max(0, Math.min(100, Number(v)));
+            const timer = setInterval(async () => {
+              if (!polling) return;
+              try {
+                const r = await fetch('/generate-cache/' + encodeURIComponent(data.id) + '?tail=50000');
+                if (!r.ok) {
+                  // si 404, es probable que el job haya expirado/limpiado
+                  if (r.status === 404) {
+                    txt.textContent = 'not found';
+                    clearInterval(timer);
+                    polling = false;
+                    restoreButton();
+                  }
+                  return;
+                }
+                const j = await r.json().catch(()=>null);
+                const last = parseProgress(j?.stdout || '');
+                if (last?.percent != null) {
+                  lastPct = clamp(last.percent);
+                  barInner.style.width = lastPct + '%';
+                  txt.textContent = lastPct + '%';
+                }
+                if (j?.status && ["completed","error","aborted"].includes(j.status)) {
+                  if (j.status === 'completed' && lastPct < 100) {
+                    lastPct = 100;
+                    barInner.style.width = '100%';
+                    txt.textContent = '100%';
+                  }
+                  txt.textContent += ` · ${j.status}`;
+                  clearInterval(timer);
+                  polling = false;
+                  // limpiar UI y reactivar botón
+                  try { stopBtn.remove(); } catch {}
+                  restoreButton();
+                  // refresh layer list after foreground job completes
+                  setTimeout(()=>{ try { loadLayers(); } catch{} }, 600);
+                }
+              } catch (e) {
+                // ignorar fallos de red puntuales
+              }
+            }, 1000);
+
+            // al salir de la página o recargar, limpiar el polling
+            window.addEventListener('beforeunload', () => { try { clearInterval(timer); } catch {} });
+          }
+        } catch (err) {
+          showStatus('Network error: ' + err, true);
+          restoreButton();
+        }
+      }
+
+      async function deleteCache(btn, projectId, layerName) {
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        btn.title = 'Deleting cache…';
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          const res = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName), { method: 'DELETE' });
+          const data = await res.json().catch(()=>null);
+          if (!res.ok) {
+            showStatus('Delete failed: ' + (data?.error || data?.details || res.statusText), true);
+            console.error('/cache DELETE non-ok', res.status, data);
+          } else {
+            showStatus('Cache deleted: ' + layerName);
+            loadLayers(); // refresh list
+          }
+        } catch (err) {
+          showStatus('Network error: ' + err, true);
+          console.error('deleteCache failed', err);
+        } finally {
+          restoreButton();
+        }
+      }
+
+      async function deleteProject(btn, project) {
+        if (!project || !project.id) return;
+        const message = `Delete project "${project.name || project.id}"? This also removes cached tiles.`;
+        if (!window.confirm(message)) return;
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        btn.title = 'Deleting project…';
+        btn.setAttribute('aria-busy', 'true');
+        showStatus('Deleting project: ' + (project.name || project.id));
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(project.id), { method: 'DELETE' });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            const detail = data?.error || data?.details || res.statusText;
+            showStatus('Delete project failed: ' + detail, true);
+            return;
+          }
+          extentStates.delete(project.id);
+          projectConfigs.delete(project.id);
+          showStatus('Project deleted: ' + (project.name || project.id));
+          loadLayers();
+        } catch (err) {
+          showStatus('Network error: ' + err, true);
+        } finally {
+          restoreButton();
+        }
+      }
+
+  reloadBtn.onclick = () => { showStatus('Reloading…'); loadLayers(); };
+      loadLayers();
+      // arrancar polling de jobs para persistir estado entre recargas
+      refreshJobs();
+      const jobsTicker = setInterval(refreshJobs, 2000);
+      window.addEventListener('beforeunload', ()=>{ try{ clearInterval(jobsTicker);}catch{} });
+      // dynamic remote enable toggle
+      if (allowRemoteCheckbox) {
+        allowRemoteCheckbox.addEventListener('change', () => {
+          syncRemoteButtons();
+          emitControlConfigChange();
+        });
+        syncRemoteButtons();
+      }
+
+  // dynamic mode/CRS UI
+      function applyModeUI(){
+        if (!modeSelect || !tileCrsInput) return;
+        const m = modeSelect.value;
+        if (m === 'xyz') {
+          tileCrsInput.value = 'EPSG:3857';
+          tileCrsInput.disabled = true;
+          tileCrsInput.title = 'Fixed to EPSG:3857 for standard XYZ scheme';
+        } else if (m === 'wmts') {
+          tileCrsInput.disabled = false;
+          if (!tileCrsInput.value || tileCrsInput.value === 'EPSG:3857') tileCrsInput.value = '';
+          tileCrsInput.placeholder = 'auto (layer CRS)';
+          tileCrsInput.title = 'Empty = use layer native CRS';
+        } else {
+          tileCrsInput.disabled = false;
+          if (!tileCrsInput.value) tileCrsInput.placeholder = 'auto';
+          tileCrsInput.title = 'Empty = use layer CRS';
+        }
+      }
+      if (modeSelect) {
+        modeSelect.addEventListener('change', () => {
+          applyModeUI();
+          emitControlConfigChange();
+        });
+        applyModeUI();
+      }
+    </script>
+  </body>
+</html>
