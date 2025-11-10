@@ -8,153 +8,92 @@
   <head>
     <meta charset="utf-8">
   <title>Qtiler · MundoGIS</title>
-    <style>
-      :root{
-        --bg:#f7f8fa; --fg:#0f172a; --muted:#6b7280; --border:#e5e7eb;
-        --card:#ffffff; --primary:#2563eb; --primary-600:#1d4ed8; --danger:#dc2626; --danger-600:#b91c1c;
-        --ok:#065f46; --warn:#92400e; --shadow:0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.06);
-      }
-      @media (prefers-color-scheme: dark){
-        :root{
-          --bg:#0b1020; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --card:#111827;
-          --primary:#3b82f6; --primary-600:#2563eb; --danger:#ef4444; --danger-600:#dc2626;
-          --ok:#10b981; --warn:#f59e0b; --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
-        }
-      }
-      *{box-sizing:border-box}
-      html,body{height:100%}
-      body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:var(--bg); color:var(--fg)}
-      .container{max-width: 1000px; margin: 0 auto; padding:24px}
-      header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px}
-      h1{font-size:24px; margin:0}
-      .muted{color:var(--muted)}
-
-      .toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:12px 0}
-      .field{display:flex; align-items:center; gap:8px}
-      input[type=number]{width:80px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px}
-  .language-select{padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); font-weight:600; box-shadow:var(--shadow)}
-
-      #status{margin:12px 0}
-      .status{padding:10px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow: var(--shadow); white-space:pre-wrap}
-      .status.error{border-color: var(--danger); color: var(--danger)}
-
-      .list{display:flex; flex-direction:column; gap:10px}
-      .layer{display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow)}
-      .layer:hover{border-color:#cbd5e1}
-      .layer .meta{font-size:12px; color:var(--muted)}
-  .layer-title{display:flex; align-items:center; gap:8px; font-weight:700}
-  .layer-title-icon{display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:6px; border:1px solid var(--border); background:var(--card); color:var(--primary)}
-  .layer-title-icon.theme{color:var(--ok); border-color:rgba(37,99,235,.3)}
-  .layer-title-icon.wmts{color:var(--primary-600)}
-  .layer-title-icon svg{width:14px; height:14px; fill:currentColor}
-
-      .actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
-      .btn{appearance:none; border:none; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; transition: transform .02s ease, background .2s ease, color .2s ease; box-shadow: var(--shadow); background:#e5e7eb; color:#111827}
-      .btn:hover{transform: translateY(-1px)}
-      .btn:disabled{opacity:.6; cursor:not-allowed}
-      .btn-primary{background: var(--primary); color:#fff}
-      .btn-primary:hover{background: var(--primary-600)}
-      .btn-secondary{background:#e5e7eb; color:#111827}
-      .btn-outline{background:transparent; color:var(--primary); border:1px solid var(--primary)}
-      .btn-danger{background: var(--danger); color:#fff}
-      .btn-danger:hover{background: var(--danger-600)}
-  .btn-icon{width:36px; height:36px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:var(--card); border:1px solid var(--border); color:var(--fg); box-shadow: var(--shadow)}
-  .btn-icon:hover{background: var(--primary); color:#fff; border-color: var(--primary)}
-  .btn-icon:disabled{background: var(--card); color: var(--muted); border-color: var(--border)}
-  .btn-icon svg{width:18px; height:18px; fill:currentColor}
-  .project-heading{display:flex; align-items:center; gap:10px; margin:12px 0}
-  .project-heading h2{margin:0; font-size:20px}
-  .heading-icon{display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:999px; background:var(--primary); color:#fff; box-shadow: var(--shadow)}
-  .btn-icon.btn-primary{background: var(--primary); border-color: var(--primary); color:#fff}
-  .btn-icon.btn-primary:hover{background: var(--primary-600); border-color: var(--primary-600)}
-  .btn-icon.btn-secondary{background:#e5e7eb; border-color: var(--border); color:#111827}
-  .btn-icon.btn-secondary:hover{background:#d1d5db; border-color:#cbd5e1; color:#111827}
-  .btn-icon.btn-danger{background: var(--danger); border-color: var(--danger); color:#fff}
-  .btn-icon.btn-danger:hover{background: var(--danger-600); border-color: var(--danger-600)}
-  .btn-spinner{display:inline-block; width:18px; height:18px; border:2px solid currentColor; border-top-color: transparent; border-radius:50%; animation: btn-spin .75s linear infinite}
-  @keyframes btn-spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
-
-      a{color: var(--primary); text-decoration: none}
-      a:hover{text-decoration: underline}
-
-      .progress-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); background: var(--card); border-radius:999px; font-size:12px; color:var(--muted)}
-      .progress-bar{position:relative; width:120px; height:6px; background:#e5e7eb; border-radius:999px; overflow:hidden}
-      .progress-bar > i{display:block; height:100%; width:0%; background: var(--primary)}
-      .jobs{margin:16px 0; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow: var(--shadow)}
-      .job{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px dashed var(--border)}
-      .job:first-child{border-top:none}
-      .job .info{font-size:13px; color:var(--muted)}
-  .schedule-backdrop{position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; z-index:1200; padding:16px}
-  .schedule-backdrop[data-open="1"]{display:flex}
-  .schedule-dialog{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:20px; max-width:420px; width:100%; max-height:90vh; overflow:auto}
-  .schedule-dialog h2{margin:0 0 12px 0; font-size:18px}
-  .schedule-dialog fieldset{border:none; padding:0; margin:0}
-  .schedule-dialog .schedule-section{margin:12px 0}
-  .schedule-dialog .frequency-options{display:flex; flex-direction:column; gap:6px; margin:8px 0}
-  .schedule-dialog .day-grid{display:flex; flex-wrap:wrap; gap:8px}
-  .schedule-dialog .day-grid label{display:flex; align-items:center; gap:4px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer}
-  .schedule-dialog .day-grid input{margin:0}
-  .schedule-dialog .yearly-grid{display:flex; flex-direction:column; gap:8px}
-  .schedule-dialog .yearly-row{display:flex; gap:6px; align-items:center}
-  .schedule-dialog select,
-  .schedule-dialog input[type="time"],
-  .schedule-dialog input[type="number"],
-  .schedule-dialog input[type="text"]{width:100%; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px}
-  .schedule-dialog .yearly-row select{flex:1}
-  .schedule-dialog .yearly-row input[type="number"]{width:80px}
-  .schedule-dialog .yearly-row input[type="time"]{width:110px}
-  .schedule-dialog .error{color:var(--danger); font-size:12px; min-height:16px}
-  .schedule-dialog .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px}
-    </style>
+    <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <div class="container">
-      <header>
-        <div>
-          <h1>Qtiler</h1>
-          <div class="muted" data-i18n="MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.">MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.</div>
-        </div>
-        <div class="toolbar">
-          <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
-          <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
-          <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
-          <button id="open_guide" class="btn btn-outline" data-i18n="User guide">User guide</button>
-          <select id="language_selector" class="language-select" aria-label="Language">
-            <option value="en">English</option>
-            <option value="es">Español</option>
-            <option value="sv">Svenska</option>
-          </select>
-          <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
-          <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
-          <div class="field"><span data-i18n="Mode:">Mode:</span>
-            <select id="cache_mode" style="padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px">
-              <option value="xyz" selected data-i18n="XYZ (EPSG:3857)">XYZ (EPSG:3857)</option>
-              <option value="wmts" data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
-              <option value="custom" data-i18n="Custom subdivision (bbox)">Custom subdivision (bbox)</option>
-            </select>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="header-inner">
+          <div class="brand">
+            <a href="/index.html" class="brand-logo">Qtiler</a>
+            <span class="brand-tagline" data-i18n="MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.">MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.</span>
           </div>
-          <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
-            <input id="tile_crs" type="text" placeholder="auto" value="EPSG:3857" style="width:120px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px" data-i18n-placeholder="Tile CRS" />
-          </div>
-          <div class="field" style="display:flex;align-items:center;gap:4px">
-            <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input id="allow_remote" type="checkbox"> <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span></label>
-            <input id="throttle_ms" type="number" min="0" value="0" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" style="width:90px; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px" data-i18n-placeholder="Delay between tiles (ms)" />
-          </div>
+          <nav class="main-nav" aria-label="Primary">
+            <a href="/index.html" class="nav-link is-active" aria-current="page" data-i18n="Dashboard">Dashboard</a>
+            <a href="/viewer.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Tile viewer">Tile viewer</a>
+            <a href="/guide.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Guide">Guide</a>
+          </nav>
         </div>
       </header>
 
-      <div id="status"></div>
-    <div id="jobs" class="jobs" style="display:none">
-  <div style="font-weight:700; margin-bottom:8px" data-i18n="Running tasks">Running tasks</div>
-        <div id="jobsList" class="list"></div>
-      </div>
-  <div id="layers" class="list">Loading layers…</div>
+      <main class="app-main">
+        <section class="control-panel">
+          <div class="control-toolbar">
+            <div class="control-actions">
+              <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
+              <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
+              <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
+              <button id="open_guide" class="btn btn-outline" data-i18n="User guide">User guide</button>
+            </div>
+            <div class="control-language">
+              <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+              <select id="language_selector" class="input-select" aria-label="Language">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="sv">Svenska</option>
+              </select>
+            </div>
+          </div>
+          <div class="control-grid">
+            <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" class="input-number" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
+            <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" class="input-number" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
+            <div class="field"><span data-i18n="Mode:">Mode:</span>
+              <select id="cache_mode" class="input-select">
+                <option value="xyz" selected data-i18n="XYZ (EPSG:3857)">XYZ (EPSG:3857)</option>
+                <option value="wmts" data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
+                <option value="custom" data-i18n="Custom subdivision (bbox)">Custom subdivision (bbox)</option>
+              </select>
+            </div>
+            <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
+              <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="EPSG:3857" data-i18n-placeholder="Tile CRS" />
+            </div>
+            <div class="field field-remote">
+              <label class="checkbox">
+                <input id="allow_remote" type="checkbox">
+                <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span>
+              </label>
+              <input id="throttle_ms" class="input-number" type="number" min="0" value="0" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
+            </div>
+          </div>
+        </section>
+
+        <div id="status"></div>
+        <div id="jobs" class="jobs" style="display:none">
+          <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
+          <div id="jobsList" class="list"></div>
+        </div>
+        <div id="layers" class="list">Loading layers…</div>
+      </main>
+
+      <footer class="app-footer">
+        <div class="footer-inner">
+          <div class="footer-brand">© <span id="footer_year"></span> MundoGIS</div>
+          <div class="footer-links">
+            <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>
+            <a href="mailto:info@mundogis.se">info@mundogis.se</a>
+          </div>
+        </div>
+      </footer>
     </div>
 
     <script>
       const SUPPORTED_LANGS = ["en", "es", "sv"];
       const TRANSLATIONS = {
         es: {
+          "Dashboard": "Panel principal",
+          "Tile viewer": "Visor de teselas",
+          "Guide": "Guía",
+          "Language": "Idioma",
           "Upload project": "Subir proyecto",
           "Reload layers": "Recargar capas",
           "User guide": "Guía de uso",
@@ -263,6 +202,10 @@
           "Schedule saved for {name}": "Programación guardada para {name}"
         },
         sv: {
+          "Dashboard": "Översikt",
+          "Tile viewer": "Tile-visare",
+          "Guide": "Guide",
+          "Language": "Språk",
           "Upload project": "Ladda upp projekt",
           "Reload layers": "Ladda om lager",
           "User guide": "Användarguide",
@@ -420,6 +363,11 @@
   const projectBatchFetches = new Map();
       let activeProjectId = null;
       let suppressControlSync = false;
+
+      const footerYearEl = document.getElementById('footer_year');
+      if (footerYearEl) {
+        footerYearEl.textContent = String(new Date().getFullYear());
+      }
 
       const deepMergeObjects = (target, patch) => {
         if (!patch || typeof patch !== 'object') return target;
@@ -1985,7 +1933,7 @@
           const provider = (l.provider || '').toLowerCase();
           const cacheable = !!l.cacheable;
           const badges = [];
-          if (!cacheable) badges.push('<span style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted)">remote</span>');
+          if (!cacheable) badges.push('<span class="layer-badge layer-badge-remote">remote</span>');
           const cachedEntry = cachedByKey.get('layer:' + l.name) || null;
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleSummary = describeSchedule(configLayer && configLayer.schedule);
@@ -2089,7 +2037,7 @@
             const themeHeaderPieces = [
               `<span class="layer-title-icon theme">${ICONS.theme}</span>`,
               `<span>${escapeHtml(theme.name)}</span>`,
-              '<span style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted)">theme</span>'
+              '<span class="layer-badge layer-badge-theme">theme</span>'
             ];
             infoBox.innerHTML = `<div class="layer-title">${themeHeaderPieces.join(' ')}</div>`;
             const metaBox = document.createElement('div');
