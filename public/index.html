@@ -175,6 +175,7 @@
           "Network error while loading project layers": "Error de red al cargar las capas del proyecto",
           "View sample tile": "Ver tesela de ejemplo",
           "Copy tiles URL": "Copiar URL de teselas",
+          "Copy XYZ URL": "Copiar URL XYZ",
           "Tile template copied to clipboard: {url}": "Plantilla de teselas copiada: {url}",
           "Copy failed: {error}": "Error al copiar: {error}",
           "Generate cache": "Generar caché",
@@ -282,6 +283,7 @@
           "Network error while loading project layers": "Nätverksfel vid inläsning av projektlager",
           "View sample tile": "Visa exempelruta",
           "Copy tiles URL": "Kopiera tile-URL",
+          "Copy XYZ URL": "Kopiera XYZ-URL",
           "Tile template copied to clipboard: {url}": "Tile-mall kopierad: {url}",
           "Copy failed: {error}": "Kopiering misslyckades: {error}",
           "Generate cache": "Generera cache",
@@ -452,6 +454,7 @@
         { month: 7, day: 1, time: DEFAULT_SCHEDULE_TIME },
         { month: 11, day: 1, time: DEFAULT_SCHEDULE_TIME }
       ];
+      const WEB_MERCATOR_CODES = ['EPSG:3857', 'EPSG3857', 'EPSG:3858', 'EPSG3858'];
 
   let scheduleDialogBackdrop = null;
   let scheduleDialogContainer = null;
@@ -2005,8 +2008,7 @@
           const cachedScheme = cachedEntry && cachedEntry.scheme ? cachedEntry.scheme : null;
           const isCachedXYZ = cachedScheme === 'xyz';
           const cachedTileCrs = (cachedEntry && typeof cachedEntry.tile_crs === 'string') ? cachedEntry.tile_crs.toUpperCase() : '';
-          const webMercatorCodes = ['EPSG:3857', 'EPSG3857', 'EPSG:3858', 'EPSG3858'];
-          const isWebMercatorXYZ = isCachedXYZ && webMercatorCodes.includes(cachedTileCrs);
+          const isWebMercatorXYZ = isCachedXYZ && WEB_MERCATOR_CODES.includes(cachedTileCrs);
 
           let exampleLink = null;
           if (cachedEntry && isCachedXYZ) {
@@ -2021,7 +2023,7 @@
 
           let copyBtn = null;
           if (cachedEntry && isWebMercatorXYZ) {
-            copyBtn = makeIconButton('Copy tiles URL', 'copy', () => {
+            copyBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
               const full = window.location.origin + tileTemplate;
               navigator.clipboard.writeText(full).then(() => {
                 showStatus(tr('Tile template copied to clipboard: {url}', { url: full }));
@@ -2119,15 +2121,19 @@
             actions.appendChild(scheduleThemeBtn);
             actions.appendChild(cacheBtn);
 
-            const copyThemeBtn = makeIconButton('Copy WMTS URL', 'copy', () => {
-              const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
-              navigator.clipboard.writeText(template).then(() => {
-                showStatus(tr('WMTS theme URL copied: {url}', { url: template }));
-              }).catch(err => {
-                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+            const themeScheme = cachedTheme && cachedTheme.scheme ? cachedTheme.scheme : null;
+            const themeTileCrs = (cachedTheme && typeof cachedTheme.tile_crs === 'string') ? cachedTheme.tile_crs.toUpperCase() : '';
+            if (cachedTheme && themeScheme === 'xyz' && WEB_MERCATOR_CODES.includes(themeTileCrs)) {
+              const copyThemeBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
+                const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
+                navigator.clipboard.writeText(template).then(() => {
+                  showStatus(tr('Tile template copied to clipboard: {url}', { url: template }));
+                }).catch(err => {
+                  showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+                });
               });
-            });
-            actions.appendChild(copyThemeBtn);
+              actions.appendChild(copyThemeBtn);
+            }
 
             const viewThemeBtn = makeIconButton('Open map viewer', 'eye', () => {
               const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
