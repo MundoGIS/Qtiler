@@ -17,7 +17,7 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Optional Windows service scripts for unattended execution.
 
 ## System Requirements
-- Windows 10/11 (64-bit).
+- Windows 10/11 or Windows server (64-bit).
 - [OSGeo4W](https://trac.osgeo.org/osgeo4w/) or a full QGIS installation (provides Python + QGIS libraries).
 - Node.js 18 or newer.
 - Git (recommended) to clone the repository.
@@ -112,4 +112,3 @@ PROJECT_UPLOAD_MAX_BYTES=209715200
 - Use a dedicated Windows account for the service with access to the `cache/` directory.
 - Schedule regular cleanups of `logs/` and old caches via Windows Task Scheduler if storage is constrained.
 
-Ready to publish? Commit the repository (including this README), push to GitHub, and share **Qtiler by MundoGIS** with your team.
