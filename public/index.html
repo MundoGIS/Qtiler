@@ -84,6 +84,27 @@
       .job{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px dashed var(--border)}
       .job:first-child{border-top:none}
       .job .info{font-size:13px; color:var(--muted)}
+  .schedule-backdrop{position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; z-index:1200; padding:16px}
+  .schedule-backdrop[data-open="1"]{display:flex}
+  .schedule-dialog{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:20px; max-width:420px; width:100%; max-height:90vh; overflow:auto}
+  .schedule-dialog h2{margin:0 0 12px 0; font-size:18px}
+  .schedule-dialog fieldset{border:none; padding:0; margin:0}
+  .schedule-dialog .schedule-section{margin:12px 0}
+  .schedule-dialog .frequency-options{display:flex; flex-direction:column; gap:6px; margin:8px 0}
+  .schedule-dialog .day-grid{display:flex; flex-wrap:wrap; gap:8px}
+  .schedule-dialog .day-grid label{display:flex; align-items:center; gap:4px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer}
+  .schedule-dialog .day-grid input{margin:0}
+  .schedule-dialog .yearly-grid{display:flex; flex-direction:column; gap:8px}
+  .schedule-dialog .yearly-row{display:flex; gap:6px; align-items:center}
+  .schedule-dialog select,
+  .schedule-dialog input[type="time"],
+  .schedule-dialog input[type="number"],
+  .schedule-dialog input[type="text"]{width:100%; padding:6px 8px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:6px}
+  .schedule-dialog .yearly-row select{flex:1}
+  .schedule-dialog .yearly-row input[type="number"]{width:80px}
+  .schedule-dialog .yearly-row input[type="time"]{width:110px}
+  .schedule-dialog .error{color:var(--danger); font-size:12px; min-height:16px}
+  .schedule-dialog .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px}
     </style>
   </head>
   <body>
@@ -214,7 +235,31 @@
           "Loading jobs…": "Cargando tareas…",
           "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet no cargó (revisa bloqueo de SRI o CSP)",
           "Show extent map": "Mostrar mapa de extensión",
-          "Hide extent map": "Ocultar mapa de extensión"
+          "Hide extent map": "Ocultar mapa de extensión",
+          "Automatic cache schedule": "Programación automática de caché",
+          "Theme: ": "Tema: ",
+          "Layer: ": "Capa: ",
+          "Enable automatic cache generation": "Habilitar generación automática de caché",
+          "Weekly": "Semanal",
+          "Run on selected weekdays at a fixed time.": "Ejecutar los días seleccionados a una hora fija.",
+          "Monthly": "Mensual",
+          "Run on chosen days each month.": "Ejecutar en los días elegidos cada mes.",
+          "3x per year": "3 veces al año",
+          "Run up to three specific dates per year.": "Ejecutar hasta tres fechas específicas por año.",
+          "Weekly options": "Opciones semanales",
+          "Time (local)": "Hora (local)",
+          "Days of month (comma separated)": "Días del mes (separados por comas)",
+          "Yearly dates (up to 3)": "Fechas anuales (hasta 3)",
+          "Cancel": "Cancelar",
+          "Save schedule": "Guardar programación",
+          "Select at least one weekday.": "Selecciona al menos un día de la semana.",
+          "Provide one or more day numbers between 1 and 31.": "Ingresa uno o más días entre 1 y 31.",
+          "Day values must be between 1 and 31.": "Los días deben estar entre 1 y 31.",
+          "Complete month, day and time for yearly entries or leave them blank.": "Completa mes, día y hora para las entradas anuales o déjalas vacías.",
+          "Add at least one yearly date.": "Agrega al menos una fecha anual.",
+          "Configure auto cache": "Configurar caché automática",
+          "Auto cache disabled for {name}": "Caché automática desactivada para {name}",
+          "Schedule saved for {name}": "Programación guardada para {name}"
         },
         sv: {
           "Upload project": "Ladda upp projekt",
@@ -295,7 +340,31 @@
           "Loading jobs…": "Laddar jobb…",
           "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet laddades inte (kontrollera SRI eller CSP)",
           "Show extent map": "Visa utbredningskarta",
-          "Hide extent map": "Dölj utbredningskarta"
+          "Hide extent map": "Dölj utbredningskarta",
+          "Automatic cache schedule": "Automatisk cacheplan",
+          "Theme: ": "Tema: ",
+          "Layer: ": "Lager: ",
+          "Enable automatic cache generation": "Aktivera automatisk cachegenerering",
+          "Weekly": "Veckovis",
+          "Run on selected weekdays at a fixed time.": "Kör på valda veckodagar vid en fast tid.",
+          "Monthly": "Månadsvis",
+          "Run on chosen days each month.": "Kör på valda dagar varje månad.",
+          "3x per year": "3 ggr per år",
+          "Run up to three specific dates per year.": "Kör upp till tre specifika datum per år.",
+          "Weekly options": "Veckoval",
+          "Time (local)": "Tid (lokal)",
+          "Days of month (comma separated)": "Dagar i månaden (kommaseparerade)",
+          "Yearly dates (up to 3)": "Årliga datum (upp till 3)",
+          "Cancel": "Avbryt",
+          "Save schedule": "Spara schema",
+          "Select at least one weekday.": "Välj minst en veckodag.",
+          "Provide one or more day numbers between 1 and 31.": "Ange en eller flera dagnummer mellan 1 och 31.",
+          "Day values must be between 1 and 31.": "Dagvärden måste vara mellan 1 och 31.",
+          "Complete month, day and time for yearly entries or leave them blank.": "Fyll i månad, dag och tid för årliga poster eller lämna dem tomma.",
+          "Add at least one yearly date.": "Lägg till minst ett årligt datum.",
+          "Configure auto cache": "Konfigurera automatisk cache",
+          "Auto cache disabled for {name}": "Automatisk cache avstängd för {name}",
+          "Schedule saved for {name}": "Schema sparat för {name}"
         }
       };
 
@@ -365,6 +434,486 @@
         }
         return target;
       };
+
+      const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+      const WEEKDAY_LABELS = {
+        mon: 'Mon',
+        tue: 'Tue',
+        wed: 'Wed',
+        thu: 'Thu',
+        fri: 'Fri',
+        sat: 'Sat',
+        sun: 'Sun'
+      };
+      const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const DEFAULT_SCHEDULE_TIME = '02:00';
+      const DEFAULT_YEARLY_OCCURRENCES = [
+        { month: 3, day: 1, time: DEFAULT_SCHEDULE_TIME },
+        { month: 7, day: 1, time: DEFAULT_SCHEDULE_TIME },
+        { month: 11, day: 1, time: DEFAULT_SCHEDULE_TIME }
+      ];
+
+  let scheduleDialogBackdrop = null;
+  let scheduleDialogContainer = null;
+  let scheduleDialogKeyHandler = null;
+
+      const cloneScheduleEntry = (schedule) => {
+        if (!schedule || typeof schedule !== 'object') return null;
+        return {
+          enabled: schedule.enabled === true,
+          mode: typeof schedule.mode === 'string' ? schedule.mode : null,
+          weekly: schedule.weekly && typeof schedule.weekly === 'object'
+            ? {
+                days: Array.isArray(schedule.weekly.days) ? schedule.weekly.days.slice() : [],
+                time: schedule.weekly.time || null
+              }
+            : null,
+          monthly: schedule.monthly && typeof schedule.monthly === 'object'
+            ? {
+                days: Array.isArray(schedule.monthly.days) ? schedule.monthly.days.slice() : [],
+                time: schedule.monthly.time || null
+              }
+            : null,
+          yearly: schedule.yearly && typeof schedule.yearly === 'object'
+            ? {
+                occurrences: Array.isArray(schedule.yearly.occurrences)
+                  ? schedule.yearly.occurrences.map((occ) => ({
+                      month: Number(occ.month),
+                      day: Number(occ.day),
+                      time: occ.time || null
+                    }))
+                  : []
+              }
+            : null,
+          nextRunAt: schedule.nextRunAt || null,
+          lastRunAt: schedule.lastRunAt || null,
+          lastResult: schedule.lastResult || null,
+          lastMessage: schedule.lastMessage || null,
+          history: Array.isArray(schedule.history) ? schedule.history.slice() : []
+        };
+      };
+
+      const describeSchedule = (schedule) => {
+        if (!schedule || schedule.enabled !== true) return '';
+        const timeLabel = (value) => (value ? value : '00:00');
+        if (schedule.mode === 'weekly' && schedule.weekly && Array.isArray(schedule.weekly.days) && schedule.weekly.days.length) {
+          const sorted = schedule.weekly.days.slice().sort((a, b) => WEEKDAY_KEYS.indexOf(a) - WEEKDAY_KEYS.indexOf(b));
+          const labels = sorted.map((key) => WEEKDAY_LABELS[key] || key.toUpperCase());
+          return 'Weekly ' + labels.join(', ') + ' @ ' + timeLabel(schedule.weekly.time);
+        }
+        if (schedule.mode === 'monthly' && schedule.monthly && Array.isArray(schedule.monthly.days) && schedule.monthly.days.length) {
+          const days = schedule.monthly.days.slice().map((n) => Number(n)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+          if (!days.length) return '';
+          return 'Monthly ' + days.join(', ') + ' @ ' + timeLabel(schedule.monthly.time);
+        }
+        if (schedule.mode === 'yearly' && schedule.yearly && Array.isArray(schedule.yearly.occurrences) && schedule.yearly.occurrences.length) {
+          const entries = schedule.yearly.occurrences
+            .slice()
+            .filter((occ) => Number.isInteger(occ.month) && Number.isInteger(occ.day))
+            .sort((a, b) => (a.month === b.month ? a.day - b.day : a.month - b.month))
+            .map((occ) => {
+              const monthName = MONTH_LABELS[(Number(occ.month) || 1) - 1] || `M${occ.month}`;
+              return `${monthName} ${occ.day} @ ${timeLabel(occ.time)}`;
+            });
+          if (!entries.length) return '';
+          return 'Yearly ' + entries.join('; ');
+        }
+        return '';
+      };
+
+      function ensureScheduleDialogElements(){
+        if (scheduleDialogBackdrop) return;
+        scheduleDialogBackdrop = document.createElement('div');
+        scheduleDialogBackdrop.className = 'schedule-backdrop';
+        scheduleDialogBackdrop.dataset.open = '0';
+        scheduleDialogBackdrop.addEventListener('click', (ev) => {
+          if (ev.target === scheduleDialogBackdrop) closeScheduleDialog();
+        });
+        scheduleDialogContainer = document.createElement('div');
+        scheduleDialogContainer.className = 'schedule-dialog';
+        scheduleDialogBackdrop.appendChild(scheduleDialogContainer);
+        document.body.appendChild(scheduleDialogBackdrop);
+      }
+
+      function closeScheduleDialog(){
+        if (!scheduleDialogBackdrop) return;
+        scheduleDialogBackdrop.dataset.open = '0';
+  if (scheduleDialogContainer) scheduleDialogContainer.innerHTML = '';
+        if (scheduleDialogKeyHandler) {
+          document.removeEventListener('keydown', scheduleDialogKeyHandler);
+          scheduleDialogKeyHandler = null;
+        }
+      }
+
+      function openScheduleDialog({ projectId, targetType, targetName, configEntry }){
+        if (!projectId || !targetType || !targetName) return;
+        ensureScheduleDialogElements();
+        const existingSchedule = cloneScheduleEntry(configEntry && configEntry.schedule ? configEntry.schedule : null) || {
+          enabled: false,
+          mode: 'weekly',
+          weekly: { days: ['mon'], time: DEFAULT_SCHEDULE_TIME },
+          monthly: { days: [1], time: DEFAULT_SCHEDULE_TIME },
+          yearly: { occurrences: DEFAULT_YEARLY_OCCURRENCES.map((occ) => ({ ...occ })) },
+          history: []
+        };
+        if (!existingSchedule.weekly || !Array.isArray(existingSchedule.weekly.days)) {
+          existingSchedule.weekly = { days: ['mon'], time: DEFAULT_SCHEDULE_TIME };
+        }
+        if (!existingSchedule.monthly || !Array.isArray(existingSchedule.monthly.days)) {
+          existingSchedule.monthly = { days: [1], time: DEFAULT_SCHEDULE_TIME };
+        }
+        if (!existingSchedule.yearly || !Array.isArray(existingSchedule.yearly.occurrences) || !existingSchedule.yearly.occurrences.length) {
+          existingSchedule.yearly = { occurrences: DEFAULT_YEARLY_OCCURRENCES.map((occ) => ({ ...occ })) };
+        }
+
+        scheduleDialogContainer.innerHTML = '';
+
+  const heading = document.createElement('h2');
+  heading.textContent = tr('Automatic cache schedule');
+        scheduleDialogContainer.appendChild(heading);
+
+        const subtitle = document.createElement('div');
+        subtitle.className = 'meta';
+  subtitle.textContent = (targetType === 'theme' ? tr('Theme: ') : tr('Layer: ')) + targetName;
+        scheduleDialogContainer.appendChild(subtitle);
+
+        const form = document.createElement('form');
+        scheduleDialogContainer.appendChild(form);
+
+        const enableRow = document.createElement('label');
+        enableRow.style.display = 'flex';
+        enableRow.style.alignItems = 'center';
+        enableRow.style.gap = '8px';
+        enableRow.style.marginTop = '12px';
+        const enableCheckbox = document.createElement('input');
+        enableCheckbox.type = 'checkbox';
+        enableCheckbox.checked = existingSchedule.enabled === true;
+        enableRow.appendChild(enableCheckbox);
+        const enableText = document.createElement('span');
+  enableText.textContent = tr('Enable automatic cache generation');
+        enableRow.appendChild(enableText);
+        form.appendChild(enableRow);
+
+        const fieldset = document.createElement('fieldset');
+        fieldset.disabled = !enableCheckbox.checked;
+        fieldset.style.marginTop = '12px';
+        form.appendChild(fieldset);
+
+        const frequencyBox = document.createElement('div');
+        frequencyBox.className = 'frequency-options';
+        fieldset.appendChild(frequencyBox);
+
+        const frequencyOptions = [
+          { value: 'weekly', label: tr('Weekly'), description: tr('Run on selected weekdays at a fixed time.') },
+          { value: 'monthly', label: tr('Monthly'), description: tr('Run on chosen days each month.') },
+          { value: 'yearly', label: tr('3x per year'), description: tr('Run up to three specific dates per year.') }
+        ];
+
+        const currentMode = existingSchedule.mode || 'weekly';
+
+        frequencyOptions.forEach((option) => {
+          const optionLabel = document.createElement('label');
+          optionLabel.style.display = 'flex';
+          optionLabel.style.flexDirection = 'column';
+          optionLabel.style.gap = '2px';
+
+          const row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.gap = '6px';
+
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'schedule-frequency';
+          radio.value = option.value;
+          radio.checked = currentMode === option.value;
+          row.appendChild(radio);
+          row.appendChild(document.createTextNode(option.label));
+          optionLabel.appendChild(row);
+          if (option.description) {
+            const hint = document.createElement('span');
+            hint.className = 'meta';
+            hint.style.fontSize = '12px';
+            hint.textContent = option.description;
+            optionLabel.appendChild(hint);
+          }
+          frequencyBox.appendChild(optionLabel);
+        });
+
+        const weeklySection = document.createElement('div');
+        weeklySection.className = 'schedule-section';
+        const weeklyTitle = document.createElement('div');
+        weeklyTitle.style.fontWeight = '600';
+  weeklyTitle.textContent = tr('Weekly options');
+        weeklySection.appendChild(weeklyTitle);
+        const weeklyDaysGrid = document.createElement('div');
+        weeklyDaysGrid.className = 'day-grid';
+        WEEKDAY_KEYS.forEach((key) => {
+          const label = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = key;
+          cb.checked = existingSchedule.weekly && Array.isArray(existingSchedule.weekly.days) && existingSchedule.weekly.days.includes(key);
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(WEEKDAY_LABELS[key] || key.toUpperCase()));
+          weeklyDaysGrid.appendChild(label);
+        });
+        weeklySection.appendChild(weeklyDaysGrid);
+        const weeklyTimeLabel = document.createElement('label');
+        weeklyTimeLabel.style.display = 'flex';
+        weeklyTimeLabel.style.flexDirection = 'column';
+        weeklyTimeLabel.style.gap = '4px';
+        weeklyTimeLabel.style.marginTop = '8px';
+  weeklyTimeLabel.textContent = tr('Time (local)');
+        const weeklyTimeInput = document.createElement('input');
+        weeklyTimeInput.type = 'time';
+        weeklyTimeInput.value = (existingSchedule.weekly && existingSchedule.weekly.time) || DEFAULT_SCHEDULE_TIME;
+        weeklyTimeLabel.appendChild(weeklyTimeInput);
+        weeklySection.appendChild(weeklyTimeLabel);
+
+        const monthlySection = document.createElement('div');
+        monthlySection.className = 'schedule-section';
+        const monthlyDaysLabel = document.createElement('label');
+        monthlyDaysLabel.style.display = 'flex';
+        monthlyDaysLabel.style.flexDirection = 'column';
+        monthlyDaysLabel.style.gap = '4px';
+  monthlyDaysLabel.textContent = tr('Days of month (comma separated)');
+        const monthlyDaysInput = document.createElement('input');
+        monthlyDaysInput.type = 'text';
+        monthlyDaysInput.placeholder = '1,15,30';
+        monthlyDaysInput.value = (existingSchedule.monthly && Array.isArray(existingSchedule.monthly.days) && existingSchedule.monthly.days.length ? existingSchedule.monthly.days.join(',') : '1');
+        monthlyDaysLabel.appendChild(monthlyDaysInput);
+        monthlySection.appendChild(monthlyDaysLabel);
+        const monthlyTimeLabel = document.createElement('label');
+        monthlyTimeLabel.style.display = 'flex';
+        monthlyTimeLabel.style.flexDirection = 'column';
+        monthlyTimeLabel.style.gap = '4px';
+        monthlyTimeLabel.style.marginTop = '8px';
+  monthlyTimeLabel.textContent = tr('Time (local)');
+        const monthlyTimeInput = document.createElement('input');
+        monthlyTimeInput.type = 'time';
+        monthlyTimeInput.value = (existingSchedule.monthly && existingSchedule.monthly.time) || DEFAULT_SCHEDULE_TIME;
+        monthlyTimeLabel.appendChild(monthlyTimeInput);
+        monthlySection.appendChild(monthlyTimeLabel);
+
+        const yearlySection = document.createElement('div');
+        yearlySection.className = 'schedule-section';
+        const yearlyTitle = document.createElement('div');
+        yearlyTitle.style.fontWeight = '600';
+  yearlyTitle.textContent = tr('Yearly dates (up to 3)');
+        yearlySection.appendChild(yearlyTitle);
+        const yearlyGrid = document.createElement('div');
+        yearlyGrid.className = 'yearly-grid';
+        const yearlyOccurrences = existingSchedule.yearly && Array.isArray(existingSchedule.yearly.occurrences) && existingSchedule.yearly.occurrences.length
+          ? existingSchedule.yearly.occurrences.slice(0, 3)
+          : DEFAULT_YEARLY_OCCURRENCES.map((occ) => ({ ...occ }));
+        while (yearlyOccurrences.length < 3) {
+          yearlyOccurrences.push({ month: 1, day: 1, time: DEFAULT_SCHEDULE_TIME });
+        }
+        const yearlyRows = [];
+        yearlyOccurrences.forEach((occ) => {
+          const row = document.createElement('div');
+          row.className = 'yearly-row';
+          const monthSelect = document.createElement('select');
+          MONTH_LABELS.forEach((label, idx) => {
+            const opt = document.createElement('option');
+            opt.value = String(idx + 1);
+            opt.textContent = `${idx + 1} — ${label}`;
+            if ((Number(occ.month) || 0) === idx + 1) opt.selected = true;
+            monthSelect.appendChild(opt);
+          });
+          row.appendChild(monthSelect);
+          const dayInput = document.createElement('input');
+          dayInput.type = 'number';
+          dayInput.min = '1';
+          dayInput.max = '31';
+          dayInput.value = Number(occ.day) ? String(Math.min(Math.max(1, Number(occ.day)), 31)) : '';
+          row.appendChild(dayInput);
+          const timeInput = document.createElement('input');
+          timeInput.type = 'time';
+          timeInput.value = occ.time || DEFAULT_SCHEDULE_TIME;
+          row.appendChild(timeInput);
+          yearlyGrid.appendChild(row);
+          yearlyRows.push({ monthSelect, dayInput, timeInput });
+        });
+        yearlySection.appendChild(yearlyGrid);
+
+        const sections = {
+          weekly: weeklySection,
+          monthly: monthlySection,
+          yearly: yearlySection
+        };
+
+        Object.values(sections).forEach((section) => fieldset.appendChild(section));
+
+        const updateSectionVisibility = (value) => {
+          Object.entries(sections).forEach(([key, el]) => {
+            el.style.display = key === value ? 'block' : 'none';
+          });
+        };
+        updateSectionVisibility(currentMode);
+
+        frequencyBox.querySelectorAll('input[name="schedule-frequency"]').forEach((radio) => {
+          radio.addEventListener('change', () => updateSectionVisibility(radio.value));
+        });
+
+        enableCheckbox.addEventListener('change', () => {
+          fieldset.disabled = !enableCheckbox.checked;
+        });
+
+        const errorEl = document.createElement('div');
+        errorEl.className = 'error';
+        errorEl.style.marginTop = '12px';
+        form.appendChild(errorEl);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-secondary';
+  cancelBtn.textContent = tr('Cancel');
+        cancelBtn.addEventListener('click', () => closeScheduleDialog());
+        actions.appendChild(cancelBtn);
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'submit';
+        saveBtn.className = 'btn btn-primary';
+  saveBtn.textContent = tr('Save schedule');
+        actions.appendChild(saveBtn);
+        form.appendChild(actions);
+
+        const handleDisableSchedule = () => {
+          const disabledPayload = {
+            enabled: false,
+            mode: null,
+            weekly: null,
+            monthly: null,
+            yearly: null,
+            nextRunAt: null,
+            lastRunAt: existingSchedule.lastRunAt || null,
+            lastResult: existingSchedule.lastResult || null,
+            lastMessage: existingSchedule.lastMessage || null,
+            history: existingSchedule.history ? existingSchedule.history.slice(-5) : []
+          };
+          const patch = targetType === 'theme'
+            ? { themes: { [targetName]: { schedule: disabledPayload } } }
+            : { layers: { [targetName]: { schedule: disabledPayload } } };
+          queueProjectConfigSave(projectId, patch, { immediate: true });
+          showStatus(tr('Auto cache disabled for {name}', { name: targetName }));
+          closeScheduleDialog();
+          setTimeout(() => { try { loadLayers(); } catch {} }, 500);
+        };
+
+        const handleSave = () => {
+          errorEl.textContent = '';
+          if (!enableCheckbox.checked) {
+            handleDisableSchedule();
+            return;
+          }
+          const selectedRadio = form.querySelector('input[name="schedule-frequency"]:checked');
+          const mode = selectedRadio ? selectedRadio.value : 'weekly';
+          const schedulePayload = {
+            enabled: true,
+            mode,
+            weekly: null,
+            monthly: null,
+            yearly: null,
+            nextRunAt: null,
+            lastRunAt: null,
+            lastResult: null,
+            lastMessage: null,
+            history: []
+          };
+
+          if (mode === 'weekly') {
+            const selectedDays = [];
+            weeklyDaysGrid.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+              if (cb.checked) selectedDays.push(cb.value);
+            });
+            if (!selectedDays.length) {
+              errorEl.textContent = tr('Select at least one weekday.');
+              return;
+            }
+            const sortedDays = selectedDays.sort((a, b) => WEEKDAY_KEYS.indexOf(a) - WEEKDAY_KEYS.indexOf(b));
+            const timeValue = weeklyTimeInput.value || DEFAULT_SCHEDULE_TIME;
+            schedulePayload.weekly = { days: sortedDays, time: timeValue };
+            schedulePayload.monthly = null;
+            schedulePayload.yearly = null;
+          } else if (mode === 'monthly') {
+            const tokens = monthlyDaysInput.value.split(/[\s,]+/).filter(Boolean);
+            const parsed = Array.from(new Set(tokens.map((token) => Number(token)))).filter((n) => Number.isInteger(n));
+            if (!parsed.length) {
+              errorEl.textContent = tr('Provide one or more day numbers between 1 and 31.');
+              return;
+            }
+            const invalid = parsed.find((n) => n < 1 || n > 31);
+            if (invalid != null) {
+              errorEl.textContent = tr('Day values must be between 1 and 31.');
+              return;
+            }
+            parsed.sort((a, b) => a - b);
+            const timeValue = monthlyTimeInput.value || DEFAULT_SCHEDULE_TIME;
+            schedulePayload.monthly = { days: parsed, time: timeValue };
+            schedulePayload.weekly = null;
+            schedulePayload.yearly = null;
+          } else if (mode === 'yearly') {
+            const occurrences = [];
+            let invalidMessage = null;
+            yearlyRows.forEach(({ monthSelect, dayInput, timeInput }) => {
+              const monthVal = Number(monthSelect.value);
+              const dayRaw = dayInput.value.trim();
+              const timeVal = timeInput.value;
+              if (!dayRaw && !timeVal) {
+                return;
+              }
+              if (!monthVal || !dayRaw || !timeVal) {
+                invalidMessage = tr('Complete month, day and time for yearly entries or leave them blank.');
+                return;
+              }
+              const dayVal = Number(dayRaw);
+              if (!Number.isInteger(dayVal) || dayVal < 1 || dayVal > 31) {
+                invalidMessage = tr('Day values must be between 1 and 31.');
+                return;
+              }
+              occurrences.push({ month: monthVal, day: dayVal, time: timeVal || DEFAULT_SCHEDULE_TIME });
+            });
+            if (invalidMessage) {
+              errorEl.textContent = invalidMessage;
+              return;
+            }
+            if (!occurrences.length) {
+              errorEl.textContent = tr('Add at least one yearly date.');
+              return;
+            }
+            schedulePayload.yearly = { occurrences: occurrences.slice(0, 3) };
+            schedulePayload.weekly = null;
+            schedulePayload.monthly = null;
+          }
+
+          const patch = targetType === 'theme'
+            ? { themes: { [targetName]: { schedule: schedulePayload } } }
+            : { layers: { [targetName]: { schedule: schedulePayload } } };
+
+          saveBtn.disabled = true;
+          queueProjectConfigSave(projectId, patch, { immediate: true });
+          showStatus(tr('Schedule saved for {name}', { name: targetName }));
+          closeScheduleDialog();
+          setTimeout(() => { try { loadLayers(); } catch {} }, 600);
+        };
+
+        form.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          handleSave();
+        });
+
+        scheduleDialogBackdrop.dataset.open = '1';
+        scheduleDialogKeyHandler = (ev) => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            closeScheduleDialog();
+          }
+        };
+        document.addEventListener('keydown', scheduleDialogKeyHandler);
+      }
 
       async function loadProjectConfig(projectId) {
         if (projectConfigs.has(projectId)) return projectConfigs.get(projectId);
@@ -459,53 +1008,6 @@
         if (existingTimer) clearTimeout(existingTimer);
         const timer = setTimeout(() => flushProjectConfigSave(projectId), 600);
         projectConfigTimers.set(projectId, timer);
-      }
-
-      async function openRecacheScheduler(project) {
-        if (!project || !project.id) return;
-        const cfg = projectConfigs.get(project.id) || {};
-        const rec = cfg.recache || {};
-        const currentInterval = rec.intervalMinutes;
-        const currentEnabled = rec.enabled;
-        const intervalPrompt = prompt(
-          'Set automatic recache interval in minutes (leave blank to disable).\nCurrent: ' + (currentEnabled && currentInterval ? currentInterval + ' minutes' : 'disabled'),
-          currentEnabled && currentInterval ? String(currentInterval) : ''
-        );
-        if (intervalPrompt === null) return;
-        const trimmed = intervalPrompt.trim();
-        const patch = { recache: {} };
-        if (!trimmed) {
-          patch.recache.enabled = false;
-          patch.recache.intervalMinutes = null;
-          patch.recache.nextRunAt = null;
-          queueProjectConfigSave(project.id, patch, { immediate: true });
-          showStatus('Recache timer disabled for ' + project.id);
-          return;
-        }
-        const minutes = Number(trimmed);
-        if (!Number.isFinite(minutes) || minutes <= 0) {
-          showStatus('Invalid minutes value for recache interval', true);
-          return;
-        }
-        let nextIso = null;
-        const nextPrompt = prompt('Optional: enter next run datetime (ISO or local). Leave blank for automatic.', rec.nextRunAt ? new Date(rec.nextRunAt).toLocaleString() : '');
-        if (nextPrompt != null) {
-          const nextTrim = nextPrompt.trim();
-          if (nextTrim) {
-            const parsed = Date.parse(nextTrim);
-            if (Number.isNaN(parsed)) {
-              showStatus('Invalid datetime for next recache run', true);
-              return;
-            }
-            nextIso = new Date(parsed).toISOString();
-          }
-        }
-        patch.recache.enabled = true;
-        patch.recache.strategy = 'interval';
-        patch.recache.intervalMinutes = minutes;
-        patch.recache.nextRunAt = nextIso;
-        queueProjectConfigSave(project.id, patch, { immediate: true });
-        showStatus('Recache timer updated for ' + project.id);
       }
 
       function setProjectBatchPolling(projectId, active){
@@ -686,6 +1188,7 @@
         layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
         wmts: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1.5 2.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 11.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 17v2h3v-2h-3Zm4.5 0v2h4v-2h-4Zm5.5 0v2h3v-2h-3Z"/></svg>',
         theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.75a.75.75 0 0 1 1.5 0V4h7V2.75a.75.75 0 0 1 1.5 0V4h1.25A2.75 2.75 0 0 1 21 6.75v11.5A2.75 2.75 0 0 1 18.25 21H5.75A2.75 2.75 0 0 1 3 18.25V6.75A2.75 2.75 0 0 1 5.75 4H7V2.75ZM5.75 5.5A1.25 1.25 0 0 0 4.5 6.75v1.25h15V6.75A1.25 1.25 0 0 0 18.25 5.5H5.75Zm12.5 4.5h-15v8.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V10Z"/></svg>',
         play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.27a1 1 0 0 1 1.52-.85l9 5.73a1 1 0 0 1 0 1.7l-9 5.73a1 1 0 0 1-1.52-.85V5.27Z"/></svg>',
         trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3a1 1 0 0 0-1 1v1H4.75a.75.75 0 0 0 0 1.5h.68l.76 11.24A2.75 2.75 0 0 0 8.93 20.5h6.14a2.75 2.75 0 0 0 2.74-2.76l.76-11.24h.68a.75.75 0 0 0 0-1.5H16V4a1 1 0 0 0-1-1H9Zm1 1.5h4V5H10V4.5Zm-1.82 3h7.64l-.74 11a1.25 1.25 0 0 1-1.24 1.2H8.7a1.25 1.25 0 0 1-1.24-1.2l-.74-11Z"/></svg>',
         copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.75 4A3.75 3.75 0 0 0 6 7.75v8.5A3.75 3.75 0 0 0 9.75 20h8.5A3.75 3.75 0 0 0 22 16.25v-8.5A3.75 3.75 0 0 0 18.25 4h-8.5Zm0 1.5h8.5A2.25 2.25 0 0 1 20.5 7.75v8.5a2.25 2.25 0 0 1-2.25 2.25h-8.5A2.25 2.25 0 0 1 7.5 16.25v-8.5A2.25 2.25 0 0 1 9.75 5.5ZM4.75 7A.75.75 0 0 1 5.5 7.75v9a.75.75 0 0 1-1.5 0v-9A.75.75 0 0 1 4.75 7Z"/></svg>',
@@ -769,18 +1272,14 @@
           const zMax = cfg.zoom.max != null ? cfg.zoom.max : 'auto';
           parts.push('Zoom ' + zMin + '–' + zMax);
         }
-        if (cfg && cfg.recache) {
-          if (cfg.recache.enabled) {
-            let nextLabel = 'pending';
-            if (cfg.recache.nextRunAt) {
-              const parsed = Date.parse(cfg.recache.nextRunAt);
-              if (!Number.isNaN(parsed)) {
-                nextLabel = new Date(parsed).toLocaleString();
-              }
-            }
-            parts.push('Recache: next ' + nextLabel);
-          } else {
-            parts.push('Recache: off');
+        if (cfg) {
+          const layersWithSchedule = Object.values(cfg.layers || {}).filter(entry => entry && entry.schedule && entry.schedule.enabled).length;
+          const themesWithSchedule = Object.values(cfg.themes || {}).filter(entry => entry && entry.schedule && entry.schedule.enabled).length;
+          if (layersWithSchedule || themesWithSchedule) {
+            const bits = [];
+            if (layersWithSchedule) bits.push(layersWithSchedule + ' layer' + (layersWithSchedule === 1 ? '' : 's'));
+            if (themesWithSchedule) bits.push(themesWithSchedule + ' theme' + (themesWithSchedule === 1 ? '' : 's'));
+            parts.push('Auto cache: ' + bits.join(', '));
           }
         }
         state.metaInfoEl.textContent = parts.join(' · ');
@@ -1407,13 +1906,6 @@
           });
           controlsBox.appendChild(copyWmtsBtn);
 
-          const scheduleBtn = document.createElement('button');
-          scheduleBtn.className = 'btn btn-outline';
-          scheduleBtn.type = 'button';
-          scheduleBtn.textContent = 'Recache timer';
-          scheduleBtn.addEventListener('click', () => openRecacheScheduler(project));
-          controlsBox.appendChild(scheduleBtn);
-
           const extentToggle = document.createElement('button');
           extentToggle.className = 'btn btn-outline';
           extentToggle.type = 'button';
@@ -1492,6 +1984,8 @@
           const badges = [];
           if (!cacheable) badges.push('<span style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:999px;font-size:11px;color:var(--muted)">remote</span>');
           const cachedEntry = cachedByKey.get('layer:' + l.name) || null;
+          const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
+          const scheduleSummary = describeSchedule(configLayer && configLayer.schedule);
           const iconKind = cachedEntry && cachedEntry.scheme === 'wmts' ? 'wmts' : 'layer';
           const iconClass = iconKind === 'layer' ? 'layer-title-icon' : `layer-title-icon ${iconKind}`;
           const titlePieces = [
@@ -1499,29 +1993,43 @@
             `<span>${escapeHtml(l.name)}</span>`
           ];
           if (badges.length) titlePieces.push(badges.join(' '));
+          const metaSegments = [];
+          if (l.crs) metaSegments.push(l.crs);
+          if (provider) metaSegments.push(provider);
+          if (l.extent) metaSegments.push('extent: ' + JSON.stringify(l.extent));
+          if (scheduleSummary) metaSegments.push('Auto: ' + scheduleSummary);
           info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` +
-                           '<div class="meta">' + (l.crs ? escapeHtml(l.crs) : '') + (provider? (' · ' + escapeHtml(provider)) : '') + (l.extent ? ' · extent: ' + escapeHtml(JSON.stringify(l.extent)) : '') + '</div>';
+                           '<div class="meta">' + metaSegments.map(escapeHtml).join(' · ') + '</div>';
 
           const tileTemplate = `/wmts/${encodeURIComponent(project.id)}/${encodeURIComponent(l.name)}/{z}/{x}/{y}.png`;
-          
-          const exampleLink = document.createElement('a');
-          if (cachedEntry) {
-            exampleLink.href = tileTemplate.replace('{z}', String(cachedEntry.zoom_min ?? 0)).replace('{x}','0').replace('{y}','0');
+          const cachedScheme = cachedEntry && cachedEntry.scheme ? cachedEntry.scheme : null;
+          const isCachedXYZ = cachedScheme === 'xyz';
+          const cachedTileCrs = (cachedEntry && typeof cachedEntry.tile_crs === 'string') ? cachedEntry.tile_crs.toUpperCase() : '';
+          const webMercatorCodes = ['EPSG:3857', 'EPSG3857', 'EPSG:3858', 'EPSG3858'];
+          const isWebMercatorXYZ = isCachedXYZ && webMercatorCodes.includes(cachedTileCrs);
+
+          let exampleLink = null;
+          if (cachedEntry && isCachedXYZ) {
+            exampleLink = document.createElement('a');
+            exampleLink.href = tileTemplate.replace('{z}', String(cachedEntry.zoom_min ?? 0)).replace('{x}', '0').replace('{y}', '0');
             exampleLink.target = '_blank';
             exampleLink.style.display = 'block';
             exampleLink.style.fontSize = '12px';
             exampleLink.style.marginTop = '6px';
-            exampleLink.textContent = 'View sample tile';
+            exampleLink.textContent = tr('View sample tile');
           }
 
-          const copyBtn = makeIconButton('Copy tiles URL', 'copy', () => {
-            const full = window.location.origin + tileTemplate;
-            navigator.clipboard.writeText(full).then(() => {
-              showStatus('Tile template copied to clipboard: ' + full);
-            }).catch(err => {
-              showStatus('Copy failed: ' + String(err), true);
+          let copyBtn = null;
+          if (cachedEntry && isWebMercatorXYZ) {
+            copyBtn = makeIconButton('Copy tiles URL', 'copy', () => {
+              const full = window.location.origin + tileTemplate;
+              navigator.clipboard.writeText(full).then(() => {
+                showStatus(tr('Tile template copied to clipboard: {url}', { url: full }));
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
             });
-          });
+          }
 
           const controls = document.createElement('div');
           controls.className = 'actions';
@@ -1539,6 +2047,8 @@
             genBtn.dataset.remote = '1';
           }
 
+          const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
+
           const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
 
           const viewBtn = makeIconButton('Open map viewer', 'eye', () => {
@@ -1546,18 +2056,19 @@
             window.open(url, '_blank', 'noopener');
           }, 'btn-secondary');
 
+          controls.appendChild(scheduleBtn);
           controls.appendChild(genBtn);
           // only show delete/view/example when cache exists
           if (cachedEntry) {
             controls.appendChild(delBtn);
-            controls.appendChild(copyBtn);
+            if (copyBtn) controls.appendChild(copyBtn);
             controls.appendChild(viewBtn);
           } else {
-            controls.appendChild(copyBtn);
+            if (copyBtn) controls.appendChild(copyBtn);
           }
 
           d.appendChild(info);
-          if (cachedEntry) d.appendChild(exampleLink);
+          if (exampleLink) d.appendChild(exampleLink);
           d.appendChild(controls);
           targetEl.appendChild(d);
         });
@@ -1592,6 +2103,8 @@
               if (!Number.isNaN(when.getTime())) metaParts.push('Last run: ' + when.toLocaleString());
             }
             if (configTheme && configTheme.lastResult) metaParts.push('Status: ' + configTheme.lastResult);
+            const themeScheduleSummary = describeSchedule(configTheme && configTheme.schedule);
+            if (themeScheduleSummary) metaParts.push('Auto: ' + themeScheduleSummary);
             metaBox.textContent = metaParts.join(' · ') || 'No runs yet';
             infoBox.appendChild(metaBox);
             themeRow.appendChild(infoBox);
@@ -1602,14 +2115,16 @@
 
             const themeObj = { name: theme.name, layers: sources };
             const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
+            const scheduleThemeBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'theme', targetName: theme.name, configEntry: configTheme || null }));
+            actions.appendChild(scheduleThemeBtn);
             actions.appendChild(cacheBtn);
 
             const copyThemeBtn = makeIconButton('Copy WMTS URL', 'copy', () => {
               const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
               navigator.clipboard.writeText(template).then(() => {
-                showStatus('WMTS theme URL copied: ' + template);
+                showStatus(tr('WMTS theme URL copied: {url}', { url: template }));
               }).catch(err => {
-                showStatus('Copy failed: ' + String(err), true);
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
             });
             actions.appendChild(copyThemeBtn);

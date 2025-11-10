@@ -47,6 +47,292 @@ const projectLogLastMessage = new Map(); // id -> string
 const projectBatchRuns = new Map(); // id -> run info
 const projectBatchCleanupTimers = new Map();
 
+const SCHEDULE_HISTORY_LIMIT = 25;
+const WEEKDAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const WEEKDAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+const isValidTimeToken = (value) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(trimmed);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return { hour, minute, token: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}` };
+};
+
+const sanitizeWeeklySpec = (input) => {
+  if (!input || typeof input !== "object") return null;
+  const rawDays = Array.isArray(input.days)
+    ? input.days
+    : typeof input.days === "string"
+      ? input.days.split(/[,\s]+/).filter(Boolean)
+      : [];
+  const normalizedDays = [];
+  for (const token of rawDays) {
+    if (!token) continue;
+    const key = String(token).toLowerCase().slice(0, 3);
+    if (Object.prototype.hasOwnProperty.call(WEEKDAY_INDEX, key) && !normalizedDays.includes(key)) {
+      normalizedDays.push(key);
+    }
+  }
+  const timeInfo = isValidTimeToken(input.time);
+  if (!normalizedDays.length || !timeInfo) return null;
+  normalizedDays.sort((a, b) => WEEKDAY_INDEX[a] - WEEKDAY_INDEX[b]);
+  return { days: normalizedDays, time: timeInfo.token };
+};
+
+const sanitizeMonthlySpec = (input) => {
+  if (input == null) return null;
+  const raw = Array.isArray(input.days)
+    ? input.days
+    : typeof input.days === "string"
+      ? input.days.split(/[,\s]+/).filter(Boolean)
+      : [];
+  const days = [];
+  for (const token of raw) {
+    const num = Number(token);
+    if (Number.isInteger(num) && num >= 1 && num <= 31 && !days.includes(num)) {
+      days.push(num);
+    }
+  }
+  const timeInfo = isValidTimeToken(input.time);
+  if (!days.length || !timeInfo) return null;
+  days.sort((a, b) => a - b);
+  return { days, time: timeInfo.token };
+};
+
+const sanitizeYearlySpec = (input) => {
+  if (!input || typeof input !== "object") return null;
+  const occurrences = Array.isArray(input.occurrences) ? input.occurrences : [];
+  const sanitized = [];
+  for (const occ of occurrences) {
+    if (!occ || typeof occ !== "object") continue;
+    const month = Number(occ.month);
+    const day = Number(occ.day);
+    const timeInfo = isValidTimeToken(occ.time || occ.hour);
+    if (!Number.isInteger(month) || month < 1 || month > 12) continue;
+    if (!Number.isInteger(day) || day < 1 || day > 31) continue;
+    if (!timeInfo) continue;
+    sanitized.push({
+      month,
+      day,
+      time: timeInfo.token
+    });
+    if (sanitized.length >= 3) break;
+  }
+  if (!sanitized.length) return null;
+  return { occurrences: sanitized };
+};
+
+const clampDayToMonth = (year, monthIndex, day) => {
+  const last = new Date(year, monthIndex + 1, 0).getDate();
+  return Math.min(Math.max(1, day), last);
+};
+
+const computeWeeklyNext = (spec, now) => {
+  if (!spec || !Array.isArray(spec.days) || !spec.days.length) return null;
+  const timeInfo = isValidTimeToken(spec.time);
+  if (!timeInfo) return null;
+  const base = new Date(now);
+  const today = base.getDay();
+  let best = null;
+  for (const token of spec.days) {
+    if (!Object.prototype.hasOwnProperty.call(WEEKDAY_INDEX, token)) continue;
+    const targetDow = WEEKDAY_INDEX[token];
+    const candidate = new Date(base);
+    const diff = (targetDow - today + 7) % 7;
+    candidate.setDate(candidate.getDate() + diff);
+    candidate.setHours(timeInfo.hour, timeInfo.minute, 0, 0);
+    if (candidate.getTime() <= now + 30000) {
+      candidate.setDate(candidate.getDate() + 7);
+    }
+    if (!best || candidate.getTime() < best.getTime()) {
+      best = candidate;
+    }
+  }
+  return best ? best.getTime() : null;
+};
+
+const computeMonthlyNext = (spec, now) => {
+  if (!spec || !Array.isArray(spec.days) || !spec.days.length) return null;
+  const timeInfo = isValidTimeToken(spec.time);
+  if (!timeInfo) return null;
+  const base = new Date(now);
+  const startYear = base.getFullYear();
+  const startMonth = base.getMonth();
+  let best = null;
+  for (let offset = 0; offset <= 14; offset++) {
+    const monthIndex = (startMonth + offset) % 12;
+    const year = startYear + Math.floor((startMonth + offset) / 12);
+    for (const rawDay of spec.days) {
+      if (!Number.isInteger(rawDay)) continue;
+      const day = clampDayToMonth(year, monthIndex, rawDay);
+      const candidate = new Date(year, monthIndex, day, timeInfo.hour, timeInfo.minute, 0, 0);
+      if (candidate.getTime() <= now + 30000) continue;
+      if (!best || candidate.getTime() < best.getTime()) {
+        best = candidate;
+      }
+    }
+    if (best) break;
+  }
+  return best ? best.getTime() : null;
+};
+
+const computeYearlyNext = (spec, now) => {
+  if (!spec || !Array.isArray(spec.occurrences) || !spec.occurrences.length) return null;
+  let best = null;
+  const base = new Date(now);
+  const startYear = base.getFullYear();
+  for (let yearOffset = 0; yearOffset <= 3; yearOffset++) {
+    const year = startYear + yearOffset;
+    for (const occ of spec.occurrences) {
+      const timeInfo = isValidTimeToken(occ.time);
+      if (!timeInfo) continue;
+      const monthIndex = Number(occ.month) - 1;
+      if (!Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) continue;
+      const day = clampDayToMonth(year, monthIndex, Number(occ.day));
+      const candidate = new Date(year, monthIndex, day, timeInfo.hour, timeInfo.minute, 0, 0);
+      if (candidate.getTime() <= now + 30000) continue;
+      if (!best || candidate.getTime() < best.getTime()) {
+        best = candidate;
+      }
+    }
+    if (best) break;
+  }
+  return best ? best.getTime() : null;
+};
+
+const computeScheduleNextRun = (schedule, { now = Date.now() } = {}) => {
+  if (!schedule || schedule.enabled !== true) return null;
+  const anchor = Math.max(now, schedule.lastRunAt ? Date.parse(schedule.lastRunAt) || 0 : 0);
+  if (schedule.mode === "weekly" && schedule.weekly) {
+    return computeWeeklyNext(schedule.weekly, anchor);
+  }
+  if (schedule.mode === "monthly" && schedule.monthly) {
+    return computeMonthlyNext(schedule.monthly, anchor);
+  }
+  if (schedule.mode === "yearly" && schedule.yearly) {
+    return computeYearlyNext(schedule.yearly, anchor);
+  }
+  return null;
+};
+
+const limitScheduleHistory = (history) => {
+  if (!Array.isArray(history)) return [];
+  const trimmed = history.slice(-SCHEDULE_HISTORY_LIMIT);
+  return trimmed;
+};
+
+const cloneSchedule = (schedule) => {
+  if (!schedule || typeof schedule !== "object") return null;
+  return {
+    enabled: schedule.enabled === true,
+    mode: schedule.mode || null,
+    weekly: schedule.weekly
+      ? {
+          days: Array.isArray(schedule.weekly.days) ? schedule.weekly.days.slice() : [],
+          time: schedule.weekly.time || null
+        }
+      : null,
+    monthly: schedule.monthly
+      ? {
+          days: Array.isArray(schedule.monthly.days) ? schedule.monthly.days.slice() : [],
+          time: schedule.monthly.time || null
+        }
+      : null,
+    yearly: schedule.yearly
+      ? {
+          occurrences: Array.isArray(schedule.yearly.occurrences)
+            ? schedule.yearly.occurrences.map((occ) => ({ month: occ.month, day: occ.day, time: occ.time }))
+            : []
+        }
+      : null,
+    nextRunAt: schedule.nextRunAt || null,
+    lastRunAt: schedule.lastRunAt || null,
+    lastResult: schedule.lastResult || null,
+    lastMessage: schedule.lastMessage || null,
+    history: Array.isArray(schedule.history) ? schedule.history.slice() : []
+  };
+};
+
+const deriveProjectScheduleItems = (projectId, config, { now = Date.now() } = {}) => {
+  const items = [];
+  const pushItem = (entry) => {
+    if (!entry || !Number.isFinite(entry.nextTs)) return;
+    items.push(entry);
+  };
+  if (config && config.layers && typeof config.layers === "object") {
+    for (const [name, info] of Object.entries(config.layers)) {
+      if (!info || !info.schedule || info.schedule.enabled !== true) continue;
+      const schedule = info.schedule;
+      let nextTs = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
+      if (!Number.isFinite(nextTs) || nextTs <= now + 1000) {
+        nextTs = computeScheduleNextRun(schedule, { now });
+      }
+      if (!Number.isFinite(nextTs)) continue;
+      pushItem({
+        kind: "layer",
+        name,
+        nextTs,
+        schedule,
+        scope: "layer"
+      });
+    }
+  }
+  if (config && config.themes && typeof config.themes === "object") {
+    for (const [name, info] of Object.entries(config.themes)) {
+      if (!info || !info.schedule || info.schedule.enabled !== true) continue;
+      const schedule = info.schedule;
+      let nextTs = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
+      if (!Number.isFinite(nextTs) || nextTs <= now + 1000) {
+        nextTs = computeScheduleNextRun(schedule, { now });
+      }
+      if (!Number.isFinite(nextTs)) continue;
+      pushItem({
+        kind: "theme",
+        name,
+        nextTs,
+        schedule,
+        scope: "theme"
+      });
+    }
+  }
+  const legacyNext = computeNextRunTimestamp(config);
+  if (Number.isFinite(legacyNext)) {
+    pushItem({ kind: "project", name: projectId, nextTs: legacyNext, scope: "project" });
+  }
+  items.sort((a, b) => a.nextTs - b.nextTs);
+  return items;
+};
+
+const applyScheduleFinalization = (config, { now = Date.now() } = {}) => {
+  if (!config || typeof config !== "object") return;
+  const finalizeEntry = (entry) => {
+    if (!entry || typeof entry !== "object" || !entry.schedule) return;
+    const schedule = entry.schedule;
+    if (schedule && Array.isArray(schedule.history)) {
+      schedule.history = limitScheduleHistory(schedule.history);
+    }
+    if (!schedule || schedule.enabled !== true) {
+      if (schedule) schedule.nextRunAt = null;
+      return;
+    }
+    const nextTs = computeScheduleNextRun(schedule, { now });
+    schedule.nextRunAt = nextTs ? new Date(nextTs).toISOString() : null;
+  };
+  if (config.layers && typeof config.layers === "object") {
+    for (const value of Object.values(config.layers)) {
+      finalizeEntry(value);
+    }
+  }
+  if (config.themes && typeof config.themes === "object") {
+    for (const value of Object.values(config.themes)) {
+      finalizeEntry(value);
+    }
+  }
+};
+
 const PROJECT_BATCH_TTL_MS = parseInt(process.env.PROJECT_BATCH_TTL_MS || "900000", 10);
 
 // asegurar solo el directorio base (ya no se crea un index.json global)
@@ -142,6 +428,7 @@ const writeProjectConfig = (projectId, config, { skipReschedule = false } = {}) 
   if (merged.projectCache && Array.isArray(merged.projectCache.history)) {
     merged.projectCache.history = merged.projectCache.history.slice(-25);
   }
+  applyScheduleFinalization(merged);
   const configPath = getProjectConfigPath(projectId);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf8");
@@ -158,6 +445,60 @@ const updateProjectConfig = (projectId, patch, { skipReschedule = false } = {}) 
   // conservar createdAt
   merged.createdAt = current.createdAt || merged.createdAt || new Date().toISOString();
   return writeProjectConfig(projectId, merged, { skipReschedule });
+};
+
+const sanitizeIso = (value) => {
+  if (!value) return null;
+  const ts = Date.parse(value);
+  if (Number.isNaN(ts)) return null;
+  return new Date(ts).toISOString();
+};
+
+const buildSchedulePatch = (input) => {
+  if (input == null) return null;
+  if (typeof input !== "object") {
+    return null;
+  }
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(input, "enabled")) {
+    patch.enabled = !!input.enabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "mode")) {
+    if (input.mode === null) {
+      patch.mode = null;
+    } else if (typeof input.mode === "string") {
+      const mode = input.mode.toLowerCase();
+      if (["weekly", "monthly", "yearly"].includes(mode)) {
+        patch.mode = mode;
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "weekly")) {
+    patch.weekly = sanitizeWeeklySpec(input.weekly) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "monthly")) {
+    patch.monthly = sanitizeMonthlySpec(input.monthly) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "yearly")) {
+    patch.yearly = sanitizeYearlySpec(input.yearly) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "nextRunAt")) {
+    patch.nextRunAt = sanitizeIso(input.nextRunAt);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "lastRunAt")) {
+    patch.lastRunAt = sanitizeIso(input.lastRunAt);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "lastResult")) {
+    const lr = input.lastResult == null ? null : String(input.lastResult);
+    patch.lastResult = lr;
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "lastMessage")) {
+    patch.lastMessage = input.lastMessage == null ? null : String(input.lastMessage);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "history")) {
+    patch.history = limitScheduleHistory(Array.isArray(input.history) ? input.history : []);
+  }
+  return Object.keys(patch).length ? patch : {};
 };
 
 const buildProjectConfigPatch = (input = {}) => {
@@ -203,6 +544,25 @@ const buildProjectConfigPatch = (input = {}) => {
       if (info.lastResult) layerPatch.lastResult = info.lastResult;
       if (info.lastMessage) layerPatch.lastMessage = info.lastMessage;
       if (info.lastRunAt) layerPatch.lastRunAt = info.lastRunAt;
+      if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
+        if (info.schedule === null) {
+          layerPatch.schedule = {
+            enabled: false,
+            mode: null,
+            weekly: null,
+            monthly: null,
+            yearly: null,
+            nextRunAt: null,
+            lastRunAt: null,
+            lastResult: null,
+            lastMessage: null,
+            history: []
+          };
+        } else {
+          const schedulePatch = buildSchedulePatch(info.schedule) || {};
+          if (Object.keys(schedulePatch).length) layerPatch.schedule = schedulePatch;
+        }
+      }
       if (Object.keys(layerPatch).length) patch.layers[layerName] = layerPatch;
     }
   }
@@ -219,6 +579,25 @@ const buildProjectConfigPatch = (input = {}) => {
       if (info.lastRunAt) themePatch.lastRunAt = info.lastRunAt;
       if (Array.isArray(info.sourceLayers)) themePatch.sourceLayers = info.sourceLayers.slice(0, 64);
       if (info.lastJobId) themePatch.lastJobId = info.lastJobId;
+      if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
+        if (info.schedule === null) {
+          themePatch.schedule = {
+            enabled: false,
+            mode: null,
+            weekly: null,
+            monthly: null,
+            yearly: null,
+            nextRunAt: null,
+            lastRunAt: null,
+            lastResult: null,
+            lastMessage: null,
+            history: []
+          };
+        } else {
+          const schedulePatch = buildSchedulePatch(info.schedule) || {};
+          if (Object.keys(schedulePatch).length) themePatch.schedule = schedulePatch;
+        }
+      }
       if (Object.keys(themePatch).length) patch.themes[themeName] = themePatch;
     }
   }
@@ -300,22 +679,169 @@ const computeNextRunTimestamp = (config) => {
 const scheduleProjectRecache = (projectId, configParam) => {
   const cfg = configParam || readProjectConfig(projectId);
   cancelProjectTimer(projectId);
-  if (!cfg || !cfg.recache || cfg.recache.enabled !== true) {
-    return;
-  }
-  const nextTs = computeNextRunTimestamp(cfg);
-  if (!nextTs) {
-    return;
-  }
+  const items = deriveProjectScheduleItems(projectId, cfg);
+  if (!items.length) return;
+  const nextEntry = items.find((entry) => Number.isFinite(entry.nextTs));
+  if (!nextEntry) return;
   const now = Date.now();
-  const delayMs = Math.max(0, nextTs - now);
+  const delayMs = Math.max(0, nextEntry.nextTs - now);
   const timeoutDelay = Math.min(delayMs, MAX_TIMER_DELAY_MS);
   const timeout = setTimeout(() => {
-    handleProjectTimer(projectId, nextTs).catch((err) => {
+    handleProjectTimer(projectId, nextEntry.nextTs).catch((err) => {
       console.error(`Recache timer error for ${projectId}:`, err);
     });
   }, timeoutDelay);
-  projectTimers.set(projectId, { timeout, targetTime: nextTs });
+  projectTimers.set(projectId, { timeout, targetTime: nextEntry.nextTs });
+};
+
+const computeNextScheduleIso = (schedule, { now = Date.now() } = {}) => {
+  if (!schedule || schedule.enabled !== true) return null;
+  const nextTs = computeScheduleNextRun(schedule, { now });
+  return nextTs ? new Date(nextTs).toISOString() : null;
+};
+
+const runScheduledLayer = async (projectId, layerName, config) => {
+  const currentConfig = config || readProjectConfig(projectId, { useCache: false });
+  const layerEntry = currentConfig.layers && currentConfig.layers[layerName] ? currentConfig.layers[layerName] : null;
+  if (!layerEntry) {
+    logProjectEvent(projectId, `Scheduled layer ${layerName} skipped (missing info)`, "warn");
+    return currentConfig;
+  }
+  const schedule = cloneSchedule(layerEntry.schedule) || { enabled: false };
+  const nowIso = new Date().toISOString();
+  const appendHistory = (status, message) => {
+    const historyEntry = { at: nowIso, status, message };
+    const baseHistory = Array.isArray(schedule.history) ? schedule.history.slice() : [];
+    schedule.history = limitScheduleHistory([...baseHistory, historyEntry]);
+    schedule.lastRunAt = nowIso;
+    schedule.lastResult = status;
+    schedule.lastMessage = message;
+    schedule.nextRunAt = schedule.enabled === true ? computeNextScheduleIso(schedule, { now: Date.now() + 5000 }) : null;
+  };
+
+  if (!layerEntry.lastParams || typeof layerEntry.lastParams !== "object") {
+    const message = "Skipped automatic recache: no parameters recorded";
+    appendHistory("skipped", message);
+    const updated = updateProjectConfig(projectId, {
+      layers: {
+        [layerName]: {
+          schedule,
+          lastResult: "skipped",
+          lastMessage: message,
+          lastRunAt: nowIso
+        }
+      }
+    }, { skipReschedule: true });
+    return updated;
+  }
+
+  try {
+    await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
+  } catch (err) {
+    logProjectEvent(projectId, `Failed to purge layer ${layerName} before scheduled recache: ${err?.message || err}`, "warn");
+  }
+
+  let status = "success";
+  let message = "Automatic recache completed";
+  try {
+    const params = { ...layerEntry.lastParams, project: projectId, layer: layerName };
+    params.project = projectId;
+    params.layer = layerName;
+    const result = await runCacheJobViaHttp(params, {});
+    const rawStatus = result && result.status ? String(result.status) : "completed";
+    if (rawStatus !== "completed") {
+      status = rawStatus;
+      message = `Automatic recache ended with status ${rawStatus}`;
+    }
+  } catch (err) {
+    status = "error";
+    message = `Automatic recache failed: ${err?.message || err}`;
+    logProjectEvent(projectId, `Layer ${layerName} scheduled recache failed: ${err?.message || err}`, "error");
+  }
+  appendHistory(status, message);
+  const updated = updateProjectConfig(projectId, {
+    layers: {
+      [layerName]: {
+        schedule,
+        lastResult: status,
+        lastMessage: message,
+        lastRunAt: nowIso
+      }
+    }
+  }, { skipReschedule: true });
+  return updated;
+};
+
+const runScheduledTheme = async (projectId, themeName, config) => {
+  const currentConfig = config || readProjectConfig(projectId, { useCache: false });
+  const themeEntry = currentConfig.themes && currentConfig.themes[themeName] ? currentConfig.themes[themeName] : null;
+  if (!themeEntry) {
+    logProjectEvent(projectId, `Scheduled theme ${themeName} skipped (missing info)`, "warn");
+    return currentConfig;
+  }
+  const schedule = cloneSchedule(themeEntry.schedule) || { enabled: false };
+  const nowIso = new Date().toISOString();
+  const appendHistory = (status, message) => {
+    const historyEntry = { at: nowIso, status, message };
+    const baseHistory = Array.isArray(schedule.history) ? schedule.history.slice() : [];
+    schedule.history = limitScheduleHistory([...baseHistory, historyEntry]);
+    schedule.lastRunAt = nowIso;
+    schedule.lastResult = status;
+    schedule.lastMessage = message;
+    schedule.nextRunAt = schedule.enabled === true ? computeNextScheduleIso(schedule, { now: Date.now() + 5000 }) : null;
+  };
+
+  if (!themeEntry.lastParams || typeof themeEntry.lastParams !== "object") {
+    const message = "Skipped automatic recache: no parameters recorded";
+    appendHistory("skipped", message);
+    const updated = updateProjectConfig(projectId, {
+      themes: {
+        [themeName]: {
+          schedule,
+          lastResult: "skipped",
+          lastMessage: message,
+          lastRunAt: nowIso
+        }
+      }
+    }, { skipReschedule: true });
+    return updated;
+  }
+
+  try {
+    await deleteThemeCacheInternal(projectId, themeName, { force: true, silent: true });
+  } catch (err) {
+    logProjectEvent(projectId, `Failed to purge theme ${themeName} before scheduled recache: ${err?.message || err}`, "warn");
+  }
+
+  let status = "success";
+  let message = "Automatic theme recache completed";
+  try {
+    const params = { ...themeEntry.lastParams, project: projectId, theme: themeName };
+    params.project = projectId;
+    params.theme = themeName;
+    const result = await runCacheJobViaHttp(params, {});
+    const rawStatus = result && result.status ? String(result.status) : "completed";
+    if (rawStatus !== "completed") {
+      status = rawStatus;
+      message = `Automatic theme recache ended with status ${rawStatus}`;
+    }
+  } catch (err) {
+    status = "error";
+    message = `Automatic theme recache failed: ${err?.message || err}`;
+    logProjectEvent(projectId, `Theme ${themeName} scheduled recache failed: ${err?.message || err}`, "error");
+  }
+  appendHistory(status, message);
+  const updated = updateProjectConfig(projectId, {
+    themes: {
+      [themeName]: {
+        schedule,
+        lastResult: status,
+        lastMessage: message,
+        lastRunAt: nowIso
+      }
+    }
+  }, { skipReschedule: true });
+  return updated;
 };
 
 const logProjectEvent = (projectId, message, level = "info") => {
@@ -358,21 +884,36 @@ const handleProjectTimer = async (projectId, targetTime) => {
   const now = Date.now();
   const entry = projectTimers.get(projectId);
   if (entry && entry.targetTime && entry.targetTime !== targetTime) {
-    // timer se reprogramó mientras esperábamos
     return;
   }
-  if (now + 1000 < targetTime) {
-    // faltaba mucho: reprogramar
-    scheduleProjectRecache(projectId);
+  const config = readProjectConfig(projectId, { useCache: false });
+  const items = deriveProjectScheduleItems(projectId, config, { now });
+  if (!items.length) {
+    scheduleProjectRecache(projectId, config);
     return;
   }
-  try {
-    await runRecacheForProject(projectId, "scheduled");
-  } catch (err) {
-    console.error(`Scheduled recache failed for ${projectId}:`, err);
-  } finally {
-    scheduleProjectRecache(projectId);
+  const dueItems = items.filter((item) => Number.isFinite(item.nextTs) && item.nextTs <= now + 60000);
+  if (!dueItems.length) {
+    scheduleProjectRecache(projectId, config);
+    return;
   }
+  dueItems.sort((a, b) => a.nextTs - b.nextTs);
+  let workingConfig = config;
+  for (const item of dueItems) {
+    try {
+      if (item.kind === "layer") {
+        workingConfig = await runScheduledLayer(projectId, item.name, workingConfig);
+      } else if (item.kind === "theme") {
+        workingConfig = await runScheduledTheme(projectId, item.name, workingConfig);
+      } else if (item.kind === "project") {
+        await runRecacheForProject(projectId, "scheduled", { requireEnabled: false });
+        workingConfig = readProjectConfig(projectId, { useCache: false });
+      }
+    } catch (err) {
+      console.error(`Scheduled item failed for ${projectId} (${item.kind}:${item.name}):`, err);
+    }
+  }
+  scheduleProjectRecache(projectId, workingConfig);
 };
 
 const runCacheJobViaHttp = async (payload, { timeoutMs = 3600000 } = {}) => {
@@ -592,6 +1133,79 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   }
   logProjectEvent(projectId, `Layer ${layerName} cache deleted${force ? " (force)" : ""}.`);
   return { project: projectId, layer: layerName };
+};
+
+const deleteThemeCacheInternal = async (projectId, themeName, { force = false, silent = false } = {}) => {
+  if (!projectId) throw new Error("project required");
+  if (!themeName) throw new Error("theme required");
+  const runningEntry = Array.from(runningJobs.entries()).find(([id, job]) => job && job.status === "running" && job.project === projectId && job.targetMode === "theme" && job.targetName === themeName);
+  if (runningEntry) {
+    if (!force) {
+      const err = new Error("job_running");
+      err.code = "job_running";
+      err.jobId = runningEntry[0];
+      throw err;
+    }
+    try {
+      const [rid, job] = runningEntry;
+      job.proc.kill();
+      setTimeout(() => {
+        try {
+          if (job.proc && job.proc.pid) {
+            const tk = spawn("taskkill", ["/PID", String(job.proc.pid), "/T", "/F"], { shell: true });
+            tk.on("close", (code) => console.log(`taskkill (deleteThemeCacheInternal) job ${rid} -> code ${code}`));
+          }
+        } catch (e) {
+          if (!silent) console.warn("taskkill escalation failed (deleteThemeCacheInternal)", e);
+        }
+      }, parseInt(process.env.ABORT_GRACE_MS || "1000", 10));
+      job.status = "aborted";
+      job.endedAt = Date.now();
+      try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch {}
+      clearTimeout(job.cleanupTimer);
+      job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
+    } catch (e) {
+      if (!silent) console.warn("Failed to abort theme job before delete", e);
+    }
+  }
+
+  const themeDir = path.join(cacheDir, projectId, "_themes", themeName);
+  if (fs.existsSync(themeDir)) {
+    await fs.promises.rm(themeDir, { recursive: true, force: true });
+  }
+
+  const projectIndexPath = path.join(cacheDir, projectId, "index.json");
+  let index = { layers: [] };
+  try {
+    const raw = fs.readFileSync(projectIndexPath, "utf8");
+    if (raw) index = JSON.parse(raw);
+  } catch {
+    index = { layers: [] };
+  }
+  index.layers = Array.isArray(index.layers)
+    ? index.layers.filter((entry) => !(entry && entry.name === themeName && (entry.kind || "layer") === "theme"))
+    : [];
+  try {
+    fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
+  } catch (err) {
+    if (!silent) console.error("Failed to write project index after theme delete", err);
+    throw err;
+  }
+  try {
+    updateProjectConfig(projectId, {
+      themes: {
+        [themeName]: {
+          lastResult: "deleted",
+          lastMessage: "Theme cache removed",
+          lastRunAt: new Date().toISOString()
+        }
+      }
+    }, { skipReschedule: true });
+  } catch (cfgErr) {
+    if (!silent) console.warn("Failed to record theme delete in config", cfgErr);
+  }
+  logProjectEvent(projectId, `Theme ${themeName} cache deleted${force ? " (force)" : ""}.`);
+  return { project: projectId, theme: themeName };
 };
 
 const allowedProjectExtensions = new Set([".qgz", ".qgs"]);
