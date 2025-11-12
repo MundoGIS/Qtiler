@@ -7,53 +7,100 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-  <title data-i18n="guide.pageTitle">User Guide · Qtiler</title>
+    <title data-i18n="guide.pageTitle">User Guide · Qtiler</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="/styles.css">
     <style>
-      :root {
-        --bg:#f9fafb;
-        --card:#ffffff;
-        --card-muted:#f2f4f8;
-        --fg:#0f172a;
-        --muted:#64748b;
-        --accent:#2563eb;
-        --accent-light:rgba(37,99,235,0.1);
-        --accent-strong:#1d4ed8;
-        --border:rgba(15,23,42,0.08);
-        --border-strong:rgba(37,99,235,0.3);
-        --shadow:0 20px 35px rgba(15,23,42,0.08);
-        --green:#15803d;
-      }
-      *{box-sizing:border-box}
-      body {
-        margin: 0;
-        font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: var(--bg);
-        color: var(--fg);
-        min-height: 100vh;
-        display: flex;
-      }
-      main {
+      .guide-main {
         width: 100%;
         max-width: 960px;
         margin: 0 auto;
         padding: 60px 28px 80px;
       }
-      header {
+
+      .guide-topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 32px;
+      }
+
+      .guide-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-weight: 600;
+        text-decoration: none;
+        transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+      }
+
+      .guide-button:hover,
+      .guide-button:focus {
+        transform: translateY(-1px);
+        border-color: var(--primary-600);
+        background: rgba(37, 99, 235, 0.18);
+        text-decoration: none;
+      }
+
+      .guide-language-select {
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg);
+        font-weight: 600;
+        min-width: 160px;
+        box-shadow: var(--shadow);
+      }
+
+      @media (max-width: 600px) {
+        .guide-topbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .guide-language-select {
+          width: 100%;
+        }
+      }
+
+      .guide-hero {
         text-align: center;
         margin-bottom: 48px;
       }
-      header h1 {
+
+      .guide-hero h1 {
         font-size: 36px;
         margin: 0 0 12px 0;
         letter-spacing: -0.5px;
       }
-      header p {
+
+      .guide-hero p {
         margin: 0;
         color: var(--muted);
         font-size: 16px;
       }
-      section {
+
+      .guide-badge {
+        display: inline-flex;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        font-size: 12px;
+        margin-bottom: 18px;
+      }
+
+      .guide-section {
         background: var(--card);
         border: 1px solid var(--border);
         border-radius: 18px;
@@ -61,7 +108,8 @@
         box-shadow: var(--shadow);
         margin-bottom: 32px;
       }
-      section h2 {
+
+      .guide-section h2 {
         margin-top: 0;
         margin-bottom: 18px;
         font-size: 22px;
@@ -69,256 +117,250 @@
         align-items: center;
         gap: 10px;
       }
-      section h2 span {
+
+      .guide-section h2 span:first-child {
         display: inline-flex;
         width: 30px;
         height: 30px;
         align-items: center;
         justify-content: center;
         border-radius: 10px;
-        background: var(--accent-light);
-        color: var(--accent);
+        background: var(--primary-soft);
+        color: var(--primary);
         font-weight: 600;
         font-size: 14px;
       }
-      p, li {
+
+      .guide-main p,
+      .guide-main li {
         font-size: 15px;
         line-height: 1.65;
-        color: rgba(15,23,42,0.82);
+        color: var(--fg);
       }
-      ul, ol {
+
+      .guide-main ul,
+      .guide-main ol {
         margin: 0;
         padding-left: 20px;
       }
+
       code {
         font-family: "Cascadia Code", Consolas, "Fira Code", monospace;
-        background: rgba(15,23,42,0.08);
+        background: rgba(15, 23, 42, 0.08);
         padding: 2px 5px;
         border-radius: 6px;
         font-size: 13px;
       }
+
       .tip {
         margin-top: 18px;
         padding: 16px;
-        background: var(--accent-light);
-        border-left: 3px solid var(--accent);
+        background: var(--primary-soft);
+        border-left: 3px solid var(--primary);
         border-radius: 12px;
       }
+
       .grid {
         display: grid;
         gap: 18px;
       }
+
       @media (min-width: 860px) {
         .grid.two {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
+
       .card-mini {
-        background: var(--card-muted);
+        background: var(--card);
         border-radius: 14px;
         padding: 18px;
-        border: 1px solid rgba(15,23,42,0.08);
+        border: 1px solid rgba(15, 23, 42, 0.08);
       }
+
       .card-mini h3 {
         margin: 0 0 10px 0;
         font-size: 17px;
-        color: var(--accent);
+        color: var(--primary);
       }
-      .badge {
-        display: inline-flex;
-        padding: 4px 10px;
-        border-radius: 999px;
-        background: var(--accent-light);
-        color: var(--accent);
-        font-weight: 600;
-        letter-spacing: 0.3px;
-        font-size: 12px;
-      }
-      a.button {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 10px 16px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: rgba(37,99,235,0.08);
-        color: var(--accent);
-        text-decoration: none;
-        font-weight: 600;
-        transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
-      }
-      a.button:hover {
-        transform: translateY(-1px);
-        border-color: var(--accent-strong);
-        background: rgba(37,99,235,0.15);
-      }
-      footer {
+
+      .guide-note {
         text-align: center;
         margin-top: 32px;
         color: var(--muted);
         font-size: 13px;
       }
-      .top-bar {
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        gap:12px;
-        flex-wrap:wrap;
-        margin-bottom:24px;
-      }
-      .language-select {
-        padding:8px 12px;
-        border-radius:999px;
-        border:1px solid var(--border);
-        background:var(--card);
-        color:var(--fg);
-        font-weight:600;
-        box-shadow:var(--shadow);
-        min-width:160px;
-      }
-      @media (max-width: 600px) {
-        .language-select {
-          width:100%;
-        }
-        .top-bar {
-          flex-direction:column;
-          align-items:stretch;
-        }
-      }
     </style>
   </head>
   <body>
-    <main>
-      <div class="top-bar">
-        <a class="button" href="/index.html" data-i18n="guide.back">⬅ Back to dashboard</a>
-        <select id="language_selector" class="language-select" aria-label="Language">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="sv">Svenska</option>
-        </select>
-      </div>
-      <header>
-  <span class="badge">Qtiler · MundoGIS</span>
-  <h1 data-i18n="guide.heroTitle">Quick Start & Workflow Guide</h1>
-  <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, generate layer or theme caches with Qtiler, and publish production-ready WMTS.</p>
+    <div class="app-shell guide-shell">
+      <header class="app-header">
+        <div class="header-inner">
+          <div class="brand">
+            <a href="/index.html" class="brand-logo">Qtiler</a>
+            <span class="brand-tagline" data-i18n="Guide">Guide</span>
+          </div>
+          <nav class="main-nav" aria-label="Primary">
+            <a href="/index.html" class="nav-link" data-i18n="Dashboard">Dashboard</a>
+            <a href="/guide.html" class="nav-link is-active" aria-current="page" data-i18n="Guide">Guide</a>
+            <a href="/viewer.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Tile viewer">Tile viewer</a>
+            <div class="nav-divider" aria-hidden="true"></div>
+            <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+            <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="sv">Svenska</option>
+            </select>
+          </nav>
+        </div>
       </header>
 
-      <section>
-        <h2><span>1</span> <span data-i18n="guide.section1Title">Getting ready</span></h2>
-        <div class="grid two">
-          <div class="card-mini">
-            <h3 data-i18n="guide.prepareQgis">Prepare QGIS</h3>
-            <ul>
-              <li data-i18n="guide.prepareQgis.step1">Create and save your project in QGIS 3.x with all layers styled.</li>
-              <li data-i18n="guide.prepareQgis.step2">Define "Map Themes" (a.k.a. Kartteman) for every layer combination you want to cache as a composite.</li>
-              <li data-i18n-html="guide.prepareQgis.step3">Save the project (<code>Ctrl+S</code>) before uploading so the themes are persisted.</li>
-            </ul>
+      <main class="app-main">
+        <div class="guide-main">
+          <div class="guide-topbar">
+            <a class="guide-button" href="/index.html" data-i18n="guide.back">⬅ Back to dashboard</a>
+            <select id="guide_language_selector" class="guide-language-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="sv">Svenska</option>
+            </select>
           </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.setupServer">Set up the server</h3>
-            <ul>
-              <li data-i18n-html="guide.setupServer.step1">Install OSGeo4W or the standalone QGIS build and configure <code>QGIS_PREFIX</code>, <code>OSGEO4W_BIN</code>, <code>PYTHON_EXE</code>.</li>
-              <li data-i18n-html="guide.setupServer.step2">Launch Qtiler with <code>npm start</code> (default <code>http://localhost:3000</code>).</li>
-              <li data-i18n-html="guide.setupServer.step3">Optional: install the Windows Service via <code>node service\\install-service.js</code>.</li>
-            </ul>
-          </div>
-        </div>
-        <div class="tip" data-i18n-html="guide.tip1">Already copied projects into <code>qgisprojects/</code>? Just click <strong>Reload layers</strong> to rebuild the list.</div>
-      </section>
 
-      <section>
-        <h2><span>2</span> <span data-i18n="guide.section2Title">Dashboard workflow</span></h2>
-        <p style="margin-bottom:18px;color:var(--muted)" data-i18n-html="guide.dashboardIntro">Here is the end-to-end flow inside the dashboard. Drop your own annotated screenshots into <code>public/assets</code> and update the references below if you want inline visuals.</p>
-        <div class="grid two" style="margin-bottom:22px;">
-          <div class="card-mini">
-            <h3 data-i18n="guide.dashboardOverview">Dashboard overview</h3>
-            <p data-i18n-html="guide.dashboardOverview.body">Screenshot placeholder. Replace <code>dashboard-overview.png</code> with your own capture.</p>
-            <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
-              <img src="assets/dashboard-overview.png" alt="Dashboard overview" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/dashboard-overview.png';" />
+          <section class="guide-hero">
+            <span class="guide-badge">Qtiler · MundoGIS</span>
+            <h1 data-i18n="guide.heroTitle">Quick Start &amp; Workflow Guide</h1>
+            <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, generate layer or theme caches with Qtiler, and publish production-ready WMTS.</p>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>1</span> <span data-i18n="guide.section1Title">Getting ready</span></h2>
+            <div class="grid two">
+              <div class="card-mini">
+                <h3 data-i18n="guide.prepareQgis">Prepare QGIS</h3>
+                <ul>
+                  <li data-i18n="guide.prepareQgis.step1">Create and save your project in QGIS 3.x with all layers styled.</li>
+                  <li data-i18n="guide.prepareQgis.step2">Define "Map Themes" (a.k.a. Kartteman) for every layer combination you want to cache as a composite.</li>
+                  <li data-i18n-html="guide.prepareQgis.step3">Save the project (<code>Ctrl+S</code>) before uploading so the themes are persisted.</li>
+                </ul>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.setupServer">Set up the server</h3>
+                <ul>
+                  <li data-i18n-html="guide.setupServer.step1">Install OSGeo4W or the standalone QGIS build and configure <code>QGIS_PREFIX</code>, <code>OSGEO4W_BIN</code>, <code>PYTHON_EXE</code>.</li>
+                  <li data-i18n-html="guide.setupServer.step2">Launch Qtiler with <code>npm start</code> (default <code>http://localhost:3000</code>).</li>
+                  <li data-i18n-html="guide.setupServer.step3">Optional: install the Windows Service via <code>node service\\install-service.js</code>.</li>
+                </ul>
+              </div>
             </div>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.layerControls">Layer controls</h3>
-            <p data-i18n-html="guide.layerControls.body">Show layer actions (play, delete, copy URL, viewer). Replace <code>layer-controls.png</code> with your own image.</p>
-            <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
-              <img src="assets/layer-controls.png" alt="Layer controls" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/layer-controls.png';" />
+            <div class="tip" data-i18n-html="guide.tip1">Already copied projects into <code>qgisprojects/</code>? Just click <strong>Reload layers</strong> to rebuild the list.</div>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>2</span> <span data-i18n="guide.section2Title">Dashboard workflow</span></h2>
+            <p style="margin-bottom:18px;color:var(--muted)" data-i18n-html="guide.dashboardIntro">Here is the end-to-end flow inside the dashboard. Drop your own annotated screenshots into <code>public/assets</code> and update the references below if you want inline visuals.</p>
+            <div class="grid two" style="margin-bottom:22px;">
+              <div class="card-mini">
+                <h3 data-i18n="guide.dashboardOverview">Dashboard overview</h3>
+                <p data-i18n-html="guide.dashboardOverview.body">Screenshot placeholder. Replace <code>dashboard-overview.png</code> with your own capture.</p>
+                <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
+                  <img src="assets/dashboard-overview.png" alt="Dashboard overview" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/dashboard-overview.png';" />
+                </div>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.layerControls">Layer controls</h3>
+                <p data-i18n-html="guide.layerControls.body">Show layer actions (play, delete, copy URL, viewer). Replace <code>layer-controls.png</code> with your own image.</p>
+                <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
+                  <img src="assets/layer-controls.png" alt="Layer controls" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/layer-controls.png';" />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="grid two">
-          <div class="card-mini">
-            <h3 data-i18n="guide.uploadRefresh">1️⃣ Upload or refresh projects</h3>
-            <p data-i18n-html="guide.uploadRefresh.body">Use <strong>Upload project</strong> for `.qgs/.qgz` files. Qtiler drops them into <code>qgisprojects/</code> and extracts layers, CRS, extent, and themes. Manual copies work too—just hit <strong>Reload layers</strong>.</p>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.adjustZoom">2️⃣ Adjust zoom and extent</h3>
-            <p data-i18n-html="guide.adjustZoom.body">Set global min/max zoom and open <strong>Show extent map</strong> when you need precise bounding boxes. The map supports deep zoom (≈1:100) so you can refine the box in WGS84.</p>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.cachePerLayer">3️⃣ Cache per layer</h3>
-            <p data-i18n="guide.cachePerLayer.intro">Each layer row offers:</p>
+            <div class="grid two">
+              <div class="card-mini">
+                <h3 data-i18n="guide.uploadRefresh">1️⃣ Upload or refresh projects</h3>
+                <p data-i18n-html="guide.uploadRefresh.body">Use <strong>Upload project</strong> for `.qgs/.qgz` files. Qtiler drops them into <code>qgisprojects/</code> and extracts layers, CRS, extent, and themes. Manual copies work too—just hit <strong>Reload layers</strong>.</p>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.adjustZoom">2️⃣ Adjust zoom and extent</h3>
+                <p data-i18n-html="guide.adjustZoom.body">Set global min/max zoom and open <strong>Show extent map</strong> when you need precise bounding boxes. The map supports deep zoom (≈1:100) so you can refine the box in WGS84.</p>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.cachePerLayer">3️⃣ Cache per layer</h3>
+                <p data-i18n="guide.cachePerLayer.intro">Each layer row offers:</p>
+                <ul>
+                  <li data-i18n="guide.cachePerLayer.option1">▶ Generate/refresh cache.</li>
+                  <li data-i18n="guide.cachePerLayer.option2">🗑 Delete stored tiles.</li>
+                  <li data-i18n="guide.cachePerLayer.option3">📋 Copy tile URL (`/wmts/&lt;project&gt;/&lt;layer&gt;/{z}/{x}/{y}.png`).</li>
+                  <li data-i18n="guide.cachePerLayer.option4">👁 Open the Leaflet viewer in the layer’s native CRS.</li>
+                </ul>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.cachePerTheme">4️⃣ Cache per theme</h3>
+                <p data-i18n-html="guide.cachePerTheme.body">The <strong>Map Themes</strong> section lists every theme found. Use ▶ to generate the composite mosaic (`/wmts/&lt;project&gt;/themes/&lt;theme&gt;/…`). Copy the WMTS URL and preview it in the viewer.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>3</span> <span data-i18n="guide.section3Title">Jobs &amp; automation</span></h2>
+            <div class="grid two">
+              <div class="card-mini">
+                <h3 data-i18n="guide.projectWideCache">Project-wide cache</h3>
+                <p data-i18n-html="guide.projectWideCache.body"><strong>Cache all layers</strong> launches a batch job that iterates over every layer with the current parameters. The “Running tasks” panel tracks progress live.</p>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.scheduledRecache">Scheduled recache</h3>
+                <p data-i18n-html="guide.scheduledRecache.body">Open the recache menu to define minute-based intervals. The server records last result and next run inside <code>project-config.json</code>.</p>
+              </div>
+            </div>
+            <div class="tip" data-i18n-html="guide.tip2">Caches live under <code>cache/&lt;project&gt;/</code>. Each run updates <code>index.json</code> with <code>kind</code>, zooms, source layers, and timestamps.</div>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>4</span> <span data-i18n="guide.section4Title">Publishing WMTS</span></h2>
+            <p data-i18n-html="guide.section4.body">The backend exposes a minimal GetCapabilities endpoint at <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. All cached layers and themes appear as individual WMTS layers with ready-to-use templates.</p>
+            <div class="grid two">
+              <div class="card-mini">
+                <h3 data-i18n="guide.gisIntegration">GIS client integration</h3>
+                <ul>
+                  <li data-i18n="guide.gisIntegration.body1">Load the Capabilities URL to register every layer at once.</li>
+                  <li data-i18n="guide.gisIntegration.body2">Use individual tile URLs when you only need a specific resource.</li>
+                  <li data-i18n-html="guide.gisIntegration.body3">Themes are identified as <code>&lt;project&gt;:&lt;theme&gt;</code> and stored under <code>_themes/</code>.</li>
+                </ul>
+              </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
+                <p data-i18n-html="guide.leafletViewer.body">The built-in viewer (<code>viewer.html</code>) handles custom CRS via Proj4, displays a scale bar, and allows extra zoom-in to validate tile quality before publishing.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>5</span> <span data-i18n="guide.section5Title">Best practices</span></h2>
             <ul>
-              <li data-i18n="guide.cachePerLayer.option1">▶ Generate/refresh cache.</li>
-              <li data-i18n="guide.cachePerLayer.option2">🗑 Delete stored tiles.</li>
-              <li data-i18n="guide.cachePerLayer.option3">📋 Copy tile URL (`/wmts/&lt;project&gt;/&lt;layer&gt;/{z}/{x}/{y}.png`).</li>
-              <li data-i18n="guide.cachePerLayer.option4">👁 Open the Leaflet viewer in the layer’s native CRS.</li>
+              <li data-i18n="guide.bestPractice1">Keep QGIS projects and themes organized—names map directly to WMTS paths.</li>
+              <li data-i18n="guide.bestPractice2">Monitor disk usage; WMTS caches can grow fast. Clean up unused layers regularly.</li>
+              <li data-i18n-html="guide.bestPractice3">Review logs (`logs/`) and UI status messages to catch render errors early.</li>
+              <li data-i18n="guide.bestPractice4">Use dedicated Windows accounts and background services for production deployments.</li>
             </ul>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.cachePerTheme">4️⃣ Cache per theme</h3>
-            <p data-i18n-html="guide.cachePerTheme.body">The <strong>Map Themes</strong> section lists every theme found. Use ▶ to generate the composite mosaic (`/wmts/&lt;project&gt;/themes/&lt;theme&gt;/…`). Copy the WMTS URL and preview it in the viewer.</p>
+          </section>
+
+          <p class="guide-note" data-i18n="guide.footer">
+            Need to customize further? Update the repository README with team-specific notes and share this guide internally.
+          </p>
+        </div>
+      </main>
+
+      <footer class="app-footer guide-footer">
+        <div class="footer-inner">
+          <div class="footer-brand">© <span id="guide_footer_year"></span> MundoGIS</div>
+          <div class="footer-links">
+            <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>
+            <a href="mailto:info@mundogis.se">info@mundogis.se</a>
           </div>
         </div>
-      </section>
-
-      <section>
-        <h2><span>3</span> <span data-i18n="guide.section3Title">Jobs & automation</span></h2>
-        <div class="grid two">
-          <div class="card-mini">
-            <h3 data-i18n="guide.projectWideCache">Project-wide cache</h3>
-            <p data-i18n-html="guide.projectWideCache.body"><strong>Cache all layers</strong> launches a batch job that iterates over every layer with the current parameters. The “Running tasks” panel tracks progress live.</p>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.scheduledRecache">Scheduled recache</h3>
-            <p data-i18n-html="guide.scheduledRecache.body">Open the recache menu to define minute-based intervals. The server records last result and next run inside <code>project-config.json</code>.</p>
-          </div>
-        </div>
-        <div class="tip" data-i18n-html="guide.tip2">Caches live under <code>cache/&lt;project&gt;/</code>. Each run updates <code>index.json</code> with <code>kind</code>, zooms, source layers, and timestamps.</div>
-      </section>
-
-      <section>
-        <h2><span>4</span> <span data-i18n="guide.section4Title">Publishing WMTS</span></h2>
-        <p data-i18n-html="guide.section4.body">The backend exposes a minimal GetCapabilities endpoint at <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. All cached layers and themes appear as individual WMTS layers with ready-to-use templates.</p>
-        <div class="grid two">
-          <div class="card-mini">
-            <h3 data-i18n="guide.gisIntegration">GIS client integration</h3>
-            <ul>
-              <li data-i18n="guide.gisIntegration.body1">Load the Capabilities URL to register every layer at once.</li>
-              <li data-i18n="guide.gisIntegration.body2">Use individual tile URLs when you only need a specific resource.</li>
-              <li data-i18n-html="guide.gisIntegration.body3">Themes are identified as <code>&lt;project&gt;:&lt;theme&gt;</code> and stored under <code>_themes/</code>.</li>
-            </ul>
-          </div>
-          <div class="card-mini">
-            <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
-            <p data-i18n-html="guide.leafletViewer.body">The built-in viewer (<code>viewer.html</code>) handles custom CRS via Proj4, displays a scale bar, and allows extra zoom-in to validate tile quality before publishing.</p>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <h2><span>5</span> <span data-i18n="guide.section5Title">Best practices</span></h2>
-        <ul>
-          <li data-i18n="guide.bestPractice1">Keep QGIS projects and themes organized—names map directly to WMTS paths.</li>
-          <li data-i18n="guide.bestPractice2">Monitor disk usage; WMTS caches can grow fast. Clean up unused layers regularly.</li>
-          <li data-i18n-html="guide.bestPractice3">Review logs (`logs/`) and UI status messages to catch render errors early.</li>
-          <li data-i18n="guide.bestPractice4">Use dedicated Windows accounts and background services for production deployments.</li>
-        </ul>
-      </section>
-
-      <footer data-i18n="guide.footer">
-        Need to customize further? Update the repository README with team-specific notes and share this guide internally.
       </footer>
-    </main>
+    </div>
+
     <script>
       (function(){
         const SUPPORTED_LANGS = ["en", "es", "sv"];
@@ -398,7 +440,7 @@
             "guide.dashboardIntro": "Här är hela arbetsflödet i panelen. Byt ut skärmdumparna i <code>public/assets</code> och uppdatera referenserna om du vill visa egna bilder.",
             "guide.dashboardOverview": "Panelöversikt",
             "guide.dashboardOverview.body": "Platshållare för skärmdump. Ersätt <code>dashboard-overview.png</code> med din egen bild.",
-            "guide.layerControls": "Lagerkontroller",
+            "guide.layerControls": "Kontroller för lager",
             "guide.layerControls.body": "Visa lageråtgärder (starta, ta bort, kopiera URL, visare). Ersätt <code>layer-controls.png</code> med din egen bild.",
             "guide.uploadRefresh": "1️⃣ Ladda upp eller uppdatera projekt",
             "guide.uploadRefresh.body": "Använd <strong>Ladda upp projekt</strong> för `.qgs/.qgz`-filer. Qtiler placerar dem i <code>qgisprojects/</code> och extraherar lager, CRS, utbredning och teman. Manuella kopior fungerar också – klicka bara på <strong>Ladda om lager</strong>.",
@@ -463,13 +505,13 @@
           if (!key) return "";
           const table = TRANSLATIONS[currentLang] || {};
           const fallback = DEFAULT_TEXT[key] ?? DEFAULT_HTML[key] ?? "";
-          const template = table[key] ?? fallback;
-          return template;
+          return table[key] ?? fallback;
         };
 
         const applyTranslations = () => {
           document.documentElement.setAttribute("lang", currentLang);
-          document.title = tr("guide.pageTitle") || document.title;
+          const titleTranslation = tr("guide.pageTitle");
+          if (titleTranslation) document.title = titleTranslation;
           document.querySelectorAll("[data-i18n]").forEach(el => {
             const key = el.getAttribute("data-i18n");
             if (!key) return;
@@ -484,21 +526,34 @@
           if (backLink) backLink.setAttribute("aria-label", tr("guide.back"));
         };
 
+        const navLanguageSelect = document.getElementById("language_selector");
+        const secondaryLanguageSelect = document.getElementById("guide_language_selector");
+
+        const syncSelects = () => {
+          if (navLanguageSelect) navLanguageSelect.value = currentLang;
+          if (secondaryLanguageSelect) secondaryLanguageSelect.value = currentLang;
+        };
+
         const setLanguage = (lang) => {
           currentLang = normalizeLang(lang);
           localStorage.setItem("qtiler.lang", currentLang);
           applyTranslations();
+          syncSelects();
         };
 
-        document.addEventListener("DOMContentLoaded", () => {
-          captureDefaults();
-          const selector = document.getElementById("language_selector");
-          if (selector) {
-            selector.value = currentLang;
-            selector.addEventListener("change", (event) => setLanguage(event.target.value));
-          }
-          applyTranslations();
-        });
+        captureDefaults();
+        applyTranslations();
+        syncSelects();
+
+        if (navLanguageSelect) {
+          navLanguageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
+        }
+        if (secondaryLanguageSelect) {
+          secondaryLanguageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
+        }
+
+        const footerYearEl = document.getElementById("guide_footer_year");
+        if (footerYearEl) footerYearEl.textContent = String(new Date().getFullYear());
       })();
     </script>
   </body>

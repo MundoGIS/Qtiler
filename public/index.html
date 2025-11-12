@@ -20,28 +20,27 @@
           </div>
           <nav class="main-nav" aria-label="Primary">
             <a href="/index.html" class="nav-link is-active" aria-current="page" data-i18n="Dashboard">Dashboard</a>
+            <button id="open_guide" class="nav-button" type="button" data-i18n="User guide">User guide</button>
             <a href="/viewer.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Tile viewer">Tile viewer</a>
-            <a href="/guide.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Guide">Guide</a>
+            <div class="nav-divider" aria-hidden="true"></div>
+            <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+            <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="sv">Svenska</option>
+            </select>
           </nav>
         </div>
       </header>
 
       <main class="app-main">
-        <section class="control-panel">
+        <div class="main-layout">
+          <aside class="control-panel">
           <div class="control-toolbar">
             <div class="control-actions">
               <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
               <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
               <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
-              <button id="open_guide" class="btn btn-outline" data-i18n="User guide">User guide</button>
-            </div>
-            <div class="control-language">
-              <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
-              <select id="language_selector" class="input-select" aria-label="Language">
-                <option value="en">English</option>
-                <option value="es">Español</option>
-                <option value="sv">Svenska</option>
-              </select>
             </div>
           </div>
           <div class="control-grid">
@@ -65,14 +64,17 @@
               <input id="throttle_ms" class="input-number" type="number" min="0" value="0" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
             </div>
           </div>
-        </section>
+          </aside>
 
-        <div id="status"></div>
-        <div id="jobs" class="jobs" style="display:none">
-          <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
-          <div id="jobsList" class="list"></div>
+          <section class="content-panel">
+            <div id="status"></div>
+            <div id="jobs" class="jobs" style="display:none">
+              <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
+              <div id="jobsList" class="list"></div>
+            </div>
+            <div id="layers" class="list">Loading layers…</div>
+          </section>
         </div>
-        <div id="layers" class="list">Loading layers…</div>
       </main>
 
       <footer class="app-footer">
@@ -119,9 +121,17 @@
           "Copy failed: {error}": "Error al copiar: {error}",
           "Generate cache": "Generar caché",
           "Recache layer": "Regenerar caché",
+          "Start recache": "Iniciar regeneración",
+          "Choose zoom levels for this recache run.": "Elige los niveles de zoom para esta regeneración.",
+          "Cached zoom range: {range}": "Rango de zoom cacheado: {range}",
+          "Values only apply to this recache operation.": "Estos valores solo se aplican a esta regeneración.",
+          "Provide valid zoom numbers (0-30).": "Ingresa valores de zoom válidos (0-30).",
+          "Min zoom must be less than or equal to max zoom.": "El zoom mínimo debe ser menor o igual que el zoom máximo.",
           "Remote layer. Enable \"Allow remote\" to cache.": "Capa remota. Activa \"Permitir remoto\" para cachearla.",
           "Delete cache": "Eliminar caché",
           "Open map viewer": "Abrir visor de mapa",
+          "Open remote source": "Abrir fuente remota",
+          "View cached tiles": "Ver teselas cacheadas",
           "Running tasks": "Tareas en ejecución",
           "Loading layers…": "Cargando capas…",
           "Project cache running": "Caché de proyecto en ejecución",
@@ -231,9 +241,17 @@
           "Copy failed: {error}": "Kopiering misslyckades: {error}",
           "Generate cache": "Generera cache",
           "Recache layer": "Generera om cache",
+          "Start recache": "Starta omgenerering",
+          "Choose zoom levels for this recache run.": "Välj zoomnivåer för den här omgenereringen.",
+          "Cached zoom range: {range}": "Cachelagrat zoomintervall: {range}",
+          "Values only apply to this recache operation.": "Värdena gäller bara för denna omgenerering.",
+          "Provide valid zoom numbers (0-30).": "Ange giltiga zoomtal (0-30).",
+          "Min zoom must be less than or equal to max zoom.": "Minsta zoom måste vara mindre än eller lika med största zoom.",
           "Remote layer. Enable \"Allow remote\" to cache.": "Fjärrlager. Aktivera \"Tillåt fjärrlager\" för att cachea.",
           "Delete cache": "Ta bort cache",
           "Open map viewer": "Öppna kartvisare",
+          "Open remote source": "Öppna fjärrkälla",
+          "View cached tiles": "Visa cachelagrade rutor",
           "Running tasks": "Pågående jobb",
           "Loading layers…": "Laddar lager…",
           "Project cache running": "Projektcache körs",
@@ -321,6 +339,57 @@
       };
 
       let currentLang = normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
+      const PROJECT_COLLAPSE_STORAGE_KEY = 'qtiler.projectCollapse.v1';
+      let collapsePrefsCache = null;
+
+      const readCollapsePrefs = () => {
+        if (collapsePrefsCache) return collapsePrefsCache;
+        try {
+          const raw = localStorage.getItem(PROJECT_COLLAPSE_STORAGE_KEY);
+          if (!raw) {
+            collapsePrefsCache = {};
+          } else {
+            const parsed = JSON.parse(raw);
+            collapsePrefsCache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+          }
+        } catch {
+          collapsePrefsCache = {};
+        }
+        return collapsePrefsCache;
+      };
+
+      const getStoredCollapse = (projectId) => {
+        if (!projectId) return null;
+        const prefs = readCollapsePrefs();
+        return Object.prototype.hasOwnProperty.call(prefs, projectId) ? !!prefs[projectId] : null;
+      };
+
+      const writeCollapsePrefs = () => {
+        if (!collapsePrefsCache) return;
+        try {
+          localStorage.setItem(PROJECT_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsePrefsCache));
+        } catch {}
+      };
+
+      const setStoredCollapse = (projectId, collapsed) => {
+        if (!projectId) return;
+        const prefs = readCollapsePrefs();
+        if (collapsed) {
+          prefs[projectId] = true;
+        } else if (Object.prototype.hasOwnProperty.call(prefs, projectId)) {
+          delete prefs[projectId];
+        }
+        writeCollapsePrefs();
+      };
+
+      const removeStoredCollapse = (projectId) => {
+        if (!projectId) return;
+        const prefs = readCollapsePrefs();
+        if (Object.prototype.hasOwnProperty.call(prefs, projectId)) {
+          delete prefs[projectId];
+          writeCollapsePrefs();
+        }
+      };
 
       const tr = (text, replacements = {}) => {
         if (!text) return "";
@@ -403,10 +472,15 @@
         { month: 11, day: 1, time: DEFAULT_SCHEDULE_TIME }
       ];
       const WEB_MERCATOR_CODES = ['EPSG:3857', 'EPSG3857', 'EPSG:3858', 'EPSG3858'];
+      const MAX_ZOOM_LEVEL = 30;
 
   let scheduleDialogBackdrop = null;
   let scheduleDialogContainer = null;
   let scheduleDialogKeyHandler = null;
+  let recacheDialogBackdrop = null;
+  let recacheDialogContainer = null;
+  let recacheDialogResolve = null;
+  let recacheDialogKeyHandler = null;
 
       const cloneScheduleEntry = (schedule) => {
         if (!schedule || typeof schedule !== 'object') return null;
@@ -472,6 +546,254 @@
         return '';
       };
 
+      const formatTriggerLabel = (token) => {
+        if (!token) return '';
+        const lower = String(token).toLowerCase();
+        if (lower === 'timer' || lower === 'scheduled' || lower === 'scheduled-layer' || lower === 'scheduled-theme') return 'Timer';
+        if (lower === 'manual-recache') return 'Manual recache';
+        if (lower === 'manual-project' || lower === 'manual') return 'Manual';
+        if (lower === 'manual-theme') return 'Manual theme';
+        return token.charAt(0).toUpperCase() + token.slice(1);
+      };
+
+      const formatDateTimeLocal = (value) => {
+        if (!value) return '';
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleString();
+      };
+
+      const formatStatusToken = (value) => {
+        if (!value) return 'unknown';
+        const lower = String(value).toLowerCase();
+        if (lower === 'completed') return 'completed';
+        if (lower === 'success') return 'success';
+        if (lower === 'running') return 'running';
+        if (lower === 'queued') return 'queued';
+        if (lower === 'error') return 'error';
+        if (lower === 'skipped') return 'skipped';
+        if (lower === 'aborted') return 'aborted';
+        return value;
+      };
+
+      const formatZoomRangeLabel = (min, max) => {
+        const hasMin = Number.isFinite(min);
+        const hasMax = Number.isFinite(max);
+        if (hasMin && hasMax) return 'z' + min + '–' + max;
+        if (hasMin) return 'z>=' + min;
+        if (hasMax) return 'z<=' + max;
+        return null;
+      };
+
+      const parseZoomNumber = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return null;
+        const rounded = Math.round(num);
+        if (rounded < 0 || rounded > MAX_ZOOM_LEVEL) return null;
+        return rounded;
+      };
+
+      const deriveCachedZoomRange = (entry) => {
+        if (!entry) {
+          return { min: null, max: null, coverageMin: null, coverageMax: null };
+        }
+        const minCandidate = parseZoomNumber(entry.last_zoom_min);
+        const maxCandidate = parseZoomNumber(entry.last_zoom_max);
+        const coverageMin = parseZoomNumber(entry.zoom_min);
+        const coverageMax = parseZoomNumber(entry.zoom_max);
+        const min = minCandidate != null ? minCandidate : coverageMin;
+        const max = maxCandidate != null ? maxCandidate : coverageMax;
+        return { min, max, coverageMin, coverageMax };
+      };
+
+      function ensureRecacheDialogElements(){
+        if (recacheDialogBackdrop) return;
+        recacheDialogBackdrop = document.createElement('div');
+        recacheDialogBackdrop.className = 'schedule-backdrop';
+        recacheDialogBackdrop.dataset.open = '0';
+        recacheDialogBackdrop.addEventListener('click', (event) => {
+          if (event.target === recacheDialogBackdrop) {
+            finishRecacheDialog(null);
+          }
+        });
+        recacheDialogContainer = document.createElement('div');
+        recacheDialogContainer.className = 'schedule-dialog recache-dialog';
+        recacheDialogBackdrop.appendChild(recacheDialogContainer);
+        document.body.appendChild(recacheDialogBackdrop);
+      }
+
+      function hideRecacheDialog(){
+        if (recacheDialogBackdrop) {
+          recacheDialogBackdrop.dataset.open = '0';
+        }
+        if (recacheDialogContainer) {
+          recacheDialogContainer.innerHTML = '';
+        }
+        if (recacheDialogKeyHandler) {
+          document.removeEventListener('keydown', recacheDialogKeyHandler);
+          recacheDialogKeyHandler = null;
+        }
+      }
+
+      function finishRecacheDialog(result){
+        hideRecacheDialog();
+        if (recacheDialogResolve) {
+          const resolver = recacheDialogResolve;
+          recacheDialogResolve = null;
+          resolver(result);
+        }
+      }
+
+      const openRecacheDialog = ({ layerName, cachedEntry }) => {
+        ensureRecacheDialogElements();
+        return new Promise((resolve) => {
+          if (recacheDialogResolve) {
+            finishRecacheDialog(null);
+          }
+          recacheDialogResolve = resolve;
+          recacheDialogBackdrop.dataset.open = '1';
+          recacheDialogContainer.innerHTML = '';
+          if (recacheDialogKeyHandler) {
+            document.removeEventListener('keydown', recacheDialogKeyHandler);
+            recacheDialogKeyHandler = null;
+          }
+          const rangeInfo = deriveCachedZoomRange(cachedEntry);
+          const coverageLabel = formatZoomRangeLabel(rangeInfo.coverageMin, rangeInfo.coverageMax);
+          const controlMin = parseZoomNumber(zoomMinInput ? zoomMinInput.value : null);
+          const controlMax = parseZoomNumber(zoomMaxInput ? zoomMaxInput.value : null);
+          const defaultMin = rangeInfo.min != null ? rangeInfo.min : (controlMin != null ? controlMin : 0);
+          let defaultMax = rangeInfo.max != null ? rangeInfo.max : (controlMax != null ? controlMax : defaultMin);
+          if (defaultMax == null) defaultMax = defaultMin;
+
+          const heading = document.createElement('h2');
+          heading.textContent = tr('Recache layer');
+          recacheDialogContainer.appendChild(heading);
+
+          if (layerName) {
+            const subtitle = document.createElement('div');
+            subtitle.className = 'meta';
+            subtitle.textContent = tr('Layer: ') + layerName;
+            recacheDialogContainer.appendChild(subtitle);
+          }
+
+          const desc = document.createElement('div');
+          desc.className = 'dialog-description';
+          desc.textContent = tr('Choose zoom levels for this recache run.');
+          recacheDialogContainer.appendChild(desc);
+
+          if (coverageLabel) {
+            const coverageRow = document.createElement('div');
+            coverageRow.className = 'meta';
+            coverageRow.textContent = tr('Cached zoom range: {range}', { range: coverageLabel });
+            recacheDialogContainer.appendChild(coverageRow);
+          }
+
+          const note = document.createElement('div');
+          note.className = 'dialog-note';
+          note.textContent = tr('Values only apply to this recache operation.');
+          recacheDialogContainer.appendChild(note);
+
+          const form = document.createElement('form');
+          recacheDialogContainer.appendChild(form);
+
+          const grid = document.createElement('div');
+          grid.className = 'dialog-grid';
+          form.appendChild(grid);
+
+          const minField = document.createElement('div');
+          minField.className = 'dialog-field';
+          const minLabel = document.createElement('label');
+          minLabel.setAttribute('for', 'recache_zoom_min');
+          minLabel.textContent = tr('Min zoom:');
+          const minInput = document.createElement('input');
+          minInput.id = 'recache_zoom_min';
+          minInput.type = 'number';
+          minInput.min = '0';
+          minInput.max = String(MAX_ZOOM_LEVEL);
+          minInput.step = '1';
+          minInput.value = defaultMin != null ? String(defaultMin) : '';
+          minInput.autocomplete = 'off';
+          minInput.inputMode = 'numeric';
+          minField.appendChild(minLabel);
+          minField.appendChild(minInput);
+          grid.appendChild(minField);
+
+          const maxField = document.createElement('div');
+          maxField.className = 'dialog-field';
+          const maxLabel = document.createElement('label');
+          maxLabel.setAttribute('for', 'recache_zoom_max');
+          maxLabel.textContent = tr('Max zoom:');
+          const maxInput = document.createElement('input');
+          maxInput.id = 'recache_zoom_max';
+          maxInput.type = 'number';
+          maxInput.min = '0';
+          maxInput.max = String(MAX_ZOOM_LEVEL);
+          maxInput.step = '1';
+          maxInput.value = defaultMax != null ? String(defaultMax) : '';
+          maxInput.autocomplete = 'off';
+          maxInput.inputMode = 'numeric';
+          maxField.appendChild(maxLabel);
+          maxField.appendChild(maxInput);
+          grid.appendChild(maxField);
+
+          const errorRow = document.createElement('div');
+          errorRow.className = 'error';
+          errorRow.setAttribute('role', 'alert');
+          errorRow.textContent = '';
+          form.appendChild(errorRow);
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          form.appendChild(actions);
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.type = 'button';
+          cancelBtn.className = 'btn btn-secondary';
+          cancelBtn.textContent = tr('Cancel');
+          cancelBtn.addEventListener('click', () => finishRecacheDialog(null));
+          actions.appendChild(cancelBtn);
+
+          const submitBtn = document.createElement('button');
+          submitBtn.type = 'submit';
+          submitBtn.className = 'btn btn-primary';
+          submitBtn.textContent = tr('Start recache');
+          actions.appendChild(submitBtn);
+
+          const clearError = () => {
+            errorRow.textContent = '';
+          };
+          minInput.addEventListener('input', clearError);
+          maxInput.addEventListener('input', clearError);
+
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const minValue = parseZoomNumber(minInput.value);
+            const maxValue = parseZoomNumber(maxInput.value);
+            if (minValue == null || maxValue == null) {
+              errorRow.textContent = tr('Provide valid zoom numbers (0-30).');
+              return;
+            }
+            if (minValue > maxValue) {
+              errorRow.textContent = tr('Min zoom must be less than or equal to max zoom.');
+              return;
+            }
+            finishRecacheDialog({ min: minValue, max: maxValue });
+          });
+
+          recacheDialogKeyHandler = (event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              finishRecacheDialog(null);
+            }
+          };
+          document.addEventListener('keydown', recacheDialogKeyHandler);
+
+          setTimeout(() => {
+            try { minInput.focus(); minInput.select(); } catch {}
+          }, 0);
+        });
+      };
+
       function ensureScheduleDialogElements(){
         if (scheduleDialogBackdrop) return;
         scheduleDialogBackdrop = document.createElement('div');
@@ -480,8 +802,8 @@
         scheduleDialogBackdrop.addEventListener('click', (ev) => {
           if (ev.target === scheduleDialogBackdrop) closeScheduleDialog();
         });
-        scheduleDialogContainer = document.createElement('div');
-        scheduleDialogContainer.className = 'schedule-dialog';
+  scheduleDialogContainer = document.createElement('div');
+  scheduleDialogContainer.className = 'schedule-dialog';
         scheduleDialogBackdrop.appendChild(scheduleDialogContainer);
         document.body.appendChild(scheduleDialogBackdrop);
       }
@@ -530,6 +852,43 @@
 
         const form = document.createElement('form');
         scheduleDialogContainer.appendChild(form);
+
+        const zoomRow = document.createElement('div');
+        zoomRow.className = 'schedule-zoom-row';
+        zoomRow.style.display = 'flex';
+        zoomRow.style.gap = '8px';
+        zoomRow.style.marginTop = '12px';
+        const zoomMinLabel = document.createElement('label');
+        zoomMinLabel.style.display = 'flex';
+        zoomMinLabel.style.flexDirection = 'column';
+        zoomMinLabel.style.fontSize = '12px';
+        zoomMinLabel.textContent = tr('Min zoom');
+        const zoomMinInput = document.createElement('input');
+        zoomMinInput.type = 'number';
+        zoomMinInput.min = '0';
+        zoomMinInput.max = String(MAX_ZOOM_LEVEL);
+        zoomMinInput.step = '1';
+        if (Number.isFinite(existingSchedule.zoomMin)) {
+          zoomMinInput.value = String(existingSchedule.zoomMin);
+        }
+        zoomMinLabel.appendChild(zoomMinInput);
+        zoomRow.appendChild(zoomMinLabel);
+        const zoomMaxLabel = document.createElement('label');
+        zoomMaxLabel.style.display = 'flex';
+        zoomMaxLabel.style.flexDirection = 'column';
+        zoomMaxLabel.style.fontSize = '12px';
+        zoomMaxLabel.textContent = tr('Max zoom');
+        const zoomMaxInput = document.createElement('input');
+        zoomMaxInput.type = 'number';
+        zoomMaxInput.min = '0';
+        zoomMaxInput.max = String(MAX_ZOOM_LEVEL);
+        zoomMaxInput.step = '1';
+        if (Number.isFinite(existingSchedule.zoomMax)) {
+          zoomMaxInput.value = String(existingSchedule.zoomMax);
+        }
+        zoomMaxLabel.appendChild(zoomMaxInput);
+        zoomRow.appendChild(zoomMaxLabel);
+        form.appendChild(zoomRow);
 
         const enableRow = document.createElement('label');
         enableRow.style.display = 'flex';
@@ -710,7 +1069,16 @@
 
         enableCheckbox.addEventListener('change', () => {
           fieldset.disabled = !enableCheckbox.checked;
+          zoomMinInput.disabled = !enableCheckbox.checked;
+          zoomMaxInput.disabled = !enableCheckbox.checked;
         });
+
+        const updateZoomDisabledState = () => {
+          const disable = !enableCheckbox.checked;
+          zoomMinInput.disabled = disable;
+          zoomMaxInput.disabled = disable;
+        };
+        updateZoomDisabledState();
 
         const errorEl = document.createElement('div');
         errorEl.className = 'error';
@@ -743,6 +1111,8 @@
             lastRunAt: existingSchedule.lastRunAt || null,
             lastResult: existingSchedule.lastResult || null,
             lastMessage: existingSchedule.lastMessage || null,
+            zoomMin: null,
+            zoomMax: null,
             history: existingSchedule.history ? existingSchedule.history.slice(-5) : []
           };
           const patch = targetType === 'theme'
@@ -751,7 +1121,7 @@
           queueProjectConfigSave(projectId, patch, { immediate: true });
           showStatus(tr('Auto cache disabled for {name}', { name: targetName }));
           closeScheduleDialog();
-          setTimeout(() => { try { loadLayers(); } catch {} }, 500);
+          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 500);
         };
 
         const handleSave = () => {
@@ -772,8 +1142,37 @@
             lastRunAt: null,
             lastResult: null,
             lastMessage: null,
-            history: []
+            history: [],
+            zoomMin: null,
+            zoomMax: null
           };
+
+        const minValue = zoomMinInput.value != null ? String(zoomMinInput.value).trim() : '';
+        const maxValue = zoomMaxInput.value != null ? String(zoomMaxInput.value).trim() : '';
+          const parseZoom = (value) => {
+            if (!value) return null;
+            const num = Number(value);
+            if (!Number.isFinite(num)) return null;
+            const rounded = Math.round(num);
+            if (rounded < 0 || rounded > MAX_ZOOM_LEVEL) return null;
+            return rounded;
+          };
+          const parsedMin = parseZoom(minValue);
+          const parsedMax = parseZoom(maxValue);
+          if (minValue && parsedMin == null) {
+            errorEl.textContent = tr('Min zoom must be between 0 and {max}.', { max: MAX_ZOOM_LEVEL });
+            return;
+          }
+          if (maxValue && parsedMax == null) {
+            errorEl.textContent = tr('Max zoom must be between 0 and {max}.', { max: MAX_ZOOM_LEVEL });
+            return;
+          }
+          if (parsedMin != null && parsedMax != null && parsedMin > parsedMax) {
+            errorEl.textContent = tr('Min zoom cannot exceed max zoom.');
+            return;
+          }
+          schedulePayload.zoomMin = parsedMin;
+          schedulePayload.zoomMax = parsedMax;
 
           if (mode === 'weekly') {
             const selectedDays = [];
@@ -848,7 +1247,7 @@
           queueProjectConfigSave(projectId, patch, { immediate: true });
           showStatus(tr('Schedule saved for {name}', { name: targetName }));
           closeScheduleDialog();
-          setTimeout(() => { try { loadLayers(); } catch {} }, 600);
+          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 600);
         };
 
         form.addEventListener('submit', (ev) => {
@@ -866,8 +1265,8 @@
         document.addEventListener('keydown', scheduleDialogKeyHandler);
       }
 
-      async function loadProjectConfig(projectId) {
-        if (projectConfigs.has(projectId)) return projectConfigs.get(projectId);
+      async function loadProjectConfig(projectId, { force = false } = {}) {
+        if (!force && projectConfigs.has(projectId)) return projectConfigs.get(projectId);
         try {
           const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config');
           if (!res.ok) throw new Error(res.statusText || 'config fetch failed');
@@ -883,24 +1282,59 @@
       function setActiveProject(projectId){
         if (!projectId) return;
         activeProjectId = projectId;
+        const state = getProjectState(projectId);
         const cfg = projectConfigs.get(projectId);
-        if (!cfg) return;
         suppressControlSync = true;
         try {
-          if (cfg.zoom) {
-            if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = cfg.zoom.min;
-            if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = cfg.zoom.max;
+          if (cfg) {
+            if (cfg.zoom) {
+              if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = cfg.zoom.min;
+              if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = cfg.zoom.max;
+            }
+            if (cfg.cachePreferences) {
+              if (modeSelect && typeof cfg.cachePreferences.mode === 'string') modeSelect.value = cfg.cachePreferences.mode;
+              if (tileCrsInput && typeof cfg.cachePreferences.tileCrs === 'string') tileCrsInput.value = cfg.cachePreferences.tileCrs;
+              if (allowRemoteCheckbox && typeof cfg.cachePreferences.allowRemote === 'boolean') allowRemoteCheckbox.checked = cfg.cachePreferences.allowRemote;
+              if (throttleInput && cfg.cachePreferences.throttleMs != null) throttleInput.value = cfg.cachePreferences.throttleMs;
+            }
           }
-          if (cfg.cachePreferences) {
-            if (modeSelect && typeof cfg.cachePreferences.mode === 'string') modeSelect.value = cfg.cachePreferences.mode;
-            if (tileCrsInput && typeof cfg.cachePreferences.tileCrs === 'string') tileCrsInput.value = cfg.cachePreferences.tileCrs;
-            if (allowRemoteCheckbox && typeof cfg.cachePreferences.allowRemote === 'boolean') allowRemoteCheckbox.checked = cfg.cachePreferences.allowRemote;
-            if (throttleInput && cfg.cachePreferences.throttleMs != null) throttleInput.value = cfg.cachePreferences.throttleMs;
-          }
+          applyCachedZoomRangeToControls(projectId, { force: true });
         } finally {
           suppressControlSync = false;
         }
+        if (state) {
+          state.controlsEdited = false;
+        }
+        if (!state.defaultMapExtent && state.layerExtentUnion) {
+          state.defaultMapExtent = state.layerExtentUnion.slice();
+        }
         syncRemoteButtons();
+      }
+
+      function applyCachedZoomRangeToControls(projectId, { force = false } = {}){
+        if (!projectId || projectId !== activeProjectId) return;
+        const state = getProjectState(projectId);
+        const range = state?.cachedZoomRange || null;
+        if (!range) {
+          state.lastAppliedZoomRange = null;
+          return;
+        }
+        const lastApplied = state.lastAppliedZoomRange || null;
+        const matchesLast = lastApplied && lastApplied.min === range.min && lastApplied.max === range.max;
+        if (!force && (state.controlsEdited || matchesLast)) {
+          return;
+        }
+        suppressControlSync = true;
+        try {
+          if (zoomMinInput && range.min != null) zoomMinInput.value = range.min;
+          if (zoomMaxInput && range.max != null) zoomMaxInput.value = range.max;
+        } finally {
+          suppressControlSync = false;
+        }
+        state.lastAppliedZoomRange = {
+          min: range.min != null ? range.min : null,
+          max: range.max != null ? range.max : null
+        };
       }
 
       function mergeProjectConfig(projectId, patch){
@@ -984,9 +1418,17 @@
         if (current) {
           const status = current.status || 'unknown';
           const startedLabel = current.startedAt ? new Date(current.startedAt).toLocaleString() : null;
-          const layerCount = Array.isArray(current.layers) ? current.layers.length : (typeof current.layers === 'number' ? current.layers : null);
+          const totalLayers = Array.isArray(current.layers)
+            ? current.layers.length
+            : (Number.isFinite(current.totalCount) ? current.totalCount : (typeof current.layers === 'number' ? current.layers : null));
           if (status === 'running') {
-            lines.push(`Project cache running${layerCount != null ? ` (${layerCount} layers)` : ''}${startedLabel ? ` since ${startedLabel}` : ''}`);
+            lines.push(`Project cache running${totalLayers != null ? ` (${totalLayers} layers)` : ''}${startedLabel ? ` since ${startedLabel}` : ''}`);
+            const idx = Number.isFinite(current.currentIndex) ? current.currentIndex : null;
+            const activeLayer = current.currentLayer || (idx != null && Array.isArray(current.layers) && current.layers[idx] ? current.layers[idx] : null);
+            if (activeLayer) {
+              const ordinal = idx != null && totalLayers != null ? ` (${idx + 1}/${totalLayers})` : '';
+              lines.push(`Working on ${activeLayer}${ordinal}`);
+            }
           } else if (status === 'queued') {
             lines.push('Project cache queued…');
           } else if (status === 'error') {
@@ -994,6 +1436,9 @@
           } else {
             lines.push(`Project cache status: ${status}`);
           }
+          const triggerToken = current.trigger || current.reason || null;
+          const triggerLabel = formatTriggerLabel(triggerToken);
+          if (triggerLabel) lines.push('Trigger: ' + triggerLabel);
         } else {
           lines.push('Project cache idle');
         }
@@ -1010,7 +1455,7 @@
         const prevStatus = state.lastBatchStatus;
         state.lastBatchStatus = nextStatus;
         if (prevStatus === 'running' && nextStatus && nextStatus !== 'running' && nextStatus !== 'queued') {
-          setTimeout(() => { try { loadLayers(); } catch {} }, 800);
+          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 800);
         }
       }
 
@@ -1135,7 +1580,8 @@
       }
 
       const ICONS = {
-        project: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5A1.75 1.75 0 0 1 5.5 3.25h4.19c.46 0 .9.18 1.23.5l1.56 1.56c.33.32.77.5 1.23.5h6.29A1.75 1.75 0 0 1 21.5 7.5v10.75A2.75 2.75 0 0 1 18.75 21H5.25A2.75 2.75 0 0 1 2.5 18.25V5.75A.75.75 0 0 1 3.25 5h.5Zm.75 1.5v11.75c0 .69.56 1.25 1.25 1.25h13.5c.69 0 1.25-.56 1.25-1.25V8.5h-6.29c-.83 0-1.63-.33-2.22-.92L10.93 6H5.5a.75.75 0 0 0-.75.75Z"/></svg>',
+  project: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5A1.75 1.75 0 0 1 5.5 3.25h4.19c.46 0 .9.18 1.23.5l1.56 1.56c.33.32.77.5 1.23.5h6.29A1.75 1.75 0 0 1 21.5 7.5v10.75A2.75 2.75 0 0 1 18.75 21H5.25A2.75 2.75 0 0 1 2.5 18.25V5.75A.75.75 0 0 1 3.25 5h.5Zm.75 1.5v11.75c0 .69.56 1.25 1.25 1.25h13.5c.69 0 1.25-.56 1.25-1.25V8.5h-6.29c-.83 0-1.63-.33-2.22-.92L10.93 6H5.5a.75.75 0 0 0-.75.75Z"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.23 8.97a.75.75 0 0 1 1.06-.08L12 13.01l4.71-4.12a.75.75 0 0 1 .99 1.12l-5.2 4.55a.75.75 0 0 1-.99 0l-5.2-4.55a.75.75 0 0 1-.08-1.04Z"/></svg>',
         layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
         wmts: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1.5 2.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 11.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 17v2h3v-2h-3Zm4.5 0v2h4v-2h-4Zm5.5 0v2h3v-2h-3Z"/></svg>',
         theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
@@ -1147,6 +1593,8 @@
         link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.06 5.53a3.75 3.75 0 0 1 5.3-.02l.13.13a3.75 3.75 0 0 1 0 5.3l-1.84 1.84a.75.75 0 0 1-1.06-1.06l1.84-1.84a2.25 2.25 0 0 0 0-3.18l-.13-.13a2.25 2.25 0 0 0-3.18 0l-1.84 1.84a.75.75 0 1 1-1.06-1.06l1.84-1.84Zm-6.25 6.23a.75.75 0 0 1 1.06 1.06l-1.84 1.84a2.25 2.25 0 0 0 0 3.18l.13.13a2.25 2.25 0 0 0 3.18 0l1.84-1.84a.75.75 0 0 1 1.06 1.06l-1.84 1.84a3.75 3.75 0 0 1-5.3 0l-.13-.13a3.75 3.75 0 0 1 0-5.3l1.84-1.84Zm6.59-4.13a.75.75 0 0 1 0 1.06l-5.02 5.02a.75.75 0 0 1-1.06-1.06l5.02-5.02a.75.75 0 0 1 1.06 0Z"/></svg>'
         ,
         refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 4a.75.75 0 0 1 .75.75v2.19A7.25 7.25 0 0 1 20.02 12a.75.75 0 0 1-1.5 0 5.75 5.75 0 1 0-10.95-2h2.18a.75.75 0 0 1 .53 1.28l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5A.75.75 0 0 1 2.75 11h2.18a7.25 7.25 0 0 1 13.57-3.56V4.75a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-.75.75h-4a.75.75 0 0 1 0-1.5h2.19A5.75 5.75 0 1 0 3.5 12a.75.75 0 0 1-1.5 0A7.25 7.25 0 0 1 5.5 6.94V4.75a.75.75 0 0 1 .75-.75Z"/></svg>'
+        ,
+        cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.24-10A6.01 6.01 0 0 1 12.76 6 4.75 4.75 0 0 1 19 10.5a4 4 0 0 1-.18 8.5H7Zm0-1.5h11.82a2.5 2.5 0 0 0 .19-5c-.38 0-.75.04-1.1.12a.75.75 0 0 1-.9-.54A4.5 4.5 0 0 0 12.76 7.5c-1.7 0-3.2.95-4 2.37a.75.75 0 0 1-.7.39H8a3.5 3.5 0 0 0-.17 7Z"/></svg>'
       };
 
       function ensureLeafletReady(){
@@ -1191,6 +1639,7 @@
 
       function getProjectState(projectId){
         if (!extentStates.has(projectId)) {
+          const storedCollapse = getStoredCollapse(projectId);
           extentStates.set(projectId, {
             extent: null,
             open: false,
@@ -1201,11 +1650,61 @@
             batchInfoEl: null,
             batchPoller: null,
             batchButton: null,
-            lastBatchStatus: null
+            lastBatchStatus: null,
+            cachedZoomRange: null,
+            lastAppliedZoomRange: null,
+            controlsEdited: false,
+            layerExtents: new Map(),
+            themeExtents: new Map(),
+            layerExtentUnion: null,
+            focusLayerGroup: null,
+            lastFocusKey: null,
+            pendingMapFocus: null,
+            defaultMapExtent: null,
+            projectViewExtent: null,
+            collapsed: storedCollapse != null ? !!storedCollapse : false
           });
         }
         return extentStates.get(projectId);
       }
+
+      function findProjectWrap(projectId){
+        if (!projectId) return null;
+        const nodes = document.querySelectorAll('[data-project-id]');
+        for (const node of nodes) {
+          if (node?.dataset?.projectId === projectId) return node;
+        }
+        return null;
+      }
+
+      function setProjectCollapsed(projectId, collapsed, options = {}) {
+        const { store = true, silent = false, element = null } = options;
+        const wrap = element || findProjectWrap(projectId);
+        const state = getProjectState(projectId);
+        const isCollapsed = !!collapsed;
+        state.collapsed = isCollapsed;
+        if (wrap) {
+          wrap.classList.toggle('is-collapsed', isCollapsed);
+          wrap.dataset.collapsed = isCollapsed ? '1' : '0';
+          const toggleBtn = wrap.querySelector('.project-toggle');
+          if (toggleBtn) {
+            toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+            toggleBtn.classList.toggle('is-open', !isCollapsed);
+          }
+        }
+        if (store) {
+          setStoredCollapse(projectId, isCollapsed);
+        }
+        if (!isCollapsed && !silent) {
+          setActiveProject(projectId);
+        }
+      }
+
+      const toDomId = (value) => {
+        const token = String(value || 'project');
+        const sanitized = token.replace(/[^a-zA-Z0-9_-]+/g, '-');
+        return sanitized || 'project';
+      };
 
       function refreshProjectMetaInfo(project, projectMeta, projectConfig){
         const projectId = project && project.id ? project.id : project;
@@ -1263,6 +1762,82 @@
         return [[lat1, lon1], [lat2, lon2]];
       }
 
+      const normalizeExtentList = (extent) => {
+        if (!Array.isArray(extent) || extent.length !== 4) return null;
+        const nums = extent.map((value) => Number(value));
+        if (nums.some((value) => !Number.isFinite(value))) return null;
+        const [minLon, minLat, maxLon, maxLat] = nums;
+        if (maxLon < minLon || maxLat < minLat) return null;
+        if (minLon === maxLon || minLat === maxLat) return null;
+        return [minLon, minLat, maxLon, maxLat];
+      };
+
+      const combineExtentLists = (current, next) => {
+        const normNext = normalizeExtentList(next);
+        if (!normNext) return current ? current.slice() : null;
+        if (!current) return normNext.slice();
+        const [curMinLon, curMinLat, curMaxLon, curMaxLat] = current;
+        const [minLon, minLat, maxLon, maxLat] = normNext;
+        return [
+          Math.min(curMinLon, minLon),
+          Math.min(curMinLat, minLat),
+          Math.max(curMaxLon, maxLon),
+          Math.max(curMaxLat, maxLat)
+        ];
+      };
+
+      const focusMapToExtent = (projectId, extentList, options = {}) => {
+        const norm = normalizeExtentList(extentList);
+        if (!projectId || !norm) return;
+        const state = getProjectState(projectId);
+        const payload = {
+          extent: norm,
+          highlight: options.highlight !== false,
+          sourceKey: options.sourceKey || null,
+          maxZoom: Number.isFinite(options.maxZoom) ? Number(options.maxZoom) : null
+        };
+        state.pendingMapFocus = payload;
+        if (!state.map || typeof L === 'undefined') {
+          return;
+        }
+        const map = state.map;
+        const bounds = toBoundsWgs84(norm);
+        if (!bounds) return;
+        const applyFocus = () => {
+          try { map.invalidateSize(); } catch {}
+          try {
+            const fitOptions = payload.maxZoom != null ? { maxZoom: payload.maxZoom } : {};
+            map.fitBounds(bounds, { ...fitOptions, animate: true });
+          } catch {}
+          if (payload.highlight) {
+            if (!state.focusLayerGroup) {
+              try {
+                state.focusLayerGroup = new L.FeatureGroup();
+                map.addLayer(state.focusLayerGroup);
+              } catch (err) {
+                state.focusLayerGroup = null;
+              }
+            }
+            if (state.focusLayerGroup) {
+              state.focusLayerGroup.clearLayers();
+              try {
+                const rect = L.rectangle(bounds, { color: '#f97316', weight: 1, fillOpacity: 0.08, dashArray: '6 4' });
+                state.focusLayerGroup.addLayer(rect);
+              } catch {}
+            }
+          } else if (state.focusLayerGroup) {
+            state.focusLayerGroup.clearLayers();
+          }
+          state.lastFocusKey = payload.sourceKey || null;
+          state.pendingMapFocus = null;
+        };
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(applyFocus);
+        } else {
+          setTimeout(applyFocus, 16);
+        }
+      };
+
       async function toggleProjectExtentPanel(project, projectMeta, container){
         const state = getProjectState(project.id);
         if (container.dataset.open === '1') {
@@ -1272,6 +1847,11 @@
             try { state.map.remove(); } catch {}
             state.map = null;
           }
+          if (state.focusLayerGroup) {
+            try { state.focusLayerGroup.clearLayers(); } catch {}
+          }
+          state.focusLayerGroup = null;
+          state.pendingMapFocus = null;
           container.innerHTML = '';
           state.open = false;
           refreshProjectMetaInfo(project, projectMeta, state.config);
@@ -1396,16 +1976,37 @@
           });
         } catch {}
 
-        const boundsFromState = toBoundsWgs84(state.extent);
-        const metaBounds = toBoundsWgs84(projectMeta && projectMeta.extent_wgs84);
-        if (boundsFromState) {
-          map.fitBounds(boundsFromState, { maxZoom: 22 });
-          applyExtentRectangle(state.extent);
-        } else if (metaBounds) {
-          map.fitBounds(metaBounds, { maxZoom: 20 });
-        } else {
-          map.setView([0,0], 2);
-        }
+        applyExtentRectangle(state.extent);
+        const ensureInitialView = () => {
+          if (!state.map) return;
+          const pending = state.pendingMapFocus;
+          if (pending && pending.extent) {
+            focusMapToExtent(project.id, pending.extent, pending);
+            return;
+          }
+          const capturedExtent = normalizeExtentList(state.extent);
+          if (capturedExtent) {
+            focusMapToExtent(project.id, capturedExtent, { highlight: false, sourceKey: 'captured', maxZoom: 22 });
+            return;
+          }
+          const defaultExtent = normalizeExtentList(state.defaultMapExtent)
+            || normalizeExtentList(state.projectViewExtent)
+            || normalizeExtentList(projectMeta && projectMeta.extent_wgs84)
+            || normalizeExtentList(state.layerExtentUnion);
+          if (defaultExtent) {
+            focusMapToExtent(project.id, defaultExtent, { highlight: false, sourceKey: 'project-default', maxZoom: 20 });
+            return;
+          }
+          const fallbackBounds = toBoundsWgs84(projectMeta && projectMeta.extent_wgs84);
+          try { map.invalidateSize(); } catch {}
+          if (fallbackBounds) {
+            try { map.fitBounds(fallbackBounds, { maxZoom: 20 }); } catch {}
+          } else {
+            try { map.setView([0, 0], 2); } catch {}
+          }
+        };
+        ensureInitialView();
+        setTimeout(ensureInitialView, 60);
 
         const btnCapture = document.createElement('button');
         btnCapture.className = 'btn btn-secondary';
@@ -1418,6 +2019,22 @@
           updateInfo();
           queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
         };
+        const btnCenterProject = document.createElement('button');
+        btnCenterProject.className = 'btn btn-secondary';
+        btnCenterProject.type = 'button';
+        btnCenterProject.textContent = 'Center on project extent';
+        btnCenterProject.onclick = () => {
+          const targetExtent = normalizeExtentList(state.projectViewExtent)
+            || normalizeExtentList(state.defaultMapExtent)
+            || normalizeExtentList(projectMeta && projectMeta.extent_wgs84)
+            || normalizeExtentList(state.layerExtentUnion);
+          if (targetExtent) {
+            focusMapToExtent(project.id, targetExtent, { highlight: false, sourceKey: 'project-center', maxZoom: 20 });
+          } else {
+            showStatus('Project extent unavailable.', true);
+          }
+        };
+        buttons.appendChild(btnCenterProject);
         buttons.appendChild(btnCapture);
 
         const btnMin = document.createElement('button');
@@ -1503,6 +2120,7 @@
       }
   let loadLayersRunning = false;
   let loadLayersQueued = false;
+  let loadLayersQueuedOptions = null;
 
       if (languageSelect) {
         languageSelect.value = currentLang;
@@ -1523,6 +2141,10 @@
 
       function emitControlConfigChange(extraPatch = {}){
         if (!activeProjectId || suppressControlSync) return;
+        const state = getProjectState(activeProjectId);
+        if (state) {
+          state.controlsEdited = true;
+        }
         const zoomMinVal = Number(zoomMinInput?.value);
         const zoomMaxVal = Number(zoomMaxInput?.value);
         const prefsPatch = {
@@ -1582,13 +2204,16 @@
         });
       }
 
-      async function loadLayers() {
+      async function loadLayers(options = {}) {
+        const forceConfigReload = !!options.forceConfigReload;
   if (loadLayersRunning) {
     loadLayersQueued = true;
+    loadLayersQueuedOptions = options ? { ...options } : {};
         return;
       }
       loadLayersRunning = true;
       loadLayersQueued = false;
+      loadLayersQueuedOptions = null;
   layersEl.textContent = tr('Loading projects…');
         try {
           const r = await fetch('/projects');
@@ -1600,19 +2225,36 @@
           layersEl.innerHTML = '';
           // cargar capas por proyecto
           for (const p of projects) {
+            const state = getProjectState(p.id);
             const wrap = document.createElement('div');
             wrap.dataset.projectId = p.id;
+            wrap.className = 'project-block';
             wrap.addEventListener('mouseenter', () => setActiveProject(p.id));
             wrap.addEventListener('focusin', () => setActiveProject(p.id));
+
             const heading = document.createElement('div');
             heading.className = 'project-heading';
-            const icon = document.createElement('span');
-            icon.className = 'heading-icon';
-            icon.innerHTML = ICONS.project;
-            const title = document.createElement('h2');
-            title.textContent = `Project: ${p.name}`;
-            heading.appendChild(icon);
-            heading.appendChild(title);
+
+            const contentId = `project-${toDomId(p.id)}-content`;
+            const toggleBtn = document.createElement('button');
+            toggleBtn.type = 'button';
+            toggleBtn.className = 'project-toggle';
+            const projectLabel = escapeHtml(p.name || p.id || '');
+            toggleBtn.innerHTML = `
+              <span class="toggle-caret" aria-hidden="true">${ICONS.chevron}</span>
+              <span class="heading-icon">${ICONS.project}</span>
+              <span class="project-title">Project: ${projectLabel}</span>
+            `;
+            toggleBtn.setAttribute('aria-controls', contentId);
+            toggleBtn.setAttribute('aria-expanded', state.collapsed ? 'false' : 'true');
+            toggleBtn.addEventListener('click', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const next = !wrap.classList.contains('is-collapsed');
+              setProjectCollapsed(p.id, next);
+            });
+            heading.appendChild(toggleBtn);
+
             const headingActions = document.createElement('div');
             headingActions.style.marginLeft = 'auto';
             headingActions.style.display = 'flex';
@@ -1621,11 +2263,14 @@
             deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
             headingActions.appendChild(deleteProjectBtn);
             heading.appendChild(headingActions);
+
             wrap.appendChild(heading);
             const listEl = document.createElement('div');
             listEl.className = 'list';
+            listEl.id = contentId;
             wrap.appendChild(listEl);
             layersEl.appendChild(wrap);
+            setProjectCollapsed(p.id, state.collapsed, { store: false, silent: true, element: wrap });
             try {
               const lr = await fetch('/projects/' + encodeURIComponent(p.id) + '/layers');
               const text = await lr.text();
@@ -1635,7 +2280,7 @@
                 continue;
               }
               const json = JSON.parse(text);
-              await renderProjectLayers(p, json, listEl, wrap);
+              await renderProjectLayers(p, json, listEl, wrap, { forceConfigReload });
             } catch (e) {
               listEl.innerHTML = `<div class="error">${tr('Network error while loading project layers')}</div>`;
             }
@@ -1652,8 +2297,10 @@
           loadLayersRunning = false;
           syncRemoteButtons();
           if (loadLayersQueued) {
+            const queuedOptions = loadLayersQueuedOptions ? { ...loadLayersQueuedOptions } : {};
             loadLayersQueued = false;
-            setTimeout(loadLayers, 0);
+            loadLayersQueuedOptions = null;
+            setTimeout(() => loadLayers(queuedOptions), 0);
           }
         }
       }
@@ -1680,7 +2327,7 @@
             extentStates.delete(projectId);
           }
           showStatus('Project uploaded: ' + (projectId || file.name));
-          loadLayers();
+          loadLayers({ forceConfigReload: true });
         } catch (err) {
           showStatus('Network error: ' + err, true);
         } finally {
@@ -1690,12 +2337,11 @@
       }
 
       // Gestión de jobs activos (persistencia visual tras recarga)
-      const jobMonitors = new Map(); // id -> {timer, elements}
+      const jobMonitors = new Map(); // id -> {timer, inner, txt}
       function renderJobsList(list){
         jobsList.innerHTML = '';
         if (!Array.isArray(list) || list.length === 0) {
           jobsWrap.style.display = 'none';
-          // limpiar monitores antiguos
           for (const m of jobMonitors.values()) { try { clearInterval(m.timer); } catch{} }
           jobMonitors.clear();
           return;
@@ -1703,73 +2349,122 @@
         jobsWrap.style.display = '';
         const seen = new Set();
         list.forEach(j => {
+          if (!j || !j.id) return;
           seen.add(j.id);
-          let row = document.getElementById('job-'+j.id);
-          if (!row) {
-            row = document.createElement('div');
-            row.className = 'job';
-            row.id = 'job-'+j.id;
-            const left = document.createElement('div');
-            left.innerHTML = `<div><strong>${escapeHtml(j.layer)}</strong> <span class="info">· project: ${escapeHtml(j.project||'-')}</span></div>`+
-                             `<div class="info">id: ${j.id}</div>`;
-            const right = document.createElement('div');
-            right.style.display = 'flex';
-            right.style.alignItems = 'center';
-            right.style.gap = '8px';
-            const pill = document.createElement('span');
-            pill.className = 'progress-pill';
-            const bar = document.createElement('span'); bar.className = 'progress-bar'; const inner = document.createElement('i'); bar.appendChild(inner);
-            const txt = document.createElement('span'); txt.textContent = '...';
-            pill.appendChild(bar); pill.appendChild(txt);
-            const abortBtn = document.createElement('button'); abortBtn.className = 'btn btn-danger'; abortBtn.textContent = 'Abort';
-            abortBtn.onclick = async () => {
-              abortBtn.disabled = true;
-              showStatus('Aborting job ' + j.id);
-              try{
-                const r = await fetch('/generate-cache/' + encodeURIComponent(j.id), { method:'DELETE' });
-                if (!r.ok) showStatus('No se pudo abortar job', true);
-              }catch(e){ showStatus('Network error while aborting: ' + e, true); }
-            };
-            right.appendChild(pill); right.appendChild(abortBtn);
-            row.appendChild(left); row.appendChild(right);
-            jobsList.appendChild(row);
-            // monitor
-            const timer = setInterval(async () => {
-              try{
-                const r = await fetch('/generate-cache/' + encodeURIComponent(j.id) + '?tail=50000');
-                if (!r.ok) throw new Error('http ' + r.status);
-                const det = await r.json();
-                let pct = null; let status = det.status;
-                // intentar parsear el último porcentaje de stdout
-                const last = (function(stdout){
-                  if (!stdout) return null;
-                  const lines = stdout.split(/\r?\n/).filter(Boolean);
-                  let last = null; for (const line of lines){
-                    const s = line.indexOf('{'), e = line.lastIndexOf('}');
-                    if (s !== -1 && e !== -1 && e>s){ try{ const o = JSON.parse(line.slice(s,e+1)); if (o && (o.progress||o.status||o.debug)) last = o; }catch{} }
-                  }
-                  return last;
-                })(det.stdout||'');
-                if (last && typeof last.percent === 'number') pct = Math.max(0, Math.min(100, last.percent));
-                if (status === 'completed' && (pct==null || pct<100)) pct = 100;
-                if (pct!=null) inner.style.width = pct + '%';
-                txt.textContent = (pct!=null? (pct+'%'):'...') + (status? (' · ' + status):'');
-                if (status && ['completed','error','aborted'].includes(status)) {
-                  clearInterval(timer);
-                  jobMonitors.delete(j.id);
-                  // quitar fila tras unos segundos
-                  setTimeout(()=>{ try{ row.remove(); }catch{}; if (!jobsList.children.length) jobsWrap.style.display='none'; }, 2000);
-                  // refresh layer list so cache buttons update (delete/view)
-                  try { loadLayers(); } catch {}
-                }
-              }catch{}
-            }, 1200);
-            jobMonitors.set(j.id, { timer });
+          const existing = jobMonitors.get(j.id);
+          const isNewJob = !existing;
+          if (existing && existing.timer) {
+            try { clearInterval(existing.timer); } catch {}
           }
+          const row = document.createElement('div');
+          row.className = 'job';
+          row.id = 'job-' + j.id;
+          row.dataset.project = j.project || '';
+          row.dataset.trigger = j.trigger || '';
+
+          const info = document.createElement('div');
+          info.className = 'job-info';
+          const detailBits = [];
+          detailBits.push('project: ' + escapeHtml(j.project || '-'));
+          const triggerToken = j.trigger || '';
+          if (triggerToken && triggerToken !== 'manual') detailBits.push('trigger: ' + escapeHtml(formatTriggerLabel(triggerToken)));
+          if (typeof j.batchIndex === 'number' && typeof j.batchTotal === 'number' && j.batchTotal > 0) {
+            detailBits.push('batch ' + (j.batchIndex + 1) + '/' + j.batchTotal);
+          } else if (typeof j.batchTotal === 'number' && j.batchTotal > 0) {
+            detailBits.push('batch total ' + j.batchTotal);
+          }
+          const subtitle = detailBits.length ? ` <span class="info">· ${detailBits.join(' · ')}</span>` : '';
+          info.innerHTML = `<div><strong>${escapeHtml(j.layer || j.targetName || 'Job')}</strong>${subtitle}</div>` +
+                           `<div class="info">id: ${escapeHtml(String(j.id))}</div>`;
+
+          const right = document.createElement('div');
+          right.style.display = 'flex';
+          right.style.alignItems = 'center';
+          right.style.gap = '8px';
+          const pill = document.createElement('span');
+          pill.className = 'progress-pill';
+          const bar = document.createElement('span');
+          bar.className = 'progress-bar';
+          const inner = document.createElement('i');
+          bar.appendChild(inner);
+          const txt = document.createElement('span');
+          txt.textContent = '...';
+          pill.appendChild(bar);
+          pill.appendChild(txt);
+
+          const abortBtn = document.createElement('button');
+          abortBtn.className = 'btn btn-danger';
+          abortBtn.textContent = 'Abort';
+          abortBtn.onclick = async () => {
+            abortBtn.disabled = true;
+            showStatus('Aborting job ' + j.id);
+            try {
+              const r = await fetch('/generate-cache/' + encodeURIComponent(j.id), { method: 'DELETE' });
+              if (!r.ok) showStatus('No se pudo abortar job', true);
+            } catch (e) {
+              showStatus('Network error while aborting: ' + e, true);
+            }
+          };
+
+          right.appendChild(pill);
+          right.appendChild(abortBtn);
+          row.appendChild(info);
+          row.appendChild(right);
+          jobsList.appendChild(row);
+          if (isNewJob && j.trigger && String(j.trigger).toLowerCase() === 'timer') {
+            const label = j.layer || j.targetName || j.id;
+            showStatus(tr('Timer recache started for {name}', { name: label }));
+          }
+          if (j.project) {
+            try { refreshProjectBatchStatus(j.project); } catch {}
+          }
+
+          const timer = setInterval(async () => {
+            try {
+              if (!document.getElementById('job-' + j.id)) {
+                clearInterval(timer);
+                return;
+              }
+              const r = await fetch('/generate-cache/' + encodeURIComponent(j.id) + '?tail=50000');
+              if (!r.ok) throw new Error('http ' + r.status);
+              const det = await r.json();
+              let pct = null;
+              const status = det.status;
+              const last = (function(stdout){
+                if (!stdout) return null;
+                const lines = stdout.split(/\r?\n/).filter(Boolean);
+                let lastLine = null;
+                for (const line of lines){
+                  const s = line.indexOf('{'), e = line.lastIndexOf('}');
+                  if (s !== -1 && e !== -1 && e > s) {
+                    try { const o = JSON.parse(line.slice(s, e + 1)); if (o && (o.progress || o.status || o.debug)) lastLine = o; } catch {}
+                  }
+                }
+                return lastLine;
+              })(det.stdout || '');
+              if (last && typeof last.percent === 'number') pct = Math.max(0, Math.min(100, last.percent));
+              if (status === 'completed' && (pct == null || pct < 100)) pct = 100;
+              if (pct != null) inner.style.width = pct + '%';
+              txt.textContent = (pct != null ? (pct + '%') : '...') + (status ? (' · ' + status) : '');
+              if (status && ['completed', 'error', 'aborted'].includes(status)) {
+                clearInterval(timer);
+                jobMonitors.delete(j.id);
+                setTimeout(() => {
+                  try { row.remove(); } catch {}
+                  if (!jobsList.children.length) jobsWrap.style.display = 'none';
+                }, 2000);
+                try { loadLayers({ forceConfigReload: true }); } catch {}
+              }
+            } catch {}
+          }, 1200);
+          jobMonitors.set(j.id, { timer, inner, txt, info });
         });
-        // limpiar monitores de jobs que ya no están
         for (const id of Array.from(jobMonitors.keys())) {
-          if (!seen.has(id)) { try{ clearInterval(jobMonitors.get(id).timer); }catch{} jobMonitors.delete(id); }
+          if (!seen.has(id)) {
+            const monitor = jobMonitors.get(id);
+            if (monitor && monitor.timer) { try { clearInterval(monitor.timer); } catch {} }
+            jobMonitors.delete(id);
+          }
         }
       }
 
@@ -1782,21 +2477,41 @@
         }catch{}
       }
 
-  async function renderProjectLayers(project, payload, targetEl, wrapEl) {
+  async function renderProjectLayers(project, payload, targetEl, wrapEl, { forceConfigReload = false } = {}) {
         const projectMeta = (!Array.isArray(payload) && payload && typeof payload === 'object' && Array.isArray(payload.layers)) ? payload.project : null;
   const layers = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.layers) ? payload.layers : []);
   const themes = payload && Array.isArray(payload.themes) ? payload.themes : [];
         const parent = wrapEl || targetEl.parentElement;
     const state = getProjectState(project.id);
-  state.projectMeta = projectMeta;
-  state.themes = themes;
+    state.projectMeta = projectMeta;
+    state.themes = themes;
+    state.layerExtents = new Map();
+    state.themeExtents = new Map();
+    state.layerExtentUnion = null;
 
-        const projectConfig = await loadProjectConfig(project.id);
+        const metaViewExtent = normalizeExtentList(projectMeta && projectMeta.view_extent_wgs84);
+        const metaExtentDefault = normalizeExtentList(projectMeta && projectMeta.extent_wgs84);
+        state.projectViewExtent = metaViewExtent ? metaViewExtent.slice() : null;
+  const projectConfig = await loadProjectConfig(project.id, { force: forceConfigReload });
+        let configExtent = null;
         if (projectConfig) {
           state.config = projectConfig;
-          if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox) && projectConfig.extent.bbox.length === 4) {
-            state.extent = projectConfig.extent.bbox.slice();
+          if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox)) {
+            const normalized = normalizeExtentList(projectConfig.extent.bbox);
+            if (normalized) {
+              configExtent = normalized;
+            }
           }
+        }
+        state.extent = configExtent ? configExtent.slice() : null;
+        if (configExtent) {
+          state.defaultMapExtent = configExtent.slice();
+        } else if (state.projectViewExtent) {
+          state.defaultMapExtent = state.projectViewExtent.slice();
+        } else if (metaExtentDefault) {
+          state.defaultMapExtent = metaExtentDefault.slice();
+        } else {
+          state.defaultMapExtent = null;
         }
 
         if (parent) {
@@ -1914,7 +2629,8 @@
         }
         targetEl.innerHTML = '';
         // fetch project cache index to know which layers have cached tiles
-  let cacheIndex = null; const cachedByKey = new Map();
+        let cacheIndex = null; const cachedByKey = new Map();
+        let cachedProjectMin = null; let cachedProjectMax = null;
         try {
           const r = await fetch('/cache/' + encodeURIComponent(project.id) + '/index.json');
           if (r.ok) {
@@ -1923,9 +2639,29 @@
               if (!e || !e.name) continue;
               const kind = e.kind || 'layer';
               cachedByKey.set(kind + ':' + e.name, e);
+              const entryMinVal = Number(e.zoom_min);
+              const entryMaxVal = Number(e.zoom_max);
+              const entryMin = Number.isFinite(entryMinVal) ? Math.round(entryMinVal) : null;
+              const entryMax = Number.isFinite(entryMaxVal) ? Math.round(entryMaxVal) : null;
+              if (entryMin != null) cachedProjectMin = cachedProjectMin == null ? entryMin : Math.min(cachedProjectMin, entryMin);
+              if (entryMax != null) cachedProjectMax = cachedProjectMax == null ? entryMax : Math.max(cachedProjectMax, entryMax);
             }
           }
         } catch {}
+        const projectState = getProjectState(project.id);
+        if (projectState) {
+          if (cachedProjectMin != null || cachedProjectMax != null) {
+            projectState.cachedZoomRange = {
+              min: cachedProjectMin != null ? cachedProjectMin : null,
+              max: cachedProjectMax != null ? cachedProjectMax : null
+            };
+          } else {
+            projectState.cachedZoomRange = null;
+          }
+          if (project.id === activeProjectId) {
+            applyCachedZoomRangeToControls(project.id);
+          }
+        }
         layers.forEach(l => {
           const d = document.createElement('div');
           d.className = 'layer';
@@ -1936,9 +2672,15 @@
           if (!cacheable) badges.push('<span class="layer-badge layer-badge-remote">remote</span>');
           const cachedEntry = cachedByKey.get('layer:' + l.name) || null;
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
-          const scheduleSummary = describeSchedule(configLayer && configLayer.schedule);
+          const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
+          const scheduleSummary = describeSchedule(scheduleObj);
           const iconKind = cachedEntry && cachedEntry.scheme === 'wmts' ? 'wmts' : 'layer';
           const iconClass = iconKind === 'layer' ? 'layer-title-icon' : `layer-title-icon ${iconKind}`;
+          const layerExtentWgs = normalizeExtentList(l.extent_wgs84);
+          if (layerExtentWgs) {
+            state.layerExtents.set(l.name, layerExtentWgs);
+            state.layerExtentUnion = combineExtentLists(state.layerExtentUnion, layerExtentWgs);
+          }
           const titlePieces = [
             `<span class="${iconClass}">${ICONS[iconKind] || ICONS.layer}</span>`,
             `<span>${escapeHtml(l.name)}</span>`
@@ -1949,6 +2691,30 @@
           if (provider) metaSegments.push(provider);
           if (l.extent) metaSegments.push('extent: ' + JSON.stringify(l.extent));
           if (scheduleSummary) metaSegments.push('Auto: ' + scheduleSummary);
+          if (scheduleObj) {
+            const history = Array.isArray(scheduleObj.history) ? scheduleObj.history : [];
+            const lastHistory = history.length ? history[history.length - 1] : null;
+            const lastRunSource = scheduleObj.lastRunAt || (lastHistory && lastHistory.at) || null;
+            const lastRunLabel = formatDateTimeLocal(lastRunSource);
+            const lastStatusToken = scheduleObj.lastResult || (lastHistory && lastHistory.status) || null;
+            if (lastRunLabel && lastStatusToken) {
+              metaSegments.push('Auto last: ' + formatStatusToken(lastStatusToken) + ' @ ' + lastRunLabel);
+            } else if (lastRunLabel) {
+              metaSegments.push('Auto last: ' + lastRunLabel);
+            }
+            const nextRunLabel = formatDateTimeLocal(scheduleObj.nextRunAt);
+            if (nextRunLabel) {
+              metaSegments.push('Auto next: ' + nextRunLabel);
+            }
+          }
+          if (cachedEntry) {
+            const cachedMinVal = Number(cachedEntry.zoom_min);
+            const cachedMaxVal = Number(cachedEntry.zoom_max);
+            const cachedMin = Number.isFinite(cachedMinVal) ? Math.round(cachedMinVal) : null;
+            const cachedMax = Number.isFinite(cachedMaxVal) ? Math.round(cachedMaxVal) : null;
+            const coverageLabel = formatZoomRangeLabel(cachedMin, cachedMax);
+            if (coverageLabel) metaSegments.push('Cached ' + coverageLabel);
+          }
           info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` +
                            '<div class="meta">' + metaSegments.map(escapeHtml).join(' · ') + '</div>';
 
@@ -1984,11 +2750,24 @@
           const controls = document.createElement('div');
           controls.className = 'actions';
           controls.setAttribute('role', 'group');
+          controls.addEventListener('click', (event) => event.stopPropagation());
 
+          const remoteSource = l.remote_source || null;
           const hasCache = !!cachedEntry;
-          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', () => generateCache(genBtn, project.id, l.name, l, { recache: hasCache, cachedEntry }), 'btn-primary');
+          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
           if (hasCache) {
             genBtn.title = 'Recache layer (rebuild tiles)';
+            genBtn.addEventListener('click', async () => {
+              const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
+              if (!selection) return;
+              try {
+                await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
+              } catch (err) {
+                console.error('Recache request failed', err);
+              }
+            });
+          } else {
+            genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
           }
           if (l.cacheable === false) {
             genBtn.disabled = true;
@@ -2001,25 +2780,44 @@
 
           const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
 
-          const viewBtn = makeIconButton('Open map viewer', 'eye', () => {
-            const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
-            window.open(url, '_blank', 'noopener');
-          }, 'btn-secondary');
+          let viewCacheBtn = null;
+          if (hasCache) {
+            const baseUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
+            const cacheUrl = remoteSource ? baseUrl + '&mode=cache' : baseUrl;
+            const cacheLabel = remoteSource ? tr('View cached tiles') : tr('Open map viewer');
+            viewCacheBtn = makeIconButton(cacheLabel, 'eye', () => {
+              window.open(cacheUrl, '_blank', 'noopener');
+            }, 'btn-secondary');
+          }
+
+          let viewRemoteBtn = null;
+          if (remoteSource) {
+            const remoteUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name) + '&mode=remote';
+            viewRemoteBtn = makeIconButton(tr('Open remote source'), 'cloud', () => {
+              window.open(remoteUrl, '_blank', 'noopener');
+            }, 'btn-secondary');
+          }
 
           controls.appendChild(scheduleBtn);
           controls.appendChild(genBtn);
-          // only show delete/view/example when cache exists
           if (cachedEntry) {
             controls.appendChild(delBtn);
-            if (copyBtn) controls.appendChild(copyBtn);
-            controls.appendChild(viewBtn);
-          } else {
-            if (copyBtn) controls.appendChild(copyBtn);
           }
+          if (copyBtn) controls.appendChild(copyBtn);
+          if (viewCacheBtn) controls.appendChild(viewCacheBtn);
+          if (viewRemoteBtn) controls.appendChild(viewRemoteBtn);
 
           d.appendChild(info);
           if (exampleLink) d.appendChild(exampleLink);
           d.appendChild(controls);
+          if (layerExtentWgs) {
+            const focusLayer = () => focusMapToExtent(project.id, layerExtentWgs, { sourceKey: 'layer:' + l.name, maxZoom: 22 });
+            d.addEventListener('click', (event) => {
+              const interactive = event.target.closest('a, button, input, select, textarea');
+              if (interactive) return;
+              focusLayer();
+            });
+          }
           targetEl.appendChild(d);
         });
         if (themes && themes.length) {
@@ -2059,9 +2857,21 @@
             infoBox.appendChild(metaBox);
             themeRow.appendChild(infoBox);
 
+            let themeExtent = null;
+            if (Array.isArray(sources)) {
+              for (const sourceName of sources) {
+                const ex = state.layerExtents ? state.layerExtents.get(sourceName) : null;
+                if (ex) themeExtent = combineExtentLists(themeExtent, ex);
+              }
+            }
+            if (themeExtent) {
+              state.themeExtents.set(theme.name, themeExtent);
+            }
+
             const actions = document.createElement('div');
             actions.className = 'actions';
             actions.setAttribute('role', 'group');
+            actions.addEventListener('click', (event) => event.stopPropagation());
 
             const themeObj = { name: theme.name, layers: sources };
             const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
@@ -2090,6 +2900,14 @@
             actions.appendChild(viewThemeBtn);
 
             themeRow.appendChild(actions);
+            if (themeExtent) {
+              const focusTheme = () => focusMapToExtent(project.id, themeExtent, { sourceKey: 'theme:' + theme.name, maxZoom: 22 });
+              themeRow.addEventListener('click', (event) => {
+                const interactive = event.target.closest('a, button, input, select, textarea');
+                if (interactive) return;
+                focusTheme();
+              });
+            }
             targetEl.appendChild(themeRow);
           });
         }
@@ -2099,7 +2917,7 @@
       function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
       async function generateCache(btn, projectId, layerName, layerObj, options = {}) {
-        const { recache = false, cachedEntry = null, kind = 'layer' } = options || {};
+        const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null } = options || {};
         const isTheme = kind === 'theme';
         const targetLabel = isTheme ? `theme "${layerName}"` : layerName;
         setActiveProject(projectId);
@@ -2118,9 +2936,25 @@
         btn.setAttribute('aria-busy', 'true');
   showStatus((recache ? 'Starting recache for: ' : 'Starting generation for: ') + targetLabel);
         try {
-          let zoom_min = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
-          let zoom_max = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
+          let zoom_min = null;
+          let zoom_max = null;
+          if (zoomOverride && typeof zoomOverride === 'object') {
+            const overrideMin = parseZoomNumber(zoomOverride.min);
+            const overrideMax = parseZoomNumber(zoomOverride.max);
+            if (overrideMin != null && overrideMax != null) {
+              zoom_min = overrideMin;
+              zoom_max = overrideMax;
+            }
+          }
+          if (zoom_min == null || zoom_max == null) {
+            const controlMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
+            const controlMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
+            zoom_min = Number.isFinite(controlMin) ? controlMin : 0;
+            zoom_max = Number.isFinite(controlMax) ? controlMax : 0;
+          }
           if (zoom_min < 0) zoom_min = 0; if (zoom_max < 0) zoom_max = 0;
+          if (zoom_min > MAX_ZOOM_LEVEL) zoom_min = MAX_ZOOM_LEVEL;
+          if (zoom_max > MAX_ZOOM_LEVEL) zoom_max = MAX_ZOOM_LEVEL;
           if (zoom_min > zoom_max && !(zoom_min === 0 && zoom_max === 0)) {
             // intercambiar para ser amigables
             const tmp = zoom_min; zoom_min = zoom_max; zoom_max = tmp;
@@ -2132,6 +2966,41 @@
             body.theme = layerName;
           } else {
             body.layer = layerName;
+          }
+          let recacheMode = null;
+          if (recache && cachedEntry) {
+            const lastRunMinVal = Number(cachedEntry.last_zoom_min);
+            const lastRunMaxVal = Number(cachedEntry.last_zoom_max);
+            const coverageMinVal = Number(cachedEntry.zoom_min);
+            const coverageMaxVal = Number(cachedEntry.zoom_max);
+            const prevMin = Number.isFinite(lastRunMinVal) ? Math.round(lastRunMinVal)
+              : (Number.isFinite(coverageMinVal) ? Math.round(coverageMinVal) : null);
+            const prevMax = Number.isFinite(lastRunMaxVal) ? Math.round(lastRunMaxVal)
+              : (Number.isFinite(coverageMaxVal) ? Math.round(coverageMaxVal) : null);
+            const overlapMinRaw = prevMin != null ? Math.max(prevMin, zoom_min) : zoom_min;
+            const overlapMaxRaw = prevMax != null ? Math.min(prevMax, zoom_max) : zoom_max;
+            const overlapExists = overlapMinRaw <= overlapMaxRaw;
+            if (prevMin != null && prevMax != null && overlapExists) {
+              recacheMode = prevMin === zoom_min && prevMax === zoom_max ? 'full' : 'incremental';
+            } else if (overlapExists) {
+              recacheMode = 'incremental';
+            } else {
+              recacheMode = 'full';
+            }
+            body.recache = {
+              mode: recacheMode,
+              previous_zoom_min: prevMin,
+              previous_zoom_max: prevMax
+            };
+            if (overlapExists) {
+              body.recache.overlap = { min: overlapMinRaw, max: overlapMaxRaw };
+            }
+            if (cachedEntry && Array.isArray(cachedEntry.extent) && cachedEntry.extent.length === 4) {
+              body.recache.previous_extent = cachedEntry.extent.slice();
+            }
+            if (cachedEntry && typeof cachedEntry.tile_crs === 'string') {
+              body.recache.previous_tile_crs = cachedEntry.tile_crs;
+            }
           }
           if (mode === 'xyz') {
             body.scheme = 'xyz';
@@ -2163,6 +3032,9 @@
             restoreButton();
             return;
           }
+          const runReason = recache ? 'manual-recache' : (isTheme ? 'manual-theme' : 'manual');
+          body.run_reason = runReason;
+          body.trigger = 'manual';
           const nowIso = new Date().toISOString();
           const targetConfigPatch = {
             lastParams: { ...body },
@@ -2194,11 +3066,16 @@
               restoreButton();
               return;
             }
+            const needsFullPurge = !body.recache || body.recache.mode !== 'incremental';
             try {
-              const delRes = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
-              if (!delRes.ok && delRes.status !== 404) {
-                const delData = await delRes.json().catch(()=>null);
-                throw new Error(delData?.error || delData?.details || delRes.statusText || 'Failed to purge old cache');
+              if (needsFullPurge) {
+                const delRes = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
+                if (!delRes.ok && delRes.status !== 404) {
+                  const delData = await delRes.json().catch(()=>null);
+                  throw new Error(delData?.error || delData?.details || delRes.statusText || 'Failed to purge old cache');
+                }
+              } else {
+                showStatus('Incremental recache: keeping existing tiles.', false);
               }
             } catch (delErr) {
               showStatus('Recache aborted (purge failed): ' + delErr, true);
@@ -2311,7 +3188,7 @@
                   try { stopBtn.remove(); } catch {}
                   restoreButton();
                   // refresh layer list after foreground job completes
-                  setTimeout(()=>{ try { loadLayers(); } catch{} }, 600);
+                  setTimeout(()=>{ try { loadLayers({ forceConfigReload: true }); } catch{} }, 600);
                 }
               } catch (e) {
                 // ignorar fallos de red puntuales
@@ -2349,7 +3226,7 @@
             console.error('/cache DELETE non-ok', res.status, data);
           } else {
             showStatus('Cache deleted: ' + layerName);
-            loadLayers(); // refresh list
+              loadLayers({ forceConfigReload: true }); // refresh list
           }
         } catch (err) {
           showStatus('Network error: ' + err, true);
@@ -2387,8 +3264,9 @@
           }
           extentStates.delete(project.id);
           projectConfigs.delete(project.id);
+          removeStoredCollapse(project.id);
           showStatus('Project deleted: ' + (project.name || project.id));
-          loadLayers();
+          loadLayers({ forceConfigReload: true });
         } catch (err) {
           showStatus('Network error: ' + err, true);
         } finally {
@@ -2396,8 +3274,8 @@
         }
       }
 
-  reloadBtn.onclick = () => { showStatus('Reloading…'); loadLayers(); };
-      loadLayers();
+  reloadBtn.onclick = () => { showStatus('Reloading…'); loadLayers({ forceConfigReload: true }); };
+      loadLayers({ forceConfigReload: true });
       // arrancar polling de jobs para persistir estado entre recargas
       refreshJobs();
       const jobsTicker = setInterval(refreshJobs, 2000);

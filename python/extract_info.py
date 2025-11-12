@@ -9,6 +9,7 @@ import os
 import json
 import argparse
 from pathlib import Path
+from urllib.parse import parse_qsl
 
 # --- Cargar .env (intenta python-dotenv, fallback manual) ---
 def load_dotenv_file(path: Path):
@@ -108,9 +109,22 @@ if not project.read(PROJECT_PATH):
 project_crs = project.crs()
 project_extent = None
 project_extent_wgs84 = None
+project_view_extent = None
+project_view_extent_wgs84 = None
 layers = []
 wgs84 = QgsCoordinateReferenceSystem('EPSG:4326')
 themes = []
+
+try:
+    view_settings = project.viewSettings()
+    try:
+        rect = view_settings.defaultViewExtent()
+        if rect and not rect.isEmpty():
+            project_view_extent = QgsRectangle(rect)
+    except Exception:
+        project_view_extent = None
+except Exception:
+    view_settings = None
 
 for layer in project.mapLayers().values():
     extent = layer.extent()
@@ -157,7 +171,38 @@ for layer in project.mapLayers().values():
         except Exception:
             extent_wgs84 = None
 
-    layers.append({
+    remote_source = None
+    if provider_lc in {"xyz", "tile"}:
+        source_uri = layer.source() or ""
+        if source_uri:
+            remote_source = {
+                "type": "xyz",
+                "url_template": source_uri,
+                "attribution": (layer.attribution() if hasattr(layer, "attribution") else "") or None
+            }
+    elif provider_lc == "wms":
+        source_uri = layer.source() or ""
+        if source_uri:
+            params = dict(parse_qsl(source_uri, keep_blank_values=True))
+            url = params.get("url") or params.get("contextualWMSLegend")
+            layers_param = params.get("layers")
+            styles_param = params.get("styles")
+            format_param = params.get("format")
+            version_param = params.get("version")
+            crs_param = params.get("crs") or params.get("srs")
+            if url and layers_param:
+                remote_source = {
+                    "type": "wms",
+                    "url": url,
+                    "layers": layers_param,
+                    "styles": styles_param or None,
+                    "format": format_param or None,
+                    "version": version_param or None,
+                    "crs": crs_param or None,
+                    "attribution": (layer.attribution() if hasattr(layer, "attribution") else "") or None
+                }
+
+    layer_payload = {
         "name": layer.name(),
         "id": layer.id(),
         "crs": layer_crs.authid(),
@@ -170,7 +215,11 @@ for layer in project.mapLayers().values():
         ] if extent_wgs84 else None,
         "provider": provider,
         "cacheable": cacheable
-    })
+    }
+    if remote_source:
+        layer_payload["remote_source"] = remote_source
+
+    layers.append(layer_payload)
 
 try:
     theme_collection = project.mapThemeCollection()
@@ -204,6 +253,14 @@ if project_extent and project_extent_wgs84 is None:
     except Exception:
         project_extent_wgs84 = None
 
+if project_view_extent and project_view_extent_wgs84 is None:
+    try:
+        transform_project_wgs = QgsCoordinateTransform(project_crs, wgs84, project) if project_crs and project_crs.isValid() else None
+        if transform_project_wgs:
+            project_view_extent_wgs84 = transform_project_wgs.transformBoundingBox(QgsRectangle(project_view_extent))
+    except Exception:
+        project_view_extent_wgs84 = None
+
 if project_extent_wgs84 is None and project_extent is None and layers:
     # fallback: build extent from layer WGS84 extents
     for lyr in layers:
@@ -229,7 +286,9 @@ result = {
         "path": PROJECT_PATH,
         "crs": project_crs.authid() if project_crs.isValid() else None,
         "extent": rect_to_list(project_extent),
-        "extent_wgs84": rect_to_list(project_extent_wgs84)
+        "extent_wgs84": rect_to_list(project_extent_wgs84),
+        "view_extent": rect_to_list(project_view_extent),
+        "view_extent_wgs84": rect_to_list(project_view_extent_wgs84)
     },
     "layers": layers,
     "themes": themes

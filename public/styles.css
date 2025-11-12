@@ -7,6 +7,13 @@
   --card: #ffffff;
   --primary: #2563eb;
   --primary-600: #1d4ed8;
+.job-info {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
   --primary-soft: rgba(37, 99, 235, 0.08);
   --danger: #dc2626;
   --danger-600: #b91c1c;
@@ -132,6 +139,62 @@ a:focus {
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
+  margin-left: auto;
+  align-self: center;
+}
+
+.main-nav .nav-link,
+.main-nav .nav-button {
+  font-weight: 600;
+}
+
+.nav-button {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.nav-button:hover,
+.nav-button:focus {
+  background: rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
+}
+
+.nav-button:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 2px;
+}
+
+.nav-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.35);
+  margin: 0 10px;
+}
+
+.main-nav .nav-language-select {
+  background: rgba(15, 23, 42, 0.35);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-weight: 600;
+  min-width: 130px;
+  cursor: pointer;
+}
+
+.main-nav .nav-language-select:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 2px;
+}
+
+.main-nav .nav-language-select option {
+  color: #0f172a;
 }
 
 .nav-link {
@@ -178,6 +241,12 @@ a:focus {
   gap: 28px;
 }
 
+.main-layout {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+
 .control-panel {
   background: var(--card);
   border: 1px solid var(--border);
@@ -187,6 +256,19 @@ a:focus {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  flex: 0 0 320px;
+  position: sticky;
+  top: 96px;
+  align-self: flex-start;
+  height: fit-content;
+}
+
+.content-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
 }
 
 .control-toolbar {
@@ -194,7 +276,7 @@ a:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: 16px;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .control-actions {
@@ -202,12 +284,6 @@ a:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-}
-
-.control-language {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .control-grid {
@@ -530,6 +606,11 @@ a:focus {
   border-top: 1px dashed var(--border-strong);
 }
 
+.job[data-trigger="timer"] {
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+}
+
 .job:first-child {
   border-top: none;
 }
@@ -567,16 +648,75 @@ a:focus {
   background: var(--primary);
 }
 
+.project-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 20px 20px;
+  margin: 0 0 20px 0;
+  box-shadow: var(--shadow);
+}
+
+.project-block.is-collapsed {
+  padding-bottom: 16px;
+  margin-bottom: 12px;
+}
+
+.project-block.is-collapsed > :not(.project-heading) {
+  display: none;
+}
+
 .project-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0 4px;
+  gap: 18px;
+  margin: 0 0 14px 0;
 }
 
-.project-heading h2 {
-  margin: 0;
+.project-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
   font-size: 1.1rem;
+  padding: 0;
+  cursor: pointer;
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.project-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+.project-toggle .toggle-caret {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+  color: var(--muted);
+}
+
+.project-block.is-collapsed .project-toggle .toggle-caret {
+  transform: rotate(-90deg);
+}
+
+.project-toggle .project-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-toggle .heading-icon {
+  flex-shrink: 0;
 }
 
 .heading-icon {
@@ -716,6 +856,36 @@ a:focus {
   margin-top: 20px;
 }
 
+.recache-dialog .dialog-description {
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.recache-dialog .dialog-note {
+  margin-top: 4px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.recache-dialog .dialog-grid {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.recache-dialog .dialog-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recache-dialog label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .app-footer {
   margin-top: auto;
   background: rgba(15, 23, 42, 0.92);
@@ -749,6 +919,31 @@ a:focus {
   opacity: 0.85;
 }
 
+.viewer-header .header-inner {
+  padding: 18px 28px;
+}
+
+.viewer-header .brand-logo {
+  font-size: 20px;
+}
+
+.viewer-header .brand-tagline {
+  font-size: 13px;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.viewer-footer .footer-inner {
+  padding: 18px 28px;
+}
+
+.viewer-footer .footer-brand {
+  font-size: 13px;
+}
+
+.viewer-footer .footer-links a {
+  font-weight: 500;
+}
+
 @media (max-width: 900px) {
   .header-inner {
     padding: 20px;
@@ -758,10 +953,30 @@ a:focus {
 
   .main-nav {
     width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .nav-divider {
+    display: none;
+  }
+
+  .main-nav .nav-language-select {
+    width: 100%;
+    max-width: 220px;
+  }
+
+  .main-layout {
+    flex-direction: column;
   }
 
   .control-panel {
     padding: 22px;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    width: 100%;
+    flex: 1 1 auto;
   }
 
   .control-toolbar {
@@ -769,13 +984,12 @@ a:focus {
     align-items: flex-start;
   }
 
-  .control-language {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
   .input-number {
     max-width: 100%;
+  }
+
+  .content-panel {
+    width: 100%;
   }
 }
 

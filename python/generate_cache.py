@@ -94,6 +94,7 @@ try:
         QgsCoordinateTransform,
     )
     from qgis.PyQt.QtCore import QSize
+    from qgis.PyQt.QtGui import QColor
 except Exception as e:
     sys.stderr.write(json.dumps({"error": "No se pudo importar qgis", "details": str(e)}) + "\n")
     sys.exit(1)
@@ -435,6 +436,7 @@ parser.add_argument("--allow_remote", action="store_true", help="Permitir cachea
 parser.add_argument("--throttle_ms", type=int, default=int(os.environ.get("REMOTE_THROTTLE_MS", "0")), help="Demora opcional en milisegundos entre tiles (útil para servicios remotos)")
 parser.add_argument("--render_timeout_ms", type=int, default=int(os.environ.get("RENDER_TIMEOUT_MS", "30000")), help="Tiempo máximo por tile (ms) antes de cancelar e intentar el siguiente")
 parser.add_argument("--tile_retries", type=int, default=int(os.environ.get("TILE_RETRIES", "1")), help="Reintentos por tile después de timeout/fallo")
+parser.add_argument("--skip_existing", action="store_true", help="Omitir render si el archivo de tile ya existe")
 args = parser.parse_args()
 
 if not args.layer and not args.theme:
@@ -681,6 +683,11 @@ else:
     settings.setLayers([layer])
 settings.setOutputSize(QSize(256, 256))
 settings.setDestinationCrs(tile_crs)
+# keep background transparent so tiles overlay correctly
+try:
+    settings.setBackgroundColor(QColor(0, 0, 0, 0))
+except Exception:
+    pass
 # acelerar render: desactivar antialiasing y efectos avanzados
 try:
     settings.setFlag(QgsMapSettings.Antialiasing, False)
@@ -766,6 +773,11 @@ if scheme == "xyz":
                 tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
                 settings.setExtent(tile_bbox)
                 settings.setOutputSize(QSize(256, 256))
+                tile_dir = os.path.join(tile_base_dir, str(z), str(x))
+                out_file = os.path.join(tile_dir, f"{y}.png")
+                if args.skip_existing and os.path.exists(out_file):
+                    total_generated += 1; level_generated += 1
+                    continue
                 out_file = None
                 try:
                     attempts = 0
@@ -878,6 +890,11 @@ elif scheme == "wmts":
                 tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
                 settings.setExtent(tile_bbox)
                 settings.setOutputSize(QSize(TILE_SIZE, TILE_SIZE))
+                tile_dir = os.path.join(tile_base_dir, str(z), str(x))
+                out_file = os.path.join(tile_dir, f"{y}.png")
+                if args.skip_existing and os.path.exists(out_file):
+                    total_generated += 1; level_generated += 1
+                    continue
                 out_file = None
                 try:
                     attempts = 0
@@ -895,7 +912,6 @@ elif scheme == "wmts":
                                 last_err = "timeout"
                                 continue
                             img = job.renderedImage()
-                            tile_dir = os.path.join(tile_base_dir, str(z), str(x))
                             os.makedirs(tile_dir, exist_ok=True)
                             out_file = os.path.join(tile_dir, f"{y}.png")
                             success = img.save(out_file, "PNG", max(0, min(9, int(args.png_compression))))
@@ -952,6 +968,11 @@ else:
                 tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
                 settings.setExtent(tile_bbox)
                 settings.setOutputSize(QSize(256, 256))
+                tile_dir = os.path.join(tile_base_dir, str(z), str(x))
+                out_file = os.path.join(tile_dir, f"{y}.png")
+                if args.skip_existing and os.path.exists(out_file):
+                    total_generated += 1; level_generated += 1
+                    continue
                 out_file = None
                 try:
                     attempts = 0
@@ -969,7 +990,6 @@ else:
                                 last_err = "timeout"
                                 continue
                             img = job.renderedImage()
-                            tile_dir = os.path.join(tile_base_dir, str(z), str(x))
                             os.makedirs(tile_dir, exist_ok=True)
                             out_file = os.path.join(tile_dir, f"{y}.png")
                             success = img.save(out_file, "PNG", max(0, min(9, int(args.png_compression))))
@@ -1054,10 +1074,37 @@ try:
                 } for m in wmts_matrices
             ]
         }
+    layers_snapshot = list(index.get("layers", []))
+
+    def _safe_int(value):
+        try:
+            iv = int(value)
+            return max(0, iv)
+        except Exception:
+            return None
+
+    existing_entry = next((l for l in layers_snapshot if l.get("name") == target_name and (l.get("kind") or "layer") == target_mode), None)
     index["layers"] = [
-        l for l in index.get("layers", [])
+        l for l in layers_snapshot
         if not (l.get("name") == target_name and (l.get("kind") or "layer") == target_mode)
     ]
+    if existing_entry:
+        prev_zoom_min = _safe_int(existing_entry.get("zoom_min"))
+        prev_zoom_max = _safe_int(existing_entry.get("zoom_max"))
+        if prev_zoom_min is not None and prev_zoom_max is not None:
+            range_min = min(prev_zoom_min, zoom_min)
+            range_max = max(prev_zoom_max, zoom_max)
+        elif prev_zoom_min is not None:
+            range_min = min(prev_zoom_min, zoom_min)
+            range_max = zoom_max
+        elif prev_zoom_max is not None:
+            range_min = zoom_min
+            range_max = max(prev_zoom_max, zoom_max)
+        else:
+            range_min = zoom_min
+            range_max = zoom_max
+        layer_entry["zoom_min"] = range_min
+        layer_entry["zoom_max"] = range_max
     index["layers"].append(layer_entry)
     with open(index_path, "w", encoding="utf8") as f:
         json.dump(index, f, indent=2, ensure_ascii=False)

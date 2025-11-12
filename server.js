@@ -36,13 +36,15 @@ const logsDir = path.resolve(__dirname, "logs");
 
 const PROJECT_CONFIG_FILENAME = "project-config.json";
 const MAX_TIMER_DELAY_MS = 2147483647; // ~24.8 días, límite de setTimeout
+const PROGRESS_CONFIG_INTERVAL_MS = parseInt(process.env.PROGRESS_CONFIG_INTERVAL_MS || "180000", 10);
+const INDEX_FLUSH_INTERVAL_MS = parseInt(process.env.INDEX_FLUSH_INTERVAL_MS || "180000", 10);
 
 // utilidades generales
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // caché en memoria para configs y timers
 const projectConfigCache = new Map(); // id -> config
-const projectTimers = new Map(); // id -> { timeout, targetTime }
+const projectTimers = new Map(); // id -> { timeout, targetTime, item }
 const projectLogLastMessage = new Map(); // id -> string
 const projectBatchRuns = new Map(); // id -> run info
 const projectBatchCleanupTimers = new Map();
@@ -50,6 +52,10 @@ const projectBatchCleanupTimers = new Map();
 const SCHEDULE_HISTORY_LIMIT = 25;
 const WEEKDAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 const WEEKDAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const SCHEDULE_MIN_LEAD_MS = parseInt(process.env.SCHEDULE_MIN_LEAD_MS || "5000", 10);
+const SCHEDULE_DUE_TOLERANCE_MS = Math.max(1000, parseInt(process.env.SCHEDULE_DUE_TOLERANCE_MS || "60000", 10));
+const SCHEDULE_HEARTBEAT_INTERVAL_MS = parseInt(process.env.SCHEDULE_HEARTBEAT_INTERVAL_MS || "60000", 10);
+const SCHEDULE_OVERDUE_GRACE_MS = parseInt(process.env.SCHEDULE_OVERDUE_GRACE_MS || "5000", 10);
 
 const isValidTimeToken = (value) => {
   if (typeof value !== "string") return null;
@@ -136,6 +142,7 @@ const computeWeeklyNext = (spec, now) => {
   if (!timeInfo) return null;
   const base = new Date(now);
   const today = base.getDay();
+  const minLead = Number.isFinite(SCHEDULE_MIN_LEAD_MS) ? Math.max(0, SCHEDULE_MIN_LEAD_MS) : 0;
   let best = null;
   for (const token of spec.days) {
     if (!Object.prototype.hasOwnProperty.call(WEEKDAY_INDEX, token)) continue;
@@ -144,7 +151,7 @@ const computeWeeklyNext = (spec, now) => {
     const diff = (targetDow - today + 7) % 7;
     candidate.setDate(candidate.getDate() + diff);
     candidate.setHours(timeInfo.hour, timeInfo.minute, 0, 0);
-    if (candidate.getTime() <= now + 30000) {
+    if (candidate.getTime() <= now + minLead) {
       candidate.setDate(candidate.getDate() + 7);
     }
     if (!best || candidate.getTime() < best.getTime()) {
@@ -161,6 +168,7 @@ const computeMonthlyNext = (spec, now) => {
   const base = new Date(now);
   const startYear = base.getFullYear();
   const startMonth = base.getMonth();
+  const minLead = Number.isFinite(SCHEDULE_MIN_LEAD_MS) ? Math.max(0, SCHEDULE_MIN_LEAD_MS) : 0;
   let best = null;
   for (let offset = 0; offset <= 14; offset++) {
     const monthIndex = (startMonth + offset) % 12;
@@ -169,7 +177,7 @@ const computeMonthlyNext = (spec, now) => {
       if (!Number.isInteger(rawDay)) continue;
       const day = clampDayToMonth(year, monthIndex, rawDay);
       const candidate = new Date(year, monthIndex, day, timeInfo.hour, timeInfo.minute, 0, 0);
-      if (candidate.getTime() <= now + 30000) continue;
+      if (candidate.getTime() <= now + minLead) continue;
       if (!best || candidate.getTime() < best.getTime()) {
         best = candidate;
       }
@@ -184,6 +192,7 @@ const computeYearlyNext = (spec, now) => {
   let best = null;
   const base = new Date(now);
   const startYear = base.getFullYear();
+  const minLead = Number.isFinite(SCHEDULE_MIN_LEAD_MS) ? Math.max(0, SCHEDULE_MIN_LEAD_MS) : 0;
   for (let yearOffset = 0; yearOffset <= 3; yearOffset++) {
     const year = startYear + yearOffset;
     for (const occ of spec.occurrences) {
@@ -193,7 +202,7 @@ const computeYearlyNext = (spec, now) => {
       if (!Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) continue;
       const day = clampDayToMonth(year, monthIndex, Number(occ.day));
       const candidate = new Date(year, monthIndex, day, timeInfo.hour, timeInfo.minute, 0, 0);
-      if (candidate.getTime() <= now + 30000) continue;
+      if (candidate.getTime() <= now + minLead) continue;
       if (!best || candidate.getTime() < best.getTime()) {
         best = candidate;
       }
@@ -224,6 +233,20 @@ const limitScheduleHistory = (history) => {
   return trimmed;
 };
 
+const logProjectEvent = (projectId, message, level = "info") => {
+  if (!projectId || !message) return;
+  const line = `[${new Date().toISOString()}][${level.toUpperCase()}] ${message}\n`;
+  const last = projectLogLastMessage.get(projectId);
+  if (last === message) return;
+  projectLogLastMessage.set(projectId, message);
+  const logPath = path.join(logsDir, `project-${projectId}.log`);
+  try {
+    fs.appendFileSync(logPath, line, "utf8");
+  } catch (err) {
+    console.warn("Failed to write project log", projectId, err);
+  }
+};
+
 const cloneSchedule = (schedule) => {
   if (!schedule || typeof schedule !== "object") return null;
   return {
@@ -252,7 +275,9 @@ const cloneSchedule = (schedule) => {
     lastRunAt: schedule.lastRunAt || null,
     lastResult: schedule.lastResult || null,
     lastMessage: schedule.lastMessage || null,
-    history: Array.isArray(schedule.history) ? schedule.history.slice() : []
+    history: Array.isArray(schedule.history) ? schedule.history.slice() : [],
+    zoomMin: Object.prototype.hasOwnProperty.call(schedule, "zoomMin") ? schedule.zoomMin : null,
+    zoomMax: Object.prototype.hasOwnProperty.call(schedule, "zoomMax") ? schedule.zoomMax : null
   };
 };
 
@@ -266,9 +291,15 @@ const deriveProjectScheduleItems = (projectId, config, { now = Date.now() } = {}
     for (const [name, info] of Object.entries(config.layers)) {
       if (!info || !info.schedule || info.schedule.enabled !== true) continue;
       const schedule = info.schedule;
-      let nextTs = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
-      if (!Number.isFinite(nextTs) || nextTs <= now + 1000) {
+      const storedNext = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
+      let nextTs = storedNext;
+      if (!Number.isFinite(nextTs)) {
         nextTs = computeScheduleNextRun(schedule, { now });
+      } else if (nextTs > now + SCHEDULE_DUE_TOLERANCE_MS) {
+        const recomputed = computeScheduleNextRun(schedule, { now });
+        if (Number.isFinite(recomputed)) {
+          nextTs = recomputed;
+        }
       }
       if (!Number.isFinite(nextTs)) continue;
       pushItem({
@@ -284,9 +315,15 @@ const deriveProjectScheduleItems = (projectId, config, { now = Date.now() } = {}
     for (const [name, info] of Object.entries(config.themes)) {
       if (!info || !info.schedule || info.schedule.enabled !== true) continue;
       const schedule = info.schedule;
-      let nextTs = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
-      if (!Number.isFinite(nextTs) || nextTs <= now + 1000) {
+      const storedNext = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : null;
+      let nextTs = storedNext;
+      if (!Number.isFinite(nextTs)) {
         nextTs = computeScheduleNextRun(schedule, { now });
+      } else if (nextTs > now + SCHEDULE_DUE_TOLERANCE_MS) {
+        const recomputed = computeScheduleNextRun(schedule, { now });
+        if (Number.isFinite(recomputed)) {
+          nextTs = recomputed;
+        }
       }
       if (!Number.isFinite(nextTs)) continue;
       pushItem({
@@ -393,6 +430,357 @@ const deepMerge = (target, source) => {
   return target;
 };
 
+const sanitizeStorageName = (value) => {
+  if (!value) return "cache_item";
+  const cleaned = String(value).trim() || String(value);
+  return cleaned.replace(/[<>:"/\\|?*]/g, "_").replace(/\.\./g, "_") || "cache_item";
+};
+
+const getProjectIndexPath = (projectId) => path.join(cacheDir, projectId, "index.json");
+
+const loadProjectIndexData = (projectId) => {
+  const indexPath = getProjectIndexPath(projectId);
+  if (!fs.existsSync(indexPath)) {
+    return {
+      project: null,
+      id: projectId,
+      created: new Date().toISOString(),
+      layers: []
+    };
+  }
+  try {
+    const raw = fs.readFileSync(indexPath, "utf8");
+    return raw ? JSON.parse(raw) : { project: null, id: projectId, layers: [] };
+  } catch (err) {
+    console.warn("Failed to read index for", projectId, err);
+    return { project: null, id: projectId, layers: [] };
+  }
+};
+
+const writeProjectIndexData = (projectId, data) => {
+  const indexPath = getProjectIndexPath(projectId);
+  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
+  fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), "utf8");
+};
+
+const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => {
+  if (!projectId) return null;
+  const data = loadProjectIndexData(projectId);
+  const layers = Array.isArray(data.layers) ? data.layers : [];
+  let existing = null;
+  const filtered = [];
+  for (const entry of layers) {
+    if (!entry) continue;
+    const kind = entry.kind || "layer";
+    if (entry.name === targetName && kind === targetMode) {
+      existing = entry;
+      continue;
+    }
+    filtered.push(entry);
+  }
+  const updated = updater(existing || {}) || null;
+  if (updated) {
+    updated.name = targetName;
+    updated.kind = targetMode;
+    updated.updated = new Date().toISOString();
+    filtered.push(updated);
+  }
+  data.layers = filtered;
+  if (!data.project) data.project = null;
+  if (!data.id) data.id = projectId;
+  if (!data.created) data.created = new Date().toISOString();
+  data.updated = new Date().toISOString();
+  writeProjectIndexData(projectId, data);
+  return updated;
+};
+
+const resolveTileBaseDir = (projectId, targetMode, targetName, storageName = null) => {
+  const safeName = storageName ? sanitizeStorageName(storageName) : sanitizeStorageName(targetName);
+  return targetMode === "theme"
+    ? path.join(cacheDir, projectId, "_themes", safeName)
+    : path.join(cacheDir, projectId, safeName);
+};
+
+const pruneZoomDirectories = (baseDir, { minZoom = null, maxZoom = null } = {}) => {
+  if (!baseDir || !fs.existsSync(baseDir)) return [];
+  const removed = [];
+  try {
+    const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const z = Number(entry.name);
+      if (!Number.isInteger(z)) continue;
+      if ((minZoom != null && z < minZoom) || (maxZoom != null && z > maxZoom)) {
+        const dirPath = path.join(baseDir, entry.name);
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        removed.push(z);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to prune zoom directories", baseDir, err);
+  }
+  return removed;
+};
+
+const RETRIABLE_REMOVE_CODES = new Set(["ENOTEMPTY", "EBUSY", "EPERM", "EACCES"]);
+const RETRIABLE_RENAME_CODES = new Set(["ENOTEMPTY", "EBUSY", "EPERM", "EACCES"]);
+
+const removeDirectorySafe = async (targetPath, { attempts = 6, delayMs = 200 } = {}) => {
+  if (!targetPath) return;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (!fs.existsSync(targetPath)) return;
+    try {
+      await fs.promises.rm(targetPath, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const code = err && err.code;
+      if (!RETRIABLE_REMOVE_CODES.has(code) || attempt === attempts) {
+        throw err;
+      }
+      await sleep(delayMs * attempt);
+    }
+  }
+};
+
+const relocateDirectoryForRemoval = async (dirPath, { attempts = 3, delayMs = 150 } = {}) => {
+  if (!dirPath || !fs.existsSync(dirPath)) return null;
+  const parentDir = path.dirname(dirPath);
+  const tempName = `${path.basename(dirPath)}.__purge_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+  const tempPath = path.join(parentDir, tempName);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await fs.promises.rename(dirPath, tempPath);
+      return tempPath;
+    } catch (err) {
+      const code = err && err.code;
+      if (code === "ENOENT") return null;
+      if (!RETRIABLE_RENAME_CODES.has(code) || attempt === attempts) {
+        throw err;
+      }
+      await sleep(delayMs * attempt);
+    }
+  }
+  return null;
+};
+
+const toIntOrNull = (value) => {
+  const num = Number(value);
+  return Number.isInteger(num) ? num : null;
+};
+
+const computeRecachePlan = ({ existingEntry, zoomMin, zoomMax, requestBody = {} }) => {
+  const plan = {
+    mode: "full",
+    skipExisting: false,
+    previousZoom: null,
+    overlap: null
+  };
+  if (!existingEntry) return plan;
+
+  const prevMinCandidate = toIntOrNull(existingEntry.last_zoom_min);
+  const prevMaxCandidate = toIntOrNull(existingEntry.last_zoom_max);
+  const prevMinFallback = toIntOrNull(existingEntry.zoom_min);
+  const prevMaxFallback = toIntOrNull(existingEntry.zoom_max);
+  const prevMin = prevMinCandidate != null ? prevMinCandidate : prevMinFallback;
+  const prevMax = prevMaxCandidate != null ? prevMaxCandidate : prevMaxFallback;
+  const hasPrevRange = Number.isInteger(prevMin) && Number.isInteger(prevMax);
+  if (!hasPrevRange) return plan;
+  const sameRange = prevMin === zoomMin && prevMax === zoomMax;
+
+  let requestedMode = null;
+  if (requestBody?.recache && typeof requestBody.recache === "object") {
+    if (typeof requestBody.recache.mode === "string" && requestBody.recache.mode) {
+      requestedMode = String(requestBody.recache.mode);
+    }
+    if (!requestedMode) {
+      requestedMode = "incremental";
+    }
+  } else if (requestBody.recache === "incremental") {
+    requestedMode = "incremental";
+  }
+  if (requestedMode !== "incremental") {
+    return plan;
+  }
+
+  const requestedTileCrs = requestBody.tile_crs ? String(requestBody.tile_crs).toUpperCase() : null;
+  const previousTileCrs = existingEntry.tile_crs ? String(existingEntry.tile_crs).toUpperCase() : null;
+  if (requestedTileCrs && previousTileCrs && requestedTileCrs !== previousTileCrs) {
+    return plan;
+  }
+
+  if (sameRange) {
+    return plan;
+  }
+
+  plan.mode = "incremental";
+  plan.previousZoom = { min: prevMin, max: prevMax };
+  let hasOverlap = Number.isInteger(prevMin) && Number.isInteger(prevMax)
+    ? !(zoomMax < prevMin || zoomMin > prevMax)
+    : false;
+  if (!hasOverlap && requestBody?.recache && typeof requestBody.recache === "object") {
+    const overlapMin = toIntOrNull(requestBody.recache.overlap?.min);
+    const overlapMax = toIntOrNull(requestBody.recache.overlap?.max);
+    if (overlapMin != null && overlapMax != null && overlapMin <= overlapMax) {
+      hasOverlap = true;
+      plan.overlap = { min: overlapMin, max: overlapMax };
+    }
+  }
+  if (hasOverlap) {
+    if (!plan.overlap) {
+      const overlapMin = Math.max(prevMin, zoomMin);
+      const overlapMax = Math.min(prevMax, zoomMax);
+      if (Number.isInteger(overlapMin) && Number.isInteger(overlapMax) && overlapMin <= overlapMax) {
+        plan.overlap = { min: overlapMin, max: overlapMax };
+      }
+    }
+    plan.skipExisting = false;
+  } else {
+    plan.skipExisting = true;
+  }
+
+  return plan;
+};
+
+const computePercentValue = (totalGenerated, expectedTotal) => {
+  if (!Number.isFinite(totalGenerated) || !Number.isFinite(expectedTotal) || expectedTotal <= 0) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, (totalGenerated / expectedTotal) * 100));
+};
+
+const persistJobProgress = (job, payload, { forceIndex = false, forceConfig = false } = {}) => {
+  if (!job || !job.project) return;
+  const now = Date.now();
+  const totalGenerated = Number.isFinite(Number(payload.total_generated)) ? Number(payload.total_generated) : (job.lastProgress?.totalGenerated ?? null);
+  const expectedTotal = Number.isFinite(Number(payload.expected_total)) ? Number(payload.expected_total) : (job.lastProgress?.expectedTotal ?? null);
+  const percentValue = typeof payload.percent === "number" ? payload.percent : computePercentValue(totalGenerated, expectedTotal);
+  const status = payload.status || (payload.progress === "level_done" ? "running" : null) || job.status || "running";
+  const progressInfo = {
+    status,
+    percent: percentValue != null ? Number(percentValue.toFixed(2)) : null,
+    totalGenerated: totalGenerated != null ? Number(totalGenerated) : null,
+    expectedTotal: expectedTotal != null ? Number(expectedTotal) : null,
+    updatedAt: new Date(now).toISOString()
+  };
+  if (payload.message) progressInfo.message = String(payload.message);
+
+  if (forceConfig) {
+    try {
+      const progressPatch = { progress: progressInfo };
+      const patch = job.targetMode === "theme"
+        ? { themes: { [job.targetName]: progressPatch } }
+        : { layers: { [job.targetName]: progressPatch } };
+      updateProjectConfig(job.project, patch, { skipReschedule: true });
+      job.lastProgressWriteAt = now;
+    } catch (err) {
+      console.warn("Failed to persist progress config", job.project, job.targetName, err);
+    }
+  }
+
+  if (forceIndex) {
+    try {
+      const metadata = job.metadata || {};
+      upsertProjectIndexEntry(job.project, job.targetMode, job.targetName, (existing = {}) => {
+        const base = { ...existing };
+        if (metadata.project_extent && !base.extent) base.extent = metadata.project_extent;
+        if (metadata.project_extent) base.project_extent = metadata.project_extent;
+        if (metadata.project_crs) base.project_crs = metadata.project_crs;
+        if (metadata.tile_crs) base.tile_crs = metadata.tile_crs;
+        if (metadata.scheme) base.scheme = metadata.scheme;
+        if (metadata.xyz_mode) base.xyz_mode = metadata.xyz_mode;
+        if (!base.scheme && job.requestedScheme) base.scheme = job.requestedScheme;
+        if (!base.xyz_mode && job.xyzMode) base.xyz_mode = job.xyzMode;
+        if (!base.tile_crs && job.requestedTileCrs) base.tile_crs = job.requestedTileCrs;
+        const runZoomMin = toIntOrNull(job.zoomMin);
+        const runZoomMax = toIntOrNull(job.zoomMax);
+        const prevCoverageMin = toIntOrNull(existing.zoom_min);
+        const prevCoverageMax = toIntOrNull(existing.zoom_max);
+        const coverageMin = runZoomMin != null && prevCoverageMin != null
+          ? Math.min(prevCoverageMin, runZoomMin)
+          : (runZoomMin != null ? runZoomMin : prevCoverageMin);
+        const coverageMax = runZoomMax != null && prevCoverageMax != null
+          ? Math.max(prevCoverageMax, runZoomMax)
+          : (runZoomMax != null ? runZoomMax : prevCoverageMax);
+        if (coverageMin != null) base.zoom_min = coverageMin; else delete base.zoom_min;
+        if (coverageMax != null) base.zoom_max = coverageMax; else delete base.zoom_max;
+        if (runZoomMin != null) {
+          base.last_zoom_min = runZoomMin;
+        } else if (existing.last_zoom_min != null) {
+          base.last_zoom_min = existing.last_zoom_min;
+        } else {
+          delete base.last_zoom_min;
+        }
+        if (runZoomMax != null) {
+          base.last_zoom_max = runZoomMax;
+        } else if (existing.last_zoom_max != null) {
+          base.last_zoom_max = existing.last_zoom_max;
+        } else {
+          delete base.last_zoom_max;
+        }
+        base.tile_format = existing.tile_format || "png";
+        base.path = existing.path || job.tileBaseDir || resolveTileBaseDir(job.project, job.targetMode, job.targetName, metadata.storage_name);
+        base.generated = existing.generated || new Date(now).toISOString();
+        if (progressInfo.totalGenerated != null) {
+          base.tile_count = Math.max(0, Number(progressInfo.totalGenerated));
+        }
+        base.status = progressInfo.status;
+        base.partial = true;
+        base.progress = progressInfo;
+        return base;
+  });
+      job.lastIndexWriteAt = now;
+  return null;
+    } catch (err) {
+      console.warn("Failed to update index progress", job.project, job.targetName, err);
+    }
+  }
+  return null;
+};
+
+const handleJobJsonEvent = (job, payload) => {
+  if (!job || !payload || typeof payload !== "object") return;
+  if (payload.debug === "start_generate") {
+    job.metadata = {
+      ...payload,
+      receivedAt: Date.now()
+    };
+    if (!job.metadata.scheme && job.requestedScheme) job.metadata.scheme = job.requestedScheme;
+    if (!job.metadata.xyz_mode && job.xyzMode) job.metadata.xyz_mode = job.xyzMode;
+    if (!job.metadata.tile_crs && job.requestedTileCrs) job.metadata.tile_crs = job.requestedTileCrs;
+    if (!job.tileBaseDir && payload.output_dir && payload.storage_name) {
+      const baseDir = job.targetMode === "theme"
+        ? path.join(payload.output_dir, "_themes", sanitizeStorageName(payload.storage_name))
+        : path.join(payload.output_dir, sanitizeStorageName(payload.storage_name));
+      job.tileBaseDir = path.resolve(baseDir);
+    }
+    persistJobProgress(job, { total_generated: 0, expected_total: payload.expected_total ?? null, percent: 0, status: "running" }, { forceIndex: true, forceConfig: true });
+    return;
+  }
+
+  const progressLike = payload.progress || payload.status || payload.debug === "index_written";
+  if (!progressLike) return;
+
+  const totalGenerated = Number.isFinite(Number(payload.total_generated)) ? Number(payload.total_generated) : (job.lastProgress?.totalGenerated ?? null);
+  const expectedTotal = Number.isFinite(Number(payload.expected_total)) ? Number(payload.expected_total) : (job.lastProgress?.expectedTotal ?? null);
+  const percentValue = typeof payload.percent === "number" ? payload.percent : computePercentValue(totalGenerated, expectedTotal);
+  job.lastProgress = {
+    totalGenerated,
+    expectedTotal,
+    percent: percentValue,
+    status: payload.status || job.status || "running",
+    updatedAt: Date.now()
+  };
+
+  const now = Date.now();
+  const shouldWriteIndex = job.lastIndexWriteAt === 0 || now - job.lastIndexWriteAt >= INDEX_FLUSH_INTERVAL_MS || !!payload.status;
+  const shouldWriteConfig = job.lastProgressWriteAt === 0 || now - job.lastProgressWriteAt >= PROGRESS_CONFIG_INTERVAL_MS || !!payload.status;
+
+  persistJobProgress(job, { ...payload, total_generated: totalGenerated, expected_total: expectedTotal, percent: percentValue }, {
+    forceIndex: shouldWriteIndex,
+    forceConfig: shouldWriteConfig
+  });
+};
+
 const readProjectConfig = (projectId, { useCache = true } = {}) => {
   if (useCache && projectConfigCache.has(projectId)) {
     return projectConfigCache.get(projectId);
@@ -497,6 +885,24 @@ const buildSchedulePatch = (input) => {
   }
   if (Object.prototype.hasOwnProperty.call(input, "history")) {
     patch.history = limitScheduleHistory(Array.isArray(input.history) ? input.history : []);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "zoomMin")) {
+    const minVal = input.zoomMin;
+    if (minVal === null || minVal === "" || typeof minVal === "undefined") {
+      patch.zoomMin = null;
+    } else {
+      const parsed = Number(minVal);
+      patch.zoomMin = Number.isFinite(parsed) ? Math.round(parsed) : null;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "zoomMax")) {
+    const maxVal = input.zoomMax;
+    if (maxVal === null || maxVal === "" || typeof maxVal === "undefined") {
+      patch.zoomMax = null;
+    } else {
+      const parsed = Number(maxVal);
+      patch.zoomMax = Number.isFinite(parsed) ? Math.round(parsed) : null;
+    }
   }
   return Object.keys(patch).length ? patch : {};
 };
@@ -691,7 +1097,9 @@ const scheduleProjectRecache = (projectId, configParam) => {
       console.error(`Recache timer error for ${projectId}:`, err);
     });
   }, timeoutDelay);
-  projectTimers.set(projectId, { timeout, targetTime: nextEntry.nextTs });
+  projectTimers.set(projectId, { timeout, targetTime: nextEntry.nextTs, item: nextEntry });
+  const whenIso = new Date(nextEntry.nextTs).toISOString();
+  logProjectEvent(projectId, `Scheduled automatic cache for ${nextEntry.kind}:${nextEntry.name} at ${whenIso}.`);
 };
 
 const computeNextScheduleIso = (schedule, { now = Date.now() } = {}) => {
@@ -708,6 +1116,9 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     return currentConfig;
   }
   const schedule = cloneSchedule(layerEntry.schedule) || { enabled: false };
+  const scheduleMin = toIntOrNull(schedule.zoomMin);
+  const scheduleMax = toIntOrNull(schedule.zoomMax);
+  const hasZoomOverride = scheduleMin != null || scheduleMax != null;
   const nowIso = new Date().toISOString();
   const appendHistory = (status, message) => {
     const historyEntry = { at: nowIso, status, message };
@@ -735,11 +1146,15 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     return updated;
   }
 
-  try {
-    await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
-  } catch (err) {
-    logProjectEvent(projectId, `Failed to purge layer ${layerName} before scheduled recache: ${err?.message || err}`, "warn");
+  if (!hasZoomOverride) {
+    try {
+      await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
+    } catch (err) {
+      logProjectEvent(projectId, `Failed to purge layer ${layerName} before scheduled recache: ${err?.message || err}`, "warn");
+    }
   }
+
+  logProjectEvent(projectId, `Running scheduled recache for ${layerName}.`);
 
   let status = "success";
   let message = "Automatic recache completed";
@@ -747,11 +1162,22 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     const params = { ...layerEntry.lastParams, project: projectId, layer: layerName };
     params.project = projectId;
     params.layer = layerName;
+    params.run_reason = "scheduled-layer";
+    params.trigger = "timer";
+    params.batch_total = 1;
+    params.batch_index = 0;
+    if (scheduleMin != null) params.zoom_min = scheduleMin;
+    if (scheduleMax != null) params.zoom_max = scheduleMax;
     const result = await runCacheJobViaHttp(params, {});
     const rawStatus = result && result.status ? String(result.status) : "completed";
     if (rawStatus !== "completed") {
       status = rawStatus;
       message = `Automatic recache ended with status ${rawStatus}`;
+    }
+    if (status === "success" || status === "completed") {
+      logProjectEvent(projectId, `Scheduled recache for ${layerName} finished successfully.`);
+    } else {
+      logProjectEvent(projectId, `Scheduled recache for ${layerName} finished with status ${rawStatus}.`, "warn");
     }
   } catch (err) {
     status = "error";
@@ -780,6 +1206,9 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     return currentConfig;
   }
   const schedule = cloneSchedule(themeEntry.schedule) || { enabled: false };
+  const scheduleMin = toIntOrNull(schedule.zoomMin);
+  const scheduleMax = toIntOrNull(schedule.zoomMax);
+  const hasZoomOverride = scheduleMin != null || scheduleMax != null;
   const nowIso = new Date().toISOString();
   const appendHistory = (status, message) => {
     const historyEntry = { at: nowIso, status, message };
@@ -807,10 +1236,12 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     return updated;
   }
 
-  try {
-    await deleteThemeCacheInternal(projectId, themeName, { force: true, silent: true });
-  } catch (err) {
-    logProjectEvent(projectId, `Failed to purge theme ${themeName} before scheduled recache: ${err?.message || err}`, "warn");
+  if (!hasZoomOverride) {
+    try {
+      await deleteThemeCacheInternal(projectId, themeName, { force: true, silent: true });
+    } catch (err) {
+      logProjectEvent(projectId, `Failed to purge theme ${themeName} before scheduled recache: ${err?.message || err}`, "warn");
+    }
   }
 
   let status = "success";
@@ -819,6 +1250,12 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     const params = { ...themeEntry.lastParams, project: projectId, theme: themeName };
     params.project = projectId;
     params.theme = themeName;
+    params.run_reason = "scheduled-theme";
+    params.trigger = "timer";
+    params.batch_total = 1;
+    params.batch_index = 0;
+    if (scheduleMin != null) params.zoom_min = scheduleMin;
+    if (scheduleMax != null) params.zoom_max = scheduleMax;
     const result = await runCacheJobViaHttp(params, {});
     const rawStatus = result && result.status ? String(result.status) : "completed";
     if (rawStatus !== "completed") {
@@ -842,19 +1279,6 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     }
   }, { skipReschedule: true });
   return updated;
-};
-
-const logProjectEvent = (projectId, message, level = "info") => {
-  const line = `[${new Date().toISOString()}][${level.toUpperCase()}] ${message}\n`;
-  const last = projectLogLastMessage.get(projectId);
-  if (last === message) return; // evita repeticiones inmediatas
-  projectLogLastMessage.set(projectId, message);
-  const logPath = path.join(logsDir, `project-${projectId}.log`);
-  try {
-    fs.appendFileSync(logPath, line, "utf8");
-  } catch (err) {
-    console.warn("Failed to write project log", projectId, err);
-  }
 };
 
 const updateProjectBatchRun = (projectId, patch) => {
@@ -883,9 +1307,13 @@ const updateProjectBatchRun = (projectId, patch) => {
 const handleProjectTimer = async (projectId, targetTime) => {
   const now = Date.now();
   const entry = projectTimers.get(projectId);
-  if (entry && entry.targetTime && entry.targetTime !== targetTime) {
+  if (entry && entry.targetTime && targetTime && entry.targetTime !== targetTime) {
     return;
   }
+  if (entry && entry.timeout) {
+    try { clearTimeout(entry.timeout); } catch {}
+  }
+  projectTimers.delete(projectId);
   const config = readProjectConfig(projectId, { useCache: false });
   const items = deriveProjectScheduleItems(projectId, config, { now });
   if (!items.length) {
@@ -988,10 +1416,44 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
     });
     return;
   }
-  logProjectEvent(projectId, `Recache start (${reason}), layers: ${layerEntries.map((entry) => entry.name).join(", ")}`);
+  const layerNames = layerEntries.map((entry) => entry.name);
+  logProjectEvent(projectId, `Recache start (${reason}), layers: ${layerNames.join(", ")}`);
+  const normalizedTrigger = reason === "scheduled" ? "timer" : reason === "manual-project" ? "manual" : (reason || "manual");
+  const effectiveRunId = runId || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  const startedAt = Date.now();
+  const totalCount = layerNames.length;
+  let completedCount = 0;
+  updateProjectBatchRun(projectId, {
+    id: effectiveRunId,
+    project: projectId,
+    status: "running",
+    reason,
+    trigger: normalizedTrigger,
+    startedAt,
+    layers: layerNames,
+    totalCount,
+    completedCount: 0,
+    currentLayer: null,
+    currentIndex: null
+  });
+
   const failures = [];
-  for (const entry of layerEntries) {
+  for (let idx = 0; idx < layerEntries.length; idx++) {
+    const entry = layerEntries[idx];
     const layerName = entry.name;
+    updateProjectBatchRun(projectId, {
+      id: effectiveRunId,
+      project: projectId,
+      status: "running",
+      reason,
+      trigger: normalizedTrigger,
+      startedAt,
+      layers: layerNames,
+      totalCount,
+      completedCount,
+      currentLayer: layerName,
+      currentIndex: idx
+    });
     try {
       await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
     } catch (err) {
@@ -1015,6 +1477,11 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       if (config.extent.crs) payload.extent_crs = config.extent.crs;
     }
     try {
+      payload.run_reason = reason;
+      payload.trigger = normalizedTrigger;
+      payload.run_id = effectiveRunId;
+      payload.batch_total = totalCount;
+      payload.batch_index = idx;
       const result = await runCacheJobViaHttp(payload, {});
       if (!result || (result.status && result.status !== "completed")) {
         const msg = `Recache job for ${layerName} ended with status ${(result && result.status) || "unknown"}`;
@@ -1028,6 +1495,14 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       failures.push(msg);
       logProjectEvent(projectId, msg, "error");
     }
+    completedCount += 1;
+    updateProjectBatchRun(projectId, {
+      id: effectiveRunId,
+      project: projectId,
+      completedCount,
+      currentLayer: null,
+      currentIndex: null
+    });
   }
   const nowIso = new Date().toISOString();
   const success = failures.length === 0;
@@ -1059,6 +1534,22 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
     recacheUpdate.recache.nextRunAt = null;
   }
   updateProjectConfig(projectId, recacheUpdate);
+  const endedAt = Date.now();
+  updateProjectBatchRun(projectId, {
+    id: effectiveRunId,
+    project: projectId,
+    status: success ? "completed" : "error",
+    result: success ? "success" : "error",
+    error: success ? null : failures.join(" | "),
+    endedAt,
+    trigger: normalizedTrigger,
+    reason,
+    layers: layerNames,
+    completedCount,
+    totalCount,
+    currentLayer: null,
+    currentIndex: null
+  });
   if (!success) {
     throw new Error(message + " " + failures.join(" | "));
   }
@@ -1099,8 +1590,25 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   }
 
   const layerDir = path.join(cacheDir, projectId, layerName);
-  if (fs.existsSync(layerDir)) {
-    await fs.promises.rm(layerDir, { recursive: true, force: true });
+  let removalPath = layerDir;
+  try {
+    const relocated = await relocateDirectoryForRemoval(layerDir);
+    if (relocated) {
+      removalPath = relocated;
+    }
+  } catch (relocateErr) {
+    if (!silent) console.warn("Failed to relocate cache prior to delete", projectId, layerName, relocateErr);
+  }
+  try {
+    await removeDirectorySafe(removalPath, {});
+    if (removalPath !== layerDir) {
+      try {
+        await removeDirectorySafe(layerDir, { attempts: 2, delayMs: 100 });
+      } catch {}
+    }
+  } catch (rmErr) {
+    if (!silent) console.error("Failed to remove cache directory", projectId, layerName, rmErr);
+    throw rmErr;
   }
 
   const projectIndexPath = path.join(cacheDir, projectId, "index.json");
@@ -1170,8 +1678,25 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
   }
 
   const themeDir = path.join(cacheDir, projectId, "_themes", themeName);
-  if (fs.existsSync(themeDir)) {
-    await fs.promises.rm(themeDir, { recursive: true, force: true });
+  let themeRemovalPath = themeDir;
+  try {
+    const relocated = await relocateDirectoryForRemoval(themeDir);
+    if (relocated) {
+      themeRemovalPath = relocated;
+    }
+  } catch (relocateErr) {
+    if (!silent) console.warn("Failed to relocate theme cache prior to delete", projectId, themeName, relocateErr);
+  }
+  try {
+    await removeDirectorySafe(themeRemovalPath, {});
+    if (themeRemovalPath !== themeDir) {
+      try {
+        await removeDirectorySafe(themeDir, { attempts: 2, delayMs: 100 });
+      } catch {}
+    }
+  } catch (rmErr) {
+    if (!silent) console.error("Failed to remove theme cache directory", projectId, themeName, rmErr);
+    throw rmErr;
   }
 
   const projectIndexPath = path.join(cacheDir, projectId, "index.json");
@@ -1306,6 +1831,47 @@ const initializeProjectSchedules = () => {
     } catch (err) {
       console.error(`Failed to initialize schedule for project ${proj.id}:`, err);
     }
+  }
+};
+
+const startScheduleHeartbeat = () => {
+  if (!Number.isFinite(SCHEDULE_HEARTBEAT_INTERVAL_MS) || SCHEDULE_HEARTBEAT_INTERVAL_MS <= 0) {
+    return;
+  }
+  const interval = Math.max(1000, SCHEDULE_HEARTBEAT_INTERVAL_MS);
+  const grace = Number.isFinite(SCHEDULE_OVERDUE_GRACE_MS) && SCHEDULE_OVERDUE_GRACE_MS >= 0
+    ? SCHEDULE_OVERDUE_GRACE_MS
+    : 5000;
+  const tick = () => {
+    const now = Date.now();
+    for (const [projectId, info] of projectTimers.entries()) {
+      if (!info || !Number.isFinite(info.targetTime)) continue;
+      if (info.targetTime <= now - grace) {
+        const label = info.item ? `${info.item.kind}:${info.item.name}` : "task";
+        console.warn(`Schedule heartbeat forcing overdue timer for ${projectId} (${label}) target ${new Date(info.targetTime).toISOString()}.`);
+        handleProjectTimer(projectId, info.targetTime).catch((err) => {
+          console.error(`Heartbeat execution failed for ${projectId}:`, err);
+        });
+      }
+    }
+    const seen = new Set(projectTimers.keys());
+    const projects = listProjects();
+    for (const proj of projects) {
+      if (!proj || !proj.id || seen.has(proj.id)) continue;
+      try {
+        const cfg = readProjectConfig(proj.id);
+        const items = deriveProjectScheduleItems(proj.id, cfg, { now });
+        if (items.length) {
+          scheduleProjectRecache(proj.id, cfg);
+        }
+      } catch (err) {
+        console.error(`Schedule heartbeat failed to reschedule ${proj.id}:`, err);
+      }
+    }
+  };
+  const timer = setInterval(tick, interval);
+  if (typeof timer.unref === "function") {
+    timer.unref();
   }
 };
 
@@ -1480,24 +2046,26 @@ app.post("/projects/:id/cache/project", (req, res) => {
   }
   const runId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const layerNames = overrideLayers.map((l) => l.layer);
+  const runTrigger = body.reason === "scheduled" ? "timer" : "manual";
   updateProjectBatchRun(projectId, {
     id: runId,
     project: projectId,
     status: "queued",
     reason: body.reason || "manual-project",
+    trigger: runTrigger,
     createdAt: Date.now(),
     layers: layerNames
   });
   res.json({ status: "queued", runId, project: projectId, layers: layerNames.length });
   setImmediate(async () => {
     try {
-      updateProjectBatchRun(projectId, { status: "running", startedAt: Date.now() });
+      updateProjectBatchRun(projectId, { status: "running", startedAt: Date.now(), trigger: runTrigger });
       await runRecacheForProject(projectId, "manual-project", { overrideLayers, runId, requireEnabled: false });
-      updateProjectBatchRun(projectId, { status: "completed", endedAt: Date.now(), result: "success" });
+      updateProjectBatchRun(projectId, { status: "completed", endedAt: Date.now(), result: "success", trigger: runTrigger });
       logProjectEvent(projectId, `Project cache run ${runId} completed (${layerNames.length} layers).`);
     } catch (err) {
       const message = err?.message || String(err);
-      updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message });
+  updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
       logProjectEvent(projectId, `Project cache run ${runId} failed: ${message}`, "error");
     }
   });
@@ -1557,7 +2125,25 @@ const JOB_MAX = parseInt(process.env.JOB_MAX || "4", 10); // máximo de procesos
 
 // generate-cache -> spawn para proceso largo (pasar args)
 app.post("/generate-cache", (req, res) => {
-  const { project: projectId, layer, theme, zoom_min = 0, zoom_max = 0, scheme = "auto", xyz_mode = "partial", tile_crs = null, wmts = false, project_extent = null, extent_crs = null, allow_remote = false, throttle_ms = 0, render_timeout_ms = null, tile_retries = null, png_compression = null } = req.body;
+  const {
+    project: projectId,
+    layer,
+    theme,
+    zoom_min: zoomMinRaw = 0,
+    zoom_max: zoomMaxRaw = 0,
+    scheme = "auto",
+    xyz_mode = "partial",
+    tile_crs = null,
+    wmts = false,
+    project_extent = null,
+    extent_crs = null,
+    allow_remote = false,
+    throttle_ms = 0,
+    render_timeout_ms = null,
+    tile_retries = null,
+    png_compression = null,
+    recache: recacheRaw = null
+  } = req.body;
   if (!layer && !theme) return res.status(400).json({ error: "target_required", details: "Debe indicar layer o theme" });
   if (layer && theme) return res.status(400).json({ error: "too_many_targets", details: "Solo se permite layer o theme" });
 
@@ -1566,6 +2152,9 @@ app.post("/generate-cache", (req, res) => {
   if (!targetName) {
     return res.status(400).json({ error: "invalid_target_name" });
   }
+
+  const zoomMin = Number.isFinite(Number(zoomMinRaw)) ? Number(zoomMinRaw) : 0;
+  const zoomMax = Number.isFinite(Number(zoomMaxRaw)) ? Number(zoomMaxRaw) : 0;
 
   let projectPath = process.env.PROJECT_PATH || null;
   let projectKey = null;
@@ -1580,6 +2169,33 @@ app.post("/generate-cache", (req, res) => {
   const outBase = projectKey ? path.join(cacheDir, projectKey) : cacheDir;
   fs.mkdirSync(outBase, { recursive: true });
   const projectIndex = path.join(outBase, "index.json");
+
+  let existingEntry = null;
+  if (projectKey) {
+    try {
+      const indexData = loadProjectIndexData(projectKey);
+      const layers = Array.isArray(indexData.layers) ? indexData.layers : [];
+      existingEntry = layers.find((entry) => entry && entry.name === targetName && (entry.kind || "layer") === targetMode) || null;
+    } catch (err) {
+      existingEntry = null;
+    }
+  }
+
+  const recachePlan = computeRecachePlan({ existingEntry, zoomMin, zoomMax, requestBody: req.body });
+
+  let explicitTileBaseDir = null;
+  if (projectKey) {
+    if (existingEntry && typeof existingEntry.path === "string" && existingEntry.path) {
+      explicitTileBaseDir = existingEntry.path;
+    } else {
+      explicitTileBaseDir = resolveTileBaseDir(projectKey, targetMode, targetName, existingEntry && existingEntry.storage_name);
+    }
+    if (explicitTileBaseDir) {
+      explicitTileBaseDir = path.resolve(explicitTileBaseDir);
+      fs.mkdirSync(explicitTileBaseDir, { recursive: true });
+    }
+  }
+
   const args = [];
   if (targetMode === "layer") {
     args.push("--layer", layer);
@@ -1587,8 +2203,8 @@ app.post("/generate-cache", (req, res) => {
     args.push("--theme", theme);
   }
   args.push(
-    "--zoom_min", String(zoom_min),
-    "--zoom_max", String(zoom_max),
+    "--zoom_min", String(zoomMin),
+    "--zoom_max", String(zoomMax),
     "--output_dir", outBase,
     "--index_path", projectIndex,
     "--scheme", scheme,
@@ -1602,6 +2218,9 @@ app.post("/generate-cache", (req, res) => {
   }
   if (allow_remote) {
     args.push("--allow_remote");
+  }
+  if (recachePlan.skipExisting) {
+    args.push("--skip_existing");
   }
   if (throttle_ms && Number.isFinite(Number(throttle_ms)) && Number(throttle_ms) > 0) {
     args.push("--throttle_ms", String(Math.floor(Number(throttle_ms))));
@@ -1650,13 +2269,63 @@ app.post("/generate-cache", (req, res) => {
   const proc = runPythonViaOSGeo4W(script, args, {});
   console.log("Launching python generate_cache.py with args:", args);
 
-  const job = { id, proc, layer: jobLabel, targetName, targetMode, project: projectKey, key, startedAt: Date.now(), stdout: "", stderr: "", status: "running", exitCode: null, endedAt: null, cleanupTimer: null };
+  const runReason = typeof req.body.run_reason === "string" && req.body.run_reason.trim() ? req.body.run_reason.trim() : null;
+  const trigger = typeof req.body.trigger === "string" && req.body.trigger.trim() ? req.body.trigger.trim() : (runReason === "scheduled" ? "timer" : null);
+  const batchIndexVal = Number(req.body.batch_index);
+  const batchTotalVal = Number(req.body.batch_total);
+  const job = {
+    id,
+    proc,
+    layer: jobLabel,
+    targetName,
+    targetMode,
+    project: projectKey,
+    key,
+    startedAt: Date.now(),
+    stdout: "",
+    stderr: "",
+    stdoutJsonBuffer: "",
+    status: "running",
+    exitCode: null,
+    endedAt: null,
+    cleanupTimer: null,
+    recachePlan,
+    tileBaseDir: explicitTileBaseDir,
+    existingIndexEntry: existingEntry,
+    zoomMin,
+    zoomMax,
+    requestedScheme: scheme,
+    requestedTileCrs: tile_crs,
+    xyzMode: xyz_mode,
+    metadata: null,
+    lastProgressWriteAt: 0,
+    lastIndexWriteAt: 0,
+    lastProgress: null,
+    runReason,
+    trigger,
+    runId: typeof req.body.run_id === "string" && req.body.run_id.trim() ? req.body.run_id.trim() : null,
+    batchIndex: Number.isFinite(batchIndexVal) ? batchIndexVal : null,
+    batchTotal: Number.isFinite(batchTotalVal) ? batchTotalVal : null
+  };
   runningJobs.set(id, job);
 
   proc.stdout.on("data", d => {
     const s = d.toString();
     job.stdout += s;
+    job.stdoutJsonBuffer = (job.stdoutJsonBuffer || "") + s;
     console.log(`[job ${id} stdout]`, s.trim());
+    const lines = job.stdoutJsonBuffer.split(/\r?\n/);
+    job.stdoutJsonBuffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const payload = JSON.parse(trimmed);
+        handleJobJsonEvent(job, payload);
+      } catch (err) {
+        // ignore parse errors but keep buffer for debugging
+      }
+    }
   });
   proc.stderr.on("data", d => {
     const s = d.toString();
@@ -1673,6 +2342,13 @@ app.post("/generate-cache", (req, res) => {
     job.exitCode = code;
     job.status = code === 0 ? "completed" : "error";
     job.endedAt = Date.now();
+    const finalProgressPayload = {
+      status: job.status,
+      total_generated: job.lastProgress?.totalGenerated ?? null,
+      expected_total: job.lastProgress?.expectedTotal ?? null,
+      percent: job.lastProgress?.percent ?? (job.status === "completed" ? 100 : null)
+    };
+    persistJobProgress(job, finalProgressPayload, { forceIndex: true, forceConfig: true });
     if (projectKey) {
       try {
         const lastMessage = job.status === "completed" ? "Cache generation completed" : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
@@ -1706,7 +2382,7 @@ app.post("/generate-cache", (req, res) => {
       };
       if (job.id) targetPatch.lastJobId = job.id;
       const patch = {
-        zoom: { min: Number(zoom_min) ?? null, max: Number(zoom_max) ?? null, updatedAt: nowIso },
+        zoom: { min: Number.isFinite(zoomMin) ? zoomMin : null, max: Number.isFinite(zoomMax) ? zoomMax : null, updatedAt: nowIso },
         cachePreferences: {
           mode: req.body.scheme || "auto",
           tileCrs: req.body.tile_crs || null,
@@ -1748,6 +2424,7 @@ app.delete("/generate-cache/:id", (req, res) => {
     console.log(`Job ${id} kill() called -> ${killed}`);
     job.status = "aborted";
     job.endedAt = Date.now();
+    persistJobProgress(job, { status: "aborted" }, { forceIndex: true, forceConfig: true });
     // liberar clave activa
     try {
       const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
@@ -1785,7 +2462,18 @@ app.delete("/generate-cache/:id", (req, res) => {
 app.get("/generate-cache/running", (req, res) => {
   const list = Array.from(runningJobs.values())
     .filter(j => (j.status || "running") === "running")
-    .map(j => ({ id: j.id, layer: j.layer, project: j.project, startedAt: j.startedAt }));
+    .map(j => ({
+      id: j.id,
+      layer: j.layer,
+      project: j.project,
+      startedAt: j.startedAt,
+      trigger: j.trigger || null,
+      runId: j.runId || null,
+      batchIndex: Number.isFinite(j.batchIndex) ? j.batchIndex : null,
+      batchTotal: Number.isFinite(j.batchTotal) ? j.batchTotal : null,
+      targetMode: j.targetMode || null,
+      targetName: j.targetName || null
+    }));
   res.json(list);
 });
 
@@ -1944,10 +2632,12 @@ app.get('/wmts', async (req, res) => {
       try { idx = JSON.parse(fs.readFileSync(idxPath,'utf8')); } catch { continue; }
       for (const lyr of (idx.layers||[])) {
         const kind = typeof lyr.kind === "string" ? lyr.kind.toLowerCase() : "layer";
+        const scheme = typeof lyr.scheme === "string" ? lyr.scheme.toLowerCase() : null;
         const tcrs = String(lyr.tile_crs||'').toUpperCase();
-        if (lyr.scheme === 'xyz' && tcrs === 'EPSG:3857') {
+        const hasTileMatrixSet = lyr && lyr.tile_matrix_set && Array.isArray(lyr.tile_matrix_set.matrices);
+        if (scheme === 'xyz' && tcrs === 'EPSG:3857') {
           layersMeta.push({ type: 'xyz3857', project: p, layer: lyr.name, zoom_min: lyr.zoom_min, zoom_max: lyr.zoom_max, extent: lyr.extent, tileCrs: 'EPSG:3857', kind });
-        } else if (lyr.scheme === 'wmts' && lyr.tile_matrix_set && Array.isArray(lyr.tile_matrix_set.matrices)) {
+        } else if (hasTileMatrixSet) {
           const setId = lyr.tile_matrix_set.id || (p + ':' + lyr.name);
           wmtsSets.push({ project: p, layer: lyr.name, set: lyr.tile_matrix_set, extent: lyr.extent, tileCrs: lyr.tile_crs || lyr.crs, kind });
           layersMeta.push({ type: 'wmts', project: p, layer: lyr.name, setId, extent: lyr.extent, tileCrs: lyr.tile_crs || lyr.crs, kind });
@@ -2054,5 +2744,6 @@ app.get('/wmts', async (req, res) => {
 });
 
 initializeProjectSchedules();
+startScheduleHeartbeat();
 
 app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
