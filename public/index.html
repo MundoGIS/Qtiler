@@ -1121,7 +1121,7 @@
           queueProjectConfigSave(projectId, patch, { immediate: true });
           showStatus(tr('Auto cache disabled for {name}', { name: targetName }));
           closeScheduleDialog();
-          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 500);
+          scheduleProjectRefresh(projectId, { delayMs: 500, forceConfigReload: true });
         };
 
         const handleSave = () => {
@@ -1247,7 +1247,7 @@
           queueProjectConfigSave(projectId, patch, { immediate: true });
           showStatus(tr('Schedule saved for {name}', { name: targetName }));
           closeScheduleDialog();
-          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 600);
+          scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true });
         };
 
         form.addEventListener('submit', (ev) => {
@@ -1455,7 +1455,7 @@
         const prevStatus = state.lastBatchStatus;
         state.lastBatchStatus = nextStatus;
         if (prevStatus === 'running' && nextStatus && nextStatus !== 'running' && nextStatus !== 'queued') {
-          setTimeout(() => { try { loadLayers({ forceConfigReload: true }); } catch {} }, 800);
+          scheduleProjectRefresh(projectId, { delayMs: 800, forceConfigReload: true });
         }
       }
 
@@ -2374,6 +2374,146 @@
         }
       }
 
+      async function ensureProjectBlock(projectId, { projectMeta = null, forceConfigReload = false } = {}) {
+        if (!projectId) return;
+        let project = projectMeta || null;
+        if (!project) {
+          try {
+            const res = await fetch('/projects');
+            const list = await res.json().catch(() => []);
+            if (Array.isArray(list)) {
+              project = list.find((item) => item && (item.id === projectId || item.name === projectId)) || null;
+            }
+          } catch (err) {
+            console.warn('ensureProjectBlock failed to fetch project list', err);
+          }
+        }
+        if (!project || !project.id) {
+          const wrap = findProjectWrap(projectId);
+          if (wrap) {
+            try { wrap.remove(); } catch {}
+          }
+          extentStates.delete(projectId);
+          projectConfigs.delete(projectId);
+          if (activeProjectId === projectId) {
+            activeProjectId = null;
+            const firstWrap = layersEl.querySelector('[data-project-id]');
+            if (firstWrap && firstWrap.dataset.projectId) {
+              setActiveProject(firstWrap.dataset.projectId);
+            }
+          }
+          if (!layersEl.querySelector('[data-project-id]')) {
+            loadLayers({ forceConfigReload: true });
+          }
+          return;
+        }
+        const state = getProjectState(project.id);
+        let wrap = findProjectWrap(project.id);
+        let listEl = null;
+        const contentId = `project-${toDomId(project.id)}-content`;
+        if (!wrap) {
+          wrap = document.createElement('div');
+          wrap.dataset.projectId = project.id;
+          wrap.className = 'project-block';
+          wrap.addEventListener('mouseenter', () => setActiveProject(project.id));
+          wrap.addEventListener('focusin', () => setActiveProject(project.id));
+
+          const heading = document.createElement('div');
+          heading.className = 'project-heading';
+
+          const toggleBtn = document.createElement('button');
+          toggleBtn.type = 'button';
+          toggleBtn.className = 'project-toggle';
+          toggleBtn.innerHTML = `
+            <span class="toggle-caret" aria-hidden="true">${ICONS.chevron}</span>
+            <span class="heading-icon">${ICONS.project}</span>
+            <span class="project-title">Project: ${escapeHtml(project.name || project.id || '')}</span>
+          `;
+          toggleBtn.setAttribute('aria-controls', contentId);
+          toggleBtn.setAttribute('aria-expanded', state.collapsed ? 'false' : 'true');
+          toggleBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const next = !wrap.classList.contains('is-collapsed');
+            setProjectCollapsed(project.id, next);
+          });
+          heading.appendChild(toggleBtn);
+
+          const headingActions = document.createElement('div');
+          headingActions.style.marginLeft = 'auto';
+          headingActions.style.display = 'flex';
+          headingActions.style.gap = '8px';
+          const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+          deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, project));
+          headingActions.appendChild(deleteProjectBtn);
+          heading.appendChild(headingActions);
+
+          wrap.appendChild(heading);
+          listEl = document.createElement('div');
+          listEl.className = 'list';
+          listEl.id = contentId;
+          wrap.appendChild(listEl);
+          layersEl.appendChild(wrap);
+          setProjectCollapsed(project.id, state.collapsed, { store: false, silent: true, element: wrap });
+        } else {
+          const toggleBtn = wrap.querySelector('.project-toggle');
+          if (toggleBtn) {
+            toggleBtn.setAttribute('aria-controls', contentId);
+            const titleEl = toggleBtn.querySelector('.project-title');
+            if (titleEl) {
+              titleEl.textContent = 'Project: ' + (project.name || project.id || '');
+            }
+          }
+          listEl = wrap.querySelector('.list');
+          if (!listEl) {
+            listEl = document.createElement('div');
+            listEl.className = 'list';
+            listEl.id = contentId;
+            wrap.appendChild(listEl);
+          } else {
+            listEl.id = contentId;
+          }
+        }
+
+        state.projectMeta = project;
+        if (listEl) {
+          listEl.innerHTML = '<div>' + tr('Loading projects…') + '</div>';
+        }
+
+        try {
+          const lr = await fetch('/projects/' + encodeURIComponent(project.id) + '/layers');
+          const text = await lr.text();
+          if (!lr.ok) {
+            if (listEl) {
+              listEl.innerHTML = '<div class="error">' + tr('Failed to load layers: HTTP {status}', { status: lr.status }) + '</div>';
+            }
+            showStatus(tr('Details: {text}', { text }), true);
+            return;
+          }
+          const json = JSON.parse(text);
+          if (listEl) {
+            listEl.innerHTML = '';
+          }
+          await renderProjectLayers(project, json, listEl, wrap, { forceConfigReload });
+          setActiveProject(project.id);
+        } catch (err) {
+          if (listEl) {
+            listEl.innerHTML = `<div class="error">${tr('Network error while loading project layers')}</div>`;
+          }
+        }
+      }
+
+      function scheduleProjectRefresh(projectId, { delayMs = 400, forceConfigReload = true } = {}) {
+        if (!projectId) return;
+        const timeout = Math.max(0, Number(delayMs) || 0);
+        setTimeout(() => {
+          ensureProjectBlock(projectId, { forceConfigReload }).catch((err) => {
+            console.warn('scheduleProjectRefresh fallback reload', err);
+            loadLayers({ forceConfigReload: true });
+          });
+        }, timeout);
+      }
+
       async function uploadProjectFile(btn, file) {
         if (!file) return;
         const originalDisabled = btn.disabled;
@@ -2396,7 +2536,20 @@
             extentStates.delete(projectId);
           }
           showStatus('Project uploaded: ' + (projectId || file.name));
-          loadLayers({ forceConfigReload: true });
+          try {
+            const currProjects = await fetch('/projects').then((r) => r.json()).catch(() => []);
+            const matching = projectId && Array.isArray(currProjects)
+              ? currProjects.find((p) => p && (p.id === projectId || p.name === projectId))
+              : null;
+            if (matching) {
+              await ensureProjectBlock(matching.id, { projectMeta: matching });
+            } else {
+              loadLayers({ forceConfigReload: true });
+            }
+          } catch (refreshErr) {
+            console.warn('Partial refresh failed, falling back to full reload', refreshErr);
+            loadLayers({ forceConfigReload: true });
+          }
         } catch (err) {
           showStatus('Network error: ' + err, true);
         } finally {
@@ -2522,7 +2675,11 @@
                   try { row.remove(); } catch {}
                   if (!jobsList.children.length) jobsWrap.style.display = 'none';
                 }, 2000);
-                try { loadLayers({ forceConfigReload: true }); } catch {}
+                if (j.project) {
+                  scheduleProjectRefresh(j.project, { forceConfigReload: true });
+                } else {
+                  try { loadLayers({ forceConfigReload: true }); } catch {}
+                }
               }
             } catch {}
           }, 1200);
@@ -3257,7 +3414,7 @@
                   try { stopBtn.remove(); } catch {}
                   restoreButton();
                   // refresh layer list after foreground job completes
-                  setTimeout(()=>{ try { loadLayers({ forceConfigReload: true }); } catch{} }, 600);
+                  scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true });
                 }
               } catch (e) {
                 // ignorar fallos de red puntuales
@@ -3295,7 +3452,7 @@
             console.error('/cache DELETE non-ok', res.status, data);
           } else {
             showStatus('Cache deleted: ' + layerName);
-              loadLayers({ forceConfigReload: true }); // refresh list
+            scheduleProjectRefresh(projectId, { forceConfigReload: true });
           }
         } catch (err) {
           showStatus('Network error: ' + err, true);
@@ -3335,7 +3492,20 @@
           projectConfigs.delete(project.id);
           removeStoredCollapse(project.id);
           showStatus('Project deleted: ' + (project.name || project.id));
-          loadLayers({ forceConfigReload: true });
+          const wrap = findProjectWrap(project.id);
+          if (wrap) {
+            try { wrap.remove(); } catch {}
+          }
+          if (activeProjectId === project.id) {
+            activeProjectId = null;
+            const firstWrap = layersEl.querySelector('[data-project-id]');
+            if (firstWrap && firstWrap.dataset.projectId) {
+              setActiveProject(firstWrap.dataset.projectId);
+            }
+          }
+          if (!layersEl.querySelector('[data-project-id]')) {
+            loadLayers({ forceConfigReload: true });
+          }
         } catch (err) {
           showStatus('Network error: ' + err, true);
         } finally {

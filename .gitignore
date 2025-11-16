@@ -5,6 +5,7 @@ node_modules/
 logs/
 cache/
 public/assets/
+daemon/
 qgisprojects/
 
 # Runtime files
