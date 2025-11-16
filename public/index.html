@@ -2298,8 +2298,6 @@
             const wrap = document.createElement('div');
             wrap.dataset.projectId = p.id;
             wrap.className = 'project-block';
-            wrap.addEventListener('mouseenter', () => setActiveProject(p.id));
-            wrap.addEventListener('focusin', () => setActiveProject(p.id));
 
             const heading = document.createElement('div');
             heading.className = 'project-heading';
@@ -2320,7 +2318,7 @@
               event.preventDefault();
               event.stopPropagation();
               const next = !wrap.classList.contains('is-collapsed');
-              setProjectCollapsed(p.id, next);
+              setProjectCollapsed(p.id, next, { silent: true });
             });
             heading.appendChild(toggleBtn);
 
@@ -2415,8 +2413,6 @@
           wrap = document.createElement('div');
           wrap.dataset.projectId = project.id;
           wrap.className = 'project-block';
-          wrap.addEventListener('mouseenter', () => setActiveProject(project.id));
-          wrap.addEventListener('focusin', () => setActiveProject(project.id));
 
           const heading = document.createElement('div');
           heading.className = 'project-heading';
@@ -2435,7 +2431,7 @@
             event.preventDefault();
             event.stopPropagation();
             const next = !wrap.classList.contains('is-collapsed');
-            setProjectCollapsed(project.id, next);
+            setProjectCollapsed(project.id, next, { silent: true });
           });
           heading.appendChild(toggleBtn);
 
@@ -3036,14 +3032,16 @@
           d.appendChild(info);
           if (exampleLink) d.appendChild(exampleLink);
           d.appendChild(controls);
+          let focusLayer = null;
           if (layerExtentWgs) {
-            const focusLayer = () => focusMapToExtent(project.id, layerExtentWgs, { sourceKey: 'layer:' + l.name, maxZoom: 22 });
-            d.addEventListener('click', (event) => {
-              const interactive = event.target.closest('a, button, input, select, textarea');
-              if (interactive) return;
-              focusLayer();
-            });
+            focusLayer = () => focusMapToExtent(project.id, layerExtentWgs, { sourceKey: 'layer:' + l.name, maxZoom: 22 });
           }
+          d.addEventListener('click', (event) => {
+            const interactive = event.target.closest('a, button, input, select, textarea');
+            if (interactive) return;
+            setActiveProject(project.id);
+            if (focusLayer) focusLayer();
+          });
           targetEl.appendChild(d);
         });
         if (themes && themes.length) {
@@ -3126,14 +3124,16 @@
             actions.appendChild(viewThemeBtn);
 
             themeRow.appendChild(actions);
+            let focusTheme = null;
             if (themeExtent) {
-              const focusTheme = () => focusMapToExtent(project.id, themeExtent, { sourceKey: 'theme:' + theme.name, maxZoom: 22 });
-              themeRow.addEventListener('click', (event) => {
-                const interactive = event.target.closest('a, button, input, select, textarea');
-                if (interactive) return;
-                focusTheme();
-              });
+              focusTheme = () => focusMapToExtent(project.id, themeExtent, { sourceKey: 'theme:' + theme.name, maxZoom: 22 });
             }
+            themeRow.addEventListener('click', (event) => {
+              const interactive = event.target.closest('a, button, input, select, textarea');
+              if (interactive) return;
+              setActiveProject(project.id);
+              if (focusTheme) focusTheme();
+            });
             targetEl.appendChild(themeRow);
           });
         }
