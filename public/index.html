@@ -1660,6 +1660,10 @@
             focusLayerGroup: null,
             lastFocusKey: null,
             pendingMapFocus: null,
+            mapHolder: null,
+            mapResizeObserver: null,
+            mapVisibilityObserver: null,
+            mapResizeTimer: null,
             defaultMapExtent: null,
             projectViewExtent: null,
             collapsed: storedCollapse != null ? !!storedCollapse : false
@@ -1852,6 +1856,19 @@
           }
           state.focusLayerGroup = null;
           state.pendingMapFocus = null;
+          if (state.mapResizeObserver) {
+            try { state.mapResizeObserver.disconnect(); } catch {}
+            state.mapResizeObserver = null;
+          }
+          if (state.mapVisibilityObserver) {
+            try { state.mapVisibilityObserver.disconnect(); } catch {}
+            state.mapVisibilityObserver = null;
+          }
+          if (state.mapResizeTimer) {
+            clearTimeout(state.mapResizeTimer);
+            state.mapResizeTimer = null;
+          }
+          state.mapHolder = null;
           container.innerHTML = '';
           state.open = false;
           refreshProjectMetaInfo(project, projectMeta, state.config);
@@ -1861,6 +1878,19 @@
         container.style.display = 'block';
         container.innerHTML = '';
         state.open = true;
+        if (state.mapResizeObserver) {
+          try { state.mapResizeObserver.disconnect(); } catch {}
+        }
+        if (state.mapVisibilityObserver) {
+          try { state.mapVisibilityObserver.disconnect(); } catch {}
+        }
+        if (state.mapResizeTimer) {
+          clearTimeout(state.mapResizeTimer);
+          state.mapResizeTimer = null;
+        }
+        state.mapResizeObserver = null;
+        state.mapVisibilityObserver = null;
+        state.mapHolder = null;
 
         const wrapper = document.createElement('div');
         wrapper.style.margin = '12px 0';
@@ -1879,7 +1909,13 @@
         const mapId = `extent-map-${project.id}-${Date.now()}`;
         const mapHolder = document.createElement('div');
         mapHolder.id = mapId;
-        mapHolder.style.height = '340px';
+    mapHolder.style.height = '340px';
+    mapHolder.style.width = '100%';
+    mapHolder.style.minHeight = '240px';
+    mapHolder.style.minWidth = '280px';
+    mapHolder.style.maxWidth = '100%';
+    mapHolder.style.maxHeight = 'calc(100vh - 220px)';
+    mapHolder.style.resize = 'both';
         mapHolder.style.border = '1px solid var(--border)';
         mapHolder.style.borderRadius = '8px';
         mapHolder.style.overflow = 'hidden';
@@ -1931,9 +1967,42 @@
           wheelPxPerZoomLevel: 80
         });
         state.map = map;
+        state.mapHolder = mapHolder;
+        const queueMapInvalidate = () => {
+          if (!state.map) return;
+          if (state.mapResizeTimer) {
+            clearTimeout(state.mapResizeTimer);
+          }
+          state.mapResizeTimer = setTimeout(() => {
+            state.mapResizeTimer = null;
+            try { state.map.invalidateSize(); } catch {}
+          }, 60);
+        };
+        if (typeof ResizeObserver !== 'undefined') {
+          try {
+            const resizeObserver = new ResizeObserver(() => queueMapInvalidate());
+            resizeObserver.observe(mapHolder);
+            state.mapResizeObserver = resizeObserver;
+          } catch {}
+        }
+        if (typeof IntersectionObserver !== 'undefined') {
+          try {
+            const visibilityObserver = new IntersectionObserver((entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                queueMapInvalidate();
+              }
+            }, { rootMargin: '64px' });
+            visibilityObserver.observe(mapHolder);
+            state.mapVisibilityObserver = visibilityObserver;
+          } catch {}
+        } else {
+          queueMapInvalidate();
+        }
         try {
           L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23, attribution:'OSM'}).addTo(map);
         } catch {}
+        queueMapInvalidate();
+        setTimeout(queueMapInvalidate, 160);
 
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);

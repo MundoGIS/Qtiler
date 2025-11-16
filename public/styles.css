@@ -96,7 +96,7 @@ a:focus {
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25);
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1400;
 }
 
 .header-inner {
@@ -742,7 +742,7 @@ a:focus {
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1200;
+  z-index: 2400;
   padding: 18px;
 }
 
