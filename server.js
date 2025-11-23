@@ -8,25 +8,478 @@ import express from "express";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { execFile, spawn } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+// Verificación automática de entorno QGIS/Python
+function verifyQGISEnv() {
+  const qgisBin = process.env.OSGEO4W_BIN || "C:\\QGIS\\bin";
+  const pythonExe = process.env.PYTHON_EXE || "C:\\QGIS\\bin\\python.exe";
+  const qgisPrefix = process.env.QGIS_PREFIX || "C:\\QGIS\\apps\\qgis";
+  let missing = [];
+  if (!fs.existsSync(qgisBin)) missing.push("OSGEO4W_BIN");
+  if (!fs.existsSync(pythonExe)) missing.push("PYTHON_EXE");
+  if (!fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
+  if (missing.length) {
+    console.warn("[Qtiler] Entorno QGIS/Python incompleto. Faltan:", missing.join(", "));
+    console.warn("Ejecuta 'tools/install_qgis_env.ps1' en PowerShell para instalar y configurar automáticamente.");
+  } else {
+    console.log("[Qtiler] Entorno QGIS/Python verificado.");
+  }
+}
+verifyQGISEnv();
 import crypto from "crypto";
 import multer from "multer";
+import AdmZip from "adm-zip";
+import cookieParser from "cookie-parser";
+import { PluginManager } from "./lib/pluginManager.js";
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set("trust proxy", true);
+const dataDir = path.resolve(__dirname, "data");
+const pluginsDir = path.resolve(__dirname, "plugins");
+const viewsDir = path.resolve(__dirname, "views");
+
+app.set("views", viewsDir);
+app.set("view engine", "ejs");
+
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (err) {
+  console.error("Failed to ensure data directory", dataDir, err);
+}
+
+const security = {};
+
+const applySecurityDefaults = () => {
+  security.attachUser = (req, _res, next) => {
+    req.user = null;
+    next();
+  };
+  security.ensureRoles = (_req, _res, next) => next();
+  security.ensureProjectAccess = (_req, _res, next) => next();
+  security.isEnabled = () => false;
+};
+
+applySecurityDefaults();
+
+const requireRoles = (...roles) => (req, res, next) => {
+  try {
+    const output = security.ensureRoles(req, res, next, roles);
+    if (output && typeof output.then === "function") {
+      output.catch(next);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+const requireAdmin = requireRoles("admin");
+
+const ensureProjectAccess = (selector) => (req, res, next) => {
+  try {
+    const projectId = selector(req);
+    const output = security.ensureProjectAccess(req, res, next, projectId);
+    if (output && typeof output.then === "function") {
+      output.catch(next);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess((req) => {
+  const value = req.query ? req.query[param] : null;
+  if (Array.isArray(value)) return value[0];
+  return value || null;
+});
+
+const supportedLanguages = ["en", "es", "sv"];
+const defaultLanguage = "en";
+
+const detectPreferredLanguage = (req) => {
+  if (!req || typeof req.acceptsLanguages !== "function") return defaultLanguage;
+  try {
+    const match = req.acceptsLanguages(...supportedLanguages);
+    if (!match || typeof match !== "string") return defaultLanguage;
+    const normalized = match.split(/[-_]/)[0];
+    return supportedLanguages.includes(normalized) ? normalized : defaultLanguage;
+  } catch (err) {
+    console.warn("Language negotiation failed", { error: String(err?.message || err) });
+    return defaultLanguage;
+  }
+};
+
+const renderPage = (req, res, viewName, locals = {}, options = {}) => {
+  const { status = 200, fallbackPath = null } = options;
+  const payload = {
+    pageLang: detectPreferredLanguage(req),
+    user: req?.user || null,
+    authPluginInstallUrl: '/plugins/auth-admin?missing=QtilerAuth',
+    ...locals
+  };
+
+  res.status(status);
+  res.render(viewName, payload, (err, html) => {
+    if (err) {
+      const errorStatus = status >= 400 ? status : 500;
+      console.warn("Failed to render view", { viewName, error: String(err?.message || err) });
+      if (fallbackPath) {
+        return res.status(status).sendFile(fallbackPath, (fileErr) => {
+          if (!fileErr) return;
+          console.error("Fallback static page load failed", { fallbackPath, error: String(fileErr?.message || fileErr) });
+          if (!res.headersSent) {
+            res.status(errorStatus).send("Failed to load page");
+          }
+        });
+      }
+      if (!res.headersSent) {
+        res.status(errorStatus).send("Failed to render page");
+      }
+      return;
+    }
+    return res.send(html);
+  });
+};
+
+const pluginManager = new PluginManager({ app, baseDir: pluginsDir, dataDir, security });
+app.locals.pluginManager = pluginManager;
+
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
+app.use((req, res, next) => security.attachUser(req, res, next));
 
-// add: servir carpeta pública
+app.use("/auth", (req, res, next) => {
+  if (security.isEnabled && security.isEnabled()) {
+    return next();
+  }
+  if (req.method === "OPTIONS") {
+    res.set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    const requestedHeaders = req.get("Access-Control-Request-Headers");
+    if (requestedHeaders) {
+      res.set("Access-Control-Allow-Headers", requestedHeaders);
+    }
+    return res.status(204).end();
+  }
+  return res.status(501).json(authPluginRequiredResponse);
+});
+
+// add: servir carpeta pública (sin index automático)
 const publicDir = path.join(__dirname, "public");
-app.use(express.static(publicDir));
+const indexPagePath = path.join(publicDir, "index.html");
+const loginPagePath = path.join(publicDir, "login.html");
+const accessDeniedPagePath = path.join(publicDir, "access-denied.html");
+const portalPagePath = path.join(publicDir, "portal.html");
+const guidePagePath = path.join(publicDir, "guide.html");
+const viewerPagePath = path.join(publicDir, "viewer.html");
+const projectAccessPath = path.join(dataDir, "QtilerAuth", "project-access.json");
+const legacyProjectAccessPaths = [
+  path.join(dataDir, "project-access.json"),
+  path.join(dataDir, "auth", "project-access.json")
+];
+const authUserSnapshotPaths = [
+  path.join(dataDir, "auth-users.json"),
+  path.join(dataDir, "auth", "auth-users.json"),
+  path.join(dataDir, "QtilerAuth", "auth-users.json")
+];
+const authPluginInstallUrl = "/plugins/auth-admin?missing=QtilerAuth";
+const authPluginRequiredResponse = {
+  error: "auth_plugin_disabled",
+  message: "Authentication requires the QtilerAuth plugin to be installed.",
+  installUrl: authPluginInstallUrl
+};
 
-// opcional: asegurar que GET / devuelva index.html
+const authAdminUiCandidates = [
+  path.join(pluginsDir, "QtilerAuth", "admin-ui"),
+  path.join(pluginsDir, "qtilerauth", "admin-ui"),
+  path.join(pluginsDir, "auth", "admin-ui"),
+  path.join(publicDir, "auth-admin")
+];
+
+const resolveAuthAdminUiDir = () => {
+  for (const candidate of authAdminUiCandidates) {
+    try {
+      const indexPath = path.join(candidate, "index.html");
+      if (fs.existsSync(indexPath)) {
+        return candidate;
+      }
+    } catch (err) {
+      console.warn("Auth admin UI path check failed", { candidate, error: String(err) });
+    }
+  }
+  return null;
+};
+
+const sendAccessDenied = (req, res) => {
+  renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403, fallbackPath: accessDeniedPagePath });
+};
+
+const sendLoginPage = (req, res) => {
+  renderPage(req, res, "login", { activeNav: "login" }, { status: 401, fallbackPath: loginPagePath });
+};
+
+const ensureAdminForUi = (req, res, next) => {
+  if (!security.isEnabled()) {
+    const availableDir = resolveAuthAdminUiDir();
+    const normalizedPublic = path.resolve(publicDir).toLowerCase();
+    const normalizedAvailable = availableDir ? path.resolve(availableDir).toLowerCase() : null;
+    if (normalizedAvailable && normalizedAvailable.startsWith(normalizedPublic)) {
+      return next();
+    }
+    return res.status(501).send("Auth plugin is not enabled");
+  }
+  if (!req.user) {
+    return sendLoginPage(req, res);
+  }
+  if (req.user.role !== "admin") {
+    return sendAccessDenied(req, res);
+  }
+  return next();
+};
+
+const sendAuthAdminPage = (res) => {
+  const dir = resolveAuthAdminUiDir();
+  if (!dir) {
+    return res.status(501).send("Auth admin UI not installed");
+  }
+  const filePath = path.join(dir, "index.html");
+  res.sendFile(filePath, (err) => {
+    if (!err) return;
+    console.warn("Auth admin UI load failed", { filePath, code: err?.code, message: err?.message });
+    if (err.code === "ENOENT") {
+      res.status(501).send("Auth admin UI not installed");
+    } else {
+      res.status(500).send("Failed to load auth admin UI");
+    }
+  });
+};
+
+const serveAuthAdminStatic = (req, res, next) => {
+  const dir = resolveAuthAdminUiDir();
+  if (!dir) {
+    return res.status(501).send("Auth admin UI not installed");
+  }
+  const staticMiddleware = express.static(dir);
+  staticMiddleware(req, res, (err) => {
+    if (err && err.code === "ENOENT") {
+      return res.status(404).end();
+    }
+    return next(err);
+  });
+};
+
+app.get("/plugins/auth-admin", ensureAdminForUi, (_req, res) => {
+  sendAuthAdminPage(res);
+});
+
+app.use("/plugins/auth-admin/assets", ensureAdminForUi, serveAuthAdminStatic);
+
+app.use("/plugins/auth-admin", ensureAdminForUi, (req, res, next) => {
+  if (!req.path || req.path === "/" || req.path === "") {
+    return next();
+  }
+  return serveAuthAdminStatic(req, res, next);
+});
+
+const sendPortalPage = (req, res) => {
+  renderPage(req, res, "portal", { activeNav: "portal" }, { fallbackPath: portalPagePath });
+};
+
 app.get("/", (req, res) => {
-  res.sendFile(path.join(publicDir, "index.html"));
+  if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
+    return renderPage(req, res, "index", { activeNav: "dashboard" }, { fallbackPath: indexPagePath });
+  }
+  return sendPortalPage(req, res);
+});
+
+app.get("/index.html", (req, res) => {
+  if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
+    return renderPage(req, res, "index", { activeNav: "dashboard" }, { fallbackPath: indexPagePath });
+  }
+  return res.redirect(302, "/");
+});
+
+app.get(["/portal", "/portal.html"], (req, res) => {
+  return sendPortalPage(req, res);
+});
+
+app.get(["/login", "/login.html"], (req, res) => {
+  if (!security.isEnabled()) {
+    return res.redirect(authPluginInstallUrl);
+  }
+  if (req.user && req.user.role === "admin") {
+    return res.redirect("/index.html");
+  }
+  return sendLoginPage(req, res);
+});
+
+app.get(["/guide", "/guide.html"], (req, res) => {
+  return renderPage(req, res, "guide", { activeNav: "guide" }, { fallbackPath: guidePagePath });
+});
+
+app.get(["/viewer", "/viewer.html"], (req, res) => {
+  return renderPage(req, res, "viewer", { activeNav: "viewer" }, { fallbackPath: viewerPagePath });
+});
+
+app.get(["/access-denied", "/access-denied.html"], (req, res) => {
+  return renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403, fallbackPath: accessDeniedPagePath });
+});
+
+app.use(express.static(publicDir, { index: false }));
+
+app.get("/plugins", requireAdmin, async (_req, res) => {
+  try {
+    let installed = [];
+    try {
+      const entries = await fs.promises.readdir(pluginsDir, { withFileTypes: true });
+      installed = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    } catch (dirErr) {
+      if (dirErr.code !== "ENOENT") throw dirErr;
+    }
+    const enabled = pluginManager.listEnabled();
+    res.json({ installed, enabled });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_list_failed", details: String(err) });
+  }
+});
+
+app.delete("/plugins/:name", requireAdmin, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  const pluginPath = path.join(pluginsDir, pluginName);
+  const pluginDataPath = path.join(dataDir, pluginName);
+  const exists = fs.existsSync(pluginPath);
+  const wasEnabled = pluginManager.listEnabled().includes(pluginName);
+  try {
+    if (wasEnabled) {
+      await pluginManager.disablePlugin(pluginName);
+    }
+  } catch (disableErr) {
+    return res.status(500).json({ error: "plugin_disable_failed", details: String(disableErr?.message || disableErr) });
+  }
+
+  let removedFiles = false;
+  if (exists) {
+    try {
+      await removeRecursive(pluginPath);
+      removedFiles = true;
+    } catch (rmErr) {
+      return res.status(500).json({ error: "plugin_remove_failed", details: String(rmErr?.message || rmErr) });
+    }
+  }
+
+  let removedData = false;
+  if (req.query.keepData !== "1") {
+    try {
+      await removeRecursive(pluginDataPath);
+      removedData = true;
+    } catch (rmDataErr) {
+      if (rmDataErr?.code !== "ENOENT") {
+        return res.status(500).json({ error: "plugin_data_remove_failed", details: String(rmDataErr?.message || rmDataErr) });
+      }
+    }
+  }
+
+  if (!wasEnabled && !exists) {
+    return res.status(404).json({ error: "plugin_not_found" });
+  }
+
+  if (pluginManager.listEnabled().length === 0) {
+    applySecurityDefaults();
+  }
+
+  res.json({
+    status: "uninstalled",
+    plugin: {
+      name: pluginName,
+      wasEnabled,
+      removedFiles,
+      removedData
+    }
+  });
+});
+
+app.post("/plugins/upload", requireAdmin, (req, res) => {
+  pluginUpload.single("plugin")(req, res, async (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "plugin_archive_too_large" });
+      }
+      if (err.code === "UNSUPPORTED_PLUGIN_ARCHIVE") {
+        return res.status(400).json({ error: "unsupported_plugin_archive" });
+      }
+      return res.status(500).json({ error: "plugin_upload_failed", details: String(err) });
+    }
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "plugin_archive_required" });
+    }
+
+    let tempDir = null;
+    try {
+      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-plugin-"));
+      const extractDir = path.join(tempDir, "extract");
+      await fs.promises.mkdir(extractDir, { recursive: true });
+
+      try {
+        const zip = new AdmZip(file.buffer);
+        zip.extractAllTo(extractDir, true);
+      } catch (zipErr) {
+        throw Object.assign(new Error("plugin_archive_invalid"), { statusCode: 400, code: "PLUGIN_ARCHIVE_INVALID", details: zipErr.message });
+      }
+
+      const pluginRoot = await resolvePluginRoot(extractDir);
+
+      try {
+        await fs.promises.access(path.join(pluginRoot, "index.js"), fs.constants.R_OK);
+      } catch {
+        throw Object.assign(new Error("plugin_entry_missing"), { statusCode: 400, code: "PLUGIN_ENTRY_MISSING" });
+      }
+
+      const provided = sanitizePluginName(req.body?.pluginName || req.body?.name || "");
+      const inferredName = await detectPluginName(pluginRoot, provided || path.basename(pluginRoot));
+      const pluginName = sanitizePluginName(inferredName || provided || path.basename(pluginRoot) || "");
+      if (!pluginName) {
+        throw Object.assign(new Error("plugin_name_required"), { statusCode: 400, code: "PLUGIN_NAME_REQUIRED" });
+      }
+
+      if (pluginManager.listEnabled().includes(pluginName)) {
+        throw Object.assign(new Error("plugin_already_enabled"), { statusCode: 409, code: "PLUGIN_ALREADY_ENABLED" });
+      }
+
+      const destination = path.join(pluginsDir, pluginName);
+      await removeRecursive(destination);
+      await copyRecursive(pluginRoot, destination);
+
+      try {
+        await pluginManager.enablePlugin(pluginName);
+      } catch (loadErr) {
+        await removeRecursive(destination).catch(() => {});
+        throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
+      }
+
+      return res.status(201).json({ status: "enabled", plugin: { name: pluginName } });
+    } catch (uploadErr) {
+      const statusCode = uploadErr.statusCode && Number.isInteger(uploadErr.statusCode) ? uploadErr.statusCode : 500;
+      const code = uploadErr.code || "PLUGIN_UPLOAD_FAILED";
+      const details = uploadErr.details || uploadErr.message || String(uploadErr);
+      return res.status(statusCode).json({ error: code, details });
+    } finally {
+      if (tempDir) {
+        await removeRecursive(tempDir).catch(() => {});
+      }
+    }
+  });
 });
 
 const cacheDir = path.resolve(__dirname, "cache");
@@ -1761,6 +2214,98 @@ const sanitizeProjectId = (value) => {
     .toLowerCase();
 };
 
+const sanitizePluginName = (value) => {
+  if (!value) return "";
+  return String(value)
+    .trim()
+    .replace(/[^A-Za-z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+};
+
+const resolvePluginRoot = async (dir) => {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const candidateDirs = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith("__MACOSX"));
+  const meaningfulFiles = entries.filter((entry) => entry.isFile() && !entry.name.startsWith("._"));
+  for (const entry of candidateDirs) {
+    const maybeRoot = path.join(dir, entry.name);
+    try {
+      await fs.promises.access(path.join(maybeRoot, "index.js"), fs.constants.R_OK);
+      return maybeRoot;
+    } catch {
+      // continue exploring other directories
+    }
+  }
+  if (candidateDirs.length === 1 && meaningfulFiles.length === 0) {
+    return path.join(dir, candidateDirs[0].name);
+  }
+  return dir;
+};
+
+const readJsonIfExists = async (filePath) => {
+  try {
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const detectPluginName = async (rootDir, fallbackName = "") => {
+  const candidates = [];
+  const pluginManifest = await readJsonIfExists(path.join(rootDir, "plugin.json"));
+  if (pluginManifest?.name) candidates.push(pluginManifest.name);
+  const packageJson = await readJsonIfExists(path.join(rootDir, "package.json"));
+  if (packageJson?.name) candidates.push(packageJson.name);
+  if (fallbackName) candidates.push(fallbackName);
+  for (const candidate of candidates) {
+    const sanitized = sanitizePluginName(candidate);
+    if (sanitized) return sanitized;
+  }
+  return null;
+};
+
+const copyRecursive = async (source, destination) => {
+  const stats = await fs.promises.stat(source);
+  if (stats.isDirectory()) {
+    await fs.promises.mkdir(destination, { recursive: true });
+    const entries = await fs.promises.readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      await copyRecursive(path.join(source, entry.name), path.join(destination, entry.name));
+    }
+    return;
+  }
+  if (stats.isFile()) {
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    await fs.promises.copyFile(source, destination);
+  }
+};
+
+const removeRecursive = async (targetPath) => {
+  await fs.promises.rm(targetPath, { recursive: true, force: true });
+};
+
+const allowedPluginExtensions = new Set([".zip"]);
+const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
+const pluginUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: Number.isFinite(defaultPluginUploadLimit) && defaultPluginUploadLimit > 0
+      ? defaultPluginUploadLimit
+      : 52428800
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (!allowedPluginExtensions.has(ext)) {
+      const err = new Error("unsupported_plugin_archive");
+      err.code = "UNSUPPORTED_PLUGIN_ARCHIVE";
+      return cb(err);
+    }
+    cb(null, true);
+  }
+});
+
 // Detectar ejecutable python (permite override por .env)
 const pythonExe = process.env.PYTHON_EXE || path.join(process.env.OSGEO4W_BIN || "C:\\OSGeo4W\\bin", "python.exe");
 
@@ -1779,17 +2324,21 @@ const makeChildEnv = () => {
 const o4wBatch = process.env.O4W_BATCH || path.join(process.env.OSGEO4W_BIN || "C:\\OSGeo4W\\bin", "o4w_env.bat");
 
 const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
-  // Ejecutar el batch pero suprimir su stdout/stderr (">nul 2>&1") para evitar el ruido
-  // y luego ejecutar python en la misma cmd para heredar el entorno.
-  // Usamos && para que python solo se ejecute si el batch se ejecuta correctamente.
+  // Ejecutar el batch (o4w_env) y luego python en la misma cmd para heredar el entorno.
+  // Por defecto suprimimos la salida del batch para mantener los logs limpios.
+  // Si se exporta la variable de entorno DEBUG_O4W=1, mostramos la salida del batch
+  // y registramos el comando para debugging.
+  const showO4W = String(process.env.DEBUG_O4W || '') === '1';
+  const o4wPart = showO4W ? `"${o4wBatch}"` : `"${o4wBatch}" >nul 2>&1`;
   const cmdParts = [
-    `"${o4wBatch}" >nul 2>&1`,
+    o4wPart,
     "&&",
     `"${pythonExe}"`,
     `"${script}"`,
     ...args.map(a => `"${String(a)}"`)
   ];
   const cmd = cmdParts.join(" ");
+  if (showO4W) console.log('[DEBUG] runPythonViaOSGeo4W cmd:', cmd);
   return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
 };
 
@@ -1821,6 +2370,302 @@ const listProjects = () => {
   } catch (e) { return []; }
 };
 const findProjectById = (id) => listProjects().find(p => p.id === id);
+
+const readProjectAccessSnapshot = () => {
+  const createDefaultSnapshot = () => ({ projects: {} });
+
+  const readSnapshotFrom = (filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return null;
+      }
+      const raw = fs.readFileSync(filePath, "utf8");
+      if (!raw) return createDefaultSnapshot();
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (err) {
+      if (err?.code !== "ENOENT") {
+        console.warn("Failed to read project access snapshot", err);
+      }
+    }
+    return null;
+  };
+
+  const snapshot = readSnapshotFrom(projectAccessPath);
+  if (snapshot) {
+    return snapshot;
+  }
+
+  for (const legacyPath of legacyProjectAccessPaths) {
+    const legacySnapshot = readSnapshotFrom(legacyPath);
+    if (!legacySnapshot) continue;
+    try {
+      fs.mkdirSync(path.dirname(projectAccessPath), { recursive: true });
+      fs.writeFileSync(projectAccessPath, JSON.stringify(legacySnapshot, null, 2), "utf8");
+      if (legacyPath !== projectAccessPath) {
+        console.log("Migrated project access snapshot", { from: legacyPath, to: projectAccessPath });
+      }
+    } catch (migrationErr) {
+      console.warn("Failed to migrate legacy project access snapshot", migrationErr);
+    }
+    return legacySnapshot;
+  }
+
+  return createDefaultSnapshot();
+};
+
+const persistProjectAccessSnapshot = (snapshot) => {
+  if (!snapshot || typeof snapshot !== "object") return;
+  try {
+    fs.mkdirSync(path.dirname(projectAccessPath), { recursive: true });
+    fs.writeFileSync(projectAccessPath, JSON.stringify(snapshot, null, 2), "utf8");
+  } catch (err) {
+    throw new Error(`Failed to write project access snapshot: ${err?.message || err}`);
+  }
+  for (const legacyPath of legacyProjectAccessPaths) {
+    try {
+      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+      fs.writeFileSync(legacyPath, JSON.stringify(snapshot, null, 2), "utf8");
+    } catch (legacyErr) {
+      if (legacyErr?.code !== "ENOENT") {
+        console.warn("Failed to update legacy project access snapshot", { legacyPath, error: String(legacyErr?.message || legacyErr) });
+      }
+    }
+  }
+};
+
+const removeProjectAccessEntry = (projectId) => {
+  if (!projectId) return;
+  const snapshot = readProjectAccessSnapshot();
+  if (!snapshot || typeof snapshot !== "object") return;
+  if (!snapshot.projects || typeof snapshot.projects !== "object") {
+    snapshot.projects = {};
+  }
+  if (!Object.prototype.hasOwnProperty.call(snapshot.projects, projectId)) return;
+  delete snapshot.projects[projectId];
+  persistProjectAccessSnapshot(snapshot);
+};
+
+const purgeProjectFromAuthUsers = (projectId) => {
+  if (!projectId) return;
+  for (const filePath of authUserSnapshotPaths) {
+    let changed = false;
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const raw = fs.readFileSync(filePath, "utf8");
+      if (!raw) continue;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || !Array.isArray(data.users)) continue;
+      for (const user of data.users) {
+        if (!Array.isArray(user?.projects)) continue;
+        const filtered = user.projects.filter((id) => id !== projectId);
+        if (filtered.length !== user.projects.length) {
+          user.projects = filtered;
+          changed = true;
+        }
+      }
+      if (changed) {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+      }
+    } catch (err) {
+      if (err?.code === "ENOENT") continue;
+      throw new Error(`Failed to update auth users at ${filePath}: ${err?.message || err}`);
+    }
+  }
+};
+
+const removeProjectLogs = (projectId) => {
+  if (!projectId) return;
+  const candidates = [
+    path.join(logsDir, `project-${projectId}.log`),
+    path.join(logsDir, `${projectId}.log`)
+  ];
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      if (err?.code === "ENOENT") continue;
+      throw new Error(`Failed to remove project log ${filePath}: ${err?.message || err}`);
+    }
+  }
+};
+
+const isProjectPublic = (snapshot, projectId) => {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  const projects = snapshot.projects && typeof snapshot.projects === "object" ? snapshot.projects : {};
+  const entry = projects[projectId];
+  return !!(entry && typeof entry === "object" && entry.public === true);
+};
+
+const deriveProjectAccess = (snapshot, user, projectId) => {
+  const projects = snapshot && typeof snapshot === "object" ? snapshot.projects : null;
+  const entry = projects && typeof projects === "object" ? projects[projectId] : null;
+  const accessEntry = entry && typeof entry === "object" ? entry : {};
+  if (user && user.role === "admin") {
+    return {
+      public: accessEntry.public === true,
+      viaAssignment: true,
+      viaRole: true,
+      viaUser: false,
+      allowed: true,
+      admin: true
+    };
+  }
+  const userProjects = Array.isArray(user?.projects) ? user.projects : [];
+  const viaAssignment = userProjects.includes(projectId);
+  const viaUser = user?.id && Array.isArray(accessEntry.allowedUsers) && accessEntry.allowedUsers.includes(user.id);
+  const viaRole = user?.role && Array.isArray(accessEntry.allowedRoles) && accessEntry.allowedRoles.includes(user.role);
+  const publicAccess = accessEntry.public === true;
+  const allowed = publicAccess || viaAssignment || viaUser || viaRole;
+  return {
+    public: publicAccess,
+    viaAssignment,
+    viaRole,
+    viaUser,
+    allowed
+  };
+};
+
+const cloneIndexEntry = (entry) => {
+  if (!entry || typeof entry !== "object") return null;
+  try {
+    return JSON.parse(JSON.stringify(entry));
+  } catch {
+    return { ...entry };
+  }
+};
+
+const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
+  if (!project) return null;
+  const projectId = project.id;
+  const indexData = loadProjectIndexData(projectId);
+  const rawLayers = Array.isArray(indexData.layers) ? indexData.layers : [];
+  const layers = [];
+  const themes = [];
+  for (const entry of rawLayers) {
+    if (!entry || !entry.name) continue;
+    const kindToken = typeof entry.kind === "string" ? entry.kind.toLowerCase() : (entry.theme ? "theme" : "layer");
+    const clone = cloneIndexEntry(entry) || {};
+    clone.kind = kindToken;
+    clone.projectId = projectId;
+    if (kindToken === "theme") {
+      themes.push(clone);
+    } else {
+      layers.push(clone);
+    }
+  }
+  const config = readProjectConfig(projectId);
+  const projectMeta = config && typeof config === "object" && config.project ? config.project : null;
+  const displayName = projectMeta?.title || projectMeta?.name || project.name || projectId;
+  const summary = projectMeta?.summary || projectMeta?.description || null;
+  const wmtsUrl = `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
+  const cacheUpdatedAt = indexData.updated || indexData.modified || indexData.generatedAt || indexData.created || null;
+  const accessInfo = access && typeof access === "object" ? access : { public: true, allowed: true };
+  return {
+    id: projectId,
+    name: project.name,
+    title: displayName,
+    summary,
+    public: accessInfo.public === true,
+    wmtsUrl,
+    cacheUpdatedAt,
+    layers,
+    themes,
+    access: {
+      public: accessInfo.public === true,
+      viaAssignment: accessInfo.viaAssignment === true,
+      viaRole: accessInfo.viaRole === true,
+      viaUser: accessInfo.viaUser === true,
+      allowed: accessInfo.allowed !== false
+    }
+  };
+};
+
+const buildPublicProjectsListing = () => {
+  const securityEnabled = security.isEnabled();
+  const snapshot = securityEnabled ? readProjectAccessSnapshot() : { projects: {} };
+  const projects = listProjects();
+  const visible = [];
+  for (const project of projects) {
+    if (securityEnabled && !isProjectPublic(snapshot, project.id)) continue;
+    const accessInfo = securityEnabled
+      ? { ...deriveProjectAccess(snapshot, null, project.id), public: true, allowed: true }
+      : { public: true, allowed: true };
+    const descriptor = buildProjectDescriptor(project, { snapshot, access: accessInfo });
+    if (descriptor) visible.push(descriptor);
+  }
+  return { projects: visible, generatedAt: new Date().toISOString() };
+};
+
+const resolvePublicProject = (projectId) => {
+  const securityEnabled = security.isEnabled();
+  const snapshot = securityEnabled ? readProjectAccessSnapshot() : { projects: {} };
+  const project = findProjectById(projectId);
+  if (!project) return null;
+  if (securityEnabled && !isProjectPublic(snapshot, project.id)) {
+    return null;
+  }
+  const accessInfo = securityEnabled
+    ? { ...deriveProjectAccess(snapshot, null, project.id), public: true, allowed: true }
+    : { public: true, allowed: true };
+  return buildProjectDescriptor(project, { snapshot, access: accessInfo });
+};
+
+app.get("/public/projects", (_req, res) => {
+  try {
+    const listing = buildPublicProjectsListing();
+    res.json(listing);
+  } catch (err) {
+    console.error("Failed to build public project listing", err);
+    res.status(500).json({ error: "public_projects_failed", details: String(err?.message || err) });
+  }
+});
+
+app.get("/public/projects/:id", (req, res) => {
+  try {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) {
+      return res.status(400).json({ error: "project_id_required" });
+    }
+    const descriptor = resolvePublicProject(projectId);
+    if (!descriptor) {
+      return res.status(404).json({ error: "project_not_found_or_private" });
+    }
+    res.json({ project: descriptor });
+  } catch (err) {
+    console.error("Failed to resolve public project", err);
+    res.status(500).json({ error: "public_project_failed", details: String(err?.message || err) });
+  }
+});
+
+app.get("/public/my-projects", (req, res) => {
+  if (!security.isEnabled()) {
+    return res.status(501).json({ error: "auth_disabled" });
+  }
+  if (!req.user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+  try {
+    const snapshot = readProjectAccessSnapshot();
+    const projects = listProjects();
+    const visible = [];
+    for (const project of projects) {
+      const accessInfo = deriveProjectAccess(snapshot, req.user, project.id);
+      if (!accessInfo.allowed && req.user.role !== "admin") continue;
+      const descriptor = buildProjectDescriptor(project, { snapshot, access: accessInfo });
+      if (descriptor) visible.push(descriptor);
+    }
+    res.json({ projects: visible, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("Failed to build user project listing", err);
+    res.status(500).json({ error: "my_projects_failed", details: String(err?.message || err) });
+  }
+});
 
 const initializeProjectSchedules = () => {
   const projects = listProjects();
@@ -1876,11 +2721,11 @@ const startScheduleHeartbeat = () => {
 };
 
 // listar proyectos
-app.get("/projects", (req, res) => {
+app.get("/projects", requireAdmin, (req, res) => {
   return res.json(listProjects());
 });
 
-app.post("/projects", (req, res) => {
+app.post("/projects", requireAdmin, (req, res) => {
   projectUpload.single("project")(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -1918,7 +2763,7 @@ app.post("/projects", (req, res) => {
   });
 });
 
-app.delete("/projects/:id", (req, res) => {
+app.delete("/projects/:id", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   if (!projectId) {
     return res.status(400).json({ error: "project_id_required" });
@@ -1962,11 +2807,32 @@ app.delete("/projects/:id", (req, res) => {
     }
   }
 
+  try {
+    removeProjectAccessEntry(proj.id);
+  } catch (err) {
+    console.error("Failed to remove project access entry", proj.id, err);
+    return res.status(500).json({ error: "project_access_cleanup_failed", details: String(err?.message || err) });
+  }
+
+  try {
+    purgeProjectFromAuthUsers(proj.id);
+  } catch (err) {
+    console.error("Failed to purge project assignment", proj.id, err);
+    return res.status(500).json({ error: "project_auth_cleanup_failed", details: String(err?.message || err) });
+  }
+
+  try {
+    removeProjectLogs(proj.id);
+  } catch (err) {
+    console.error("Failed to remove project logs", proj.id, err);
+    return res.status(500).json({ error: "project_log_cleanup_failed", details: String(err?.message || err) });
+  }
+
   return res.json({ status: "deleted", id: proj.id, cacheRemoved });
 });
 
 // capas por proyecto
-app.get("/projects/:id/layers", (req, res) => {
+app.get("/projects/:id/layers", requireAdmin, (req, res) => {
   const proj = findProjectById(req.params.id);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
   const script = path.join(pythonDir, "extract_info.py");
@@ -1989,7 +2855,7 @@ app.get("/projects/:id/layers", (req, res) => {
   });
 });
 
-app.get("/projects/:id/config", (req, res) => {
+app.get("/projects/:id/config", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -1997,7 +2863,7 @@ app.get("/projects/:id/config", (req, res) => {
   return res.json(config);
 });
 
-app.patch("/projects/:id/config", (req, res) => {
+app.patch("/projects/:id/config", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -2011,7 +2877,7 @@ app.patch("/projects/:id/config", (req, res) => {
   }
 });
 
-app.get("/projects/:id/cache/project", (req, res) => {
+app.get("/projects/:id/cache/project", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -2021,7 +2887,7 @@ app.get("/projects/:id/cache/project", (req, res) => {
   return res.json({ current, last });
 });
 
-app.post("/projects/:id/cache/project", (req, res) => {
+app.post("/projects/:id/cache/project", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -2072,7 +2938,7 @@ app.post("/projects/:id/cache/project", (req, res) => {
 });
 
 // /layers -> ejecutar script extract_info.py usando o4w_env.bat
-app.get("/layers", (req, res) => {
+app.get("/layers", requireAdmin, (req, res) => {
   const script = path.join(pythonDir, "extract_info.py");
   console.log("GET /layers -> launching python:", pythonExe, script);
   const proc = runPythonViaOSGeo4W(script, []);
@@ -2124,7 +2990,7 @@ const activeKeys = new Set(); // key = `${project||''}:${layer}`
 const JOB_MAX = parseInt(process.env.JOB_MAX || "4", 10); // máximo de procesos concurrentes
 
 // generate-cache -> spawn para proceso largo (pasar args)
-app.post("/generate-cache", (req, res) => {
+app.post("/generate-cache", requireAdmin, (req, res) => {
   const {
     project: projectId,
     layer,
@@ -2412,7 +3278,7 @@ app.post("/generate-cache", (req, res) => {
 });
 
 // Abort / stop job
-app.delete("/generate-cache/:id", (req, res) => {
+app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "id required" });
   const job = runningJobs.get(id);
@@ -2459,7 +3325,7 @@ app.delete("/generate-cache/:id", (req, res) => {
 });
 
 // opcional: endpoint para listar jobs activos
-app.get("/generate-cache/running", (req, res) => {
+app.get("/generate-cache/running", requireAdmin, (req, res) => {
   const list = Array.from(runningJobs.values())
     .filter(j => (j.status || "running") === "running")
     .map(j => ({
@@ -2478,7 +3344,7 @@ app.get("/generate-cache/running", (req, res) => {
 });
 
 // Obtener detalles de un job (estado y logs)
-app.get("/generate-cache/:id", (req, res) => {
+app.get("/generate-cache/:id", requireAdmin, (req, res) => {
   const id = req.params.id;
   const job = runningJobs.get(id);
   if (!job) return res.status(404).json({ error: "job not found" });
@@ -2504,33 +3370,542 @@ app.get("/generate-cache/:id", (req, res) => {
   });
 });
 
-// servir tiles
-// nuevo: ruta con proyecto
-app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", (req, res) => {
-  const { project, theme, z, x, y } = req.params;
-  const file = path.join(cacheDir, project, "_themes", theme, z, x, `${y}.png`);
-  if (fs.existsSync(file)) res.sendFile(file);
-  else res.status(404).send("Tile no encontrada");
-});
+// --- WMTS helpers -------------------------------------------------------
 
-app.get("/wmts/:project/:layer/:z/:x/:y.png", (req, res) => {
-  const { project, layer, z, x, y } = req.params;
-  const file = path.join(cacheDir, project, layer, z, x, `${y}.png`);
-  if (fs.existsSync(file)) res.sendFile(file);
-  else res.status(404).send("Tile no encontrada");
-});
+const WEB_MERCATOR_EXTENT = 20037508.342789244;
+const TILE_SIZE_PX = 256;
+const DEFAULT_WMTS_STYLE = "default";
 
-// compat legado: sin proyecto
-app.get("/wmts/:layer/:z/:x/:y.png", (req, res) => {
-  const { layer, z, x, y } = req.params;
-  const file = path.join(cacheDir, layer, z, x, `${y}.png`);
-  if (fs.existsSync(file)) res.sendFile(file);
-  else res.status(404).send("Tile no encontrada");
-});
+const normalizeIdentifier = (value, fallback = "id") => {
+  const base = (value == null ? "" : String(value)).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  const cleaned = base.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (!cleaned) return fallback;
+  const startsWithLetter = /^[A-Za-z]/.test(cleaned);
+  return startsWithLetter ? cleaned : `${fallback}_${cleaned}`;
+};
+
+const ensureUniqueIdentifier = (candidate, used, fallbackPrefix = "id") => {
+  let finalId = candidate && !used.has(candidate) ? candidate : null;
+  if (!finalId) {
+    let index = 1;
+    const prefix = candidate || fallbackPrefix;
+    while (!finalId || used.has(finalId)) {
+      finalId = `${prefix}_${index}`;
+      index += 1;
+    }
+  }
+  used.add(finalId);
+  return finalId;
+};
+
+const toCrsUrn = (crs) => {
+  const trimmed = (crs || "").trim();
+  if (!trimmed) return "urn:ogc:def:crs:EPSG::3857";
+  if (/^urn:ogc:def:crs:/i.test(trimmed)) return trimmed;
+  const normalized = trimmed.toUpperCase().replace(/\s+/g, "");
+  if (normalized.startsWith("EPSG:")) {
+    const code = normalized.split(":")[1];
+    return `urn:ogc:def:crs:EPSG::${code}`;
+  }
+  return `urn:ogc:def:crs:${normalized.replace(":", "::")}`;
+};
+
+const normalizeTileMatrixSet = (rawSet, context, usedIds) => {
+  const tileWidth = Number(rawSet?.tile_width) || TILE_SIZE_PX;
+  const tileHeight = Number(rawSet?.tile_height) || TILE_SIZE_PX;
+  const topLeft = Array.isArray(rawSet?.top_left_corner) && rawSet.top_left_corner.length === 2
+    ? [Number(rawSet.top_left_corner[0]), Number(rawSet.top_left_corner[1])]
+    : [0, 0];
+  const supportedCrs = rawSet?.supported_crs || context?.tileCrs || "EPSG:3857";
+  const rawId = rawSet?.id || `${context?.project || "proj"}_${context?.layer || "layer"}`;
+  const initialId = normalizeIdentifier(rawId, "set");
+  const id = ensureUniqueIdentifier(initialId, usedIds, "set");
+
+  const matrices = Array.isArray(rawSet?.matrices) ? rawSet.matrices.slice() : [];
+  matrices.sort((a, b) => Number(a?.z ?? 0) - Number(b?.z ?? 0));
+  const usedMatrixIdentifiers = new Set();
+  const normalizedMatrices = matrices.map((entry, idx) => {
+    const sourceLevel = Number.isFinite(Number(entry?.z)) ? Number(entry.z) : idx;
+    const fallbackIdentifier = Number.isFinite(Number(entry?.identifier)) ? Number(entry.identifier) : sourceLevel;
+    let identifier = entry?.identifier != null ? String(entry.identifier) : String(fallbackIdentifier);
+    if (!identifier) identifier = String(sourceLevel);
+    if (usedMatrixIdentifiers.has(identifier)) {
+      let dedupe = 1;
+      while (usedMatrixIdentifiers.has(`${identifier}_${dedupe}`)) {
+        dedupe += 1;
+      }
+      identifier = `${identifier}_${dedupe}`;
+    }
+    usedMatrixIdentifiers.add(identifier);
+    const scaleDen = Number(entry?.scale_denominator) || (Number(entry?.resolution) ? Number(entry.resolution) / 0.00028 : 0);
+    const matrixWidth = Math.max(1, Number(entry?.matrix_width) || 1);
+    const matrixHeight = Math.max(1, Number(entry?.matrix_height) || 1);
+    const entryTopLeft = Array.isArray(entry?.top_left) && entry.top_left.length === 2
+      ? [Number(entry.top_left[0]), Number(entry.top_left[1])]
+      : topLeft;
+    return {
+      identifier,
+      scaleDenominator: scaleDen,
+      matrixWidth,
+      matrixHeight,
+      topLeftCorner: entryTopLeft,
+      tileWidth,
+      tileHeight,
+      sourceLevel
+    };
+  });
+
+  return {
+    id,
+    supportedCrs,
+    tileWidth,
+    tileHeight,
+    topLeftCorner: topLeft,
+    matrices: normalizedMatrices
+  };
+};
+
+const buildGlobalMercatorMatrixSet = (maxZoom) => {
+  const matrices = [];
+  for (let z = 0; z <= maxZoom; z += 1) {
+    const scaleDenominator = 559082264.0287178 / Math.pow(2, z);
+    const matrixWidth = Math.pow(2, z);
+    const matrixHeight = Math.pow(2, z);
+    matrices.push({
+      identifier: String(z),
+      scaleDenominator,
+      matrixWidth,
+      matrixHeight,
+      topLeftCorner: [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT],
+      tileWidth: TILE_SIZE_PX,
+      tileHeight: TILE_SIZE_PX,
+      sourceLevel: z
+    });
+  }
+  return {
+    id: "EPSG_3857",
+    supportedCrs: "EPSG:3857",
+    tileWidth: TILE_SIZE_PX,
+    tileHeight: TILE_SIZE_PX,
+    topLeftCorner: [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT],
+    matrices
+  };
+};
+
+const clampMercator = (value) => {
+  const v = Number(value) || 0;
+  return Math.max(-WEB_MERCATOR_EXTENT, Math.min(WEB_MERCATOR_EXTENT, v));
+};
+
+const computeWebMercatorLimits = (extent, zoomMin, zoomMax) => {
+  if (!Array.isArray(extent) || extent.length !== 4) return [];
+  const [minXRaw, minYRaw, maxXRaw, maxYRaw] = extent;
+  const minLimits = [];
+  const originShift = WEB_MERCATOR_EXTENT;
+  const initialResolution = (2 * Math.PI * 6378137) / TILE_SIZE_PX;
+  const minZoom = Number.isFinite(zoomMin) ? zoomMin : 0;
+  const maxZoom = Number.isFinite(zoomMax) ? zoomMax : minZoom;
+  for (let z = minZoom; z <= maxZoom; z += 1) {
+    const resolution = initialResolution / Math.pow(2, z);
+    const matrixSize = Math.pow(2, z);
+    const minX = clampMercator(minXRaw);
+    const maxX = clampMercator(maxXRaw);
+    const minY = clampMercator(minYRaw);
+    const maxY = clampMercator(maxYRaw);
+    const minTileCol = Math.max(0, Math.floor((minX + originShift) / (TILE_SIZE_PX * resolution)));
+    const maxTileCol = Math.min(matrixSize - 1, Math.floor((maxX + originShift) / (TILE_SIZE_PX * resolution)));
+    const minTileRow = Math.max(0, Math.floor((originShift - maxY) / (TILE_SIZE_PX * resolution)));
+    const maxTileRow = Math.min(matrixSize - 1, Math.floor((originShift - minY) / (TILE_SIZE_PX * resolution)));
+    if (minTileCol <= maxTileCol && minTileRow <= maxTileRow) {
+      minLimits.push({
+        tileMatrix: String(z),
+        minTileCol,
+        maxTileCol,
+        minTileRow,
+        maxTileRow
+      });
+    }
+  }
+  return minLimits;
+};
+
+const computeRegularLimits = (normalizedSet) => {
+  if (!normalizedSet || !Array.isArray(normalizedSet.matrices)) return [];
+  return normalizedSet.matrices.map((matrix) => ({
+    tileMatrix: matrix.identifier,
+    minTileCol: 0,
+    maxTileCol: Math.max(0, matrix.matrixWidth - 1),
+    minTileRow: 0,
+    maxTileRow: Math.max(0, matrix.matrixHeight - 1)
+  }));
+};
+
+const mercatorToLonLat = (x, y) => {
+  const R = WEB_MERCATOR_EXTENT;
+  const lon = (x / R) * 180;
+  let lat = (y / R) * 180;
+  lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(lat * Math.PI / 180)) - Math.PI / 2);
+  return [lon, lat];
+};
+
+const deriveWgs84Extent = (layer) => {
+  if (Array.isArray(layer.extentWgs) && layer.extentWgs.length === 4) {
+    return layer.extentWgs;
+  }
+  if (Array.isArray(layer.extent) && layer.extent.length === 4 && layer.tileCrs === "EPSG:3857") {
+    const [minX, minY, maxX, maxY] = layer.extent;
+    const lower = mercatorToLonLat(minX, minY);
+    const upper = mercatorToLonLat(maxX, maxY);
+    return [lower[0], lower[1], upper[0], upper[1]];
+  }
+  return null;
+};
+
+const sanitizeExtent = (extent) => {
+  if (!Array.isArray(extent) || extent.length !== 4) return null;
+  return extent.map((value) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  });
+};
+
+const buildLayerTitle = (projectId, layerName, kind) => {
+  if (!projectId && !layerName) return "Layer";
+  if (kind === "theme") {
+    return `${projectId || "project"} (theme ${layerName || "theme"})`;
+  }
+  return `${projectId || "project"}:${layerName || "layer"}`;
+};
+
+const buildWmtsInventory = (options = {}) => {
+  const filterProject = options.filterProjectId ? String(options.filterProjectId).toLowerCase() : "";
+  const projects = fs.existsSync(cacheDir)
+    ? fs.readdirSync(cacheDir).filter((dir) => fs.statSync(path.join(cacheDir, dir)).isDirectory())
+    : [];
+  const usedLayerIdentifiers = new Set();
+  const usedSetIdentifiers = new Set(["EPSG_3857"]);
+  const usedProjectKeys = new Set();
+  const layerKeysByProject = new Map();
+  const layers = [];
+  const layerRouting = new Map();
+  let maxWebMercatorZoom = 0;
+
+  const loadIndex = (projectId) => {
+    const idxPath = path.join(cacheDir, projectId, "index.json");
+    if (!fs.existsSync(idxPath)) return null;
+    try {
+      const raw = fs.readFileSync(idxPath, "utf8");
+      return JSON.parse(raw);
+    } catch (err) {
+      console.warn("Failed to parse index.json for", projectId, err);
+      return null;
+    }
+  };
+
+  for (const project of projects) {
+    if (filterProject && project.toLowerCase() !== filterProject) continue;
+    const index = loadIndex(project);
+    if (!index || !Array.isArray(index.layers)) continue;
+    const projectKeyBase = normalizeIdentifier(project, "project");
+    let projectKey = projectKeyBase || `project_${project}`;
+    let projectSuffix = 1;
+    while (usedProjectKeys.has(projectKey)) {
+      projectKey = `${projectKeyBase}_${projectSuffix}`;
+      projectSuffix += 1;
+    }
+    usedProjectKeys.add(projectKey);
+    const layerKeySet = layerKeysByProject.get(projectKey) || new Set();
+
+    for (const layerEntry of index.layers) {
+      const scheme = typeof layerEntry.scheme === "string" ? layerEntry.scheme.toLowerCase() : null;
+      const tileCrs = (layerEntry.tile_crs || layerEntry.crs || "EPSG:3857").toUpperCase();
+      const kind = typeof layerEntry.kind === "string" ? layerEntry.kind.toLowerCase() : "layer";
+      const isTheme = kind === "theme";
+      const hasCustomSet = layerEntry.tile_matrix_set && Array.isArray(layerEntry.tile_matrix_set.matrices);
+      const isWebMercator = scheme === "xyz" && tileCrs === "EPSG:3857";
+      if (!hasCustomSet && !isWebMercator) continue;
+
+      const layerName = layerEntry.name || layerEntry.layer || layerEntry.theme || "layer";
+      const extent = sanitizeExtent(layerEntry.extent);
+      const extentWgs = sanitizeExtent(layerEntry.extent_wgs84);
+      const zoomMin = Number.isFinite(Number(layerEntry.zoom_min)) ? Number(layerEntry.zoom_min) : 0;
+      const zoomMax = Number.isFinite(Number(layerEntry.zoom_max)) ? Number(layerEntry.zoom_max) : zoomMin;
+
+      const rawLayerKey = normalizeIdentifier(layerName, "layer");
+      let layerKey = rawLayerKey;
+      let suffix = 1;
+      while (layerKeySet.has(layerKey)) {
+        layerKey = `${rawLayerKey}_${suffix}`;
+        suffix += 1;
+      }
+      layerKeySet.add(layerKey);
+      layerKeysByProject.set(projectKey, layerKeySet);
+
+      const layerIdentifierBase = normalizeIdentifier(`${project}_${layerName}`, "layer");
+      const layerIdentifier = ensureUniqueIdentifier(layerIdentifierBase, usedLayerIdentifiers, "layer");
+      const displayTitle = layerEntry.title || buildLayerTitle(project, layerName, kind);
+
+      let tileMatrixSetId = "";
+      let tileMatrixSet = null;
+      let tileMatrixLimits = [];
+
+      if (isWebMercator) {
+        tileMatrixSetId = "EPSG_3857";
+        tileMatrixLimits = computeWebMercatorLimits(extent || [
+          -WEB_MERCATOR_EXTENT,
+          -WEB_MERCATOR_EXTENT,
+          WEB_MERCATOR_EXTENT,
+          WEB_MERCATOR_EXTENT
+        ], zoomMin, zoomMax);
+        maxWebMercatorZoom = Math.max(maxWebMercatorZoom, zoomMax);
+      } else if (hasCustomSet) {
+        const normalizedSet = normalizeTileMatrixSet(layerEntry.tile_matrix_set, {
+          project,
+          layer: layerName,
+          tileCrs
+        }, usedSetIdentifiers);
+        tileMatrixSetId = normalizedSet.id;
+        tileMatrixSet = normalizedSet;
+        tileMatrixLimits = computeRegularLimits(normalizedSet);
+      } else {
+        continue;
+      }
+
+      const layerStyles = [
+        {
+          id: DEFAULT_WMTS_STYLE,
+          title: "Default",
+          isDefault: true
+        }
+      ];
+
+      layers.push({
+        identifier: layerIdentifier,
+        projectId: project,
+        projectKey,
+        layerName,
+        layerKey,
+        kind,
+        type: isWebMercator ? "xyz3857" : "wmts",
+        extent,
+        extentWgs,
+        tileCrs,
+        tileCrsUrn: toCrsUrn(tileCrs),
+        zoomMin,
+        zoomMax,
+        tileMatrixSetId,
+        tileMatrixSet,
+        tileMatrixLimits,
+        styles: layerStyles,
+        displayTitle,
+        storage: {
+          type: isTheme ? "theme" : "layer",
+          name: layerName
+        }
+      });
+    }
+  }
+
+  const tileMatrixSetsMap = new Map();
+  if (maxWebMercatorZoom < 0) {
+    maxWebMercatorZoom = 0;
+  }
+  const globalMercatorSet = buildGlobalMercatorMatrixSet(maxWebMercatorZoom);
+  tileMatrixSetsMap.set(globalMercatorSet.id, globalMercatorSet);
+
+  for (const layer of layers) {
+    if (layer.tileMatrixSetId === globalMercatorSet.id) {
+      layer.tileMatrixSet = globalMercatorSet;
+    } else if (layer.tileMatrixSet) {
+      tileMatrixSetsMap.set(layer.tileMatrixSet.id, layer.tileMatrixSet);
+    }
+    const routingKey = `${layer.projectKey}/${layer.layerKey}`;
+    layerRouting.set(routingKey, {
+      project: layer.projectId,
+      projectKey: layer.projectKey,
+      layerKey: layer.layerKey,
+      layerName: layer.storage.name,
+      storage: layer.storage,
+      tileMatrixSetId: layer.tileMatrixSetId,
+      tileMatrixSet: layer.tileMatrixSet,
+      type: layer.type,
+      styles: layer.styles.map((s) => s.id),
+      zoomMin: layer.zoomMin,
+      zoomMax: layer.zoomMax,
+      extent: layer.extent,
+      tileCrs: layer.tileCrs
+    });
+  }
+
+  return {
+    layers,
+    tileMatrixSets: Array.from(tileMatrixSetsMap.values()),
+    layerRouting
+  };
+};
+
+const resolveWmtsLayerRouting = (projectKey, layerKey) => {
+  const inventory = buildWmtsInventory();
+  const key = `${projectKey}/${layerKey}`;
+  return {
+    routing: inventory.layerRouting.get(key) || null,
+    inventory
+  };
+};
+
+const resolveRestTileRequest = (req, res, next) => {
+  try {
+    const { projectKey, layerKey } = req.params;
+    const { routing, inventory } = resolveWmtsLayerRouting(projectKey, layerKey);
+    if (!routing) {
+      return res.status(404).send("Layer not found");
+    }
+    req.wmtsLayer = routing;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+};
+
+app.get(
+  "/wmts/rest/:projectKey/:layerKey/:styleId/:setId/:tileMatrix/:tileRow/:tileCol.:ext",
+  resolveRestTileRequest,
+  ensureProjectAccess((req) => req.wmtsLayer?.project || null),
+  (req, res) => {
+    const layer = req.wmtsLayer;
+    if (!layer || !layer.tileMatrixSet) {
+      return res.status(404).send("Layer not available");
+    }
+
+    const styleId = String(req.params.styleId || "").toLowerCase();
+    const requestedSetId = String(req.params.setId || "");
+    const tileMatrixId = String(req.params.tileMatrix || "");
+    const tileCol = Number(req.params.tileCol);
+    const tileRow = Number(req.params.tileRow);
+    const extension = String(req.params.ext || "").toLowerCase();
+
+    const allowedStyles = new Set(layer.styles.map((s) => String(s).toLowerCase()));
+    if (!allowedStyles.has(styleId)) {
+      return res.status(404).send("Style not found");
+    }
+    if (requestedSetId !== layer.tileMatrixSetId) {
+      return res.status(404).send("TileMatrixSet not available");
+    }
+    if (!Number.isInteger(tileCol) || !Number.isInteger(tileRow) || tileCol < 0 || tileRow < 0) {
+      return res.status(400).send("Invalid tile indices");
+    }
+    if (extension !== "png") {
+      return res.status(404).send("Tile format not supported");
+    }
+
+    const matrixEntry = layer.tileMatrixSet.matrices.find((matrix) => matrix.identifier === tileMatrixId);
+    if (!matrixEntry) {
+      return res.status(404).send("TileMatrix not found");
+    }
+
+    const sourceLevel = Number.isFinite(Number(matrixEntry.sourceLevel)) ? Number(matrixEntry.sourceLevel) : Number(tileMatrixId);
+    if (!Number.isInteger(sourceLevel) || sourceLevel < 0) {
+      return res.status(404).send("Invalid TileMatrix level");
+    }
+
+    if (tileCol > Number(matrixEntry.matrixWidth) - 1 || tileRow > Number(matrixEntry.matrixHeight) - 1) {
+      return res.status(404).send("Tile outside matrix bounds");
+    }
+
+    const baseDir = layer.storage?.type === "theme"
+      ? path.join(cacheDir, layer.project, "_themes", layer.layerName)
+      : path.join(cacheDir, layer.project, layer.layerName);
+    const filePath = path.join(baseDir, String(sourceLevel), String(tileCol), `${tileRow}.png`);
+
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+      if (err) {
+        return res.status(404).send("Tile not found");
+      }
+      res.sendFile(filePath, (sendErr) => {
+        if (sendErr) {
+          console.warn("WMTS REST tile send failed", {
+            project: layer.project,
+            layer: layer.layerName,
+            tileMatrixId,
+            tileCol,
+            tileRow,
+            error: sendErr?.message
+          });
+          res.status(500).send("Failed to deliver tile");
+        }
+      });
+    });
+  }
+);
+
+// --- Helper: calcular bbox WMTS EPSG:3857 ---
+function computeTileBBoxWMTS(z, x, y, tileSize = 256) {
+  const WEB_MERCATOR_EXTENT = 20037508.342789244;
+  const res = (WEB_MERCATOR_EXTENT * 2) / (Math.pow(2, z) * tileSize);
+  const minx = -WEB_MERCATOR_EXTENT + x * res * tileSize;
+  const maxx = minx + res * tileSize;
+  const maxy = WEB_MERCATOR_EXTENT - y * res * tileSize;
+  const miny = maxy - res * tileSize;
+  return { minx, miny, maxx, maxy };
+}
+
+/**
+ * Calcula el bbox de una tile WMTS en EPSG:3857
+ * @param {number} z - Zoom level
+ * @param {number} x - Tile X
+ * @param {number} y - Tile Y
+ * @param {number} [tileSize=256] - Tile size in pixels
+ * @returns {[minx, miny, maxx, maxy]}
+ */
+function getTileBBox(z, x, y, tileSize = 256) {
+  // Extensión total EPSG:3857
+  const initialResolution = 2 * Math.PI * 6378137 / tileSize;
+  const originShift = 2 * Math.PI * 6378137 / 2.0;
+  const resolution = initialResolution / Math.pow(2, z);
+  const minx = x * tileSize * resolution - originShift;
+  const maxx = (x + 1) * tileSize * resolution - originShift;
+  const miny = originShift - (y + 1) * tileSize * resolution;
+  const maxy = originShift - y * tileSize * resolution;
+  return [minx, miny, maxx, maxy];
+}
+
+export { getTileBBox };
+// --- Control de concurrencia y cola FIFO para generación de tiles ---
+const MAX_CONCURRENT_TILE_JOBS = 2; // Ajusta según capacidad del servidor
+let activeTileJobs = 0;
+const tileJobQueue = [];
+
+function enqueueTileJob(jobFn) {
+  return new Promise((resolve, reject) => {
+    tileJobQueue.push({ jobFn, resolve, reject });
+    processTileQueue();
+  });
+}
+
+function processTileQueue() {
+  while (activeTileJobs < MAX_CONCURRENT_TILE_JOBS && tileJobQueue.length > 0) {
+    const { jobFn, resolve, reject } = tileJobQueue.shift();
+    activeTileJobs++;
+    jobFn()
+      .then((result) => {
+        activeTileJobs--;
+        resolve(result);
+        processTileQueue();
+      })
+      .catch((err) => {
+        activeTileJobs--;
+        reject(err);
+        processTileQueue();
+      });
+  }
+}
+
+// Uso: reemplaza la invocación directa de generación de tile por enqueueTileJob(() => generarTile(...))
+// ...existing code...
 
 // servir index.json del cache para meta en el visor
 // ruta legacy desactivada: informar que ahora se usan índices por proyecto
-app.get("/cache/index.json", (req, res) => {
+app.get("/cache/index.json", requireAdmin, (req, res) => {
   return res.status(410).json({
     error: "gone",
     message: "El index.json global ha sido eliminado. Usa /cache/:project/index.json"
@@ -2538,7 +3913,7 @@ app.get("/cache/index.json", (req, res) => {
 });
 
 // index por proyecto
-app.get("/cache/:project/index.json", (req, res) => {
+app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
   try {
     const p = req.params.project;
     const pIndex = path.join(cacheDir, p, "index.json");
@@ -2563,7 +3938,7 @@ app.get("/cache/:project/index.json", (req, res) => {
 });
 
 // Delete entire project cache (all layers + index)
-app.delete("/cache/:project", (req, res) => {
+app.delete("/cache/:project", requireAdmin, (req, res) => {
   const p = req.params.project;
   const pDir = path.join(cacheDir, p);
   // abort running jobs for this project
@@ -2588,162 +3963,332 @@ app.delete("/cache/:project", (req, res) => {
 });
 
 // DELETE cache for a layer and update index.json
-// nuevo: delete por proyecto
-app.delete("/cache/:project/:layer", async (req, res) => {
-  const { project, layer } = req.params;
-  const force = String(req.query.force || "").toLowerCase() === "1" || String(req.query.force || "").toLowerCase() === "true";
-  if (!layer) return res.status(400).json({ error: "layer required" });
-  try {
-    const result = await deleteLayerCacheInternal(project, layer, { force });
-    return res.json({ status: "ok", ...result });
-  } catch (err) {
-    if (err && err.code === "job_running") {
-      return res.status(409).json({ error: "job_running", id: err.jobId, message: "Hay un proceso generando esta capa. Usa ?force=1 para abortar y eliminar." });
-    }
-    console.error("Failed to delete cache for layer", layer, err);
-    return res.status(500).json({ error: String(err?.message || err) });
+// --- Control de concurrencia y cola para render on-demand ---
+const MAX_RENDER_PROCS = 2;
+const activeRenders = new Set();
+const renderQueue = [];
+
+function queueTileRender(params, filePath, cb) {
+  const key = `${params.project}|${params.layer||params.theme}|${params.z}|${params.x}|${params.y}`;
+  if (activeRenders.has(key)) {
+    // Ya en proceso, espera y reintenta
+    let tries = 0;
+    const interval = setInterval(() => {
+      if (fs.existsSync(filePath)) {
+        clearInterval(interval);
+        cb(null, filePath);
+      } else if (++tries > 30) {
+        clearInterval(interval);
+        cb(new Error('Timeout esperando tile'), null);
+      }
+    }, 200);
+    return;
   }
+  const task = { params, filePath, cb, key };
+  renderQueue.push(task);
+  processRenderQueue();
+}
+
+function processRenderQueue() {
+  if (activeRenders.size >= MAX_RENDER_PROCS) return;
+  const next = renderQueue.shift();
+  if (!next) return;
+  activeRenders.add(next.key);
+  // Construir comando Python
+  const pyExe = process.env.PYTHON_EXE || 'python';
+  const pyScript = path.join(__dirname, 'python', 'generate_cache.py');
+  // Script path is not part of args
+  const scriptPath = pyScript;
+  // Argumentos separados, nunca incluir el path del script
+  const args = [
+    '--single',
+    '--project', path.join(__dirname, 'qgisprojects', `${next.params.project}.qgz`),
+    next.params.layer ? '--layer' : null,
+    next.params.layer ? next.params.layer : null,
+    next.params.theme ? '--theme' : null,
+    next.params.theme ? next.params.theme : null,
+    '--z', String(next.params.z),
+    '--x', String(next.params.x),
+    '--y', String(next.params.y),
+    '--output_dir', path.dirname(next.filePath)
+  ].filter(Boolean);
+  // Lanzar proceso
+  // import { spawn } from 'child_process' ya está al inicio del archivo
+  // Elimina el require redundante y usa el import existente
+  logProjectEvent(next.params.project, `Render tile request: ${JSON.stringify(next.params)} | file: ${next.filePath}`);
+  // Usar el batch OSGeo4W como entrypoint y pasar python como argumento
+  // Prepare environment for the child process. Keep PYTHON* vars so
+  // OSGeo4W can set them correctly (removing them caused missing
+  // 'encodings' errors). Modify PATH to prefer OSGeo4W/QGIS paths
+  // and remove any Qtiler entries.
+  const childEnv = { ...makeChildEnv() };
+  if (childEnv.PATH) {
+    const qgisPaths = [process.env.OSGEO4W_BIN, path.join(process.env.QGIS_PREFIX || '', 'bin')].filter(Boolean);
+    const parts = childEnv.PATH.split(';').filter(p => p && !p.toLowerCase().includes('qtiler'));
+    // Prepend QGIS/OSGeo4W paths so python/qgis libs are resolved first
+    for (const p of qgisPaths.reverse()) {
+      if (!parts.includes(p)) parts.unshift(p);
+    }
+    childEnv.PATH = parts.join(';');
+  }
+  // Use wrapper batch file for Python invocation
+  const wrapperBatch = path.join(__dirname, 'daemon', 'run_qgis_python.bat');
+  // Pasar todos los argumentos al batch (no truncar)
+  const spawnArgs = [scriptPath, ...args];
+  logProjectEvent(next.params.project, `SPAWN: cmd.exe ${JSON.stringify(['/c', wrapperBatch, ...spawnArgs])}`);
+  console.log('SPAWN via o4w helper:', wrapperBatch, ...spawnArgs);
+  // Use helper that runs o4w_env.bat and then python in the same shell to ensure proper QGIS/Python env
+  const proc = runPythonViaOSGeo4W(scriptPath, args, {
+    env: childEnv,
+    cwd: __dirname,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  // Log the actual spawn arguments for debugging (helps see exact cmd used)
+  try {
+    if (proc && Array.isArray(proc.spawnargs)) {
+      logProjectEvent(next.params.project, `SPAWN_CMD: ${JSON.stringify(proc.spawnargs)}`);
+      console.log('SPAWN_CMD:', proc.spawnargs.join(' '));
+    }
+  } catch (e) {
+    // ignore logging errors
+  }
+  let stdout = '', stderr = '';
+  proc.stdout.on('data', (data) => {
+    const s = data.toString();
+    stdout += s;
+    logProjectEvent(next.params.project, `[PYTHON OUT] ${s.trim()}`);
+    console.log('[PYTHON OUT]', s.trim());
+  });
+  proc.stderr.on('data', (data) => {
+    const s = data.toString();
+    stderr += s;
+    logProjectEvent(next.params.project, `[PYTHON ERR] ${s.trim()}`);
+    console.error('[PYTHON ERR]', s.trim());
+  });
+  proc.on('close', (code) => {
+    activeRenders.delete(next.key);
+    if (fs.existsSync(next.filePath)) {
+      logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code} | stdout: ${stdout}`);
+      next.cb(null, next.filePath);
+    } else {
+      logProjectEvent(next.params.project, `Tile generation FAILED: ${next.filePath} | code: ${code} | stderr: ${stderr}`);
+      next.cb(new Error('No se pudo generar tile'), null);
+    }
+    processRenderQueue();
+  });
+}
+
+// servir tiles on-demand
+app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
+  const { project, theme, z, x, y } = req.params;
+  const file = path.join(cacheDir, project, "_themes", theme, z, x, `${y}.png`);
+  if (fs.existsSync(file)) {
+    logProjectEvent(project, `Tile hit: ${file}`);
+    return res.sendFile(file);
+  }
+  logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
+  queueTileRender({ project, theme, z, x, y }, file, (err, outFile) => {
+    if (err) {
+      logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
+      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+    }
+    logProjectEvent(project, `Tile render success: ${outFile}`);
+    res.sendFile(outFile);
+  });
 });
 
-// --- WMTS GetCapabilities (mínimo para QGIS) ---
-// Endpoint: /wmts?SERVICE=WMTS&REQUEST=GetCapabilities
-// Publica:
-//  - Layers "xyz" con tile_crs=EPSG:3857 en TileMatrixSet EPSG_3857
-//  - Layers "wmts" con su propio TileMatrixSet derivado de index.json
-app.get('/wmts', async (req, res) => {
-  const svc = String(req.query.SERVICE || '').toUpperCase();
-  const reqType = String(req.query.REQUEST || '').toUpperCase();
-  if (svc !== 'WMTS' || reqType !== 'GETCAPABILITIES') {
-    return res.status(400).json({ error: 'unsupported', details: 'Use SERVICE=WMTS&REQUEST=GetCapabilities' });
+app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
+  const { project, layer, z, x, y } = req.params;
+  const file = path.join(cacheDir, project, layer, z, x, `${y}.png`);
+  if (fs.existsSync(file)) {
+    logProjectEvent(project, `Tile hit: ${file}`);
+    return res.sendFile(file);
   }
+  logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
+  queueTileRender({ project, layer, z, x, y }, file, (err, outFile) => {
+    if (err) {
+      logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
+      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+    }
+    logProjectEvent(project, `Tile render success: ${outFile}`);
+    res.sendFile(outFile);
+  });
+});
+
+// compat legado: sin proyecto
+app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
+  const { layer, z, x, y } = req.params;
+  const file = path.join(cacheDir, layer, z, x, `${y}.png`);
+  if (fs.existsSync(file)) {
+    logProjectEvent('nogo', `Tile hit: ${file}`);
+    return res.sendFile(file);
+  }
+  logProjectEvent('nogo', `Tile miss: ${file}. Generating on-demand...`);
+  queueTileRender({ project: 'nogo', layer, z, x, y }, file, (err, outFile) => {
+    if (err) {
+      logProjectEvent('nogo', `Tile render error: ${file} | ${err?.message || err}`);
+      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+    }
+    logProjectEvent('nogo', `Tile render success: ${outFile}`);
+    res.sendFile(outFile);
+  });
+});
+app.get("/wmts", ensureProjectAccessFromQuery(), (req, res) => {
+  const svc = String(req.query.SERVICE || "").toUpperCase();
+  const reqType = String(req.query.REQUEST || "").toUpperCase();
+  if (svc !== "WMTS" || reqType !== "GETCAPABILITIES") {
+    return res.status(400).json({ error: "unsupported", details: "Use SERVICE=WMTS&REQUEST=GetCapabilities" });
+  }
+
+  const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
+  const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
+
   try {
-  const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : '';
-  const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase() : '';
-    const projects = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir).filter(d => fs.statSync(path.join(cacheDir,d)).isDirectory()) : [];
-    const layersMeta = [];
-    const wmtsSets = []; // tile matrix sets custom por layer
-    for (const p of projects) {
-      if (filterProjectId && p.toLowerCase() !== filterProjectId) {
-        continue;
-      }
-      const idxPath = path.join(cacheDir, p, 'index.json');
-      if (!fs.existsSync(idxPath)) continue;
-      let idx;
-      try { idx = JSON.parse(fs.readFileSync(idxPath,'utf8')); } catch { continue; }
-      for (const lyr of (idx.layers||[])) {
-        const kind = typeof lyr.kind === "string" ? lyr.kind.toLowerCase() : "layer";
-        const scheme = typeof lyr.scheme === "string" ? lyr.scheme.toLowerCase() : null;
-        const tcrs = String(lyr.tile_crs||'').toUpperCase();
-        const hasTileMatrixSet = lyr && lyr.tile_matrix_set && Array.isArray(lyr.tile_matrix_set.matrices);
-        if (scheme === 'xyz' && tcrs === 'EPSG:3857') {
-          layersMeta.push({ type: 'xyz3857', project: p, layer: lyr.name, zoom_min: lyr.zoom_min, zoom_max: lyr.zoom_max, extent: lyr.extent, tileCrs: 'EPSG:3857', kind });
-        } else if (hasTileMatrixSet) {
-          const setId = lyr.tile_matrix_set.id || (p + ':' + lyr.name);
-          wmtsSets.push({ project: p, layer: lyr.name, set: lyr.tile_matrix_set, extent: lyr.extent, tileCrs: lyr.tile_crs || lyr.crs, kind });
-          layersMeta.push({ type: 'wmts', project: p, layer: lyr.name, setId, extent: lyr.extent, tileCrs: lyr.tile_crs || lyr.crs, kind });
+    const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
+    const { layers, tileMatrixSets } = inventory;
+
+    const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const formatNumber = (value) => {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return "0";
+      if (Number.isInteger(num)) return num.toString();
+      return num.toPrecision(15).replace(/0+$/g, "").replace(/\.$/, "");
+    };
+    const formatCorner = (coords) => `${formatNumber(coords[0])} ${formatNumber(coords[1])}`;
+    const configuredBaseUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/g, "");
+    let proto = req.protocol || "";
+    const forwardedProtoHeader = req.get("x-forwarded-proto");
+    if (forwardedProtoHeader) {
+      proto = forwardedProtoHeader.split(",")[0].trim();
+    } else {
+      const forwardedHeader = req.get("forwarded");
+      if (forwardedHeader) {
+        const match = forwardedHeader.match(/proto=([a-zA-Z]+)/);
+        if (match && match[1]) {
+          proto = match[1].toLowerCase();
         }
       }
     }
-    // construir TileMatrixSet EPSG:3857 (global) hasta max zoom encontrado
-  const overallMaxZoom = layersMeta.filter(l=>l.type==='xyz3857').reduce((m,l)=> Math.max(m, l.zoom_min!=null && l.zoom_max!=null ? l.zoom_max : m), 0);
-    const tileMatrices = [];
-    for (let z=0; z<=overallMaxZoom; z++) {
-      const scaleDenominator = 559082264.0287178 / Math.pow(2,z); // valor inicial típico /2^z
-      const matrixWidth = Math.pow(2,z);
-      const matrixHeight = Math.pow(2,z);
-      tileMatrices.push({ z, scaleDenominator, matrixWidth, matrixHeight });
+    if (!proto) proto = "http";
+    const host = req.get("host");
+    const derivedBaseUrl = host ? `${proto}://${host}` : "";
+    const baseUrl = configuredBaseUrl || derivedBaseUrl;
+
+    const xmlParts = [];
+    xmlParts.push("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    xmlParts.push("<Capabilities xmlns=\"http://www.opengis.net/wmts/1.0\" xmlns:ows=\"http://www.opengis.net/ows/1.1\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:gml=\"http://www.opengis.net/gml\" version=\"1.0.0\">");
+    xmlParts.push("<ows:ServiceIdentification><ows:Title>Local WMTS</ows:Title><ows:ServiceType>OGC WMTS</ows:ServiceType><ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion></ows:ServiceIdentification>");
+    xmlParts.push("<ows:ServiceProvider><ows:ProviderName>Local</ows:ProviderName></ows:ServiceProvider>");
+    xmlParts.push("<Contents>");
+
+    for (const layer of layers) {
+      xmlParts.push("<Layer>");
+      xmlParts.push(`<ows:Title>${xmlEscape(layer.displayTitle || layer.identifier)}</ows:Title>`);
+      xmlParts.push(`<ows:Identifier>${xmlEscape(layer.identifier)}</ows:Identifier>`);
+
+      const wgsExtent = deriveWgs84Extent(layer);
+      if (wgsExtent) {
+        xmlParts.push("<ows:WGS84BoundingBox>");
+        xmlParts.push(`<ows:LowerCorner>${formatNumber(wgsExtent[0])} ${formatNumber(wgsExtent[1])}</ows:LowerCorner>`);
+        xmlParts.push(`<ows:UpperCorner>${formatNumber(wgsExtent[2])} ${formatNumber(wgsExtent[3])}</ows:UpperCorner>`);
+        xmlParts.push("</ows:WGS84BoundingBox>");
+      }
+
+      if (Array.isArray(layer.extent) && layer.extent.length === 4) {
+        const lower = [layer.extent[0], layer.extent[1]];
+        const upper = [layer.extent[2], layer.extent[3]];
+        xmlParts.push(`<ows:BoundingBox crs=\"${xmlEscape(layer.tileCrsUrn)}\">`);
+        xmlParts.push(`<ows:LowerCorner>${formatCorner(lower)}</ows:LowerCorner>`);
+        xmlParts.push(`<ows:UpperCorner>${formatCorner(upper)}</ows:UpperCorner>`);
+        xmlParts.push("</ows:BoundingBox>");
+      }
+
+      xmlParts.push(`<ows:SupportedCRS>${xmlEscape(layer.tileCrsUrn)}</ows:SupportedCRS>`);
+
+      for (const style of layer.styles) {
+        xmlParts.push(`<Style isDefault=\"${style.isDefault ? "true" : "false"}\">`);
+        xmlParts.push(`<ows:Identifier>${xmlEscape(style.id)}</ows:Identifier>`);
+        if (style.title) {
+          xmlParts.push(`<ows:Title>${xmlEscape(style.title)}</ows:Title>`);
+        }
+        xmlParts.push("</Style>");
+      }
+
+      xmlParts.push("<Format>image/png</Format>");
+      xmlParts.push(`<TileMatrixSetLink><TileMatrixSet>${xmlEscape(layer.tileMatrixSetId)}</TileMatrixSet>`);
+
+      if (Array.isArray(layer.tileMatrixLimits) && layer.tileMatrixLimits.length > 0) {
+        xmlParts.push("<TileMatrixSetLimits>");
+        for (const limit of layer.tileMatrixLimits) {
+          xmlParts.push("<TileMatrixLimits>");
+          xmlParts.push(`<TileMatrix>${xmlEscape(limit.tileMatrix)}</TileMatrix>`);
+          xmlParts.push(`<MinTileRow>${formatNumber(limit.minTileRow)}</MinTileRow>`);
+          xmlParts.push(`<MaxTileRow>${formatNumber(limit.maxTileRow)}</MaxTileRow>`);
+          xmlParts.push(`<MinTileCol>${formatNumber(limit.minTileCol)}</MinTileCol>`);
+          xmlParts.push(`<MaxTileCol>${formatNumber(limit.maxTileCol)}</MaxTileCol>`);
+          xmlParts.push("</TileMatrixLimits>");
+        }
+        xmlParts.push("</TileMatrixSetLimits>");
+      }
+
+      xmlParts.push("</TileMatrixSetLink>");
+
+      if (baseUrl) {
+        const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png`;
+        xmlParts.push(`<ResourceURL format=\"image/png\" resourceType=\"tile\" template=\"${xmlEscape(template)}\"/>`);
+      }
+
+      xmlParts.push("</Layer>");
     }
-    // helper: transformar mercator (x,y en EPSG:3857) a lon/lat WGS84 aproximado
-    const mercToLonLat = (x,y) => {
-      const R = 20037508.342789244;
-      const lon = (x / R) * 180;
-      let lat = (y / R) * 180;
-      lat = 180/Math.PI * (2 * Math.atan(Math.exp(lat * Math.PI/180)) - Math.PI/2);
-      return [lon, lat];
-    };
-  const xmlEscape = (s)=> String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    let xml = '';
-    xml += '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += '<Capabilities xmlns="http://www.opengis.net/wmts/1.0" xmlns:ows="http://www.opengis.net/ows/1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:gml="http://www.opengis.net/gml" version="1.0.0">';
-    xml += '<ows:ServiceIdentification><ows:Title>Local WMTS</ows:Title><ows:ServiceType>OGC WMTS</ows:ServiceType><ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion></ows:ServiceIdentification>';
-    xml += '<ows:ServiceProvider><ows:ProviderName>Local</ows:ProviderName></ows:ServiceProvider>';
-    xml += '<Contents>';
-    for (const lm of layersMeta) {
-      const [minx,miny,maxx,maxy] = lm.extent || [ -20037508.3428, -20037508.3428, 20037508.3428, 20037508.3428 ];
-      let wminlon=-180, wminlat=-90, wmaxlon=180, wmaxlat=90;
-      if (lm.type === 'xyz3857') {
-        const clamp = (v) => Math.max(-20037508.342789244, Math.min(20037508.342789244, v));
-        const cminx = clamp(minx), cminy = clamp(miny), cmaxx = clamp(maxx), cmaxy = clamp(maxy);
-        const a = mercToLonLat(cminx,cminy); const b = mercToLonLat(cmaxx,cmaxy);
-        wminlon = a[0]; wminlat = a[1]; wmaxlon = b[0]; wmaxlat = b[1];
+
+    for (const set of tileMatrixSets) {
+      const supportedCrsUrn = toCrsUrn(set.supportedCrs || "EPSG:3857");
+      const defaultTopLeft = Array.isArray(set.topLeftCorner) && set.topLeftCorner.length === 2
+        ? set.topLeftCorner
+        : [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT];
+      xmlParts.push("<TileMatrixSet>");
+      xmlParts.push(`<ows:Identifier>${xmlEscape(set.id)}</ows:Identifier>`);
+      xmlParts.push(`<ows:SupportedCRS>${xmlEscape(supportedCrsUrn)}</ows:SupportedCRS>`);
+      for (const matrix of set.matrices || []) {
+        const matrixTopLeft = Array.isArray(matrix.topLeftCorner) && matrix.topLeftCorner.length === 2
+          ? matrix.topLeftCorner
+          : defaultTopLeft;
+        xmlParts.push("<TileMatrix>");
+        xmlParts.push(`<ows:Identifier>${xmlEscape(matrix.identifier)}</ows:Identifier>`);
+        xmlParts.push(`<ScaleDenominator>${formatNumber(matrix.scaleDenominator)}</ScaleDenominator>`);
+        xmlParts.push(`<TopLeftCorner>${formatCorner(matrixTopLeft)}</TopLeftCorner>`);
+        xmlParts.push(`<TileWidth>${formatNumber(matrix.tileWidth || set.tileWidth || TILE_SIZE_PX)}</TileWidth>`);
+        xmlParts.push(`<TileHeight>${formatNumber(matrix.tileHeight || set.tileHeight || TILE_SIZE_PX)}</TileHeight>`);
+        xmlParts.push(`<MatrixWidth>${formatNumber(matrix.matrixWidth)}</MatrixWidth>`);
+        xmlParts.push(`<MatrixHeight>${formatNumber(matrix.matrixHeight)}</MatrixHeight>`);
+        xmlParts.push("</TileMatrix>");
       }
-      const tileCrs = lm.tileCrs || 'EPSG:3857';
-      const urlPath = lm.kind === 'theme'
-        ? `${encodeURIComponent(lm.project)}/themes/${encodeURIComponent(lm.layer)}`
-        : `${encodeURIComponent(lm.project)}/${encodeURIComponent(lm.layer)}`;
-      const tileCrsUrn = `urn:ogc:def:crs:${xmlEscape(tileCrs.replace(':', '::'))}`;
-      xml += '<Layer>';
-      xml += `<ows:Title>${xmlEscape(lm.project + ':' + lm.layer)}</ows:Title>`;
-      xml += `<ows:Identifier>${xmlEscape(lm.project + ':' + lm.layer)}</ows:Identifier>`;
-      xml += '<ows:WGS84BoundingBox>';
-      xml += `<ows:LowerCorner>${wminlon} ${wminlat}</ows:LowerCorner>`;
-      xml += `<ows:UpperCorner>${wmaxlon} ${wmaxlat}</ows:UpperCorner>`;
-      xml += '</ows:WGS84BoundingBox>';
-      if (Array.isArray(lm.extent) && lm.extent.length === 4) {
-        xml += `<ows:BoundingBox crs="${tileCrsUrn}">`;
-        xml += `<ows:LowerCorner>${lm.extent[0]} ${lm.extent[1]}</ows:LowerCorner>`;
-        xml += `<ows:UpperCorner>${lm.extent[2]} ${lm.extent[3]}</ows:UpperCorner>`;
-        xml += '</ows:BoundingBox>';
-      }
-      xml += `<ows:SupportedCRS>${tileCrsUrn}</ows:SupportedCRS>`;
-      xml += '<Style isDefault="true"><ows:Identifier>default</ows:Identifier></Style>';
-      xml += '<Format>image/png</Format>';
-      let supportedMatrixSet = '';
-      if (lm.type === 'xyz3857') {
-        supportedMatrixSet = 'EPSG_3857';
-      } else if (lm.type === 'wmts') {
-        supportedMatrixSet = lm.setId;
-      }
-      if (supportedMatrixSet) {
-        xml += `<TileMatrixSetLink><TileMatrixSet>${xmlEscape(supportedMatrixSet)}</TileMatrixSet></TileMatrixSetLink>`;
-      }
-      // ResourceURL template usando TileMatrix, TileCol, TileRow (válido para ambos)
-  const template = `${req.protocol}://${req.get('host')}/wmts/${urlPath}/{TileMatrix}/{TileCol}/{TileRow}.png`;
-      xml += `<ResourceURL format="image/png" resourceType="tile" template="${xmlEscape(template)}"/>`;
-      xml += '</Layer>';
+      xmlParts.push("</TileMatrixSet>");
     }
-    // TileMatrixSet EPSG_3857
-    xml += '<TileMatrixSet>';
-    xml += '<ows:Identifier>EPSG_3857</ows:Identifier>';
-    xml += '<ows:SupportedCRS>urn:ogc:def:crs:EPSG::3857</ows:SupportedCRS>';
-    for (const tm of tileMatrices) {
-      xml += `<TileMatrix><ows:Identifier>${tm.z}</ows:Identifier><ScaleDenominator>${tm.scaleDenominator}</ScaleDenominator><TopLeftCorner>-20037508.342789244 20037508.342789244</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>${tm.matrixWidth}</MatrixWidth><MatrixHeight>${tm.matrixHeight}</MatrixHeight></TileMatrix>`;
-    }
-    xml += '</TileMatrixSet>';
-    // TileMatrixSets personalizados (WMTS locales)
-    for (const s of wmtsSets) {
-      const set = s.set;
-      const sup = String(set.supported_crs || '').toUpperCase();
-      const topLeft = set.top_left_corner || [0,0];
-      xml += '<TileMatrixSet>';
-      xml += `<ows:Identifier>${xmlEscape(set.id)}</ows:Identifier>`;
-      xml += `<ows:SupportedCRS>urn:ogc:def:crs:${xmlEscape(sup.replace(':','::'))}</ows:SupportedCRS>`;
-      for (const m of (set.matrices||[])) {
-        xml += `<TileMatrix><ows:Identifier>${m.z}</ows:Identifier><ScaleDenominator>${m.scale_denominator}</ScaleDenominator><TopLeftCorner>${topLeft[0]} ${topLeft[1]}</TopLeftCorner><TileWidth>${set.tile_width||256}</TileWidth><TileHeight>${set.tile_height||256}</TileHeight><MatrixWidth>${m.matrix_width}</MatrixWidth><MatrixHeight>${m.matrix_height}</MatrixHeight></TileMatrix>`;
-      }
-      xml += '</TileMatrixSet>';
-    }
-    xml += '</Contents>';
-    xml += '</Capabilities>';
-    res.setHeader('Content-Type','application/xml');
-    return res.send(xml);
-  } catch (e) {
-    console.error('WMTS capabilities error', e);
-    return res.status(500).json({ error: 'wmts_capabilities_failed', details: String(e) });
+
+    xmlParts.push("</Contents>");
+    xmlParts.push("</Capabilities>");
+
+    res.setHeader("Content-Type", "application/xml");
+    return res.send(xmlParts.join(""));
+  } catch (error) {
+    console.error("WMTS capabilities error", error);
+    return res.status(500).json({ error: "wmts_capabilities_failed", details: String(error) });
   }
 });
 
-initializeProjectSchedules();
-startScheduleHeartbeat();
+const startServer = async () => {
+  try {
+    await pluginManager.init();
+  } catch (err) {
+    console.error('Plugin initialization failed', err);
+  }
+  initializeProjectSchedules();
+  startScheduleHeartbeat();
+  app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
+};
 
-app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
+startServer().catch((err) => {
+  console.error('Failed to start server', err);
+  process.exitCode = 1;
+});
