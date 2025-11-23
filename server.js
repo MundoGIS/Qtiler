@@ -3964,6 +3964,10 @@ app.delete("/cache/:project", requireAdmin, (req, res) => {
 // DELETE cache for a layer and update index.json
 // --- Control de concurrencia y cola para render on-demand ---
 const MAX_RENDER_PROCS = 2;
+// Por defecto, tiempo máximo que dejamos a la invocación de Python para renderizar (ms)
+const RENDER_TIMEOUT_MS = Number.isFinite(Number(process.env.RENDER_TIMEOUT_MS || 120000)) ? Number(process.env.RENDER_TIMEOUT_MS || 120000) : 120000;
+// Número de reintentos por tile en llamadas internas (on-demand)
+const RENDER_TILE_RETRIES = Number.isFinite(Number(process.env.RENDER_TILE_RETRIES || 1)) ? Number(process.env.RENDER_TILE_RETRIES || 1) : 1;
 const activeRenders = new Set();
 const renderQueue = [];
 
@@ -4036,12 +4040,92 @@ function processRenderQueue() {
   const spawnArgs = [scriptPath, ...args];
   logProjectEvent(next.params.project, `SPAWN: cmd.exe ${JSON.stringify(['/c', wrapperBatch, ...spawnArgs])}`);
   console.log('SPAWN via o4w helper:', wrapperBatch, ...spawnArgs);
-  // Use helper that runs o4w_env.bat and then python in the same shell to ensure proper QGIS/Python env
-  const proc = runPythonViaOSGeo4W(scriptPath, args, {
-    env: childEnv,
-    cwd: __dirname,
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
+  // Prepare persistent per-render log
+  try {
+    const renderLogName = `render-${next.params.project}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.log`;
+    const renderLogPath = path.join(logsDir, renderLogName);
+    const renderStream = fs.createWriteStream(renderLogPath, { flags: 'a' });
+    renderStream.write(`[${new Date().toISOString()}] Render request: ${JSON.stringify(next.params)}\n`);
+    renderStream.write(`[${new Date().toISOString()}] Spawn wrapper: ${wrapperBatch} ${spawnArgs.join(' ')}\n`);
+    try { renderStream.write(`[ENV PATH] ${childEnv.PATH || ''}\n`); } catch (e) {}
+    // Attach render path to project log for traceability
+    logProjectEvent(next.params.project, `Render log: ${renderLogPath}`);
+
+    // Ensure args include render timeout and retries if configured
+    const augmentedArgs = args.slice();
+    if (Number.isFinite(Number(RENDER_TIMEOUT_MS)) && Number(RENDER_TIMEOUT_MS) > 0) {
+      augmentedArgs.push('--render_timeout_ms', String(Math.floor(Number(RENDER_TIMEOUT_MS))));
+    }
+    if (Number.isFinite(Number(RENDER_TILE_RETRIES)) && Number(RENDER_TILE_RETRIES) >= 0) {
+      augmentedArgs.push('--tile_retries', String(Math.floor(Number(RENDER_TILE_RETRIES))));
+    }
+
+    // Use helper that runs o4w_env.bat and then python in the same shell to ensure proper QGIS/Python env
+    const proc = runPythonViaOSGeo4W(scriptPath, augmentedArgs, {
+      env: childEnv,
+      cwd: __dirname,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    // Log the actual spawn arguments for debugging (helps see exact cmd used)
+    try {
+      if (proc && Array.isArray(proc.spawnargs)) {
+        logProjectEvent(next.params.project, `SPAWN_CMD: ${JSON.stringify(proc.spawnargs)}`);
+        renderStream.write(`[${new Date().toISOString()}] SPAWN_CMD: ${proc.spawnargs.join(' ')}\n`);
+      }
+    } catch (e) {
+      // ignore logging errors
+    }
+
+    let stdout = '', stderr = '';
+    proc.stdout.on('data', (data) => {
+      const s = data.toString();
+      stdout += s;
+      logProjectEvent(next.params.project, `[PYTHON OUT] ${s.trim()}`);
+      try { renderStream.write(`[PYTHON OUT] ${s}`); } catch (e) {}
+    });
+    proc.stderr.on('data', (data) => {
+      const s = data.toString();
+      stderr += s;
+      logProjectEvent(next.params.project, `[PYTHON ERR] ${s.trim()}`);
+      try { renderStream.write(`[PYTHON ERR] ${s}`); } catch (e) {}
+    });
+    proc.on('close', (code) => {
+      try { renderStream.write(`[${new Date().toISOString()}] Exit code: ${code}\n`); } catch (e) {}
+      try { renderStream.end(); } catch (e) {}
+      activeRenders.delete(next.key);
+      if (fs.existsSync(next.filePath)) {
+        logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code} | stdout: ${stdout}`);
+        next.cb(null, next.filePath);
+      } else {
+        logProjectEvent(next.params.project, `Tile generation FAILED: ${next.filePath} | code: ${code} | stderr: ${stderr}`);
+        next.cb(new Error('No se pudo generar tile'), null);
+      }
+      processRenderQueue();
+    });
+  } catch (err) {
+    // if logging setup fails, fall back to previous behavior without persistent log
+    logProjectEvent(next.params.project, `Render logging setup failed: ${String(err)}`);
+    const proc = runPythonViaOSGeo4W(scriptPath, args, {
+      env: childEnv,
+      cwd: __dirname,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '', stderr = '';
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.on('close', (code) => {
+      activeRenders.delete(next.key);
+      if (fs.existsSync(next.filePath)) {
+        logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code}`);
+        next.cb(null, next.filePath);
+      } else {
+        logProjectEvent(next.params.project, `Tile generation FAILED: ${next.filePath} | code: ${code} | stderr: ${stderr}`);
+        next.cb(new Error('No se pudo generar tile'), null);
+      }
+      processRenderQueue();
+    });
+  }
   // Log the actual spawn arguments for debugging (helps see exact cmd used)
   try {
     if (proc && Array.isArray(proc.spawnargs)) {
