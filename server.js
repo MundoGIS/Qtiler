@@ -2326,10 +2326,10 @@ const o4wBatch = process.env.O4W_BATCH || path.join(process.env.OSGEO4W_BIN || "
 const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   // Ejecutar el batch (o4w_env) y luego python en la misma cmd para heredar el entorno.
   // Por defecto suprimimos la salida del batch para mantener los logs limpios.
-  // Si se exporta la variable de entorno DEBUG_O4W=1, mostramos la salida del batch
-  // y registramos el comando para debugging.
-  const showO4W = String(process.env.DEBUG_O4W || '') === '1';
-  const o4wPart = showO4W ? `"${o4wBatch}"` : `"${o4wBatch}" >nul 2>&1`;
+  // El batch siempre se ejecuta en modo silencioso (>nul 2>&1) para evitar ruido
+  // en los registros del servidor. Si necesitas depuración explícita, establece
+  // manualmente la variable en el entorno antes de arrancar el servidor.
+  const o4wPart = `"${o4wBatch}" >nul 2>&1`;
   const cmdParts = [
     o4wPart,
     "&&",
@@ -2338,7 +2338,6 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
     ...args.map(a => `"${String(a)}"`)
   ];
   const cmd = cmdParts.join(" ");
-  if (showO4W) console.log('[DEBUG] runPythonViaOSGeo4W cmd:', cmd);
   return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
 };
 
