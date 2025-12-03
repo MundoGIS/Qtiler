@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="authInstall.title">QtilerAuth installation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/plugins/auth-admin/assets/style.css" onerror="this.remove();">
+  <link rel="stylesheet" href="/plugins/auth-admin/fallback.css">
+  <script src="/lang-support.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <a href="/index.html" class="brand-logo">Qtiler</a>
+        <span class="brand-tagline" data-i18n="Tile caching console for QGIS projects.">Tile caching console for QGIS projects.</span>
+      </div>
+      <nav class="main-nav" aria-label="Primary">
+        <a href="/index.html" class="nav-link" data-i18n="Dashboard">Dashboard</a>
+        <a href="/guide.html" class="nav-link" data-i18n="User guide" target="_blank" rel="noopener">User guide</a>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+        <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="sv">Svenska</option>
+        </select>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <section class="card">
+      <h1 data-i18n="authInstall.heading">Install QtilerAuth plugin</h1>
+      <p data-i18n="authInstall.description">The authentication plugin is not installed. Upload the <code>QtilerAuth.zip</code> package to enable it again.</p>
+      <form id="upload-form" enctype="multipart/form-data">
+        <label for="plugin-file" data-i18n="authInstall.field.label">Plugin ZIP file</label>
+        <input type="file" id="plugin-file" name="plugin" accept=".zip" required>
+        <div class="actions">
+          <button type="submit" data-i18n="authInstall.submit">Upload and install</button>
+        </div>
+      </form>
+      <div id="status" role="status" aria-live="polite"></div>
+    </section>
+    <section class="card help">
+      <h2 data-i18n="authInstall.help.heading">Where do I get the ZIP?</h2>
+      <p data-i18n="authInstall.help.repo">If you work with the repository locally, the latest build is at <code>dist/QtilerAuth.zip</code>.</p>
+      <p data-i18n="authInstall.help.credentials">After installing, sign in with <strong>user</strong> <code>admin</code> and <strong>temporary password</strong> <code>adminnuevo</code>. Change the password in the console before returning to the dashboard.</p>
+      <p data-i18n="authInstall.help.return">Once installed, return to the full console at <a href="/plugins/auth-admin">/plugins/auth-admin</a>.</p>
+    </section>
+  </main>
+  <script type="module" src="/plugins/auth-admin/fallback.js"></script>
+  <script>
+    (function () {
+      const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
+        ? window.qtilerLang.SUPPORTED_LANGS
+        : ["en", "es", "sv"];
+      const normalizeLang = window.qtilerLang?.normalize || ((value) => {
+        const raw = (value || "").toLowerCase();
+        if (SUPPORTED_LANGS.includes(raw)) return raw;
+        const base = raw.split("-")[0];
+        return SUPPORTED_LANGS.includes(base) ? base : "en";
+      });
+      let currentLang = window.qtilerLang?.get?.() || normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
+
+      const TRANSLATIONS = {
+        en: {
+          "Dashboard": "Dashboard",
+          "User guide": "User guide",
+          "Language": "Language",
+          "Tile caching console for QGIS projects.": "Tile caching console for QGIS projects.",
+          "authInstall.title": "QtilerAuth installation",
+          "authInstall.heading": "Install QtilerAuth plugin",
+          "authInstall.description": "The authentication plugin is not installed. Upload the <code>QtilerAuth.zip</code> package to enable it again.",
+          "authInstall.field.label": "Plugin ZIP file",
+          "authInstall.submit": "Upload and install",
+          "authInstall.help.heading": "Where do I get the ZIP?",
+          "authInstall.help.repo": "If you work with the repository locally, the latest build is at <code>dist/QtilerAuth.zip</code>.",
+          "authInstall.help.credentials": "After installing, sign in with <strong>user</strong> <code>admin</code> and <strong>temporary password</strong> <code>adminnuevo</code>. Change the password in the console before returning to the dashboard.",
+          "authInstall.help.return": "Once installed, return to the full console at <a href=\"/plugins/auth-admin\">/plugins/auth-admin</a>."
+        },
+        es: {
+          "Dashboard": "Panel principal",
+          "User guide": "Guía de uso",
+          "Language": "Idioma",
+          "Tile caching console for QGIS projects.": "Consola de teselado para proyectos QGIS.",
+          "authInstall.title": "Instalación de QtilerAuth",
+          "authInstall.heading": "Instalar plugin QtilerAuth",
+          "authInstall.description": "El plugin de autenticación no está instalado. Sube el paquete <code>QtilerAuth.zip</code> para habilitarlo nuevamente.",
+          "authInstall.field.label": "Archivo ZIP del plugin",
+          "authInstall.submit": "Subir e instalar",
+          "authInstall.help.heading": "¿Cómo obtener el ZIP?",
+          "authInstall.help.repo": "Si trabajas con el repositorio local, la última versión está en <code>dist/QtilerAuth.zip</code>.",
+          "authInstall.help.credentials": "Después de instalarlo, inicia sesión con <strong>usuario</strong> <code>admin</code> y <strong>contraseña temporal</strong> <code>adminnuevo</code>. Cambia la contraseña en la consola antes de volver al dashboard.",
+          "authInstall.help.return": "Tras instalar el plugin, vuelve a la consola completa en <a href=\"/plugins/auth-admin\">/plugins/auth-admin</a>."
+        },
+        sv: {
+          "Dashboard": "Översikt",
+          "User guide": "Användarguide",
+          "Language": "Språk",
+          "Tile caching console for QGIS projects.": "Cachekonsol för QGIS-projekt.",
+          "authInstall.title": "Installation av QtilerAuth",
+          "authInstall.heading": "Installera QtilerAuth-pluginet",
+          "authInstall.description": "Autentiseringspluginet är inte installerat. Ladda upp paketet <code>QtilerAuth.zip</code> för att aktivera det igen.",
+          "authInstall.field.label": "Plugin-fil (ZIP)",
+          "authInstall.submit": "Ladda upp och installera",
+          "authInstall.help.heading": "Var hittar jag ZIP-filen?",
+          "authInstall.help.repo": "Om du arbetar lokalt finns den senaste versionen i <code>dist/QtilerAuth.zip</code>.",
+          "authInstall.help.credentials": "Efter installationen loggar du in med <strong>användare</strong> <code>admin</code> och <strong>tillfälligt lösenord</strong> <code>adminnuevo</code>. Byt lösenord i konsolen innan du återvänder till panelen.",
+          "authInstall.help.return": "När pluginet är installerat kan du återgå till hela konsolen på <a href=\"/plugins/auth-admin\">/plugins/auth-admin</a>."
+        }
+      };
+
+      const languageSelect = document.getElementById('language_selector');
+
+      const tr = (key) => {
+        if (!key) return '';
+        const table = TRANSLATIONS[currentLang] || {};
+        return table[key] ?? (TRANSLATIONS.en && TRANSLATIONS.en[key]) ?? key;
+      };
+
+      const applyTranslations = () => {
+        if (document?.documentElement) {
+          document.documentElement.setAttribute('lang', currentLang);
+        }
+        const titleNode = document.querySelector('title[data-i18n="authInstall.title"]');
+        if (titleNode) titleNode.textContent = tr('authInstall.title');
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-i18n');
+          if (!key) return;
+          el.innerHTML = tr(key);
+        });
+        if (languageSelect) {
+          languageSelect.value = currentLang;
+        }
+      };
+
+      const persistLanguageCookie = (lang) => {
+        try {
+          document.cookie = `qtiler_lang=${encodeURIComponent(lang)}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+        } catch {}
+      };
+
+      const setLanguage = (lang) => {
+        if (window.qtilerLang?.set) {
+          window.qtilerLang.set(lang);
+          return;
+        }
+        currentLang = normalizeLang(lang);
+        persistLanguageCookie(currentLang);
+        try {
+          localStorage.setItem('qtiler.lang', currentLang);
+        } catch {}
+        applyTranslations();
+      };
+
+      if (languageSelect) {
+        languageSelect.value = currentLang;
+        languageSelect.addEventListener('change', (event) => setLanguage(event.target.value));
+      }
+
+      if (window.qtilerLang?.subscribe) {
+        window.qtilerLang.subscribe((lang) => {
+          const normalized = normalizeLang(lang);
+          if (normalized === currentLang) return;
+          currentLang = normalized;
+          applyTranslations();
+        });
+      }
+
+      applyTranslations();
+    })();
+  </script>
+</body>
+</html>

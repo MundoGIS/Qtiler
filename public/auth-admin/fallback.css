@@ -1,0 +1,84 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f6f8;
+  color: #1f2933;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 2rem;
+}
+
+main {
+  max-width: 520px;
+  width: 100%;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.card {
+  background: #ffffffcc;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px -20px rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.card h1,
+.card h2 {
+  margin-top: 0;
+  margin-bottom: .5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: .25rem;
+  font-weight: 600;
+}
+
+input[type="file"] {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  appearance: none;
+  border: none;
+  background: #2563eb;
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+#status {
+  margin-top: 1rem;
+  min-height: 1.5rem;
+}
+
+.help p {
+  margin: .5rem 0;
+}
+
+code {
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+}

@@ -1,1 +1,37 @@
+# Node modules
+node_modules/
+PLUGINS.md
 
+# Logs
+logs/
+*.log
+
+# Cache
+cache/
+
+# Temporary files
+temp_uploads/
+temp_zip/
+
+# Data files (sensitive information)
+data/auth-config.json
+data/auth-users.json
+data/project-access.json
+data/auth/
+
+# QGIS projects (if not needed in repo)
+qgisprojects/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local

@@ -1,0 +1,31 @@
+{
+  "id": "sweref99tm_grid",
+  "title": "SWEREF99 TM (MapProxy compatible)",
+  "supported_crs": "EPSG:3006",
+  "tile_width": 256,
+  "tile_height": 256,
+  "axis_order": "yx",
+  "top_left_corner": [7689478.31, 181896.33],
+  "matrices": [
+    { "identifier": "00", "scale_denominator": 22309214.983258918, "matrix_width": 1, "matrix_height": 1 },
+    { "identifier": "01", "scale_denominator": 11154607.491629459, "matrix_width": 2, "matrix_height": 2 },
+    { "identifier": "02", "scale_denominator": 5577303.7458147295, "matrix_width": 3, "matrix_height": 4 },
+    { "identifier": "03", "scale_denominator": 2788651.8729073647, "matrix_width": 5, "matrix_height": 8 },
+    { "identifier": "04", "scale_denominator": 1394325.9364536824, "matrix_width": 10, "matrix_height": 16 },
+    { "identifier": "05", "scale_denominator": 697162.9682268412, "matrix_width": 19, "matrix_height": 32 },
+    { "identifier": "06", "scale_denominator": 348581.4841134206, "matrix_width": 37, "matrix_height": 64 },
+    { "identifier": "07", "scale_denominator": 174290.7420567103, "matrix_width": 73, "matrix_height": 128 },
+    { "identifier": "08", "scale_denominator": 87145.37102835515, "matrix_width": 145, "matrix_height": 256 },
+    { "identifier": "09", "scale_denominator": 43572.685514177574, "matrix_width": 290, "matrix_height": 512 },
+    { "identifier": "10", "scale_denominator": 21786.342757088787, "matrix_width": 580, "matrix_height": 1024 },
+    { "identifier": "11", "scale_denominator": 10893.171378544394, "matrix_width": 1159, "matrix_height": 2048 },
+    { "identifier": "12", "scale_denominator": 5446.585689272197, "matrix_width": 2317, "matrix_height": 4096 },
+    { "identifier": "13", "scale_denominator": 2723.2928446360984, "matrix_width": 4634, "matrix_height": 8192 },
+    { "identifier": "14", "scale_denominator": 1361.6464223180492, "matrix_width": 9267, "matrix_height": 16384 },
+    { "identifier": "15", "scale_denominator": 680.8232111590246, "matrix_width": 18533, "matrix_height": 32768 },
+    { "identifier": "16", "scale_denominator": 340.4116055795123, "matrix_width": 37066, "matrix_height": 65536 },
+    { "identifier": "17", "scale_denominator": 170.20580278975615, "matrix_width": 74131, "matrix_height": 131072 },
+    { "identifier": "18", "scale_denominator": 85.10290139487807, "matrix_width": 148261, "matrix_height": 262144 },
+    { "identifier": "19", "scale_denominator": 42.55145069743904, "matrix_width": 296522, "matrix_height": 524288 }
+  ]
+}
