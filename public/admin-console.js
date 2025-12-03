@@ -413,45 +413,6 @@ function attachIframeAutoHeight(frame) {
     frame.removeEventListener('load', handleLoad);
   };
 }
-  const cleanup = () => {
-    if (frame._qtilerObserver) {
-      frame._qtilerObserver.disconnect();
-      frame._qtilerObserver = null;
-    }
-    if (frame._qtilerResizeHandler && frame.contentWindow) {
-      frame.contentWindow.removeEventListener('resize', frame._qtilerResizeHandler);
-    }
-    frame._qtilerResizeHandler = null;
-  };
-
-  const bindObservers = () => {
-    try {
-      const doc = frame.contentDocument || frame.contentWindow?.document;
-      if (!doc || !doc.body) return;
-      const observer = new MutationObserver(() => {
-        window.requestAnimationFrame(resize);
-      });
-      observer.observe(doc.body, { childList: true, subtree: true, attributes: true, characterData: true });
-      frame._qtilerObserver = observer;
-      frame._qtilerResizeHandler = () => window.requestAnimationFrame(resize);
-      frame.contentWindow?.addEventListener('resize', frame._qtilerResizeHandler);
-    } catch (_err) {
-      // Ignore observer failures; the iframe will keep the default height.
-    }
-  };
-
-  const handleLoad = () => {
-    cleanup();
-    resize();
-    bindObservers();
-  };
-
-  frame.addEventListener('load', handleLoad);
-  frame._qtilerCleanup = () => {
-    cleanup();
-    frame.removeEventListener('load', handleLoad);
-  };
-
 async function loadPlugins() {
   try {
     const payload = await api('/plugins');
