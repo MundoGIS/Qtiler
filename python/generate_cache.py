@@ -52,6 +52,271 @@ for _ in range(4):
 if env_path:
     load_dotenv_file(env_path)
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def _ensure_float(value, fallback=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+def _maybe_float(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+def _env_int(name, default=None):
+    try:
+        if name in os.environ:
+            value = os.environ.get(name)
+            if value is not None and value != "":
+                return int(value)
+    except Exception:
+        return default
+    return default
+
+def _to_xy(coords, axis_order):
+    if not coords or len(coords) < 2:
+        return (0.0, 0.0)
+    axis = (axis_order or "xy").lower()
+    first = _ensure_float(coords[0])
+    second = _ensure_float(coords[1])
+    if axis == "yx":
+        return (second, first)
+    return (first, second)
+
+def _find_preset_for_crs(crs_authid):
+    if not crs_authid:
+        return None
+    grids_dir = REPO_ROOT / "config" / "tile-grids"
+    if not grids_dir.exists():
+        return None
+    target = crs_authid.upper()
+    for f in grids_dir.glob("*.json"):
+        try:
+            with open(f, "r", encoding="utf8") as h:
+                data = json.load(h)
+                supported = data.get("supported_crs") or data.get("crs")
+                if supported:
+                    if isinstance(supported, str) and supported.upper() == target:
+                        data["__source_path__"] = str(f)
+                        return data
+                    if isinstance(supported, list) and target in [s.upper() for s in supported if isinstance(s, str)]:
+                        data["__source_path__"] = str(f)
+                        return data
+        except Exception:
+            continue
+    return None
+
+def _load_tile_matrix_preset(name_or_path):
+    if not name_or_path:
+        return None
+    candidates = []
+    raw = Path(name_or_path)
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.append(REPO_ROOT / "config" / "tile-grids" / f"{name_or_path}.json")
+        candidates.append(REPO_ROOT / "config" / "tile-grids" / name_or_path)
+        candidates.append(Path.cwd() / name_or_path)
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                with open(candidate, "r", encoding="utf8") as handle:
+                    data = json.load(handle)
+                    data["__source_path__"] = str(candidate)
+                    return data
+        except Exception as preset_err:
+            sys.stderr.write(json.dumps({"warning": "preset_load_failed", "candidate": str(candidate), "details": str(preset_err)}) + "\n")
+    return None
+
+def _normalize_preset_definition(raw_preset):
+    if not raw_preset:
+        return None
+    axis_order = (raw_preset.get("axis_order") or "xy").lower()
+    origin = raw_preset.get("top_left_corner") or raw_preset.get("top_left") or [0, 0]
+    origin_x, origin_y = _to_xy(origin, axis_order)
+    tile_width = int(raw_preset.get("tile_width") or 256)
+    tile_height = int(raw_preset.get("tile_height") or 256)
+    matrices = []
+    raw_matrices = raw_preset.get("matrices") or raw_preset.get("matrixSet") or []
+    for idx, entry in enumerate(raw_matrices):
+        identifier = entry.get("identifier")
+        if identifier is None:
+            identifier = str(idx)
+        identifier = str(identifier)
+        source_level = entry.get("source_level")
+        if source_level is None:
+            try:
+                source_level = int(identifier)
+            except Exception:
+                source_level = idx
+        entry_axis = (entry.get("axis_order") or axis_order).lower()
+        entry_origin = entry.get("top_left_corner") or entry.get("top_left")
+        if entry_origin:
+            m_origin_x, m_origin_y = _to_xy(entry_origin, entry_axis)
+        else:
+            m_origin_x, m_origin_y = origin_x, origin_y
+        scale = entry.get("scale_denominator")
+        resolution = entry.get("resolution")
+        if resolution is None and scale is not None:
+            resolution = _ensure_float(scale) * 0.00028
+        tile_w = int(entry.get("tile_width") or tile_width)
+        tile_h = int(entry.get("tile_height") or tile_height)
+        matrix_width = int(entry.get("matrix_width") or 1)
+        matrix_height = int(entry.get("matrix_height") or 1)
+        matrices.append({
+            "identifier": identifier,
+            "source_level": int(source_level),
+            "matrix_width": max(1, matrix_width),
+            "matrix_height": max(1, matrix_height),
+            "scale_denominator": _ensure_float(scale) if scale is not None else (float(resolution) / 0.00028 if resolution is not None else 0.0),
+            "resolution": _ensure_float(resolution) if resolution is not None else None,
+            "tile_width": tile_w,
+            "tile_height": tile_h,
+            "origin_x": m_origin_x,
+            "origin_y": m_origin_y
+        })
+    return {
+        "id": raw_preset.get("id") or raw_preset.get("name") or raw_preset.get("identifier"),
+        "title": raw_preset.get("title") or raw_preset.get("name"),
+        "supported_crs": raw_preset.get("supported_crs") or raw_preset.get("crs") or "EPSG:3857",
+        "axis_order": axis_order,
+        "tile_width": tile_width,
+        "tile_height": tile_height,
+        "origin_x": origin_x,
+        "origin_y": origin_y,
+        "matrices": matrices
+    }
+
+def _load_crs_scale_presets(path_or_none):
+    presets = {}
+    if not path_or_none:
+        return presets
+    try:
+        candidate = Path(path_or_none)
+        if not candidate.is_absolute():
+            candidate = REPO_ROOT / candidate
+        if not candidate.exists():
+            return presets
+        with open(candidate, "r", encoding="utf8") as handle:
+            data = json.load(handle)
+    except Exception as err:
+        sys.stderr.write(json.dumps({"warning": "crs_scale_presets_load_failed", "path": str(path_or_none), "details": str(err)}) + "\n")
+        return presets
+    if isinstance(data, dict):
+        for raw_key, entry in data.items():
+            if not isinstance(entry, dict):
+                continue
+            scales_raw = entry.get("scales") or entry.get("scale_denominators") or entry.get("scaleDenominators")
+            if not isinstance(scales_raw, list):
+                continue
+            scales = []
+            for value in scales_raw:
+                try:
+                    num = float(value)
+                    if num > 0:
+                        scales.append(num)
+                except Exception:
+                    continue
+            if not scales:
+                continue
+            key = str(raw_key).upper()
+            presets[key] = {
+                "id": entry.get("id") or entry.get("name") or key,
+                "name": entry.get("name") or entry.get("title"),
+                "tile_size": int(entry.get("tile_size") or entry.get("tileSize") or 256),
+                "scales": scales
+            }
+    return presets
+
+def _match_crs_scale_profile(crs_obj, presets):
+    if not crs_obj or not presets:
+        return None
+    candidates = []
+    try:
+        if hasattr(crs_obj, "authid"):
+            candidates.append(crs_obj.authid())
+    except Exception:
+        pass
+    if isinstance(crs_obj, str):
+        candidates.append(crs_obj)
+    for token in candidates:
+        if not token:
+            continue
+        upper = token.upper()
+        if upper in presets:
+            return presets[upper]
+        if upper.startswith("EPSG:"):
+            plain = upper.split(":", 1)[1]
+            if plain in presets:
+                return presets[plain]
+    return None
+
+def _compute_tile_span(extent, matrix):
+    if not extent or not matrix:
+        return None
+    minx = float(extent.xMinimum())
+    miny = float(extent.yMinimum())
+    maxx = float(extent.xMaximum())
+    maxy = float(extent.yMaximum())
+    if maxx <= minx or maxy <= miny:
+        return None
+    res = matrix.get("resolution")
+    if not res or res <= 0:
+        return None
+    tile_w_mu = matrix.get("tile_width", 256) * res
+    tile_h_mu = matrix.get("tile_height", 256) * res
+    if tile_w_mu <= 0 or tile_h_mu <= 0:
+        return None
+    origin_x = matrix.get("origin_x", 0.0)
+    origin_y = matrix.get("origin_y", 0.0)
+    matrix_w = max(1, int(matrix.get("matrix_width", 1)))
+    matrix_h = max(1, int(matrix.get("matrix_height", 1)))
+
+    min_col = math.floor((minx - origin_x) / tile_w_mu)
+    max_col = math.floor((maxx - origin_x) / tile_w_mu)
+    min_row = math.floor((origin_y - maxy) / tile_h_mu)
+    max_row = math.floor((origin_y - miny) / tile_h_mu)
+
+    if max_col < min_col:
+        min_col, max_col = max_col, min_col
+    if max_row < min_row:
+        min_row, max_row = max_row, min_row
+
+    min_col = max(0, min(matrix_w - 1, min_col))
+    max_col = max(0, min(matrix_w - 1, max_col))
+    min_row = max(0, min(matrix_h - 1, min_row))
+    max_row = max(0, min(matrix_h - 1, max_row))
+
+    if max_col < min_col or max_row < min_row:
+        return None
+
+    return {
+        "min_col": min_col,
+        "max_col": max_col,
+        "min_row": min_row,
+        "max_row": max_row,
+        "tile_width_mu": tile_w_mu,
+        "tile_height_mu": tile_h_mu,
+        "origin_x": origin_x,
+        "origin_y": origin_y
+    }
+
+def _matrix_source_level(entry, fallback=0):
+    if entry is None:
+        return fallback
+    for key in ("source_level", "z", "identifier"):
+        if key in entry and entry[key] is not None:
+            try:
+                return int(entry[key])
+            except Exception:
+                continue
+    return fallback
+
 # --- Leer variables (permitir override por .env / entorno) ---
 QGIS_PREFIX = os.environ.get("QGIS_PREFIX", r"C:\OSGeo4W\apps\qgis")
 OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN", r"C:\OSGeo4W\bin")
@@ -208,6 +473,145 @@ def _wait_for_job(job, timeout_sec=30.0):
         return True
     except Exception:
         try: job.waitForFinished()
+        except Exception: pass
+        return False
+
+
+# Helper: save image atomically and verify size (evita escribir archivos "vacíos" por error)
+def _atomic_save_image(qimage, dest_path, compression=3, min_bytes=None):
+    try:
+        if qimage is None:
+            try: sys.stdout.write(json.dumps({"debug": "atomic_save_no_image", "dest": dest_path}) + "\n"); sys.stdout.flush()
+            except Exception: pass
+            return False
+        ddir = os.path.dirname(dest_path) or "."
+        os.makedirs(ddir, exist_ok=True)
+        # elegir tamaño mínimo aceptable (podemos configurarlo via env)
+        if min_bytes is None:
+            try:
+                env_value = os.environ.get("MIN_TILE_BYTES")
+                min_bytes = int(env_value) if env_value is not None else 0
+            except Exception:
+                min_bytes = 0
+        # archivo temporal en el mismo directorio
+        # Create a temporary filename in the same directory. Avoid leading dot
+        # names to reduce the chance of Windows treating it specially.
+        base = os.path.basename(dest_path)
+        ts = int(time.time() * 1000)
+        tmp_name = f"{base}.tmp.{os.getpid()}.{ts}"
+        tmp_path = os.path.join(ddir, tmp_name)
+        # Intentar guardar
+        try:
+            saved = qimage.save(tmp_path, "PNG", max(0, min(9, int(compression))))
+        except Exception as e:
+            try: sys.stderr.write(json.dumps({"warning": "atomic_save_failed_to_write", "dest": dest_path, "details": str(e)}) + "\n")
+            except Exception: pass
+            try:
+                if os.path.exists(tmp_path): os.remove(tmp_path)
+            except Exception: pass
+            return False
+        if not saved:
+            try:
+                if os.path.exists(tmp_path): os.remove(tmp_path)
+            except Exception:
+                pass
+            try: sys.stderr.write(json.dumps({"warning": "atomic_save_qimage_save_returned_false", "dest": dest_path}) + "\n")
+            except Exception: pass
+            return False
+        # Verificar tamaño
+        try:
+            size = os.path.getsize(tmp_path)
+        except Exception:
+            size = 0
+        if (min_bytes or 0) > 0 and size < min_bytes:
+            bad_dir = os.path.join(ddir, "_bad_tiles")
+            try:
+                os.makedirs(bad_dir, exist_ok=True)
+                bad_name = f"{os.path.basename(dest_path)}.bad.{os.getpid()}.{int(time.time()*1000)}"
+                bad_path = os.path.join(bad_dir, bad_name)
+                # mover el tmp al directorio de diagnóstico para inspección
+                try:
+                    os.replace(tmp_path, bad_path)
+                except Exception:
+                    try:
+                        os.rename(tmp_path, bad_path)
+                    except Exception:
+                        # si no podemos mover, intentar eliminar y continuar
+                        try:
+                            if os.path.exists(tmp_path): os.remove(tmp_path)
+                        except Exception:
+                            pass
+                        bad_path = None
+                sys.stdout.write(json.dumps({"debug": "atomic_save_too_small", "dest": dest_path, "bytes": size, "min_bytes": min_bytes, "bad_path": bad_path}) + "\n")
+                sys.stdout.flush()
+            except Exception:
+                try:
+                    if os.path.exists(tmp_path): os.remove(tmp_path)
+                except Exception:
+                    pass
+            return False
+        # mover de forma atómica
+        # Try to move the tmp file into place atomically. On Windows this can
+        # sometimes fail if the destination already exists or is locked. Try a
+        # small sequence of fallbacks: os.replace, remove dest + os.replace,
+        # os.rename. Retry a few times with short sleeps to handle races.
+        moved = False
+        move_exc = None
+        for attempt in range(3):
+            try:
+                os.replace(tmp_path, dest_path)
+                moved = True
+                break
+            except Exception as e:
+                move_exc = e
+                # If destination exists, try removing it and retry.
+                try:
+                    if os.path.exists(dest_path):
+                        try:
+                            os.remove(dest_path)
+                        except Exception:
+                            # Try to change permissions and retry removal
+                            try:
+                                os.chmod(dest_path, 0o666)
+                                os.remove(dest_path)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    os.replace(tmp_path, dest_path)
+                    moved = True
+                    break
+                except Exception as e2:
+                    move_exc = e2
+                # final fallback to rename
+                try:
+                    os.rename(tmp_path, dest_path)
+                    moved = True
+                    break
+                except Exception as e3:
+                    move_exc = e3
+                # wait a bit before next attempt
+                try:
+                    time.sleep(0.05 * (attempt + 1))
+                except Exception:
+                    pass
+        if not moved:
+            try: sys.stderr.write(json.dumps({"warning": "atomic_save_move_failed", "dest": dest_path, "details": str(move_exc)}) + "\n")
+            except Exception: pass
+            try:
+                if os.path.exists(tmp_path): os.remove(tmp_path)
+            except Exception:
+                pass
+            return False
+        try:
+            sys.stdout.write(json.dumps({"debug": "atomic_save_ok", "dest": dest_path, "bytes": size}) + "\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        try: sys.stderr.write(json.dumps({"error": "atomic_save_exception", "dest": dest_path, "details": str(e)}) + "\n")
         except Exception: pass
         return False
 
@@ -421,6 +825,8 @@ parser.add_argument("--theme", default=None, help="Nombre de tema de mapa a rend
 parser.add_argument("--output_dir", default=None)
 parser.add_argument("--zoom_min", type=int, default=0)
 parser.add_argument("--zoom_max", type=int, default=0)
+parser.add_argument("--publish_zoom_min", type=int, default=None, help="Zoom mínimo que se publicará en WMTS (permite anunciar más niveles que los cacheados)")
+parser.add_argument("--publish_zoom_max", type=int, default=None, help="Zoom máximo que se publicará en WMTS")
 parser.add_argument("--project", default=PROJECT_PATH)
 parser.add_argument("--index_path", default=None)
 parser.add_argument("--project_extent", default=None, help="minx,miny,maxx,maxy (override, comma separated)")
@@ -431,33 +837,250 @@ parser.add_argument("--tile_crs", default=None, help="CRS de las tiles (ej: EPSG
 parser.add_argument("--scheme", choices=["auto","xyz","custom"], default="auto", help="Esquema de teselas: 'xyz' (slippy EPSG:3857) o 'custom' (grid local por bbox). 'auto' usa xyz si CRS=EPSG:3857")
 parser.add_argument("--xyz_mode", choices=["partial","world"], default="partial", help="Para esquema xyz: 'partial' genera solo las teselas que intersectan el extent; 'world' genera toda la cuadrícula para cada zoom.")
 parser.add_argument("--wmts", action="store_true", help="Usar esquema WMTS local (TileMatrixSet derivado del extent y CRS)")
+parser.add_argument("--tile_matrix_preset", default=None, help="Nombre o ruta de un preset de TileMatrixSet (por ejemplo 'sweref99tm_grid')")
+parser.add_argument("--crs_scale_presets", default=None, help="Ruta a JSON con escalas estándar por CRS (fallback cuando no hay tile_matrix_preset)")
 parser.add_argument("--png_compression", type=int, default=int(os.environ.get("PNG_COMPRESSION", "3")), help="Compresión PNG 0-9 (0=sin compresión, 9=máxima)")
 parser.add_argument("--allow_remote", action="store_true", help="Permitir cachear capas remotas (WMS/WMTS/XYZ/Tile). Asegúrate de tener permiso.")
 parser.add_argument("--throttle_ms", type=int, default=int(os.environ.get("REMOTE_THROTTLE_MS", "0")), help="Demora opcional en milisegundos entre tiles (útil para servicios remotos)")
 parser.add_argument("--render_timeout_ms", type=int, default=int(os.environ.get("RENDER_TIMEOUT_MS", "30000")), help="Tiempo máximo por tile (ms) antes de cancelar e intentar el siguiente")
 parser.add_argument("--tile_retries", type=int, default=int(os.environ.get("TILE_RETRIES", "1")), help="Reintentos por tile después de timeout/fallo")
 parser.add_argument("--skip_existing", action="store_true", help="Omitir render si el archivo de tile ya existe")
+parser.add_argument("--bbox", type=str, default=None, help="Optional bbox in target CRS for single tile mode: minx,miny,maxx,maxy")
+# --- Modo single-tile ---
+parser.add_argument("--single", action="store_true", help="Renderizar solo una tile específica")
+parser.add_argument("--z", type=int, default=None, help="Zoom de la tile a renderizar")
+parser.add_argument("--x", type=int, default=None, help="Columna de la tile a renderizar")
+parser.add_argument("--y", type=int, default=None, help="Fila de la tile a renderizar")
 args = parser.parse_args()
 
-if not args.layer and not args.theme:
-    sys.stderr.write(json.dumps({"error": "Se requiere --layer o --theme"}) + "\n")
-    qgs.exitQgis(); sys.exit(1)
-if args.layer and args.theme:
-    sys.stderr.write(json.dumps({"error": "Usa solo uno de --layer o --theme"}) + "\n")
-    qgs.exitQgis(); sys.exit(1)
+tile_matrix_preset_name = args.tile_matrix_preset or os.environ.get("TILE_MATRIX_PRESET")
+tile_matrix_preset_raw = _load_tile_matrix_preset(tile_matrix_preset_name) if tile_matrix_preset_name else None
+tile_matrix_preset = _normalize_preset_definition(tile_matrix_preset_raw) if tile_matrix_preset_raw else None
+crs_scale_presets_path = args.crs_scale_presets or os.environ.get("CRS_SCALE_PRESETS_PATH") or (REPO_ROOT / "config" / "crs-scale-presets.json")
+crs_scale_presets = _load_crs_scale_presets(crs_scale_presets_path)
 
-# Validaciones básicas de argumentos
-if args.zoom_min < 0:
-    args.zoom_min = 0
-if args.zoom_max < 0:
-    args.zoom_max = 0
-if args.zoom_min > args.zoom_max and not (args.zoom_min == 0 and args.zoom_max == 0):
-    args.zoom_min, args.zoom_max = args.zoom_max, args.zoom_min
-
-# Saneo ligero del identificador de destino
+# Global helpers for validation
 INVALID_CHARS = set('<>:"/\\|?*')
-target_mode = "theme" if args.theme else "layer"
-target_name = (args.theme if target_mode == "theme" else args.layer) or ""
+
+# Normalizar target_mode/target_name desde los argumentos (se pueden sobreescribir en --single)
+target_mode = "theme" if args.theme else ("layer" if args.layer else None)
+target_name = (args.theme if args.theme else args.layer) or ""
+
+if args.single:
+    # Modo single-tile: requiere layer o theme, z, x, y
+    if not (args.layer or args.theme):
+        sys.stderr.write(json.dumps({"error": "Se requiere --layer o --theme en modo --single"}) + "\n")
+        qgs.exitQgis(); sys.exit(1)
+    if args.layer and args.theme:
+        sys.stderr.write(json.dumps({"error": "Usa solo uno de --layer o --theme en modo --single"}) + "\n")
+        qgs.exitQgis(); sys.exit(1)
+    if args.z is None or args.x is None or args.y is None:
+        sys.stderr.write(json.dumps({"error": "Se requiere --z, --x, --y en modo --single"}) + "\n")
+        qgs.exitQgis(); sys.exit(1)
+    # Saneo identificador
+    INVALID_CHARS = set('<>:"/\\|?*')
+    target_mode = "theme" if args.theme else "layer"
+    target_name = (args.theme if target_mode == "theme" else args.layer) or ""
+    # --- Renderizar solo una tile ---
+    # Cargar proyecto
+    project = QgsProject()
+    if not project.read(args.project):
+        sys.stderr.write(json.dumps({"error": f"No se pudo leer el proyecto: {args.project}"}) + "\n")
+        qgs.exitQgis(); sys.exit(1)
+    # Obtener capa(s) y CRS destino
+    if target_mode == "layer":
+        lyr = project.mapLayersByName(target_name)
+        if not lyr:
+            sys.stderr.write(json.dumps({"error": f"No se encontró la capa: {target_name}"}) + "\n")
+            qgs.exitQgis(); sys.exit(1)
+        target_layers = [lyr[0]]
+        dest_crs = lyr[0].crs() if hasattr(lyr[0], 'crs') else project.crs()
+    else:
+        target_layers = _resolve_theme_layers(project, target_name)
+        if not target_layers:
+            sys.stderr.write(json.dumps({"error": f"No se encontró el tema: {target_name}"}) + "\n")
+            qgs.exitQgis(); sys.exit(1)
+        # Usar el CRS de la primera capa del tema, si existe
+        dest_crs = target_layers[0].crs() if target_layers and hasattr(target_layers[0], 'crs') else project.crs()
+    # CRS y bbox
+    TILE_SIZE = 256
+    WEB_MERCATOR_EXTENT = 20037508.342789244
+    z, x, y = args.z, args.x, args.y
+
+    # Auto-detect preset if missing and not using explicit bbox
+    if not args.bbox and not tile_matrix_preset and dest_crs:
+        found_preset = _find_preset_for_crs(dest_crs.authid())
+        if found_preset:
+            tile_matrix_preset = _normalize_preset_definition(found_preset)
+            # Update TILE_SIZE if preset defines it
+            if tile_matrix_preset:
+                TILE_SIZE = int(tile_matrix_preset.get("tile_width") or TILE_SIZE)
+
+    # If caller supplied a bbox (in target CRS), use it directly. Otherwise
+    # fallback to WebMercator math (legacy behavior) which only works correctly
+    # for EPSG:3857 tile grids.
+    if args.bbox:
+        parts = [p.strip() for p in args.bbox.split(',') if p.strip()]
+        if len(parts) == 4:
+            try:
+                minx, miny, maxx, maxy = [float(p) for p in parts]
+                bbox_proj = QgsRectangle(minx, miny, maxx, maxy)
+                # Heurística: si el bbox parece estar en WebMercator (valores ~1e6-2e7)
+                # y el destino no es EPSG:3857, intentar transformar desde EPSG:3857
+                try:
+                    if bbox_proj is not None and dest_crs and dest_crs.authid() and dest_crs.authid() != "EPSG:3857":
+                        large_vals = any(abs(v) > 9000000 for v in (minx, miny, maxx, maxy))
+                        if large_vals:
+                            try:
+                                src_crs = QgsCoordinateReferenceSystem("EPSG:3857")
+                                if src_crs.isValid():
+                                    tx = QgsCoordinateTransform(src_crs, dest_crs, project)
+                                    bbox_proj = tx.transformBoundingBox(QgsRectangle(minx, miny, maxx, maxy))
+                            except Exception as e:
+                                try:
+                                    sys.stderr.write(json.dumps({"warning": "bbox_transform_from_3857_failed", "details": str(e)}) + "\n")
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+            except Exception as e:
+                sys.stderr.write(json.dumps({"error": "invalid_bbox", "details": str(e), "value": args.bbox}) + "\n")
+                qgs.exitQgis(); sys.exit(2)
+        else:
+            sys.stderr.write(json.dumps({"error": "invalid_bbox_format", "value": args.bbox}) + "\n")
+            qgs.exitQgis(); sys.exit(2)
+    else:
+        # Check if we have a preset to use for bbox calculation
+        bbox_proj = None
+        if tile_matrix_preset:
+            # Find matrix for z
+            matrices = tile_matrix_preset.get("matrices", [])
+            matrix = next((m for m in matrices if _matrix_source_level(m) == z), None)
+            if matrix:
+                # Use preset logic
+                res_z = matrix.get("resolution") or (matrix.get("scale_denominator") or 0) * 0.00028
+                if res_z:
+                    tile_w_mu = matrix.get("tile_width", TILE_SIZE) * res_z
+                    tile_h_mu = matrix.get("tile_height", TILE_SIZE) * res_z
+                    origin_x = matrix.get("origin_x", 0.0)
+                    origin_y = matrix.get("origin_y", 0.0)
+                    
+                    minx_tile = origin_x + x * tile_w_mu
+                    maxx_tile = minx_tile + tile_w_mu
+                    maxy_tile = origin_y - y * tile_h_mu
+                    miny_tile = maxy_tile - tile_h_mu
+                    bbox_proj = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
+                    # Update TILE_SIZE if matrix specifies it
+                    TILE_SIZE = int(matrix.get("tile_width") or TILE_SIZE)
+
+        if bbox_proj is None:
+            res = (WEB_MERCATOR_EXTENT*2)/(2**z*TILE_SIZE)
+            minx = -WEB_MERCATOR_EXTENT + x*res*TILE_SIZE
+            maxx = minx + res*TILE_SIZE
+            maxy = WEB_MERCATOR_EXTENT - y*res*TILE_SIZE
+            miny = maxy - res*TILE_SIZE
+            bbox_merc = QgsRectangle(minx, miny, maxx, maxy)
+            # Transformar bbox si CRS destino != EPSG:3857
+            tile_crs = QgsCoordinateReferenceSystem("EPSG:3857")
+            try:
+                if dest_crs.authid() != "EPSG:3857":
+                    xform = QgsCoordinateTransform(tile_crs, dest_crs, project)
+                    bbox_proj = xform.transformBoundingBox(bbox_merc)
+                else:
+                    bbox_proj = bbox_merc
+            except Exception as e:
+                sys.stderr.write(json.dumps({"error": "transform_bbox_failed", "details": str(e), "tile_bbox": [minx, miny, maxx, maxy], "dest_crs": dest_crs.authid()}) + "\n")
+                qgs.exitQgis(); sys.exit(2)
+    # Configurar render
+    ms = QgsMapSettings()
+    ms.setLayers(target_layers)
+    ms.setExtent(bbox_proj)
+    ms.setOutputSize(QSize(TILE_SIZE, TILE_SIZE))
+    ms.setDestinationCrs(dest_crs)
+    try:
+        ms.setBackgroundColor(QColor(0, 0, 0, 0))
+    except Exception:
+        ms.setBackgroundColor(QColor("white"))
+    # Debug: informar detalles sobre las capas y el bbox antes de render
+    try:
+        layer_infos = []
+        for tl in target_layers:
+            try:
+                lname = tl.name() if hasattr(tl, 'name') else str(tl)
+            except Exception:
+                lname = str(tl)
+            try:
+                lext = tl.extent()
+                lext_tuple = [lext.xMinimum(), lext.yMinimum(), lext.xMaximum(), lext.yMaximum()] if lext else None
+            except Exception:
+                lext_tuple = None
+            try:
+                fcount = tl.featureCount()
+            except Exception:
+                try:
+                    fcount = tl.featureCount(None)
+                except Exception:
+                    fcount = None
+            try:
+                prov = getattr(tl, 'providerType', lambda: '')() or ''
+            except Exception:
+                prov = ''
+            # intentar obtener info de visibilidad por escala si existe
+            try:
+                sbv = getattr(tl, 'hasScaleBasedVisibility', lambda: False)()
+            except Exception:
+                sbv = False
+            try:
+                min_scale = tl.minimumScale() if hasattr(tl, 'minimumScale') else None
+            except Exception:
+                min_scale = None
+            try:
+                max_scale = tl.maximumScale() if hasattr(tl, 'maximumScale') else None
+            except Exception:
+                max_scale = None
+            layer_infos.append({"name": lname, "extent": lext_tuple, "features": fcount, "provider": prov, "scale_based_visibility": sbv, "min_scale": min_scale, "max_scale": max_scale})
+        sys.stdout.write(json.dumps({"debug": "single_tile_prepare", "bbox": [bbox_proj.xMinimum(), bbox_proj.yMinimum(), bbox_proj.xMaximum(), bbox_proj.yMaximum()], "dest_crs": dest_crs.authid() if dest_crs else None, "layers": layer_infos}, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except Exception as e:
+        try:
+            sys.stderr.write(json.dumps({"warning": "single_tile_debug_failed", "details": str(e)}) + "\n")
+        except Exception:
+            pass
+    ms.setOutputDpi(96)
+    job = QgsMapRendererParallelJob(ms)
+    job.start()
+    _wait_for_job(job, timeout_sec=30.0)
+    img = job.renderedImage()
+    # Diagnostic: check image validity
+    try:
+        if img is None:
+            sys.stdout.write(json.dumps({"debug": "rendered_image_none"}) + "\n")
+            sys.stdout.flush()
+        else:
+            try:
+                w = img.width()
+                h = img.height()
+                sys.stdout.write(json.dumps({"debug": "rendered_image_size", "width": int(w), "height": int(h)}) + "\n")
+                sys.stdout.flush()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # Guardar PNG
+    out_dir = args.output_dir or os.path.join(os.path.dirname(args.project), "..", "cache", os.path.splitext(os.path.basename(args.project))[0], target_name, str(z), str(x))
+    os.makedirs(out_dir, exist_ok=True)
+    out_file = os.path.join(out_dir, f"{y}.png")
+    saved_ok = _atomic_save_image(img, out_file, compression=args.png_compression)
+    if saved_ok:
+        print(json.dumps({"status": "ok", "tile": out_file}))
+        qgs.exitQgis(); sys.exit(0)
+    else:
+        try:
+            sys.stderr.write(json.dumps({"error": "save_failed_or_too_small", "tile": out_file}) + "\n")
+        except Exception:
+            pass
+        qgs.exitQgis(); sys.exit(2)
+    # ...existing code...
 target_name = target_name.strip()
 if not target_name:
     sys.stderr.write(json.dumps({"error": "Nombre inválido para el destino"}) + "\n")
@@ -671,7 +1294,8 @@ print(json.dumps({
     "zoom_max": args.zoom_max,
     "project_crs": project_crs.authid() if project_crs else None,
     "project_extent": [project_extent.xMinimum(), project_extent.yMinimum(), project_extent.xMaximum(), project_extent.yMaximum()] if project_extent else None,
-    "tile_crs": tile_crs.authid() if tile_crs else None
+    "tile_crs": tile_crs.authid() if tile_crs else None,
+    "tile_matrix_preset": (tile_matrix_preset.get("id") if tile_matrix_preset else tile_matrix_preset_name)
 }, ensure_ascii=False))
 sys.stdout.flush()
 
@@ -699,7 +1323,9 @@ except Exception:
     pass
 
 scheme = args.scheme
-if scheme == "auto":
+if tile_matrix_preset:
+    scheme = "wmts"
+elif scheme == "auto":
     scheme = "xyz" if (tile_crs and tile_crs.authid().upper() == "EPSG:3857") else ("wmts" if args.wmts else "custom")
 
 # métricas base
@@ -709,9 +1335,35 @@ if zoom_min == 0 and zoom_max == 0:
     zoom_min = 0
     zoom_max = 2
 
+publish_zoom_min = args.publish_zoom_min
+publish_zoom_max = args.publish_zoom_max
+publish_min_explicit = args.publish_zoom_min is not None or ("WMTS_PUBLISH_ZOOM_MIN" in os.environ)
+publish_max_explicit = args.publish_zoom_max is not None or ("WMTS_PUBLISH_ZOOM_MAX" in os.environ)
+if publish_zoom_min is None:
+    publish_zoom_min = _env_int("WMTS_PUBLISH_ZOOM_MIN", zoom_min)
+if publish_zoom_max is None:
+    publish_zoom_max = _env_int("WMTS_PUBLISH_ZOOM_MAX", zoom_max)
+if publish_zoom_min is None:
+    publish_zoom_min = zoom_min
+if publish_zoom_max is None:
+    publish_zoom_max = max(zoom_max, publish_zoom_min)
+publish_zoom_min = max(0, int(publish_zoom_min))
+publish_zoom_max = max(publish_zoom_min, int(publish_zoom_max))
+publish_zoom_min_effective = publish_zoom_min
+publish_zoom_max_effective = publish_zoom_max
+
+if scheme != "wmts":
+    publish_zoom_min = zoom_min
+    publish_zoom_max = zoom_max
+    publish_zoom_min_effective = publish_zoom_min
+    publish_zoom_max_effective = publish_zoom_max
+
 total_generated = 0
 error_count = 0
 throttle_sec = max(0.0, float(args.throttle_ms) / 1000.0 if args.throttle_ms else 0.0)
+wmts_matrices = []
+
+active_scale_profile = None
 
 if scheme == "xyz":
     # Tiling global EPSG:3857 estilo XYZ (origen arriba-izquierda)
@@ -799,9 +1451,9 @@ if scheme == "xyz":
                             tile_dir = os.path.join(tile_base_dir, str(z), str(x))
                             os.makedirs(tile_dir, exist_ok=True)
                             out_file = os.path.join(tile_dir, f"{y}.png")
-                            success = img.save(out_file, "PNG", max(0, min(9, int(args.png_compression))))
+                            success = _atomic_save_image(img, out_file, compression=args.png_compression)
                             if not success:
-                                last_err = "save_failed"
+                                last_err = "save_failed_or_too_small"
                         except Exception as e:
                             last_err = str(e)
                     if success:
@@ -831,115 +1483,292 @@ if scheme == "xyz":
         sys.stdout.flush()
 
 elif scheme == "wmts":
-    # WMTS local: definir TileMatrixSet basado en extent_in_tile_crs y CRS
-    # parámetros base
-    TILE_SIZE = 256
-    minx = extent_in_tile_crs.xMinimum(); miny = extent_in_tile_crs.yMinimum()
-    maxx = extent_in_tile_crs.xMaximum(); maxy = extent_in_tile_crs.yMaximum()
-    width = maxx - minx; height = maxy - miny
-    if width <= 0 or height <= 0:
-        sys.stderr.write(json.dumps({"error": "project_extent inválido", "extent": [minx, miny, maxx, maxy]}) + "\n"); qgs.exitQgis(); sys.exit(1)
-
-    # Resolución base en zoom_min: ajustar a lado mayor para asegurar matriz entera aproximada
-    res0 = max(width, height) / (TILE_SIZE * (2 ** 0))
-    # top-left en origen NW
-    top_left_x = minx
-    top_left_y = maxy
-
-    # construir matrices por nivel
-    expected_total = 0
+    TILE_SIZE = int(tile_matrix_preset.get("tile_width") or 256) if tile_matrix_preset else 256
     wmts_matrices = []
-    for z in range(zoom_min, zoom_max + 1):
-        # resolución decrece por factor 2 por nivel
-        res_z = res0 / (2 ** (z - zoom_min))
-        mw = int(math.ceil(width / (TILE_SIZE * res_z)))
-        mh = int(math.ceil(height / (TILE_SIZE * res_z)))
-        if mw <= 0: mw = 1
-        if mh <= 0: mh = 1
-        wmts_matrices.append({
-            "z": z,
-            "resolution": res_z,
-            "scale_denominator": (res_z / 0.00028),
-            "matrix_width": mw,
-            "matrix_height": mh,
-            "top_left": [top_left_x, top_left_y]
-        })
-        expected_total += mw * mh
-    if expected_total <= 0:
-        expected_total = 1
+    expected_total = 0
+    active_scale_profile = None
 
-    # generar tiles siguiendo la rejilla WMTS (origen top-left, y crece hacia abajo)
-    total_generated = 0
-    for z in range(zoom_min, zoom_max + 1):
-        if _terminate["flag"]:
-            break
-        mdef = next(m for m in wmts_matrices if m["z"] == z)
-        res_z = mdef["resolution"]
-        mw = mdef["matrix_width"]; mh = mdef["matrix_height"]
-        level_generated = 0
-        for x in range(0, mw):
+    if tile_matrix_preset:
+        preset_id = tile_matrix_preset.get("id") or tile_matrix_preset_name
+        preset_matrices = tile_matrix_preset.get("matrices", [])
+        if not publish_min_explicit and not publish_max_explicit:
+            preset_levels_all = sorted({_matrix_source_level(m) for m in preset_matrices})
+            if preset_levels_all:
+                publish_zoom_min = preset_levels_all[0]
+                publish_zoom_max = preset_levels_all[-1]
+                publish_zoom_min_effective = publish_zoom_min
+                publish_zoom_max_effective = publish_zoom_max
+        selected = [m for m in preset_matrices if zoom_min <= _matrix_source_level(m) <= zoom_max]
+        if not selected:
+            selected = preset_matrices
+        publish_matrices = [m for m in preset_matrices if publish_zoom_min <= _matrix_source_level(m) <= publish_zoom_max]
+        if not publish_matrices:
+            publish_matrices = preset_matrices
+        publish_levels = sorted({_matrix_source_level(m) for m in publish_matrices})
+        if publish_levels:
+            publish_zoom_min_effective = publish_levels[0]
+            publish_zoom_max_effective = publish_levels[-1]
+        tile_runs = []
+        for matrix in selected:
+            span = _compute_tile_span(extent_in_tile_crs, matrix)
+            if not span:
+                tile_w_mu = matrix.get("tile_width", TILE_SIZE) * (matrix.get("resolution") or 0)
+                tile_h_mu = matrix.get("tile_height", TILE_SIZE) * (matrix.get("resolution") or 0)
+                span = {
+                    "min_col": 0,
+                    "max_col": matrix.get("matrix_width", 1) - 1,
+                    "min_row": 0,
+                    "max_row": matrix.get("matrix_height", 1) - 1,
+                    "tile_width_mu": tile_w_mu if tile_w_mu else TILE_SIZE,
+                    "tile_height_mu": tile_h_mu if tile_h_mu else TILE_SIZE,
+                    "origin_x": matrix.get("origin_x", 0.0),
+                    "origin_y": matrix.get("origin_y", 0.0)
+                }
+            span["matrix"] = matrix
+            if span["max_col"] >= span["min_col"] and span["max_row"] >= span["min_row"]:
+                count = (span["max_col"] - span["min_col"] + 1) * (span["max_row"] - span["min_row"] + 1)
+                expected_total += count
+                tile_runs.append(span)
+        if expected_total <= 0:
+            expected_total = sum(max(1, m.get("matrix_width", 1)) * max(1, m.get("matrix_height", 1)) for m in selected) or 1
+
+        total_generated = 0
+        for span in tile_runs:
             if _terminate["flag"]:
                 break
-            for y in range(0, mh):
+            matrix = span["matrix"]
+            res_z = matrix.get("resolution") or (matrix.get("scale_denominator") or 0) * 0.00028
+            if not res_z:
+                continue
+            tile_w_mu = span["tile_width_mu"]
+            tile_h_mu = span["tile_height_mu"]
+            level_generated = 0
+            folder_level = str(matrix.get("source_level"))
+            for x in range(int(span["min_col"]), int(span["max_col"]) + 1):
                 if _terminate["flag"]:
                     break
-                minx_tile = top_left_x + x * TILE_SIZE * res_z
-                maxx_tile = minx_tile + TILE_SIZE * res_z
-                maxy_tile = top_left_y - y * TILE_SIZE * res_z
-                miny_tile = maxy_tile - TILE_SIZE * res_z
-                tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
-                settings.setExtent(tile_bbox)
-                settings.setOutputSize(QSize(TILE_SIZE, TILE_SIZE))
-                tile_dir = os.path.join(tile_base_dir, str(z), str(x))
-                out_file = os.path.join(tile_dir, f"{y}.png")
-                if args.skip_existing and os.path.exists(out_file):
-                    total_generated += 1; level_generated += 1
-                    continue
-                out_file = None
-                try:
-                    attempts = 0
-                    success = False
-                    last_err = None
-                    while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
-                        attempts += 1
-                        try:
-                            job = QgsMapRendererParallelJob(settings)
-                            job.start()
-                            finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
-                            if not finished:
-                                try: job.cancel()
-                                except Exception: pass
-                                last_err = "timeout"
-                                continue
-                            img = job.renderedImage()
-                            os.makedirs(tile_dir, exist_ok=True)
-                            out_file = os.path.join(tile_dir, f"{y}.png")
-                            success = img.save(out_file, "PNG", max(0, min(9, int(args.png_compression))))
-                            if not success:
-                                last_err = "save_failed"
-                        except Exception as e:
-                            last_err = str(e)
-                    if success:
+                for y in range(int(span["min_row"]), int(span["max_row"]) + 1):
+                    if _terminate["flag"]:
+                        break
+                    minx_tile = span["origin_x"] + x * tile_w_mu
+                    maxx_tile = minx_tile + tile_w_mu
+                    maxy_tile = span["origin_y"] - y * tile_h_mu
+                    miny_tile = maxy_tile - tile_h_mu
+                    tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
+                    settings.setExtent(tile_bbox)
+                    settings.setOutputSize(QSize(matrix.get("tile_width", TILE_SIZE), matrix.get("tile_height", TILE_SIZE)))
+                    tile_dir = os.path.join(tile_base_dir, folder_level, str(x))
+                    out_file = os.path.join(tile_dir, f"{y}.png")
+                    if args.skip_existing and os.path.exists(out_file):
                         total_generated += 1; level_generated += 1
-                    else:
-                        sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
-                        error_count += 1
-                except Exception as e:
-                    sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
-                    error_count += 1
-                if throttle_sec > 0:
+                        continue
+                    out_file = None
                     try:
-                        time.sleep(throttle_sec)
-                    except Exception:
-                        pass
-        percent = (total_generated / expected_total) * 100.0
-        sys.stdout.write(json.dumps({"progress": "level_done", "z": z, "generated_level": level_generated, "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
-        sys.stdout.flush()
+                        attempts = 0
+                        success = False
+                        last_err = None
+                        while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
+                            attempts += 1
+                            try:
+                                job = QgsMapRendererParallelJob(settings)
+                                job.start()
+                                finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
+                                if not finished:
+                                    try: job.cancel()
+                                    except Exception: pass
+                                    last_err = "timeout"
+                                    continue
+                                img = job.renderedImage()
+                                os.makedirs(tile_dir, exist_ok=True)
+                                out_file = os.path.join(tile_dir, f"{y}.png")
+                                success = _atomic_save_image(img, out_file, compression=args.png_compression)
+                                if not success:
+                                    last_err = "save_failed_or_too_small"
+                            except Exception as e:
+                                last_err = str(e)
+                        if success:
+                            total_generated += 1; level_generated += 1
+                        else:
+                            sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
+                            error_count += 1
+                    except Exception as e:
+                        sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
+                        error_count += 1
+                    if throttle_sec > 0:
+                        try:
+                            time.sleep(throttle_sec)
+                        except Exception:
+                            pass
+            percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
+            sys.stdout.write(json.dumps({"progress": "level_done", "z": int(matrix.get("source_level", 0)), "generated_level": level_generated, "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
+            sys.stdout.flush()
 
-    if _terminate["flag"]:
-        percent = (total_generated / expected_total) * 100.0
-        sys.stdout.write(json.dumps({"status": "aborted", "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
-        sys.stdout.flush()
+        if _terminate["flag"]:
+            percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
+            sys.stdout.write(json.dumps({"status": "aborted", "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
+            sys.stdout.flush()
+
+        wmts_matrices = [
+            {
+                "z": int(m.get("source_level", idx)),
+                "identifier": m.get("identifier") or str(idx),
+                "resolution": m.get("resolution"),
+                "scale_denominator": m.get("scale_denominator"),
+                "matrix_width": m.get("matrix_width"),
+                "matrix_height": m.get("matrix_height"),
+                "top_left": [m.get("origin_x"), m.get("origin_y")]
+            }
+            for idx, m in enumerate(publish_matrices)
+        ]
+    else:
+        minx = extent_in_tile_crs.xMinimum(); miny = extent_in_tile_crs.yMinimum()
+        maxx = extent_in_tile_crs.xMaximum(); maxy = extent_in_tile_crs.yMaximum()
+        width = maxx - minx; height = maxy - miny
+        if width <= 0 or height <= 0:
+            sys.stderr.write(json.dumps({"error": "project_extent inválido", "extent": [minx, miny, maxx, maxy]}) + "\n"); qgs.exitQgis(); sys.exit(1)
+
+        publish_zoom_min_effective = min(publish_zoom_min, zoom_min)
+        publish_zoom_max_effective = max(publish_zoom_max, zoom_max)
+        top_left_x = minx
+        top_left_y = maxy
+        scale_profile = _match_crs_scale_profile(tile_crs, crs_scale_presets)
+        if scale_profile and scale_profile.get("scales"):
+            active_scale_profile = scale_profile
+            TILE_SIZE = int(scale_profile.get("tile_size") or TILE_SIZE or 256)
+            scales = scale_profile.get("scales")
+            total_levels = len(scales)
+
+            def _clamp_level(value, fallback):
+                if value is None:
+                    return fallback
+                try:
+                    idx = int(value)
+                except Exception:
+                    idx = fallback
+                return max(0, min(total_levels - 1, idx))
+
+            if not publish_min_explicit and not publish_max_explicit:
+                publish_zoom_min = 0
+                publish_zoom_max = total_levels - 1
+            zoom_min = _clamp_level(zoom_min, 0)
+            zoom_max = _clamp_level(zoom_max, total_levels - 1)
+            publish_zoom_min_effective = _clamp_level(publish_zoom_min, zoom_min)
+            publish_zoom_max_effective = _clamp_level(publish_zoom_max, zoom_max)
+            matrix_range_min = min(publish_zoom_min_effective, zoom_min)
+            matrix_range_max = max(publish_zoom_max_effective, zoom_max)
+            wmts_matrices = []
+            for idx in range(matrix_range_min, matrix_range_max + 1):
+                scale_denominator = float(scales[idx])
+                resolution = scale_denominator * 0.00028
+                mw = max(1, int(math.ceil(width / (TILE_SIZE * resolution))))
+                mh = max(1, int(math.ceil(height / (TILE_SIZE * resolution))))
+                wmts_matrices.append({
+                    "z": idx,
+                    "identifier": str(idx),
+                    "resolution": resolution,
+                    "scale_denominator": scale_denominator,
+                    "matrix_width": mw,
+                    "matrix_height": mh,
+                    "top_left": [top_left_x, top_left_y]
+                })
+        else:
+            res0 = max(width, height) / (TILE_SIZE * (2 ** 0))
+            wmts_matrices = []
+            matrix_range_min = int(publish_zoom_min_effective)
+            matrix_range_max = int(publish_zoom_max_effective)
+            for z in range(matrix_range_min, matrix_range_max + 1):
+                res_z = res0 / (2 ** (z - zoom_min))
+                mw = int(math.ceil(width / (TILE_SIZE * res_z)))
+                mh = int(math.ceil(height / (TILE_SIZE * res_z)))
+                if mw <= 0: mw = 1
+                if mh <= 0: mh = 1
+                wmts_matrices.append({
+                    "z": z,
+                    "identifier": str(z),
+                    "resolution": res_z,
+                    "scale_denominator": (res_z / 0.00028),
+                    "matrix_width": mw,
+                    "matrix_height": mh,
+                    "top_left": [top_left_x, top_left_y]
+                })
+
+        expected_total = sum(
+            max(1, m.get("matrix_width", 1)) * max(1, m.get("matrix_height", 1))
+            for m in wmts_matrices
+            if zoom_min <= m.get("z", zoom_min) <= zoom_max
+        ) or 1
+
+        total_generated = 0
+        for z in range(zoom_min, zoom_max + 1):
+            if _terminate["flag"]:
+                break
+            mdef = next(m for m in wmts_matrices if m["z"] == z)
+            res_z = mdef["resolution"]
+            mw = mdef["matrix_width"]; mh = mdef["matrix_height"]
+            level_generated = 0
+            for x in range(0, mw):
+                if _terminate["flag"]:
+                    break
+                for y in range(0, mh):
+                    if _terminate["flag"]:
+                        break
+                    minx_tile = top_left_x + x * TILE_SIZE * res_z
+                    maxx_tile = minx_tile + TILE_SIZE * res_z
+                    maxy_tile = top_left_y - y * TILE_SIZE * res_z
+                    miny_tile = maxy_tile - TILE_SIZE * res_z
+                    tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
+                    settings.setExtent(tile_bbox)
+                    settings.setOutputSize(QSize(TILE_SIZE, TILE_SIZE))
+                    tile_dir = os.path.join(tile_base_dir, str(z), str(x))
+                    out_file = os.path.join(tile_dir, f"{y}.png")
+                    if args.skip_existing and os.path.exists(out_file):
+                        total_generated += 1; level_generated += 1
+                        continue
+                    out_file = None
+                    try:
+                        attempts = 0
+                        success = False
+                        last_err = None
+                        while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
+                            attempts += 1
+                            try:
+                                job = QgsMapRendererParallelJob(settings)
+                                job.start()
+                                finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
+                                if not finished:
+                                    try: job.cancel()
+                                    except Exception: pass
+                                    last_err = "timeout"
+                                    continue
+                                img = job.renderedImage()
+                                os.makedirs(tile_dir, exist_ok=True)
+                                out_file = os.path.join(tile_dir, f"{y}.png")
+                                success = _atomic_save_image(img, out_file, compression=args.png_compression)
+                                if not success:
+                                    last_err = "save_failed_or_too_small"
+                            except Exception as e:
+                                last_err = str(e)
+                        if success:
+                            total_generated += 1; level_generated += 1
+                        else:
+                            sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
+                            error_count += 1
+                    except Exception as e:
+                        sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
+                        error_count += 1
+                    if throttle_sec > 0:
+                        try:
+                            time.sleep(throttle_sec)
+                        except Exception:
+                            pass
+            percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
+            sys.stdout.write(json.dumps({"progress": "level_done", "z": z, "generated_level": level_generated, "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
+            sys.stdout.flush()
+
+        if _terminate["flag"]:
+            percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
+            sys.stdout.write(json.dumps({"status": "aborted", "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
+            sys.stdout.flush()
 
 else:
     # esquema "custom": subdividir bbox localmente en 2^z x 2^z
@@ -992,9 +1821,9 @@ else:
                             img = job.renderedImage()
                             os.makedirs(tile_dir, exist_ok=True)
                             out_file = os.path.join(tile_dir, f"{y}.png")
-                            success = img.save(out_file, "PNG", max(0, min(9, int(args.png_compression))))
+                            success = _atomic_save_image(img, out_file, compression=args.png_compression)
                             if not success:
-                                last_err = "save_failed"
+                                last_err = "save_failed_or_too_small"
                         except Exception as e:
                             last_err = str(e)
                     if success:
@@ -1041,8 +1870,12 @@ try:
         ],
         "project_crs": project_crs.authid(),
         "project_extent": [project_extent.xMinimum(), project_extent.yMinimum(), project_extent.xMaximum(), project_extent.yMaximum()],
-        "zoom_min": zoom_min,
-        "zoom_max": zoom_max,
+        "zoom_min": publish_zoom_min_effective,
+        "zoom_max": publish_zoom_max_effective,
+        "published_zoom_min": publish_zoom_min_effective,
+        "published_zoom_max": publish_zoom_max_effective,
+        "cached_zoom_min": zoom_min,
+        "cached_zoom_max": zoom_max,
         "tile_format": "png",
         "path": os.path.abspath(tile_base_dir),
         "generated": datetime.datetime.now().isoformat(),
@@ -1058,22 +1891,45 @@ try:
         layer_entry["layer"] = target_name
     # añadir metadatos WMTS si aplica
     if scheme == "wmts":
+        preset_id_value = (tile_matrix_preset.get("id") if tile_matrix_preset else None) or f"{Path(args.project).stem}:{storage_name}"
+        axis_order_value = (tile_matrix_preset.get("axis_order") if tile_matrix_preset else "xy")
+        if axis_order_value not in ("xy", "yx"):
+            axis_order_value = "xy"
+        tile_width_value = int(tile_matrix_preset.get("tile_width") or 256) if tile_matrix_preset else 256
+        tile_height_value = int(tile_matrix_preset.get("tile_height") or 256) if tile_matrix_preset else 256
+        if tile_matrix_preset:
+            top_left_corner_record = [float(tile_matrix_preset.get("origin_x", 0.0)), float(tile_matrix_preset.get("origin_y", 0.0))]
+            supported_crs_value = tile_matrix_preset.get("supported_crs") or tile_crs.authid()
+        else:
+            top_left_corner_record = [float(extent_in_tile_crs.xMinimum()), float(extent_in_tile_crs.yMaximum())]
+            supported_crs_value = tile_crs.authid()
         layer_entry["tile_matrix_set"] = {
-            "id": f"{Path(args.project).stem}:{storage_name}",
-            "supported_crs": tile_crs.authid(),
-            "tile_width": 256,
-            "tile_height": 256,
-            "top_left_corner": [float(extent_in_tile_crs.xMinimum()), float(extent_in_tile_crs.yMaximum())],
+            "id": preset_id_value,
+            "supported_crs": supported_crs_value,
+            "tile_width": tile_width_value,
+            "tile_height": tile_height_value,
+            "axis_order": axis_order_value,
+            "top_left_corner": top_left_corner_record,
             "matrices": [
                 {
-                    "z": int(m["z"]),
-                    "scale_denominator": float(m["scale_denominator"]),
-                    "resolution": float(m["resolution"]),
-                    "matrix_width": int(m["matrix_width"]),
-                    "matrix_height": int(m["matrix_height"])
-                } for m in wmts_matrices
+                    "identifier": m.get("identifier") or str(m.get("z")),
+                    "z": int(m.get("z", idx)),
+                    "source_level": int(m.get("z", idx)),
+                    "scale_denominator": _maybe_float(m.get("scale_denominator")),
+                    "resolution": _maybe_float(m.get("resolution")),
+                    "matrix_width": int(m.get("matrix_width", 1)),
+                    "matrix_height": int(m.get("matrix_height", 1)),
+                    "top_left": [
+                        float(m.get("top_left", top_left_corner_record)[0] if isinstance(m.get("top_left"), (list, tuple)) else top_left_corner_record[0]),
+                        float(m.get("top_left", top_left_corner_record)[1] if isinstance(m.get("top_left"), (list, tuple)) else top_left_corner_record[1])
+                    ]
+                } for idx, m in enumerate(wmts_matrices)
             ]
         }
+        if tile_matrix_preset:
+            layer_entry["tile_matrix_preset"] = tile_matrix_preset.get("id") or tile_matrix_preset_name
+        elif active_scale_profile:
+            layer_entry["tile_matrix_profile"] = active_scale_profile.get("id") or active_scale_profile.get("name") or tile_crs.authid()
     layers_snapshot = list(index.get("layers", []))
 
     def _safe_int(value):
@@ -1083,28 +1939,39 @@ try:
         except Exception:
             return None
 
+    def _merge_range(prev_min, prev_max, new_min, new_max):
+        values = [v for v in (prev_min, prev_max, new_min, new_max) if v is not None]
+        if not values:
+            return (None, None)
+        return (min(values), max(values))
+
     existing_entry = next((l for l in layers_snapshot if l.get("name") == target_name and (l.get("kind") or "layer") == target_mode), None)
     index["layers"] = [
         l for l in layers_snapshot
         if not (l.get("name") == target_name and (l.get("kind") or "layer") == target_mode)
     ]
     if existing_entry:
-        prev_zoom_min = _safe_int(existing_entry.get("zoom_min"))
-        prev_zoom_max = _safe_int(existing_entry.get("zoom_max"))
-        if prev_zoom_min is not None and prev_zoom_max is not None:
-            range_min = min(prev_zoom_min, zoom_min)
-            range_max = max(prev_zoom_max, zoom_max)
-        elif prev_zoom_min is not None:
-            range_min = min(prev_zoom_min, zoom_min)
-            range_max = zoom_max
-        elif prev_zoom_max is not None:
-            range_min = zoom_min
-            range_max = max(prev_zoom_max, zoom_max)
-        else:
-            range_min = zoom_min
-            range_max = zoom_max
-        layer_entry["zoom_min"] = range_min
-        layer_entry["zoom_max"] = range_max
+        prev_publish_min = _safe_int(existing_entry.get("published_zoom_min"))
+        prev_publish_max = _safe_int(existing_entry.get("published_zoom_max"))
+        if prev_publish_min is None and prev_publish_max is None:
+            prev_publish_min = _safe_int(existing_entry.get("zoom_min"))
+            prev_publish_max = _safe_int(existing_entry.get("zoom_max"))
+        merged_publish = _merge_range(prev_publish_min, prev_publish_max, publish_zoom_min_effective, publish_zoom_max_effective)
+        if merged_publish[0] is not None:
+            layer_entry["zoom_min"] = merged_publish[0]
+            layer_entry["zoom_max"] = merged_publish[1]
+            layer_entry["published_zoom_min"] = merged_publish[0]
+            layer_entry["published_zoom_max"] = merged_publish[1]
+
+        prev_cached_min = _safe_int(existing_entry.get("cached_zoom_min"))
+        prev_cached_max = _safe_int(existing_entry.get("cached_zoom_max"))
+        if prev_cached_min is None and prev_cached_max is None:
+            prev_cached_min = _safe_int(existing_entry.get("zoom_min"))
+            prev_cached_max = _safe_int(existing_entry.get("zoom_max"))
+        merged_cached = _merge_range(prev_cached_min, prev_cached_max, zoom_min, zoom_max)
+        if merged_cached[0] is not None:
+            layer_entry["cached_zoom_min"] = merged_cached[0]
+            layer_entry["cached_zoom_max"] = merged_cached[1]
     index["layers"].append(layer_entry)
     with open(index_path, "w", encoding="utf8") as f:
         json.dump(index, f, indent=2, ensure_ascii=False)

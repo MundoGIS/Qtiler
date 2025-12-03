@@ -1,0 +1,85 @@
+<%- include('partials/html-open', {
+  pageLang,
+  pageTitle: 'Qtiler · Admin console',
+  pageTitleI18nKey: 'admin.title',
+  extraStyles: ['/css/admin.css'],
+  bodyClass: 'admin-page'
+}) %>
+  <div class="app-shell admin-shell">
+    <%- include('partials/header', {
+      headerMode: 'simple',
+      activeNav: 'admin',
+      headerTaglineKey: 'admin.subtitle',
+      headerTaglineText: 'Manage plugins and access control'
+    }) %>
+
+    <main class="admin-main" id="admin-root">
+      <section class="admin-hero">
+        <div>
+          <p class="eyebrow" data-i18n="heroEyebrow">Operations</p>
+          <h1 data-i18n="heroTitle">Admin console</h1>
+          <p data-i18n="heroSubtitle">Install signed plugins, enable their admin consoles, and keep your deployment tidy.</p>
+        </div>
+        <div class="admin-hero-actions">
+          <a href="/index.html" class="button button-ghost" data-i18n="backToDashboard">Back to Dashboard</a>
+          <button type="button" class="button" id="refresh-plugins" data-i18n="refreshPlugins">Refresh list</button>
+        </div>
+      </section>
+
+      <section class="admin-card admin-card--notice" aria-labelledby="auth-plugin-heading">
+        <div class="admin-card__body">
+          <p class="eyebrow" data-i18n="authPluginEyebrow">Authentication</p>
+          <h2 id="auth-plugin-heading" data-i18n="authPluginTitle">Secure WMTS with QtilerAuth</h2>
+          <p data-i18n="authPluginBody">Install the commercial QtilerAuth plugin to manage users, roles, and WMTS authentication.</p>
+        </div>
+        <div class="admin-card__cta">
+          <a href="https://mundogis.se" target="_blank" rel="noopener" class="button" data-i18n="authPluginCta">Get QtilerAuth at MundoGIS.se</a>
+        </div>
+      </section>
+
+      <div id="messages" class="admin-messages" aria-live="polite"></div>
+
+      <section class="admin-card admin-card--upload">
+        <div class="admin-card__header">
+          <div>
+            <h2 data-i18n="installPlugin">Install plugin</h2>
+            <p data-i18n="installSubtitle">Upload a plugin package from MundoGIS to install it on this server.</p>
+          </div>
+        </div>
+        <form id="plugin-upload-form" class="admin-form">
+          <div class="form-field">
+            <label for="plugin-file" data-i18n="uploadZip">Plugin ZIP file:</label>
+            <input type="file" id="plugin-file" name="plugin" accept=".zip" required>
+          </div>
+          <button type="submit" class="button" data-i18n="installBtn">Install plugin</button>
+        </form>
+      </section>
+
+      <section class="admin-card" aria-labelledby="plugins-heading">
+        <div class="admin-card__header">
+          <div>
+            <h2 id="plugins-heading" data-i18n="installedPlugins">Installed plugins</h2>
+            <p data-i18n="installedSubtitle">Enabled plugins expose their admin console below. Uninstall to remove files.</p>
+          </div>
+        </div>
+        <div id="plugins-container" class="plugin-list"></div>
+      </section>
+
+      <section class="admin-card" aria-labelledby="console-heading">
+        <div class="admin-card__header">
+          <div>
+            <h2 id="console-heading" data-i18n="consoleTitle">Active plugin consoles</h2>
+            <p data-i18n="consoleSubtitle">Enabled plugins can render their administration UI without leaving this page.</p>
+          </div>
+        </div>
+        <div id="plugin-sections-container" class="plugin-console-grid"></div>
+      </section>
+    </main>
+
+    <%- include('partials/footer') %>
+  </div>
+<%- include('partials/html-close', {
+  footerScripts: [
+    { src: '/admin-console.js', type: 'module' }
+  ]
+}) %>

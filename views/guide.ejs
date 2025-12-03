@@ -3,13 +3,8 @@
   If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
   Copyright (C) 2025 MundoGIS.
 -->
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title data-i18n="guide.pageTitle">User Guide · Qtiler</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="/styles.css">
+<%
+  const guideHeadStyles = String.raw`
     <style>
       .guide-main {
         width: 100%;
@@ -47,28 +42,6 @@
         border-color: var(--primary-600);
         background: rgba(37, 99, 235, 0.18);
         text-decoration: none;
-      }
-
-      .guide-language-select {
-        padding: 8px 12px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: var(--card);
-        color: var(--fg);
-        font-weight: 600;
-        min-width: 160px;
-        box-shadow: var(--shadow);
-      }
-
-      @media (max-width: 600px) {
-        .guide-topbar {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        .guide-language-select {
-          width: 100%;
-        }
       }
 
       .guide-hero {
@@ -190,46 +163,67 @@
         color: var(--muted);
         font-size: 13px;
       }
+
+      .portal-footer {
+        margin-top: auto;
+        background: rgba(4, 7, 17, 0.9);
+        border-top: 1px solid rgba(30, 41, 59, 0.65);
+      }
+
+      .portal-footer-inner {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 20px 32px 24px;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        color: rgba(226, 232, 240, 0.8);
+      }
+
+      .portal-footer-links {
+        display: inline-flex;
+        gap: 16px;
+      }
+
+      .portal-footer a {
+        color: rgba(148, 163, 184, 0.95);
+        text-decoration: none;
+      }
+
+      .portal-footer a:hover,
+      .portal-footer a:focus {
+        color: var(--primary);
+        text-decoration: underline;
+      }
     </style>
-  </head>
-  <body>
+  `;
+%>
+<%- include('partials/html-open', {
+  pageLang,
+  pageTitle: 'User Guide · Qtiler',
+  pageTitleI18nKey: 'guide.pageTitle',
+  inlineHeadContent: guideHeadStyles
+}) %>
     <div class="app-shell guide-shell">
-      <header class="app-header">
-        <div class="header-inner">
-          <div class="brand">
-            <a href="/index.html" class="brand-logo">Qtiler</a>
-            <span class="brand-tagline" data-i18n="Guide">Guide</span>
-          </div>
-          <nav class="main-nav" aria-label="Primary">
-            <a href="/index.html" class="nav-link" data-i18n="Dashboard">Dashboard</a>
-            <a href="/guide.html" class="nav-link is-active" aria-current="page" data-i18n="Guide">Guide</a>
-            <a href="/viewer.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Tile viewer">Tile viewer</a>
-            <div class="nav-divider" aria-hidden="true"></div>
-            <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
-            <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="sv">Svenska</option>
-            </select>
-          </nav>
-        </div>
-      </header>
+      <%- include('partials/header', {
+        headerMode: 'dashboard',
+        headerTaglineKey: 'User guide',
+        headerTaglineText: 'User guide',
+        user,
+        activeNav: activeNav || 'guide'
+      }) %>
 
       <main class="app-main">
         <div class="guide-main">
           <div class="guide-topbar">
             <a class="guide-button" href="/index.html" data-i18n="guide.back">⬅ Back to dashboard</a>
-            <select id="guide_language_selector" class="guide-language-select" aria-label="Language">
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="sv">Svenska</option>
-            </select>
           </div>
 
           <section class="guide-hero">
             <span class="guide-badge">Qtiler · MundoGIS</span>
             <h1 data-i18n="guide.heroTitle">Quick Start &amp; Workflow Guide</h1>
-            <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, generate layer or theme caches with Qtiler, and publish production-ready WMTS.</p>
+            <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, build manual or on-demand WMTS caches with Qtiler, secure deployments with the optional auth plugin, and publish production-ready services.</p>
           </section>
 
           <section class="guide-section">
@@ -257,21 +251,15 @@
 
           <section class="guide-section">
             <h2><span>2</span> <span data-i18n="guide.section2Title">Dashboard workflow</span></h2>
-            <p style="margin-bottom:18px;color:var(--muted)" data-i18n-html="guide.dashboardIntro">Here is the end-to-end flow inside the dashboard. Drop your own annotated screenshots into <code>public/assets</code> and update the references below if you want inline visuals.</p>
+            <p style="margin-bottom:18px;color:var(--muted)" data-i18n-html="guide.dashboardIntro">Here is the end-to-end flow inside the dashboard—everything you see ships with Qtiler, no manual assets required.</p>
             <div class="grid two" style="margin-bottom:22px;">
               <div class="card-mini">
                 <h3 data-i18n="guide.dashboardOverview">Dashboard overview</h3>
-                <p data-i18n-html="guide.dashboardOverview.body">Screenshot placeholder. Replace <code>dashboard-overview.png</code> with your own capture.</p>
-                <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
-                  <img src="assets/dashboard-overview.png" alt="Dashboard overview" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/dashboard-overview.png';" />
-                </div>
+                <p data-i18n-html="guide.dashboardOverview.body">Use the top summary to monitor pending jobs, completed caches, and quick actions like <strong>Reload layers</strong> or <strong>Cache all layers</strong>.</p>
               </div>
               <div class="card-mini">
                 <h3 data-i18n="guide.layerControls">Layer controls</h3>
-                <p data-i18n-html="guide.layerControls.body">Show layer actions (play, delete, copy URL, viewer). Replace <code>layer-controls.png</code> with your own image.</p>
-                <div style="margin-top:10px;border:1px dashed var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
-                  <img src="assets/layer-controls.png" alt="Layer controls" style="width:100%;display:block;" onerror="this.parentElement.innerHTML='Upload public/assets/layer-controls.png';" />
-                </div>
+                <p data-i18n-html="guide.layerControls.body">Each row exposes play/delete/copy/view buttons plus shortcuts to manual or on-demand caching so operators never leave the dashboard.</p>
               </div>
             </div>
             <div class="grid two">
@@ -311,6 +299,10 @@
                 <h3 data-i18n="guide.scheduledRecache">Scheduled recache</h3>
                 <p data-i18n-html="guide.scheduledRecache.body">Open the recache menu to define minute-based intervals. The server records last result and next run inside <code>project-config.json</code>.</p>
               </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.onDemandCacheTitle">On-demand caching</h3>
+                <p data-i18n-html="guide.onDemandCache.body">Qtiler can serve tiles directly from QGIS whenever a WMTS request misses the cache. Each live render is written back to disk, so manual batch jobs and on-demand traffic stay perfectly aligned.</p>
+              </div>
             </div>
             <div class="tip" data-i18n-html="guide.tip2">Caches live under <code>cache/&lt;project&gt;/</code>. Each run updates <code>index.json</code> with <code>kind</code>, zooms, source layers, and timestamps.</div>
           </section>
@@ -329,13 +321,24 @@
               </div>
               <div class="card-mini">
                 <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
-                <p data-i18n-html="guide.leafletViewer.body">The built-in viewer (<code>viewer.html</code>) handles custom CRS via Proj4, displays a scale bar, and allows extra zoom-in to validate tile quality before publishing.</p>
+                <p data-i18n-html="guide.leafletViewer.body">Launch the Leaflet viewer from the eye icon next to each layer or theme. Compare cached tiles against the remote source or preview the cache on its own.</p>
               </div>
             </div>
           </section>
 
           <section class="guide-section">
-            <h2><span>5</span> <span data-i18n="guide.section5Title">Best practices</span></h2>
+            <h2><span>5</span> <span data-i18n="guide.sectionAuthTitle">Authentication &amp; access control</span></h2>
+            <p data-i18n-html="guide.authPluginIntro">Install the optional <code>QtilerAuth</code> plugin (see <code>plugins/QtilerAuth</code>) whenever you need login-protected dashboards or customer-specific WMTS access.</p>
+            <ul>
+              <li data-i18n="guide.authPlugin.userMgmt">Manage users and roles from the built-in admin UI, including password resets and project-level permissions.</li>
+              <li data-i18n="guide.authPlugin.portal">Apply consistent authentication across the portal, Leaflet viewer, and WMTS endpoints so only authorized clients reach cached tiles.</li>
+              <li data-i18n="guide.authPlugin.setup">Download the one-time QtilerAuth ZIP from mundogis.se and upload it through the built-in plugin installer to deploy—no floating licenses or repeat activations.</li>
+            </ul>
+            <div class="tip" data-i18n-html="guide.authPlugin.purchase">QtilerAuth ships as a one-time ZIP purchase: download it from <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>, upload it through the portal installer, and email <a href="mailto:abel.gonzalez@mundogis.se">abel.gonzalez@mundogis.se</a> for personalized guidance.</div>
+          </section>
+
+          <section class="guide-section">
+            <h2><span>6</span> <span data-i18n="guide.section5Title">Best practices</span></h2>
             <ul>
               <li data-i18n="guide.bestPractice1">Keep QGIS projects and themes organized—names map directly to WMTS paths.</li>
               <li data-i18n="guide.bestPractice2">Monitor disk usage; WMTS caches can grow fast. Clean up unused layers regularly.</li>
@@ -345,33 +348,33 @@
           </section>
 
           <p class="guide-note" data-i18n="guide.footer">
-            Need to customize further? Update the repository README with team-specific notes and share this guide internally.
+            Need to customize further? Update the repository README with team-specific notes, purchase Qtiler via mundogis.se, or email abel.gonzalez@mundogis.se for more details.
           </p>
         </div>
       </main>
 
-      <footer class="app-footer guide-footer">
-        <div class="footer-inner">
-          <div class="footer-brand">© <span id="guide_footer_year"></span> MundoGIS</div>
-          <div class="footer-links">
-            <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>
-            <a href="mailto:info@mundogis.se">info@mundogis.se</a>
-          </div>
-        </div>
-      </footer>
+      <%- include('partials/footer', {
+        footerClass: 'portal-footer',
+        footerYearId: 'guide_footer_year'
+      }) %>
     </div>
 
     <script>
       (function(){
-        const SUPPORTED_LANGS = ["en", "es", "sv"];
+        const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
+          ? window.qtilerLang.SUPPORTED_LANGS
+          : ["en", "es", "sv"];
         const DEFAULT_TEXT = {};
         const DEFAULT_HTML = {};
         const TRANSLATIONS = {
           es: {
+            "Dashboard": "Panel principal",
+            "Language": "Idioma",
+            "User guide": "Guía de uso",
             "guide.pageTitle": "Guía de usuario · Qtiler",
             "guide.back": "⬅ Volver al panel",
             "guide.heroTitle": "Guía rápida y flujo de trabajo",
-            "guide.heroSubtitle": "Todo lo necesario para preparar proyectos QGIS, generar cachés de capas o temas con Qtiler y publicar WMTS listos para producción.",
+            "guide.heroSubtitle": "Todo lo necesario para preparar proyectos QGIS, generar cachés WMTS manuales u on-demand con Qtiler, proteger despliegues con el plugin de autenticación opcional y publicar servicios listos para producción.",
             "guide.section1Title": "Preparativos",
             "guide.prepareQgis": "Preparar QGIS",
             "guide.prepareQgis.step1": "Crea y guarda tu proyecto en QGIS 3.x con todas las capas estilizadas.",
@@ -383,11 +386,11 @@
             "guide.setupServer.step3": "Opcional: instala el servicio de Windows con <code>node service\\install-service.js</code>.",
             "guide.tip1": "¿Ya copiaste proyectos a <code>qgisprojects/</code>? Solo pulsa <strong>Recargar capas</strong> para reconstruir la lista.",
             "guide.section2Title": "Flujo en el panel",
-            "guide.dashboardIntro": "Este es el recorrido completo dentro del panel. Sustituye las capturas en <code>public/assets</code> y actualiza las referencias si quieres añadir imágenes.",
+            "guide.dashboardIntro": "Este es el recorrido completo dentro del panel: todo lo que ves viene incluido en Qtiler, sin recursos externos.",
             "guide.dashboardOverview": "Resumen del panel",
-            "guide.dashboardOverview.body": "Marcador de posición de captura. Sustituye <code>dashboard-overview.png</code> por tu propia imagen.",
+            "guide.dashboardOverview.body": "Usa el resumen superior para monitorear trabajos pendientes, cachés completadas y accesos directos como <strong>Recargar capas</strong> o <strong>Cachear todas las capas</strong>.",
             "guide.layerControls": "Controles de capa",
-            "guide.layerControls.body": "Muestra las acciones de capa (reproducir, eliminar, copiar URL, visor). Sustituye <code>layer-controls.png</code> por tu propia imagen.",
+            "guide.layerControls.body": "Cada fila expone botones de reproducir, borrar, copiar/ver y accesos a cacheo manual u on-demand sin salir del panel.",
             "guide.uploadRefresh": "1️⃣ Subir o refrescar proyectos",
             "guide.uploadRefresh.body": "Usa <strong>Subir proyecto</strong> para `.qgs/.qgz`. Qtiler los coloca en <code>qgisprojects/</code> y extrae capas, CRS, extensión y temas. Las copias manuales también sirven: pulsa <strong>Recargar capas</strong>.",
             "guide.adjustZoom": "2️⃣ Ajustar zoom y extensión",
@@ -405,6 +408,8 @@
             "guide.projectWideCache.body": "<strong>Cachear todas las capas</strong> inicia un trabajo por lotes que recorre cada capa con los parámetros actuales. El panel \"Tareas en ejecución\" muestra el progreso en vivo.",
             "guide.scheduledRecache": "Recacheo programado",
             "guide.scheduledRecache.body": "Abre el menú de recacheo para definir intervalos en minutos. El servidor guarda el último resultado y la siguiente ejecución en <code>project-config.json</code>.",
+            "guide.onDemandCacheTitle": "Caché bajo demanda",
+            "guide.onDemandCache.body": "Qtiler puede servir teselas directamente desde QGIS cuando una petición WMTS no existe en caché. Cada renderizado en vivo se guarda en disco, así que los trabajos manuales y las solicitudes bajo demanda se mantienen alineados.",
             "guide.tip2": "Las cachés viven en <code>cache/&lt;project&gt;/</code>. Cada ejecución actualiza <code>index.json</code> con <code>kind</code>, niveles de zoom, capas de origen y marcas de tiempo.",
             "guide.section4Title": "Publicar WMTS",
             "guide.section4.body": "El backend expone un endpoint mínimo de GetCapabilities en <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. Todas las capas y temas cacheados aparecen como capas WMTS listas para usar.",
@@ -413,19 +418,28 @@
             "guide.gisIntegration.body2": "Usa URLs de teselas individuales cuando solo necesites un recurso específico.",
             "guide.gisIntegration.body3": "Los temas se identifican como <code>&lt;project&gt;:&lt;theme&gt;</code> y se guardan bajo <code>_themes/</code>.",
             "guide.leafletViewer": "Visor Leaflet",
-            "guide.leafletViewer.body": "El visor integrado (<code>viewer.html</code>) maneja CRS personalizados mediante Proj4, muestra una barra de escala y permite zoom extra para validar la calidad antes de publicar.",
+            "guide.leafletViewer.body": "Abre el visor Leaflet desde el ícono de ojo junto a cada capa o tema. Compara las teselas cacheadas con la fuente remota o prévisualiza solo la caché.",
+            "guide.sectionAuthTitle": "Autenticación y control de acceso",
+            "guide.authPluginIntro": "Instala el plugin opcional <code>QtilerAuth</code> (carpeta <code>plugins/QtilerAuth</code>) cuando necesites paneles con inicio de sesión o acceso WMTS por cliente.",
+            "guide.authPlugin.userMgmt": "Administra usuarios y roles desde la interfaz de administración integrada, incluyendo restablecimientos de contraseña y permisos por proyecto.",
+            "guide.authPlugin.portal": "Aplica los mismos permisos en el portal, el visor Leaflet y los endpoints WMTS para que solo los clientes autorizados lleguen a las teselas cacheadas.",
+            "guide.authPlugin.setup": "Descarga el ZIP único de QtilerAuth desde mundogis.se y súbelo con el instalador integrado; no hay activaciones recurrentes.",
+            "guide.authPlugin.purchase": "QtilerAuth es una compra única en formato ZIP: bájalo de <a href=\"https://mundogis.se\" target=\"_blank\" rel=\"noopener\">mundogis.se</a>, instálalo desde el portal y escribe a <a href=\"mailto:abel.gonzalez@mundogis.se\">abel.gonzalez@mundogis.se</a> para asistencia personalizada.",
             "guide.section5Title": "Buenas prácticas",
             "guide.bestPractice1": "Mantén organizados los proyectos y temas de QGIS: sus nombres se usan directamente en las rutas WMTS.",
             "guide.bestPractice2": "Controla el uso de disco; las cachés WMTS pueden crecer rápido. Limpia capas que no utilices.",
             "guide.bestPractice3": "Revisa los registros (`logs/`) y los mensajes del panel para detectar errores de renderizado a tiempo.",
             "guide.bestPractice4": "Usa cuentas de Windows dedicadas y servicios en segundo plano para despliegues de producción.",
-            "guide.footer": "¿Necesitas personalizar más? Actualiza el README del repositorio con notas internas y comparte esta guía con el equipo."
+            "guide.footer": "¿Necesitas personalizar más? Actualiza el README del repositorio con notas internas, compra Qtiler en mundogis.se o escribe a abel.gonzalez@mundogis.se para más información."
           },
           sv: {
+            "Dashboard": "Översikt",
+            "Language": "Språk",
+            "User guide": "Användarguide",
             "guide.pageTitle": "Användarguide · Qtiler",
             "guide.back": "⬅ Tillbaka till panelen",
             "guide.heroTitle": "Snabbstart och arbetsflöde",
-            "guide.heroSubtitle": "Allt du behöver för att förbereda QGIS-projekt, skapa lager- eller temacache med Qtiler och publicera produktionsklar WMTS.",
+            "guide.heroSubtitle": "Allt du behöver för att förbereda QGIS-projekt, skapa manuella eller on-demand WMTS-cachar med Qtiler, säkra driftsättningar med det valfria autentiseringspluginet och publicera produktionsklara tjänster.",
             "guide.section1Title": "Förberedelser",
             "guide.prepareQgis": "Förbered QGIS",
             "guide.prepareQgis.step1": "Skapa och spara ditt projekt i QGIS 3.x med alla lager stylade.",
@@ -437,11 +451,11 @@
             "guide.setupServer.step3": "Valfritt: installera Windows-tjänsten via <code>node service\\install-service.js</code>.",
             "guide.tip1": "Har du redan kopierat projekt till <code>qgisprojects/</code>? Klicka bara på <strong>Ladda om lager</strong> för att återställa listan.",
             "guide.section2Title": "Panelarbetsflöde",
-            "guide.dashboardIntro": "Här är hela arbetsflödet i panelen. Byt ut skärmdumparna i <code>public/assets</code> och uppdatera referenserna om du vill visa egna bilder.",
+            "guide.dashboardIntro": "Här är hela arbetsflödet i panelen – allt ingår i Qtiler utan externa resurser.",
             "guide.dashboardOverview": "Panelöversikt",
-            "guide.dashboardOverview.body": "Platshållare för skärmdump. Ersätt <code>dashboard-overview.png</code> med din egen bild.",
+            "guide.dashboardOverview.body": "Använd översikten högst upp för att se väntande jobb, färdiga cachar och genvägar som <strong>Ladda om lager</strong> eller <strong>Cacha alla lager</strong>.",
             "guide.layerControls": "Kontroller för lager",
-            "guide.layerControls.body": "Visa lageråtgärder (starta, ta bort, kopiera URL, visare). Ersätt <code>layer-controls.png</code> med din egen bild.",
+            "guide.layerControls.body": "Varje rad har starta/ta bort/kopiera/visa-knappar plus genvägar till manuellt eller on-demand-cache utan att lämna panelen.",
             "guide.uploadRefresh": "1️⃣ Ladda upp eller uppdatera projekt",
             "guide.uploadRefresh.body": "Använd <strong>Ladda upp projekt</strong> för `.qgs/.qgz`-filer. Qtiler placerar dem i <code>qgisprojects/</code> och extraherar lager, CRS, utbredning och teman. Manuella kopior fungerar också – klicka bara på <strong>Ladda om lager</strong>.",
             "guide.adjustZoom": "2️⃣ Justera zoom och utbredning",
@@ -459,6 +473,8 @@
             "guide.projectWideCache.body": "<strong>Cacha alla lager</strong> startar ett batchjobb som går igenom varje lager med aktuella parametrar. Panelen \"Pågående uppgifter\" visar status i realtid.",
             "guide.scheduledRecache": "Schemalagd omcache",
             "guide.scheduledRecache.body": "Öppna omcache-menyn för att ange intervall i minuter. Servern sparar senaste resultatet och nästa körning i <code>project-config.json</code>.",
+            "guide.onDemandCacheTitle": "On-demand-cache",
+            "guide.onDemandCache.body": "Qtiler kan leverera tiles direkt från QGIS när en WMTS-förfrågan saknar cache. Varje live-rendering skrivs till disk så batchjobb och on-demand-trafik hålls synkade.",
             "guide.tip2": "Caches finns i <code>cache/&lt;project&gt;/</code>. Varje körning uppdaterar <code>index.json</code> med <code>kind</code>, zoomnivåer, källager och tidsstämplar.",
             "guide.section4Title": "Publicera WMTS",
             "guide.section4.body": "Backend:en exponerar ett minimalt GetCapabilities-endpoint på <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. Alla cachade lager och teman visas som färdiga WMTS-lager.",
@@ -467,24 +483,30 @@
             "guide.gisIntegration.body2": "Använd enskilda tile-URL:er när du bara behöver en specifik resurs.",
             "guide.gisIntegration.body3": "Teman identifieras som <code>&lt;project&gt;:&lt;theme&gt;</code> och lagras under <code>_themes/</code>.",
             "guide.leafletViewer": "Leaflet-visaren",
-            "guide.leafletViewer.body": "Den inbyggda visaren (<code>viewer.html</code>) hanterar egna CRS via Proj4, visar skala och låter dig zooma in extra för att kontrollera kvalitet innan publicering.",
+            "guide.leafletViewer.body": "Öppna Leaflet-visaren via ögonikonen bredvid varje lager eller tema. Jämför cachade tiles med fjärrkällan eller visa enbart cachen.",
+            "guide.sectionAuthTitle": "Autentisering och åtkomstkontroll",
+            "guide.authPluginIntro": "Installera det valfria <code>QtilerAuth</code>-pluginet (mappen <code>plugins/QtilerAuth</code>) när du behöver inloggade paneler eller kundspecifik WMTS-åtkomst.",
+            "guide.authPlugin.userMgmt": "Hantera användare och roller via det inbyggda admin-gränssnittet, inklusive lösenordsåterställningar och projekträttigheter.",
+            "guide.authPlugin.portal": "Tillämpa samma behörigheter i portalen, Leaflet-visaren och WMTS-endpoints så att endast behöriga klienter når cachade tiles.",
+            "guide.authPlugin.setup": "Ladda ner QtilerAuth som ett engångs-ZIP från mundogis.se och installera det via den inbyggda plugininställaren; inga återkommande aktiveringar krävs.",
+            "guide.authPlugin.purchase": "QtilerAuth säljs som ett ZIP-köp en gång: hämta det på <a href=\"https://mundogis.se\" target=\"_blank\" rel=\"noopener\">mundogis.se</a>, installera via portalen och mejla <a href=\"mailto:abel.gonzalez@mundogis.se\">abel.gonzalez@mundogis.se</a> för personlig hjälp.",
             "guide.section5Title": "Bästa praxis",
             "guide.bestPractice1": "Håll QGIS-projekt och teman organiserade – namnen används direkt i WMTS-sökvägarna.",
             "guide.bestPractice2": "Övervaka diskutrymme; WMTS-cache kan växa snabbt. Rensa lager du inte behöver.",
             "guide.bestPractice3": "Granska loggarna (`logs/`) och panelens statusmeddelanden för att hitta renderingsfel tidigt.",
             "guide.bestPractice4": "Använd dedikerade Windows-konton och bakgrundstjänster för produktionsmiljöer.",
-            "guide.footer": "Behöver du anpassa mer? Uppdatera projektets README med teamets anteckningar och dela guiden internt."
+            "guide.footer": "Behöver du anpassa mer? Uppdatera projektets README med teamets anteckningar, köp Qtiler via mundogis.se eller maila abel.gonzalez@mundogis.se för mer information."
           }
         };
 
-        const normalizeLang = (value) => {
+        const normalizeLang = window.qtilerLang?.normalize || ((value) => {
           const raw = (value || "").toLowerCase();
           if (SUPPORTED_LANGS.includes(raw)) return raw;
           const base = raw.split("-")[0];
           return SUPPORTED_LANGS.includes(base) ? base : "en";
-        };
+        });
 
-        let currentLang = normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
+        let currentLang = window.qtilerLang?.get?.() || normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
 
         const captureDefaults = () => {
           document.querySelectorAll("[data-i18n]").forEach(el => {
@@ -522,39 +544,49 @@
             if (!key) return;
             el.innerHTML = tr(key);
           });
-          const backLink = document.querySelector("a[data-i18n=guide.back]");
+          const backLink = document.querySelector('a[data-i18n="guide.back"]');
           if (backLink) backLink.setAttribute("aria-label", tr("guide.back"));
         };
 
         const navLanguageSelect = document.getElementById("language_selector");
-        const secondaryLanguageSelect = document.getElementById("guide_language_selector");
 
-        const syncSelects = () => {
+        if (window.qtilerLang?.subscribe) {
+          window.qtilerLang.subscribe((lang) => {
+            const normalized = normalizeLang(lang);
+            if (normalized === currentLang) return;
+            currentLang = normalized;
+            applyTranslations();
+            syncLanguageSelect();
+          });
+        }
+
+        const syncLanguageSelect = () => {
           if (navLanguageSelect) navLanguageSelect.value = currentLang;
-          if (secondaryLanguageSelect) secondaryLanguageSelect.value = currentLang;
         };
 
         const setLanguage = (lang) => {
+          if (window.qtilerLang?.set) {
+            window.qtilerLang.set(lang);
+            return;
+          }
           currentLang = normalizeLang(lang);
-          localStorage.setItem("qtiler.lang", currentLang);
+          try {
+            localStorage.setItem("qtiler.lang", currentLang);
+          } catch {}
           applyTranslations();
-          syncSelects();
+          syncLanguageSelect();
         };
 
         captureDefaults();
         applyTranslations();
-        syncSelects();
+        syncLanguageSelect();
 
         if (navLanguageSelect) {
           navLanguageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
-        }
-        if (secondaryLanguageSelect) {
-          secondaryLanguageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
         }
 
         const footerYearEl = document.getElementById("guide_footer_year");
         if (footerYearEl) footerYearEl.textContent = String(new Date().getFullYear());
       })();
     </script>
-  </body>
-</html>
+<%- include('partials/html-close') %>

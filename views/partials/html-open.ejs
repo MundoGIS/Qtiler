@@ -1,0 +1,39 @@
+<%
+  const lang = pageLang || 'en';
+  const titleText = pageTitle || 'Qtiler · MundoGIS';
+  const titleI18nKey = typeof pageTitleI18nKey === 'string' ? pageTitleI18nKey : null;
+  const rawExtraStyles = typeof extraStyles === 'undefined' ? null : extraStyles;
+  const styles = Array.isArray(rawExtraStyles) ? rawExtraStyles : [];
+  const rawHeadScripts = typeof headScripts === 'undefined' ? null : headScripts;
+  const headScriptsList = Array.isArray(rawHeadScripts) ? rawHeadScripts : [];
+  const includeLangSupportValue = typeof includeLangSupport === 'boolean' ? includeLangSupport : true;
+  const inlineHead = typeof inlineHeadContent === 'undefined' ? '' : inlineHeadContent;
+  const bodyClassValue = typeof bodyClass === 'string' && bodyClass.trim() ? bodyClass.trim() : null;
+  const proj4PresetSource = (proj4Presets && typeof proj4Presets === 'object') ? proj4Presets : {};
+  const proj4PresetsPayload = encodeURIComponent(JSON.stringify(proj4PresetSource));
+%>
+<!doctype html>
+<html lang="<%= lang %>">
+  <head>
+    <meta charset="utf-8">
+    <title<% if (titleI18nKey) { %> data-i18n="<%= titleI18nKey %>"<% } %>><%= titleText %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="/css/main.css">
+<% styles.forEach((styleEntry) => {
+     const style = typeof styleEntry === 'string' ? { href: styleEntry } : (styleEntry || {});
+     if (!style.href) return;
+%>
+    <link rel="<%= style.rel || 'stylesheet' %>" href="<%= style.href %>"<% if (style.integrity) { %> integrity="<%= style.integrity %>"<% } %><% if (style.crossorigin) { %> crossorigin="<%= style.crossorigin %>"<% } %><% if (style.referrerpolicy) { %> referrerpolicy="<%= style.referrerpolicy %>"<% } %>>
+<% }); %>
+<% if (includeLangSupportValue) { %>
+    <script src="/lang-support.js"></script>
+<% } %>
+<% headScriptsList.forEach((scriptEntry) => {
+     const script = typeof scriptEntry === 'string' ? { src: scriptEntry } : (scriptEntry || {});
+     if (!script.src) return;
+%>
+    <script src="<%= script.src %>"<% if (script.integrity) { %> integrity="<%= script.integrity %>"<% } %><% if (script.crossorigin) { %> crossorigin="<%= script.crossorigin %>"<% } %><% if (script.referrerpolicy) { %> referrerpolicy="<%= script.referrerpolicy %>"<% } %><% if (script.defer) { %> defer<% } %><% if (script.async) { %> async<% } %>></script>
+<% }); %>
+    <%- inlineHead || '' %>
+  </head>
+  <body data-proj4-presets="<%= proj4PresetsPayload %>"<% if (bodyClassValue) { %> class="<%= bodyClassValue %>"<% } %>>

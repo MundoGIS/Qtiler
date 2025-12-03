@@ -6,109 +6,123 @@ Copyright (C) 2025 MundoGIS.
 
 # Qtiler
 
-Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows.
+Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
 
 ## Features
 - Upload `.qgs`/`.qgz` projects and extract layer metadata automatically.
-- Generate caches per layer or per map theme (composed mosaics) with on-screen status tracking.
-- Persist project zoom preferences, extent, and recache schedules.
-- Serve cached tiles and expose WMTS GetCapabilities, including theme-based layers.
-- Built-in Leaflet viewer with CRS support, scale control, and deep zoom preview.
-- Optional Windows service scripts for unattended execution.
+- Generate caches per layer, per map theme, or entirely on demand, each with progress tracking and job history.
+- Persist project zoom presets, extent, and scheduled recache windows.
+- Serve cached tiles and expose a WMTS GetCapabilities endpoint (layers and themes) ready for GIS clients.
+- Built-in Leaflet viewer with CRS awareness, on/off layer toggles, and WMTS URL helpers.
+- Optional QtilerAuth plugin (one-time ZIP download) to manage users, roles, and customer-specific WMTS access.
+- Windows service helpers and reverse-proxy guidance for unattended production hosting.
 
 ## System Requirements
-- Windows 10/11 or Windows server (64-bit).
-- [OSGeo4W](https://trac.osgeo.org/osgeo4w/) or a full QGIS installation (provides Python + QGIS libraries).
+- Windows 10/11 or Windows Server 2019+ (64-bit).
+- [OSGeo4W](https://trac.osgeo.org/osgeo4w/) or a standalone QGIS install (supplies Python + QGIS libraries).
 - Node.js 18 or newer.
 - Git (recommended) to clone the repository.
 
-## 1. Prepare QGIS / OSGeo4W
+## Prepare the QGIS environment
 1. Install OSGeo4W (Advanced Install) or the latest QGIS standalone build.
-2. Confirm the following binaries exist and note their paths:
-   - `C:\OSGeo4W\bin\python.exe` (or the Python bundled with QGIS).
-   - `C:\OSGeo4W\apps\qgis` (QGIS prefix path).
-3. Add these variables to the system or a local `.env` file (recommended):
+2. Verify these paths exist:
+   - `C:\OSGeo4W\bin\python.exe` (or your QGIS Python runtime).
+   - `C:\OSGeo4W\apps\qgis` (QGIS prefix).
+3. Create a `.env` file in the repo root and add:
    ```ini
-   QGIS_PREFIX=C:\OSGeo4W\apps\qgis
    OSGEO4W_BIN=C:\OSGeo4W\bin
    PYTHON_EXE=C:\OSGeo4W\bin\python.exe
-   O4W_BATCH=C:\OSGeo4W\bin\o4w_env.bat
+   QGIS_PREFIX=C:\OSGeo4W\apps\qgis
+   QT_PLUGIN_PATH=C:\OSGeo4W\apps\qgis\qtplugins
    ```
-   Adjust paths if you installed QGIS elsewhere.
+   Adjust the paths if you installed QGIS elsewhere. The server validates these variables on boot and logs any gaps.
 
-## 2. Clone and Install Node Dependencies
+## Install dependencies
 ```powershell
 cd C:\
-git clone https://github.com/<your-account>/<your-repo>.git qtiler
-cd qtiler
+git clone https://github.com/<your-account>/<your-repo>.git Qtiler
+cd Qtiler
 npm install
 ```
 
-## 3. Folder Layout
+### Repository layout
 ```
-qtiler/
-  public/           # Frontend dashboard + viewer
+Qtiler/
+  public/           # Dashboard + portal UI
   python/           # QGIS helpers (extract info, generate cache)
-  qgisprojects/     # Drop .qgz/.qgs files here or upload via UI
-  cache/            # Generated tiles and project index.json files
-  logs/             # Runtime logs (if enabled)
-  service/          # Windows service helpers (optional)
+  qgisprojects/     # Uploaded .qgs/.qgz files
+  cache/            # Generated tiles and index metadata
+  plugins/          # Optional plugins (QtilerAuth, custom modules)
+  logs/             # Runtime logs
+  service/          # Windows service helpers
+  temp_uploads/     # Multer workspace for uploads
 ```
 
-## 4. Running the Server
+## Run the development server
 ```powershell
-# From the repository root
 npm start
 # or
 node server.js
 ```
-The server listens on `http://localhost:3000` by default. Adjust the port via the `PORT` environment variable if needed.
+The server listens on `http://localhost:3000` by default; override with `PORT` in `.env`.
 
-### Automatic Windows Service (optional)
-Use the helper scripts to install or remove a background service:
+## Dashboard workflow
+1. **Upload or refresh a project** – Use *Upload project* or copy `.qgs/.qgz` files into `qgisprojects/`, then click *Reload layers*.
+2. **Define map themes in QGIS** – Save Map Themes (Kartteman) before uploading so composites appear automatically.
+3. **Set extent and zooms** – Adjust global min/max zooms and use *Show extent map* to draw WGS84 bounding boxes.
+4. **Generate caches** – Trigger per-layer jobs, cache all layers, or build theme mosaics. Each run logs parameters for future recache batches.
+5. **Inspect & share** – Preview layers in the Leaflet viewer and copy WMTS URLs. The GetCapabilities endpoint lives at `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
+
+## On-demand WMTS/XYZ tiles
+Qtiler can render tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrency is capped (2 workers by default) so misses are queued safely. See `README_on_demand.md` for a deeper walkthrough and test commands.
+
+## Logs and troubleshooting
+- `Tile hit` – tile was served from cache.
+- `Tile miss` – tile was generated on demand.
+- `Tile render error` – Python/QGIS failed to render (see stack trace).
+
+If generation fails:
+- Double-check `.env` paths and ensure Python can import QGIS modules.
+- Run `python/generate_cache.py --single ...` manually to capture stderr.
+- Inspect `logs/project-<id>.log` for details.
+
+## Windows service (optional)
+Install or remove the background service with:
 ```powershell
-# Install the service
+# Install
 node service\install-service.js
 
-# Uninstall the service
+# Uninstall
 node service\uninstall-service.js
 ```
-Both scripts require administrator privileges.
+Run these commands in an elevated terminal. The service uses your `.env` and writes to the same log directory.
 
-## 5. Workflow Overview
-1. **Upload or refresh a project**: Use "Upload project" or place files directly under `qgisprojects/` and click "Reload layers".
-2. **Define map themes in QGIS**: Save desired layer combinations in the Map Themes panel before uploading. Themes appear under "Map themes" in the dashboard.
-3. **Set extent and zooms**:
-   - Adjust global min/max zoom inputs (defaults to 0/0).
-   - Open "Show extent map" to draw or fine-tune the bounding box (supports high zoom and WGS84 coordinates).
-4. **Generate caches**:
-   - Per layer via the play icon.
-   - Batch all layers via "Cache all layers" (records parameters for recache automation).
-   - Per theme using the play icon in the "Map themes" block (produces composite WMTS tiles stored under `_themes/<theme>`).
-5. **Inspect & share**:
-   - Use "Open map viewer" for a Leaflet preview with scale control and CRS awareness.
-   - Copy WMTS URLs from each layer or theme. The service exposes `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
+## Deploying behind IIS or Apache HTTPD
+Most production setups place Qtiler on Windows Server and expose it via IIS or Apache HTTPD using URL Rewrite:
+1. Run Qtiler on an internal port (for example `http://localhost:3000`).
+2. Configure IIS URL Rewrite (or Apache `mod_proxy`/`mod_rewrite`) to forward `/portal`, `/wmts`, `/admin`, `/plugins`, and `/viewer` to that port.
+3. Add HTTPS certificates and harden headers/caching rules at the proxy level.
+4. Optionally keep the Node service internal and only publish the proxy site.
 
-## 6. Environment Variables (optional)
-Create a `.env` file in the repository root to override defaults:
+Need assistance designing the reverse-proxy rules or securing the stack? Contact MundoGIS at [mundogis.se](https://mundogis.se) or email abel.gonzalez@mundogis.se.
+
+## Environment variables (quick reference)
 ```
 PORT=3000
 CACHE_DIR=C:\cache\cache
 QGIS_PREFIX=C:\OSGeo4W\apps\qgis
 OSGEO4W_BIN=C:\OSGeo4W\bin
 PYTHON_EXE=C:\OSGeo4W\bin\python.exe
-O4W_BATCH=C:\OSGeo4W\bin\o4w_env.bat
+QT_PLUGIN_PATH=C:\OSGeo4W\apps\qgis\qtplugins
 PROJECT_UPLOAD_MAX_BYTES=209715200
 ```
 
-## 7. Troubleshooting
-- **Leaflet viewer reports CRS issues**: Ensure `proj4` knows the EPSG code (register custom definitions in `public/viewer.html`).
-- **Python/QGIS scripts fail to start**: Confirm the QGIS paths in `.env` are correct and that `o4w_env.bat` launches python successfully.
-- **Theme list empty**: Save Map Themes inside QGIS before uploading and refresh the project in the dashboard.
-- **Service fails to install**: Run PowerShell as administrator and verify Node.js is in `PATH`.
+## Production tips
+- Place the repository on SSD storage; caches grow quickly.
+- Use a dedicated Windows account/service user with access to `cache/` and `logs/`.
+- Schedule log rotation and cache cleanup via Task Scheduler.
+- Keep QGIS and Node.js versions aligned across dev/prod to avoid rendering drift.
 
-## 8. Production Tips
-- Place the repository on a fast SSD; WMTS caches can grow quickly.
-- Use a dedicated Windows account for the service with access to the `cache/` directory.
-- Schedule regular cleanups of `logs/` and old caches via Windows Task Scheduler if storage is constrained.
+---
+Questions or need a tailored deployment? Reach out to MundoGIS for support, private builds, or hands-on assistance with IIS/Apache URL Rewrite configurations.
 

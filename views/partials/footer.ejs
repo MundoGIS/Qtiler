@@ -1,0 +1,13 @@
+<%
+  const footerClassName = typeof footerClass !== 'undefined' && footerClass ? footerClass : 'portal-footer';
+  const yearSpanId = typeof footerYearId !== 'undefined' && footerYearId ? footerYearId : 'portal_year';
+%>
+<footer class="<%= footerClassName %>">
+  <div class="portal-footer-inner">
+    <div class="portal-footer-brand">© <span id="<%= yearSpanId %>"></span> MundoGIS</div>
+    <div class="portal-footer-links">
+      <a href="https://mundogis.se" target="_blank" rel="noopener">Mundogis.se</a>
+      <a href="mailto:abel.gonzalez@mundogis.se">Get in kontact</a>
+    </div>
+  </div>
+</footer>

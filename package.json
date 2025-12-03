@@ -13,16 +13,21 @@
   "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/qtiler.git"
+    "url": "https://github.com/MundoGIS/Qtiler.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/qtiler/issues"
+    "url": "https://github.com/MundoGIS/Qtiler/issues"
   },
-  "homepage": "https://github.com/your-org/qtiler#readme",
+  "homepage": "https://github.com/MundoGIS/Qtiler/blob/master/README.md",
   "dependencies": {
+    "adm-zip": "^0.5.12",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "node-windows": "^1.0.0-beta.8"
   },

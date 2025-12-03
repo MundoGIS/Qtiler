@@ -1,0 +1,12 @@
+<%
+  const footerScriptsInput = typeof footerScripts === 'undefined' ? [] : footerScripts;
+  const footerScriptsList = Array.isArray(footerScriptsInput) ? footerScriptsInput : [];
+%>
+<% footerScriptsList.forEach((scriptEntry) => {
+     const script = typeof scriptEntry === 'string' ? { src: scriptEntry } : (scriptEntry || {});
+     if (!script.src) return;
+%>
+    <script src="<%= script.src %>"<% if (script.type) { %> type="<%= script.type %>"<% } %><% if (script.integrity) { %> integrity="<%= script.integrity %>"<% } %><% if (script.crossorigin) { %> crossorigin="<%= script.crossorigin %>"<% } %><% if (script.defer) { %> defer<% } %><% if (script.async) { %> async<% } %>></script>
+<% }); %>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "serviceIdentification": {
+    "title": "Qtiler WMTS Service",
+    "abstract": "This is the fantastic Qtiler.",
+    "keywords": ["WMTS", "Qtiler", "GIS"],
+    "serviceType": "OGC WMTS",
+    "serviceTypeVersion": "1.0.0",
+    "fees": "None",
+    "accessConstraints": "none"
+  },
+  "serviceProvider": {
+    "providerName": "MundoGIS",
+    "providerSite": "https://www.mundogis.se",
+    "contact": {
+      "individualName": "Abel Gonzalez",
+      "positionName": "GIS Developer",
+      "phoneVoice": "",
+      "phoneFacsimile": "",
+      "address": {
+        "deliveryPoint": "MundoGIS",
+        "city": "Stockholm",
+        "administrativeArea": "",
+        "postalCode": "",
+        "country": "Sweden",
+        "email": "abel.gonzalez@mundogis.se"
+      }
+    }
+  },
+  "operations": {
+    "getFeatureInfo": false
+  }
+}

@@ -23,7 +23,7 @@ function verifyQGISEnv() {
   if (!fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
   if (missing.length) {
     console.warn("[Qtiler] Entorno QGIS/Python incompleto. Faltan:", missing.join(", "));
-    console.warn("Ejecuta 'tools/install_qgis_env.ps1' en PowerShell para instalar y configurar automáticamente.");
+    console.warn("Configura manualmente las rutas en .env (OSGEO4W_BIN, PYTHON_EXE, QGIS_PREFIX) antes de generar cachés.");
   } else {
     console.log("[Qtiler] Entorno QGIS/Python verificado.");
   }
@@ -42,6 +42,32 @@ app.set("trust proxy", true);
 const dataDir = path.resolve(__dirname, "data");
 const pluginsDir = path.resolve(__dirname, "plugins");
 const viewsDir = path.resolve(__dirname, "views");
+const proj4PresetsPath = path.resolve(__dirname, "config", "proj4-presets.json");
+
+const defaultProj4Presets = {
+  // "EPSG:3006": "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0 +units=m +no_defs"
+};
+
+const loadProj4Presets = () => {
+  try {
+    const raw = fs.readFileSync(proj4PresetsPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { ...defaultProj4Presets };
+    const normalized = { ...defaultProj4Presets };
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!key || typeof value !== "string" || !value.trim()) continue;
+      normalized[key.trim().toUpperCase()] = value.trim();
+    }
+    return normalized;
+  } catch (err) {
+    if (err && err.code !== "ENOENT") {
+      console.warn("Failed to load proj4 presets", { error: String(err?.message || err) });
+    }
+    return { ...defaultProj4Presets };
+  }
+};
+
+const proj4Presets = Object.freeze(loadProj4Presets());
 
 app.set("views", viewsDir);
 app.set("view engine", "ejs");
@@ -81,6 +107,37 @@ const requireRoles = (...roles) => (req, res, next) => {
 
 const requireAdmin = requireRoles("admin");
 
+// Middleware that requires admin only if auth is enabled
+const requireAdminIfEnabled = (req, res, next) => {
+  if (security.isEnabled && security.isEnabled()) {
+    return requireAdmin(req, res, next);
+  }
+  return next();
+};
+
+// Middleware specifically for admin page access (redirects instead of JSON)
+const requireAdminPage = (req, res, next) => {
+  if (security.isEnabled && security.isEnabled()) {
+    if (!req.user) {
+      return res.redirect('/login');
+    }
+    if (req.user.role !== 'admin') {
+      return res.status(403).send(`
+        <html>
+          <head><title>Access Denied</title><link rel="stylesheet" href="/style.css"></head>
+          <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h1>Access Denied</h1>
+            <p>You do not have permission to view this page.</p>
+            <p>Current user: ${req.user.username || req.user.id} (Role: ${req.user.role})</p>
+            <p><a href="/">Return to Home</a></p>
+          </body>
+        </html>
+      `);
+    }
+  }
+  next();
+};
+
 const ensureProjectAccess = (selector) => (req, res, next) => {
   try {
     const projectId = selector(req);
@@ -102,7 +159,42 @@ const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess(
 const supportedLanguages = ["en", "es", "sv"];
 const defaultLanguage = "en";
 
+const normalizeLanguageCode = (value) => {
+  if (!value) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (supportedLanguages.includes(raw)) return raw;
+  const base = raw.split(/[-_]/)[0];
+  return supportedLanguages.includes(base) ? base : null;
+};
+
+const resolveLanguageOverride = (req) => {
+  if (!req) return null;
+  const candidates = [];
+  if (req.cookies) {
+    candidates.push(req.cookies.qtiler_lang, req.cookies["qtiler.lang"]);
+  }
+  if (req.query && Object.prototype.hasOwnProperty.call(req.query, "lang")) {
+    const queryValue = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
+    if (typeof queryValue === "string") {
+      candidates.push(queryValue);
+    }
+  }
+  const headerLang = typeof req.get === "function" ? req.get("x-qtiler-lang") : null;
+  if (headerLang) {
+    candidates.push(headerLang);
+  }
+  for (const candidate of candidates) {
+    const normalized = normalizeLanguageCode(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
+};
+
 const detectPreferredLanguage = (req) => {
+  const overrideLang = resolveLanguageOverride(req);
+  if (overrideLang) {
+    return overrideLang;
+  }
   if (!req || typeof req.acceptsLanguages !== "function") return defaultLanguage;
   try {
     const match = req.acceptsLanguages(...supportedLanguages);
@@ -116,11 +208,12 @@ const detectPreferredLanguage = (req) => {
 };
 
 const renderPage = (req, res, viewName, locals = {}, options = {}) => {
-  const { status = 200, fallbackPath = null } = options;
+  const { status = 200 } = options;
   const payload = {
     pageLang: detectPreferredLanguage(req),
     user: req?.user || null,
-    authPluginInstallUrl: '/plugins/auth-admin?missing=QtilerAuth',
+    authPluginInstallUrl: '/admin',
+    proj4Presets,
     ...locals
   };
 
@@ -129,15 +222,6 @@ const renderPage = (req, res, viewName, locals = {}, options = {}) => {
     if (err) {
       const errorStatus = status >= 400 ? status : 500;
       console.warn("Failed to render view", { viewName, error: String(err?.message || err) });
-      if (fallbackPath) {
-        return res.status(status).sendFile(fallbackPath, (fileErr) => {
-          if (!fileErr) return;
-          console.error("Fallback static page load failed", { fallbackPath, error: String(fileErr?.message || fileErr) });
-          if (!res.headersSent) {
-            res.status(errorStatus).send("Failed to load page");
-          }
-        });
-      }
       if (!res.headersSent) {
         res.status(errorStatus).send("Failed to render page");
       }
@@ -155,29 +239,10 @@ app.use(express.json());
 app.use(cookieParser());
 app.use((req, res, next) => security.attachUser(req, res, next));
 
-app.use("/auth", (req, res, next) => {
-  if (security.isEnabled && security.isEnabled()) {
-    return next();
-  }
-  if (req.method === "OPTIONS") {
-    res.set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
-    const requestedHeaders = req.get("Access-Control-Request-Headers");
-    if (requestedHeaders) {
-      res.set("Access-Control-Allow-Headers", requestedHeaders);
-    }
-    return res.status(204).end();
-  }
-  return res.status(501).json(authPluginRequiredResponse);
-});
-
 // add: servir carpeta pública (sin index automático)
 const publicDir = path.join(__dirname, "public");
-const indexPagePath = path.join(publicDir, "index.html");
-const loginPagePath = path.join(publicDir, "login.html");
-const accessDeniedPagePath = path.join(publicDir, "access-denied.html");
-const portalPagePath = path.join(publicDir, "portal.html");
-const guidePagePath = path.join(publicDir, "guide.html");
-const viewerPagePath = path.join(publicDir, "viewer.html");
+const serviceMetadataPath = path.join(__dirname, "config", "service-metadata.json");
+const tileGridDir = path.join(__dirname, "config", "tile-grids");
 const projectAccessPath = path.join(dataDir, "QtilerAuth", "project-access.json");
 const legacyProjectAccessPaths = [
   path.join(dataDir, "project-access.json"),
@@ -188,7 +253,7 @@ const authUserSnapshotPaths = [
   path.join(dataDir, "auth", "auth-users.json"),
   path.join(dataDir, "QtilerAuth", "auth-users.json")
 ];
-const authPluginInstallUrl = "/plugins/auth-admin?missing=QtilerAuth";
+const authPluginInstallUrl = "/admin";
 const authPluginRequiredResponse = {
   error: "auth_plugin_disabled",
   message: "Authentication requires the QtilerAuth plugin to be installed.",
@@ -216,12 +281,115 @@ const resolveAuthAdminUiDir = () => {
   return null;
 };
 
+const normalizeZoomInput = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed));
+};
+
+const DEFAULT_PUBLISH_ZOOM_MIN = (() => {
+  const parsed = normalizeZoomInput(process.env.WMTS_DEFAULT_PUBLISH_ZOOM_MIN);
+  if (parsed === null || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+})();
+
+const DEFAULT_PUBLISH_ZOOM_MAX = (() => {
+  const parsed = normalizeZoomInput(process.env.WMTS_DEFAULT_PUBLISH_ZOOM_MAX);
+  if (parsed === null) {
+    return 20;
+  }
+  return Math.max(parsed, DEFAULT_PUBLISH_ZOOM_MIN);
+})();
+
+const WEB_MERCATOR_EXTENT = 20037508.342789244;
+const TILE_SIZE_PX = 256;
+
+const ENABLE_PROJECT_BOOTSTRAP = String(process.env.DISABLE_PROJECT_BOOTSTRAP || "").trim().toLowerCase() !== "true";
+const BOOTSTRAP_TILE_CRS = (process.env.PROJECT_BOOTSTRAP_TILE_CRS || "EPSG:3857").trim().toUpperCase() || "EPSG:3857";
+const RAW_BOOTSTRAP_SCHEME = (process.env.PROJECT_BOOTSTRAP_SCHEME || "xyz").trim().toLowerCase();
+const BOOTSTRAP_SCHEME = RAW_BOOTSTRAP_SCHEME === "wmts" ? "wmts" : "xyz";
+const BOOTSTRAP_ZOOM_MIN_SOURCE = normalizeZoomInput(process.env.PROJECT_BOOTSTRAP_ZOOM_MIN);
+const BOOTSTRAP_ZOOM_MAX_SOURCE = normalizeZoomInput(process.env.PROJECT_BOOTSTRAP_ZOOM_MAX);
+const BOOTSTRAP_ZOOM_MIN = BOOTSTRAP_ZOOM_MIN_SOURCE != null ? BOOTSTRAP_ZOOM_MIN_SOURCE : DEFAULT_PUBLISH_ZOOM_MIN;
+const BOOTSTRAP_ZOOM_MAX = BOOTSTRAP_ZOOM_MAX_SOURCE != null
+  ? Math.max(BOOTSTRAP_ZOOM_MAX_SOURCE, BOOTSTRAP_ZOOM_MIN)
+  : Math.max(DEFAULT_PUBLISH_ZOOM_MAX, BOOTSTRAP_ZOOM_MIN);
+const BOOTSTRAP_EXTENT_FALLBACK = [-WEB_MERCATOR_EXTENT, -WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT];
+
+let cachedTileGridPresets = null;
+
+const invalidateTileGridCaches = () => {
+  cachedTileGridPresets = null;
+  bootstrapPresetCache.clear();
+};
+
+const loadTileGridPresets = () => {
+  if (cachedTileGridPresets) {
+    return cachedTileGridPresets;
+  }
+
+  cachedTileGridPresets = [];
+  try {
+    if (!fs.existsSync(tileGridDir)) {
+      return cachedTileGridPresets;
+    }
+    const entries = fs.readdirSync(tileGridDir);
+    for (const entry of entries) {
+      if (!entry.toLowerCase().endsWith(".json")) {
+        continue;
+      }
+      const presetPath = path.join(tileGridDir, entry);
+      try {
+        const raw = JSON.parse(fs.readFileSync(presetPath, "utf8"));
+        const id = raw?.id || path.basename(entry, ".json");
+        const supportedRaw = raw?.supported_crs;
+        let supportedCrs = [];
+        if (typeof supportedRaw === "string" && supportedRaw.trim()) {
+          supportedCrs = [supportedRaw.trim().toUpperCase()];
+        } else if (Array.isArray(supportedRaw)) {
+          supportedCrs = supportedRaw.map((item) => (typeof item === "string" ? item.trim().toUpperCase() : "")).filter(Boolean);
+        }
+        cachedTileGridPresets.push({
+          id,
+          fileName: path.basename(entry, ".json"),
+          supportedCrs,
+          path: presetPath
+        });
+      } catch (err) {
+        console.warn("Failed to load tile grid preset", { presetPath, error: String(err?.message || err) });
+      }
+    }
+  } catch (err) {
+    console.warn("Unable to enumerate tile grid presets", { error: String(err?.message || err) });
+  }
+  return cachedTileGridPresets;
+};
+
+const findTileMatrixPresetForCrs = (crs) => {
+  if (!crs) {
+    return null;
+  }
+  const normalized = String(crs).trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  const presets = loadTileGridPresets();
+  return presets.find((preset) => Array.isArray(preset.supportedCrs) && preset.supportedCrs.includes(normalized)) || null;
+};
+
 const sendAccessDenied = (req, res) => {
-  renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403, fallbackPath: accessDeniedPagePath });
+  renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403 });
 };
 
 const sendLoginPage = (req, res) => {
-  renderPage(req, res, "login", { activeNav: "login" }, { status: 401, fallbackPath: loginPagePath });
+  renderPage(req, res, "login", { activeNav: "login" }, { status: 401 });
 };
 
 const ensureAdminForUi = (req, res, next) => {
@@ -246,14 +414,15 @@ const ensureAdminForUi = (req, res, next) => {
 const sendAuthAdminPage = (res) => {
   const dir = resolveAuthAdminUiDir();
   if (!dir) {
-    return res.status(501).send("Auth admin UI not installed");
+    // Redirect to the new admin panel instead of showing 501
+    return res.redirect('/admin');
   }
   const filePath = path.join(dir, "index.html");
   res.sendFile(filePath, (err) => {
     if (!err) return;
     console.warn("Auth admin UI load failed", { filePath, code: err?.code, message: err?.message });
     if (err.code === "ENOENT") {
-      res.status(501).send("Auth admin UI not installed");
+      return res.redirect('/admin');
     } else {
       res.status(500).send("Failed to load auth admin UI");
     }
@@ -288,19 +457,19 @@ app.use("/plugins/auth-admin", ensureAdminForUi, (req, res, next) => {
 });
 
 const sendPortalPage = (req, res) => {
-  renderPage(req, res, "portal", { activeNav: "portal" }, { fallbackPath: portalPagePath });
+  renderPage(req, res, "portal", { activeNav: "portal" });
 };
 
 app.get("/", (req, res) => {
   if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
-    return renderPage(req, res, "index", { activeNav: "dashboard" }, { fallbackPath: indexPagePath });
+    return renderPage(req, res, "index", { activeNav: "dashboard" });
   }
   return sendPortalPage(req, res);
 });
 
 app.get("/index.html", (req, res) => {
   if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
-    return renderPage(req, res, "index", { activeNav: "dashboard" }, { fallbackPath: indexPagePath });
+    return renderPage(req, res, "index", { activeNav: "dashboard" });
   }
   return res.redirect(302, "/");
 });
@@ -320,20 +489,32 @@ app.get(["/login", "/login.html"], (req, res) => {
 });
 
 app.get(["/guide", "/guide.html"], (req, res) => {
-  return renderPage(req, res, "guide", { activeNav: "guide" }, { fallbackPath: guidePagePath });
+  return renderPage(req, res, "guide", { activeNav: "guide" });
+});
+
+app.get(["/admin", "/admin.html"], requireAdminPage, (req, res) => {
+  return renderPage(req, res, "admin", { activeNav: "admin" });
 });
 
 app.get(["/viewer", "/viewer.html"], (req, res) => {
-  return renderPage(req, res, "viewer", { activeNav: "viewer" }, { fallbackPath: viewerPagePath });
+  return renderPage(req, res, "viewer", { activeNav: "viewer" });
 });
 
 app.get(["/access-denied", "/access-denied.html"], (req, res) => {
-  return renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403, fallbackPath: accessDeniedPagePath });
+  return renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403 });
 });
 
 app.use(express.static(publicDir, { index: false }));
 
-app.get("/plugins", requireAdmin, async (_req, res) => {
+// Allow non-admin access to plugins list if no auth plugin is enabled (to install first plugin)
+app.get("/plugins", async (req, res) => {
+  // If auth is enabled, require admin
+  if (security.isEnabled && security.isEnabled()) {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+  }
+  
   try {
     let installed = [];
     try {
@@ -342,10 +523,64 @@ app.get("/plugins", requireAdmin, async (_req, res) => {
     } catch (dirErr) {
       if (dirErr.code !== "ENOENT") throw dirErr;
     }
+    const installedSet = new Set(installed);
     const enabled = pluginManager.listEnabled();
-    res.json({ installed, enabled });
+
+    // Auto-disable plugins whose directories were removed manually
+    for (const name of enabled) {
+      if (!installedSet.has(name)) {
+        try {
+          await pluginManager.disablePlugin(name);
+          console.warn(`[Qtiler] Disabled missing plugin '${name}' (directory not found).`);
+        } catch (disableErr) {
+          console.warn(`[Qtiler] Failed to disable missing plugin '${name}':`, disableErr);
+        }
+      }
+    }
+
+    if (pluginManager.listEnabled().length === 0) {
+      applySecurityDefaults();
+    }
+
+    res.json({ installed, enabled: pluginManager.listEnabled() });
   } catch (err) {
     res.status(500).json({ error: "plugin_list_failed", details: String(err) });
+  }
+});
+
+app.post("/plugins/:name/enable", requireAdminIfEnabled, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  
+  try {
+    await pluginManager.enablePlugin(pluginName);
+    res.json({ status: "enabled", plugin: { name: pluginName } });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_enable_failed", details: String(err?.message || err) });
+  }
+});
+
+app.post("/plugins/:name/disable", requireAdmin, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  
+  try {
+    await pluginManager.disablePlugin(pluginName);
+    
+    // Apply security defaults if no plugins are enabled
+    if (pluginManager.listEnabled().length === 0) {
+      applySecurityDefaults();
+    }
+    
+    res.json({ status: "disabled", plugin: { name: pluginName } });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_disable_failed", details: String(err?.message || err) });
   }
 });
 
@@ -408,7 +643,7 @@ app.delete("/plugins/:name", requireAdmin, async (req, res) => {
   });
 });
 
-app.post("/plugins/upload", requireAdmin, (req, res) => {
+app.post("/plugins/upload", requireAdminIfEnabled, (req, res) => {
   pluginUpload.single("plugin")(req, res, async (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -432,7 +667,10 @@ app.post("/plugins/upload", requireAdmin, (req, res) => {
       await fs.promises.mkdir(extractDir, { recursive: true });
 
       try {
-        const zip = new AdmZip(file.buffer);
+        if (!file.path) {
+          throw Object.assign(new Error("plugin_upload_missing"), { statusCode: 500, code: "PLUGIN_UPLOAD_MISSING" });
+        }
+        const zip = new AdmZip(file.path);
         zip.extractAllTo(extractDir, true);
       } catch (zipErr) {
         throw Object.assign(new Error("plugin_archive_invalid"), { statusCode: 400, code: "PLUGIN_ARCHIVE_INVALID", details: zipErr.message });
@@ -464,7 +702,7 @@ app.post("/plugins/upload", requireAdmin, (req, res) => {
       try {
         await pluginManager.enablePlugin(pluginName);
       } catch (loadErr) {
-        await removeRecursive(destination).catch(() => {});
+        await removeRecursive(destination).catch(() => { });
         throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
       }
 
@@ -475,8 +713,15 @@ app.post("/plugins/upload", requireAdmin, (req, res) => {
       const details = uploadErr.details || uploadErr.message || String(uploadErr);
       return res.status(statusCode).json({ error: code, details });
     } finally {
+      if (file?.path) {
+        try {
+          await fs.promises.unlink(file.path);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
       if (tempDir) {
-        await removeRecursive(tempDir).catch(() => {});
+        await removeRecursive(tempDir).catch(() => { });
       }
     }
   });
@@ -486,6 +731,29 @@ const cacheDir = path.resolve(__dirname, "cache");
 const pythonDir = path.resolve(__dirname, "python");
 const projectsDir = path.resolve(__dirname, "qgisprojects");
 const logsDir = path.resolve(__dirname, "logs");
+const uploadTempDir = path.resolve(__dirname, "temp_uploads");
+
+const ensureUploadSubdir = (name) => {
+  const dir = path.join(uploadTempDir, name);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+const createDiskStorage = (subDir) => multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    try {
+      const dir = ensureUploadSubdir(subDir);
+      cb(null, dir);
+    } catch (err) {
+      cb(err);
+    }
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "");
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}` || `upload-${Date.now()}`;
+    cb(null, unique);
+  }
+});
 
 const PROJECT_CONFIG_FILENAME = "project-config.json";
 const MAX_TIMER_DELAY_MS = 2147483647; // ~24.8 días, límite de setTimeout
@@ -501,6 +769,9 @@ const projectTimers = new Map(); // id -> { timeout, targetTime, item }
 const projectLogLastMessage = new Map(); // id -> string
 const projectBatchRuns = new Map(); // id -> run info
 const projectBatchCleanupTimers = new Map();
+const projectCrsDetectionCache = new Map();
+const projectSpatialMetadataCache = new Map();
+const bootstrapPresetCache = new Map();
 
 const SCHEDULE_HISTORY_LIMIT = 25;
 const WEEKDAY_INDEX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -707,22 +978,22 @@ const cloneSchedule = (schedule) => {
     mode: schedule.mode || null,
     weekly: schedule.weekly
       ? {
-          days: Array.isArray(schedule.weekly.days) ? schedule.weekly.days.slice() : [],
-          time: schedule.weekly.time || null
-        }
+        days: Array.isArray(schedule.weekly.days) ? schedule.weekly.days.slice() : [],
+        time: schedule.weekly.time || null
+      }
       : null,
     monthly: schedule.monthly
       ? {
-          days: Array.isArray(schedule.monthly.days) ? schedule.monthly.days.slice() : [],
-          time: schedule.monthly.time || null
-        }
+        days: Array.isArray(schedule.monthly.days) ? schedule.monthly.days.slice() : [],
+        time: schedule.monthly.time || null
+      }
       : null,
     yearly: schedule.yearly
       ? {
-          occurrences: Array.isArray(schedule.yearly.occurrences)
-            ? schedule.yearly.occurrences.map((occ) => ({ month: occ.month, day: occ.day, time: occ.time }))
-            : []
-        }
+        occurrences: Array.isArray(schedule.yearly.occurrences)
+          ? schedule.yearly.occurrences.map((occ) => ({ month: occ.month, day: occ.day, time: occ.time }))
+          : []
+      }
       : null,
     nextRunAt: schedule.nextRunAt || null,
     lastRunAt: schedule.lastRunAt || null,
@@ -833,7 +1104,7 @@ if (!fs.existsSync(projectsDir)) {
   fs.mkdirSync(projectsDir, { recursive: true });
 }
 if (!fs.existsSync(logsDir)) {
-  try { fs.mkdirSync(logsDir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(logsDir, { recursive: true }); } catch { }
 }
 
 const getProjectConfigPath = (projectId) => path.join(cacheDir, projectId, PROJECT_CONFIG_FILENAME);
@@ -843,6 +1114,7 @@ const defaultProjectConfig = (projectId) => ({
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   extent: { bbox: null, crs: null, updatedAt: null },
+  extentWgs84: { bbox: null, crs: "EPSG:4326", updatedAt: null },
   zoom: { min: null, max: null, updatedAt: null },
   cachePreferences: { mode: "xyz", tileCrs: "EPSG:3857", allowRemote: false, throttleMs: 0, updatedAt: null },
   layers: {},
@@ -881,6 +1153,154 @@ const deepMerge = (target, source) => {
     }
   }
   return target;
+};
+
+const serviceMetadataDefaults = {
+  serviceIdentification: {
+    title: "Local WMTS",
+    abstract: "WMTS endpoint",
+    keywords: [],
+    serviceType: "OGC WMTS",
+    serviceTypeVersion: "1.0.0",
+    fees: "None",
+    accessConstraints: "none"
+  },
+  serviceProvider: {
+    providerName: "MundoGIS",
+    providerSite: "",
+    contact: {
+      individualName: "",
+      positionName: "",
+      phoneVoice: "",
+      phoneFacsimile: "",
+      address: {
+        deliveryPoint: "",
+        city: "",
+        administrativeArea: "",
+        postalCode: "",
+        country: "",
+        email: ""
+      }
+    }
+  },
+  operations: {
+    getFeatureInfo: false
+  }
+};
+
+const loadServiceMetadata = () => {
+  try {
+    if (fs.existsSync(serviceMetadataPath)) {
+      const raw = fs.readFileSync(serviceMetadataPath, "utf8");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return deepMerge(JSON.parse(JSON.stringify(serviceMetadataDefaults)), parsed || {});
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load service metadata", err);
+  }
+  return JSON.parse(JSON.stringify(serviceMetadataDefaults));
+};
+
+const loadTileMatrixPresetStore = () => {
+  const store = new Map();
+  try {
+    if (!fs.existsSync(tileGridDir)) {
+      return store;
+    }
+    const entries = fs.readdirSync(tileGridDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".json")) continue;
+      const fullPath = path.join(tileGridDir, entry.name);
+      try {
+        const raw = fs.readFileSync(fullPath, "utf8");
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const presetId = (parsed.id || path.basename(entry.name, ".json") || entry.name).toString();
+        parsed.id = presetId;
+        parsed.__source = fullPath;
+        const keyVariants = new Set([
+          presetId.toLowerCase(),
+          path.basename(entry.name, ".json").toLowerCase()
+        ]);
+        for (const key of keyVariants) {
+          if (!store.has(key)) {
+            store.set(key, parsed);
+          }
+        }
+      } catch (presetErr) {
+        console.warn("Failed to parse tile matrix preset", entry.name, presetErr?.message || presetErr);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load tile matrix preset store", err?.message || err);
+  }
+  return store;
+};
+
+let serviceMetadata = loadServiceMetadata();
+let tileMatrixPresetStore = loadTileMatrixPresetStore();
+
+const scheduleReload = (fn, delay = 200) => {
+  let timer = null;
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      try {
+        fn();
+      } catch (err) {
+        console.warn("Failed to reload configuration", err);
+      }
+    }, delay);
+  };
+};
+
+try {
+  const reloadServiceMetadata = scheduleReload(() => {
+    serviceMetadata = loadServiceMetadata();
+    console.log("[WMTS] Service metadata reloaded");
+  });
+  const serviceDir = path.dirname(serviceMetadataPath);
+  if (fs.existsSync(serviceDir)) {
+    fs.watch(serviceDir, { persistent: false }, (eventType, fileName) => {
+      if (!fileName) return;
+      if (path.basename(fileName).toLowerCase() === path.basename(serviceMetadataPath).toLowerCase()) {
+        reloadServiceMetadata();
+      }
+    });
+  }
+} catch (err) {
+  // ignore watch errors (file may not exist yet)
+}
+
+try {
+  if (!fs.existsSync(tileGridDir)) {
+    fs.mkdirSync(tileGridDir, { recursive: true });
+  }
+  const reloadPresetStore = scheduleReload(() => {
+    invalidateTileGridCaches();
+    tileMatrixPresetStore = loadTileMatrixPresetStore();
+    console.log("[WMTS] Tile matrix preset store reloaded");
+  });
+  fs.watch(tileGridDir, { persistent: false }, () => reloadPresetStore());
+} catch (err) {
+  // ignore watch errors
+}
+
+const getTileMatrixPresetRaw = (name) => {
+  if (!name) return null;
+  const key = String(name).toLowerCase();
+  if (tileMatrixPresetStore.has(key)) {
+    return tileMatrixPresetStore.get(key);
+  }
+  for (const value of tileMatrixPresetStore.values()) {
+    if (value && typeof value.id === "string" && value.id.toLowerCase() === key) {
+      return value;
+    }
+  }
+  return null;
 };
 
 const sanitizeStorageName = (value) => {
@@ -946,6 +1366,7 @@ const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => 
   writeProjectIndexData(projectId, data);
   return updated;
 };
+
 
 const resolveTileBaseDir = (projectId, targetMode, targetName, storageName = null) => {
   const safeName = storageName ? sanitizeStorageName(storageName) : sanitizeStorageName(targetName);
@@ -1180,9 +1601,9 @@ const persistJobProgress = (job, payload, { forceIndex = false, forceConfig = fa
         base.partial = true;
         base.progress = progressInfo;
         return base;
-  });
+      });
       job.lastIndexWriteAt = now;
-  return null;
+      return null;
     } catch (err) {
       console.warn("Failed to update index progress", job.project, job.targetName, err);
     }
@@ -1288,6 +1709,363 @@ const updateProjectConfig = (projectId, patch, { skipReschedule = false } = {}) 
   return writeProjectConfig(projectId, merged, { skipReschedule });
 };
 
+const ensureProjectConfigExists = (projectId) => {
+  if (!projectId) return null;
+  const cfgPath = getProjectConfigPath(projectId);
+  if (!fs.existsSync(cfgPath)) {
+    try {
+      return writeProjectConfig(projectId, {}, { skipReschedule: true });
+    } catch (err) {
+      console.warn("Failed to initialize project config", { projectId, error: err?.message || err });
+    }
+  }
+  try {
+    return readProjectConfig(projectId);
+  } catch (err) {
+    console.warn("Failed to read project config", { projectId, error: err?.message || err });
+    return null;
+  }
+};
+
+const resolveProjectFilePath = (projectId) => {
+  if (!projectId) return null;
+  const normalizedId = String(projectId).trim();
+  const candidates = [
+    path.join(projectsDir, `${normalizedId}.qgz`),
+    path.join(projectsDir, `${normalizedId}.qgs`),
+    path.join(projectsDir, normalizedId)
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const stat = fs.statSync(candidate);
+        if (stat.isFile()) {
+          return candidate;
+        }
+      }
+    } catch (err) {
+      // ignore and continue with next candidate
+    }
+  }
+  try {
+    const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+    const lowered = normalizedId.toLowerCase();
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const parsed = path.parse(entry.name);
+      if (parsed.name.toLowerCase() === lowered) {
+        const resolved = path.join(projectsDir, entry.name);
+        try {
+          const stat = fs.statSync(resolved);
+          if (stat.isFile()) {
+            return resolved;
+          }
+        } catch (err) {
+          // ignore stat errors
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to enumerate projects directory for CRS detection", { projectId, error: err?.message || err });
+  }
+  return null;
+};
+
+const readProjectFileContent = (projectPath) => {
+  if (!projectPath) return null;
+  const lower = projectPath.toLowerCase();
+  if (lower.endsWith(".qgz")) {
+    try {
+      const zip = new AdmZip(projectPath);
+      const entry = zip.getEntries().find((item) => item.entryName && item.entryName.toLowerCase().endsWith(".qgs"));
+      if (!entry) return null;
+      return entry.getData().toString("utf8");
+    } catch (err) {
+      console.warn("Failed to read QGZ project for CRS detection", { projectPath, error: err?.message || err });
+      return null;
+    }
+  }
+  try {
+    return fs.readFileSync(projectPath, "utf8");
+  } catch (err) {
+    console.warn("Failed to read QGS project for CRS detection", { projectPath, error: err?.message || err });
+    return null;
+  }
+};
+
+const extractCrsTokenFromProjectXml = (xmlText) => {
+  if (!xmlText || typeof xmlText !== "string") return null;
+  const projectMatch = /<projectCrs[^>]*>([^<]+)<\/projectCrs>/i.exec(xmlText);
+  if (projectMatch && projectMatch[1]) {
+    const token = projectMatch[1].trim();
+    if (token) {
+      return token.toUpperCase();
+    }
+  }
+  const authMatch = /<authid>([^<]+)<\/authid>/i.exec(xmlText);
+  if (authMatch && authMatch[1]) {
+    const token = authMatch[1].trim().toUpperCase();
+    if (token.startsWith("EPSG:")) {
+      return token;
+    }
+  }
+  const epsgMatch = /EPSG:\s*\d{3,6}/i.exec(xmlText);
+  if (epsgMatch && epsgMatch[0]) {
+    return epsgMatch[0].replace(/\s+/g, "").toUpperCase();
+  }
+  return null;
+};
+
+const parseExtentBlock = (xmlText, tagName) => {
+  if (!xmlText || !tagName) return null;
+  const pattern = new RegExp(`<${tagName}>[\\s\\S]*?<xmin>([^<]+)<\\/xmin>[\\s\\S]*?<ymin>([^<]+)<\\/ymin>[\\s\\S]*?<xmax>([^<]+)<\\/xmax>[\\s\\S]*?<ymax>([^<]+)<\\/ymax>`, "i");
+  const match = pattern.exec(xmlText);
+  if (!match) return null;
+  const nums = match.slice(1).map((value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  });
+  if (nums.some((value) => value == null)) {
+    return null;
+  }
+  return nums;
+};
+
+const getProjectSpatialMetadata = (projectId) => {
+  if (!projectId) return null;
+  const cacheKey = String(projectId).toLowerCase();
+  if (projectSpatialMetadataCache.has(cacheKey)) {
+    return projectSpatialMetadataCache.get(cacheKey);
+  }
+  const projectPath = resolveProjectFilePath(projectId);
+  if (!projectPath) return null;
+  const xml = readProjectFileContent(projectPath);
+  if (!xml) return null;
+  const crsToken = extractCrsTokenFromProjectXml(xml);
+  const extent = parseExtentBlock(xml, "extent");
+  const viewExtent = parseExtentBlock(xml, "defaultViewExtent") || extent;
+  const result = {
+    crs: crsToken,
+    extent,
+    viewExtent
+  };
+  projectSpatialMetadataCache.set(cacheKey, result);
+  if (crsToken) {
+    projectCrsDetectionCache.set(cacheKey, crsToken);
+  }
+  return result;
+};
+
+const detectProjectCrs = (projectId) => {
+  if (!projectId) return null;
+  const cacheKey = String(projectId).toLowerCase();
+  if (projectCrsDetectionCache.has(cacheKey)) {
+    return projectCrsDetectionCache.get(cacheKey);
+  }
+  const spatial = getProjectSpatialMetadata(projectId);
+  return spatial?.crs || null;
+};
+
+const deriveTileMatrixInfoForCrs = (tileCrs) => {
+  if (!tileCrs) {
+    return { presetId: null, tileMatrixSet: null };
+  }
+  const presetMeta = findTileMatrixPresetForCrs(tileCrs);
+  if (!presetMeta) {
+    return { presetId: null, tileMatrixSet: null };
+  }
+  const presetId = presetMeta.id || presetMeta.fileName || null;
+  let rawPreset = getTileMatrixPresetRaw(presetId) || getTileMatrixPresetRaw(presetMeta.fileName);
+  if (!rawPreset && presetMeta.path && fs.existsSync(presetMeta.path)) {
+    try {
+      const fileRaw = fs.readFileSync(presetMeta.path, "utf8");
+      rawPreset = JSON.parse(fileRaw);
+      if (rawPreset && !rawPreset.id && presetId) {
+        rawPreset.id = presetId;
+      }
+    } catch (err) {
+      console.warn("Failed to load tile matrix preset from disk", { presetPath: presetMeta.path, error: err?.message || err });
+    }
+  }
+  let presetCopy = null;
+  if (rawPreset && typeof rawPreset === "object") {
+    try {
+      presetCopy = JSON.parse(JSON.stringify(rawPreset));
+    } catch (err) {
+      presetCopy = rawPreset;
+    }
+    if (!presetCopy.id && presetId) {
+      presetCopy.id = presetId;
+    }
+    if (!presetCopy.supported_crs && tileCrs) {
+      presetCopy.supported_crs = [tileCrs];
+    }
+  }
+  return { presetId, tileMatrixSet: presetCopy };
+};
+
+const recordOnDemandRequest = (projectId, targetMode, targetName) => {
+  if (!projectId || !targetName) return;
+  const normalizedMode = targetMode === "theme" ? "theme" : "layer";
+  const nowIso = new Date().toISOString();
+  let configSnapshot = null;
+  try {
+    configSnapshot = ensureProjectConfigExists(projectId);
+  } catch (err) {
+    console.warn("Failed to ensure config for on-demand request", { projectId, error: err?.message || err });
+  }
+
+  const layerConfig = normalizedMode === "theme"
+    ? configSnapshot?.themes?.[targetName]
+    : configSnapshot?.layers?.[targetName];
+  const lastParams = layerConfig && typeof layerConfig.lastParams === "object" ? layerConfig.lastParams : {};
+
+  const normalizeCrs = (value) => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed.toUpperCase() : null;
+  };
+  const normalizeScheme = (value) => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim().toLowerCase();
+    return trimmed || null;
+  };
+  const normalizePresetName = (value) => {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed || null;
+  };
+  const cloneIfObject = (value) => {
+    if (!value || typeof value !== "object") return null;
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (err) {
+      return value;
+    }
+  };
+
+  const spatialMeta = getProjectSpatialMetadata(projectId);
+  const defaultExtent = spatialMeta?.viewExtent || spatialMeta?.extent || null;
+
+  let tileCrsHint = normalizeCrs(lastParams.tile_crs || lastParams.tileCrs || layerConfig?.tile_crs || layerConfig?.tileCrs);
+  if (!tileCrsHint) {
+    const prefs = configSnapshot?.cachePreferences || null;
+    if (prefs && prefs.updatedAt && (prefs.tileCrs || prefs.tile_crs)) {
+      tileCrsHint = normalizeCrs(prefs.tileCrs || prefs.tile_crs);
+    }
+  }
+  if (!tileCrsHint) {
+    tileCrsHint = normalizeCrs(detectProjectCrs(projectId));
+  }
+
+  let schemeHint = normalizeScheme(lastParams.scheme || layerConfig?.scheme || layerConfig?.mode);
+  if (!schemeHint) {
+    const prefs = configSnapshot?.cachePreferences || null;
+    if (prefs && prefs.updatedAt && prefs.mode) {
+      schemeHint = normalizeScheme(prefs.mode);
+    }
+  }
+  if (!schemeHint && tileCrsHint) {
+    schemeHint = tileCrsHint === "EPSG:3857" ? "xyz" : "wmts";
+  }
+
+  let tileMatrixPresetId = normalizePresetName(
+    lastParams.tile_matrix_preset
+    || lastParams.tileMatrixPreset
+    || layerConfig?.tile_matrix_preset
+    || layerConfig?.tileMatrixPreset
+  );
+  let tileMatrixSetDef = cloneIfObject(layerConfig?.tile_matrix_set || layerConfig?.tileMatrixSet);
+  if ((!tileMatrixPresetId || !tileMatrixSetDef) && tileCrsHint) {
+    const derived = deriveTileMatrixInfoForCrs(tileCrsHint);
+    if (!tileMatrixPresetId && derived.presetId) {
+      tileMatrixPresetId = derived.presetId;
+    }
+    if (!tileMatrixSetDef && derived.tileMatrixSet) {
+      tileMatrixSetDef = cloneIfObject(derived.tileMatrixSet);
+    }
+  }
+  if (tileMatrixSetDef && tileMatrixPresetId && !tileMatrixSetDef.id) {
+    tileMatrixSetDef.id = tileMatrixPresetId;
+  }
+
+  if (configSnapshot) {
+    try {
+      const targetPatch = { lastRequestedAt: nowIso };
+      if (!targetPatch.extent && Array.isArray(layerConfig?.extent)) {
+        targetPatch.extent = layerConfig.extent.slice();
+      }
+      if (!targetPatch.extent && Array.isArray(defaultExtent)) {
+        targetPatch.extent = defaultExtent.slice();
+      }
+      const configPatch = normalizedMode === "theme"
+        ? { themes: { [targetName]: targetPatch } }
+        : { layers: { [targetName]: targetPatch } };
+      const prefs = configSnapshot?.cachePreferences || {};
+      const prefsUpdated = !!prefs.updatedAt;
+      const prefCrs = prefs.tileCrs ? prefs.tileCrs.toUpperCase() : (prefs.tile_crs ? String(prefs.tile_crs).toUpperCase() : null);
+      if (tileCrsHint && (!prefsUpdated || !prefCrs)) {
+        configPatch.cachePreferences = {
+          ...prefs,
+          tileCrs: tileCrsHint,
+          mode: schemeHint || prefs.mode || (tileCrsHint === "EPSG:3857" ? "xyz" : "wmts"),
+          updatedAt: nowIso
+        };
+      }
+      const hasProjectExtent = Array.isArray(configSnapshot?.extent?.bbox) && configSnapshot.extent.bbox.length === 4;
+      if (!hasProjectExtent && Array.isArray(defaultExtent)) {
+        configPatch.extent = {
+          bbox: defaultExtent.slice(),
+          crs: tileCrsHint || configSnapshot?.extent?.crs || null,
+          updatedAt: nowIso
+        };
+      }
+      updateProjectConfig(projectId, configPatch, { skipReschedule: true });
+    } catch (err) {
+      console.warn("Failed to persist on-demand request metadata", { projectId, targetName, error: err?.message || err });
+    }
+  }
+
+  try {
+    upsertProjectIndexEntry(projectId, normalizedMode, targetName, (existing = {}) => {
+      const snapshot = { ...existing };
+      if (schemeHint) {
+        snapshot.scheme = schemeHint;
+      }
+      if (tileCrsHint) {
+        snapshot.tile_crs = tileCrsHint;
+      }
+      if (tileMatrixPresetId) {
+        snapshot.tile_matrix_preset = tileMatrixPresetId;
+      }
+      if (tileMatrixSetDef) {
+        snapshot.tile_matrix_set = cloneIfObject(tileMatrixSetDef);
+      }
+      if (!snapshot.extent && Array.isArray(layerConfig?.extent)) {
+        snapshot.extent = layerConfig.extent.slice();
+      }
+      if (!snapshot.extent && Array.isArray(defaultExtent)) {
+        snapshot.extent = defaultExtent.slice();
+      }
+      if (!snapshot.path) {
+        const storageName = sanitizeStorageName(targetName);
+        snapshot.path = normalizedMode === "theme"
+          ? path.join(cacheDir, projectId, "_themes", storageName)
+          : path.join(cacheDir, projectId, storageName);
+      }
+      snapshot.tile_format = snapshot.tile_format || "png";
+      snapshot.generated = snapshot.generated || nowIso;
+      snapshot.last_request_at = nowIso;
+      snapshot.status = snapshot.status || "on-demand";
+      snapshot.partial = true;
+      snapshot.progress = snapshot.progress || { status: "on-demand", updatedAt: nowIso };
+      return snapshot;
+    });
+  } catch (err) {
+    console.warn("Failed to update index for on-demand request", { projectId, targetName, error: err?.message || err });
+  }
+};
+
 const sanitizeIso = (value) => {
   if (!value) return null;
   const ts = Date.parse(value);
@@ -1360,15 +2138,33 @@ const buildSchedulePatch = (input) => {
   return Object.keys(patch).length ? patch : {};
 };
 
+const normalizeExtentPatch = (value, { defaultCrs = null } = {}) => {
+  const stamp = new Date().toISOString();
+  if (value == null) {
+    return { bbox: null, crs: defaultCrs || null, updatedAt: stamp };
+  }
+  if (typeof value !== "object") {
+    return { bbox: null, crs: defaultCrs || null, updatedAt: stamp };
+  }
+  const bboxInput = Array.isArray(value.bbox) ? value.bbox.map((v) => Number(v)) : null;
+  const bbox = bboxInput && bboxInput.length === 4 && bboxInput.every((n) => Number.isFinite(n)) ? bboxInput : null;
+  const crs = typeof value.crs === "string" ? value.crs : (defaultCrs || null);
+  return {
+    bbox,
+    crs,
+    updatedAt: value.updatedAt || stamp
+  };
+};
+
 const buildProjectConfigPatch = (input = {}) => {
   const patch = {};
-  if (input.extent && typeof input.extent === "object") {
-    const bbox = Array.isArray(input.extent.bbox) ? input.extent.bbox.map((v) => Number(v)) : null;
-    patch.extent = {
-      bbox: bbox && bbox.length === 4 && bbox.every((n) => Number.isFinite(n)) ? bbox : null,
-      crs: input.extent.crs && typeof input.extent.crs === "string" ? input.extent.crs : null,
-      updatedAt: input.extent.updatedAt || new Date().toISOString()
-    };
+  if (Object.prototype.hasOwnProperty.call(input, "extent")) {
+    patch.extent = normalizeExtentPatch(input.extent, { defaultCrs: null });
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "extentWgs84")) {
+    patch.extentWgs84 = normalizeExtentPatch(input.extentWgs84, { defaultCrs: "EPSG:4326" });
+  } else if (Object.prototype.hasOwnProperty.call(input, "extent_wgs84")) {
+    patch.extentWgs84 = normalizeExtentPatch(input.extent_wgs84, { defaultCrs: "EPSG:4326" });
   }
   if (Object.prototype.hasOwnProperty.call(input, "zoom")) {
     const zoomObj = input.zoom && typeof input.zoom === "object" ? input.zoom : {};
@@ -1764,7 +2560,7 @@ const handleProjectTimer = async (projectId, targetTime) => {
     return;
   }
   if (entry && entry.timeout) {
-    try { clearTimeout(entry.timeout); } catch {}
+    try { clearTimeout(entry.timeout); } catch { }
   }
   projectTimers.delete(projectId);
   const config = readProjectConfig(projectId, { useCache: false });
@@ -2034,7 +2830,7 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
       }, parseInt(process.env.ABORT_GRACE_MS || "1000", 10));
       job.status = "aborted";
       job.endedAt = Date.now();
-      try { activeKeys.delete(`${projectId}:${layerName}`); } catch {}
+      try { activeKeys.delete(`${projectId}:${layerName}`); } catch { }
       clearTimeout(job.cleanupTimer);
       job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
     } catch (e) {
@@ -2057,7 +2853,7 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
     if (removalPath !== layerDir) {
       try {
         await removeDirectorySafe(layerDir, { attempts: 2, delayMs: 100 });
-      } catch {}
+      } catch { }
     }
   } catch (rmErr) {
     if (!silent) console.error("Failed to remove cache directory", projectId, layerName, rmErr);
@@ -2122,7 +2918,7 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
       }, parseInt(process.env.ABORT_GRACE_MS || "1000", 10));
       job.status = "aborted";
       job.endedAt = Date.now();
-      try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch {}
+      try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch { }
       clearTimeout(job.cleanupTimer);
       job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
     } catch (e) {
@@ -2145,7 +2941,7 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
     if (themeRemovalPath !== themeDir) {
       try {
         await removeDirectorySafe(themeDir, { attempts: 2, delayMs: 100 });
-      } catch {}
+      } catch { }
     }
   } catch (rmErr) {
     if (!silent) console.error("Failed to remove theme cache directory", projectId, themeName, rmErr);
@@ -2189,7 +2985,7 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
 const allowedProjectExtensions = new Set([".qgz", ".qgs"]);
 const defaultUploadLimit = parseInt(process.env.PROJECT_UPLOAD_MAX_BYTES || "209715200", 10); // 200 MB por defecto
 const projectUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: createDiskStorage("projects"),
   limits: { fileSize: Number.isFinite(defaultUploadLimit) && defaultUploadLimit > 0 ? defaultUploadLimit : 209715200 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname || "").toLowerCase();
@@ -2289,7 +3085,7 @@ const removeRecursive = async (targetPath) => {
 const allowedPluginExtensions = new Set([".zip"]);
 const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
 const pluginUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: createDiskStorage("plugins"),
   limits: {
     fileSize: Number.isFinite(defaultPluginUploadLimit) && defaultPluginUploadLimit > 0
       ? defaultPluginUploadLimit
@@ -2312,6 +3108,20 @@ const pythonExe = process.env.PYTHON_EXE || path.join(process.env.OSGEO4W_BIN ||
 // crear env para procesos hijos incluyendo OSGeo4W paths si están en .env
 const makeChildEnv = () => {
   const env = { ...process.env };
+  // If a repo-local .env exists, prefer its values for child processes
+  try {
+    const envFile = path.join(__dirname, '.env');
+    if (fs.existsSync(envFile)) {
+      try {
+        const parsed = dotenv.parse(fs.readFileSync(envFile, 'utf8'));
+        for (const k of Object.keys(parsed)) {
+          env[k] = parsed[k];
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    }
+  } catch (e) {}
   if (process.env.OSGEO4W_BIN) {
     env.PATH = `${process.env.OSGEO4W_BIN};${env.PATH || ""}`;
   }
@@ -2354,6 +3164,483 @@ function extractJsonLike(text) {
   return text.slice(startIdx, endIdx + 1);
 }
 
+const sanitizeExtentCoordinates = (value) => {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const parsed = value.map((coordinate) => {
+    const num = Number(coordinate);
+    return Number.isFinite(num) ? num : null;
+  });
+  return parsed.every((num) => num != null) ? parsed : null;
+};
+
+const coalesceExtent = (...candidates) => {
+  for (const candidate of candidates) {
+    const cleaned = sanitizeExtentCoordinates(candidate);
+    if (cleaned) return cleaned;
+  }
+  return null;
+};
+
+const normalizeCrsCode = (value) => {
+  if (!value) return null;
+  const normalized = String(value).trim().toUpperCase();
+  return normalized || null;
+};
+
+const cloneObject = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value));
+};
+
+const loadBootstrapPresetDefinition = (presetInfo) => {
+  if (!presetInfo || !presetInfo.path) {
+    return null;
+  }
+  const presetPath = presetInfo.path;
+  try {
+    if (!bootstrapPresetCache.has(presetPath)) {
+      if (!fs.existsSync(presetPath)) {
+        bootstrapPresetCache.set(presetPath, null);
+      } else {
+        const raw = fs.readFileSync(presetPath, "utf8");
+        bootstrapPresetCache.set(presetPath, raw ? JSON.parse(raw) : null);
+      }
+    }
+    const cached = bootstrapPresetCache.get(presetPath);
+    return cloneObject(cached);
+  } catch (err) {
+    console.warn("[bootstrap] Failed to load preset definition", presetPath, err?.message || err);
+    bootstrapPresetCache.delete(presetPath);
+    return null;
+  }
+};
+
+const buildGlobalMercatorProfile = (sourceLabel = "fallback") => {
+  const scheme = RAW_BOOTSTRAP_SCHEME === "wmts" ? "wmts" : "xyz";
+  return {
+    tileCrs: "EPSG:3857",
+    scheme,
+    tileMatrixPreset: "EPSG_3857",
+    tileMatrixSet: scheme === "wmts"
+      ? buildGlobalMercatorMatrixSet(Math.max(BOOTSTRAP_ZOOM_MIN, BOOTSTRAP_ZOOM_MAX))
+      : null,
+    source: sourceLabel
+  };
+};
+
+const createAutoGridPreset = (crs, extent, projectId = null) => {
+  if (!crs || !extent || extent.length < 4) return null;
+  try {
+    if (!fs.existsSync(tileGridDir)) {
+      fs.mkdirSync(tileGridDir, { recursive: true });
+    }
+    const safeCrs = crs.replace(/[^a-zA-Z0-9]/g, "_");
+    const safeProject = projectId ? `_${projectId.replace(/[^a-zA-Z0-9]/g, "_")}` : "";
+    const safeId = `${safeCrs}${safeProject}`;
+    const filename = `${safeId}.json`;
+    const filePath = path.join(tileGridDir, filename);
+    
+    if (fs.existsSync(filePath)) return safeId;
+
+    const width = extent[2] - extent[0];
+    const height = extent[3] - extent[1];
+    const maxDim = Math.max(width, height);
+    // Level 0 fits the extent in one 256px tile
+    const startRes = maxDim / 256;
+    
+    const matrices = [];
+    for (let z = 0; z <= 22; z++) {
+      const res = startRes / Math.pow(2, z);
+      const scaleDen = res / 0.00028;
+      // For Leaflet/Proj4Leaflet compatibility, matrix dimensions must be powers of 2
+      // This ensures tile coordinates (x,y) are calculated correctly by the client
+      const numTiles = Math.pow(2, z);
+      matrices.push({
+        identifier: String(z),
+        id: String(z),
+        z: z,
+        source_level: z,
+        resolution: res,
+        scale_denominator: scaleDen,
+        matrix_width: numTiles,
+        matrix_height: numTiles,
+        tileWidth: 256,
+        tileHeight: 256,
+        topLeftCorner: [extent[0], extent[3]],
+        top_left: [extent[0], extent[3]]
+      });
+    }
+
+    const preset = {
+      id: safeId,
+      title: `Auto-generated for ${crs}${projectId ? ` (${projectId})` : ''}`,
+      supported_crs: [crs],
+      coordinateReferenceSystem: crs,
+      tile_width: 256,
+      tile_height: 256,
+      axis_order: "xy",
+      top_left_corner: [extent[0], extent[3]],
+      topLeftCorner: [extent[0], extent[3]],
+      matrices: matrices,
+      matrixSet: matrices,
+      auto_generated: true,
+      project_id: projectId
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(preset, null, 2));
+    console.log(`[auto-grid] Generated new preset for ${crs} at ${filePath}`);
+    invalidateTileGridCaches();
+    return safeId;
+  } catch (e) {
+    console.error("Failed to write auto preset", e);
+    return null;
+  }
+};
+
+const pickBootstrapTileProfile = (candidateList = [], autoGenExtent = null, projectId = null) => {
+  const candidates = Array.isArray(candidateList) ? candidateList : [];
+  for (const candidate of candidates) {
+    const value = typeof candidate === "object" && candidate !== null ? candidate.value : candidate;
+    const source = typeof candidate === "object" && candidate !== null && candidate.source ? candidate.source : undefined;
+    const normalized = normalizeCrsCode(value);
+    if (!normalized) continue;
+    if (normalized === "EPSG:3857") {
+      const profile = buildGlobalMercatorProfile(source || "epsg3857");
+      return profile;
+    }
+    let preset = findTileMatrixPresetForCrs(normalized);
+    
+    // Auto-generate if missing and we have an extent
+    if (!preset && normalized !== "EPSG:3857" && autoGenExtent) {
+      createAutoGridPreset(normalized, autoGenExtent, projectId);
+      preset = findTileMatrixPresetForCrs(normalized);
+    }
+
+    if (preset) {
+      const presetPayload = loadBootstrapPresetDefinition(preset);
+      const presetId = preset.fileName || preset.id || normalized;
+      if (presetPayload) {
+        if (!presetPayload.id) presetPayload.id = presetId;
+        if (!presetPayload.supported_crs) presetPayload.supported_crs = normalized;
+      }
+      return {
+        tileCrs: normalized,
+        scheme: "wmts",
+        tileMatrixPreset: presetId,
+        tileMatrixSet: presetPayload ? cloneObject(presetPayload) : null,
+        source: source || "preset"
+      };
+    }
+    if (!preset && normalized !== "EPSG:3857") {
+      console.warn(`[bootstrap] Tile grid preset missing for CRS ${normalized}${source ? ` (source: ${source})` : ""}; falling back to next candidate.`);
+    }
+  }
+  return buildGlobalMercatorProfile("fallback");
+};
+
+const runExtractInfoForProject = (projectPath) => new Promise((resolve, reject) => {
+  if (!projectPath) return resolve(null);
+  const script = path.join(pythonDir, "extract_info.py");
+  if (!fs.existsSync(script)) {
+    return resolve(null);
+  }
+  const args = ["--project", projectPath];
+  const proc = runPythonViaOSGeo4W(script, args);
+  let stdout = "";
+  let stderr = "";
+  proc.stdout.on("data", (chunk) => {
+    const text = chunk.toString();
+    stdout += text;
+  });
+  proc.stderr.on("data", (chunk) => {
+    const text = chunk.toString();
+    stderr += text;
+  });
+  proc.on("error", (err) => reject(err));
+  proc.on("close", (code) => {
+    const raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
+    const candidate = extractJsonLike(raw);
+    if (!candidate) {
+      if (code === 0) return resolve(null);
+      const error = new Error("extract_info_failed");
+      error.details = raw;
+      return reject(error);
+    }
+    try {
+      resolve(JSON.parse(candidate));
+    } catch (err) {
+      err.details = raw;
+      reject(err);
+    }
+  });
+});
+
+const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload) => {
+  if (!extractPayload || typeof extractPayload !== "object") {
+    return { entries: [], projectExtent: null, projectExtentWgs: null, projectCrs: null, defaultTileProfile: null };
+  }
+  const now = new Date().toISOString();
+  const entries = [];
+  const usedKeys = new Set();
+  const projectInfo = extractPayload.project || {};
+  const projectExtent = coalesceExtent(projectInfo.extent, projectInfo.view_extent) || BOOTSTRAP_EXTENT_FALLBACK;
+  const projectExtentWgs = coalesceExtent(projectInfo.extent_wgs84, projectInfo.view_extent_wgs84);
+  const projectCrs = projectInfo.crs || null;
+  const projectCrsNormalized = normalizeCrsCode(projectCrs);
+  const EXTENT_RATIO_THRESHOLD = 25;
+  const computeExtentArea = (bbox) => {
+    const clean = sanitizeExtentCoordinates(bbox);
+    if (!clean) return null;
+    const width = clean[2] - clean[0];
+    const height = clean[3] - clean[1];
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+    return Math.abs(width * height);
+  };
+  const projectExtentArea = projectExtent ? computeExtentArea(projectExtent) : null;
+  const isExtentSignificantlyLargerThanProject = (candidate) => {
+    if (!projectExtentArea) return false;
+    const candidateArea = computeExtentArea(candidate);
+    if (!candidateArea) return false;
+    return (candidateArea / projectExtentArea) >= EXTENT_RATIO_THRESHOLD;
+  };
+
+  const addEntry = (rawName, kind, options = {}) => {
+    if (!rawName) return;
+    const baseName = String(rawName).trim();
+    if (!baseName) return;
+    let finalName = baseName;
+    let suffix = 1;
+    while (usedKeys.has(`${kind}:${finalName}`)) {
+      finalName = `${baseName}_${suffix}`;
+      suffix += 1;
+    }
+    usedKeys.add(`${kind}:${finalName}`);
+
+    const extentLooksGlobal = options.extent && isExtentSignificantlyLargerThanProject(options.extent);
+    const preferProjectExtent = options.preferProjectExtent === true
+      || (options.preferProjectExtent === undefined && extentLooksGlobal);
+    const extent = preferProjectExtent
+      ? coalesceExtent(projectExtent, options.extent, BOOTSTRAP_EXTENT_FALLBACK)
+      : coalesceExtent(options.extent, projectExtent, BOOTSTRAP_EXTENT_FALLBACK);
+    const extentWgs = preferProjectExtent
+      ? coalesceExtent(projectExtentWgs, options.extentWgs) || null
+      : coalesceExtent(options.extentWgs, projectExtentWgs) || null;
+
+    const tileProfile = pickBootstrapTileProfile([
+      { value: projectCrs, source: "project" },
+      { value: options.crs, source: kind === "theme" ? "project" : "layer" },
+      { value: BOOTSTRAP_TILE_CRS, source: "config" }
+    ], projectExtent, projectId);
+    const entryTileCrs = tileProfile.tileCrs || projectCrsNormalized || BOOTSTRAP_TILE_CRS;
+
+    const entry = {
+      name: finalName,
+      kind,
+      scheme: tileProfile.scheme,
+      tile_crs: entryTileCrs,
+      crs: entryTileCrs,
+      layer_crs: options.crs || null,
+      cacheable: options.cacheable !== false,
+      extent,
+      extent_wgs84: extentWgs,
+      zoom_min: BOOTSTRAP_ZOOM_MIN,
+      zoom_max: BOOTSTRAP_ZOOM_MAX,
+      published_zoom_min: BOOTSTRAP_ZOOM_MIN,
+      published_zoom_max: BOOTSTRAP_ZOOM_MAX,
+      cached_zoom_min: null,
+      cached_zoom_max: null,
+      tile_format: "png",
+      xyz_mode: "partial",
+      project_crs: projectCrs || entryTileCrs,
+      project_extent: projectExtent,
+      project_extent_wgs84: projectExtentWgs,
+      bootstrap: true,
+      bootstrap_source: "extract_info",
+      bootstrap_at: now,
+      created: now,
+      updated: now,
+      path: resolveTileBaseDir(projectId, kind, finalName),
+      tile_profile_source: tileProfile.source || null
+    };
+    if (kind === "theme") {
+      entry.theme = finalName;
+    } else {
+      entry.layer = finalName;
+      if (options.layerId) {
+        entry.layer_id = options.layerId;
+      }
+    }
+    if (tileProfile.tileMatrixPreset) {
+      entry.tile_matrix_preset = tileProfile.tileMatrixPreset;
+    }
+    if (tileProfile.tileMatrixSet) {
+      entry.tile_matrix_set = tileProfile.tileMatrixSet;
+    }
+    entries.push(entry);
+  };
+
+  const remoteLayerProviders = new Set(["wms", "wmts", "xyz", "tile"]);
+  const layerList = Array.isArray(extractPayload.layers) ? extractPayload.layers : [];
+  for (const layer of layerList) {
+    if (!layer) continue;
+    const name = layer.name || layer.id || null;
+    if (!name) continue;
+    const provider = typeof layer.provider === "string" ? layer.provider.trim().toLowerCase() : "";
+    const preferProjectExtent = remoteLayerProviders.has(provider) || !!layer.remote_source;
+    addEntry(name, "layer", {
+      extent: layer.extent,
+      extentWgs: layer.extent_wgs84,
+      crs: layer.crs,
+      cacheable: layer.cacheable !== false,
+      layerId: layer.id || null,
+      preferProjectExtent
+    });
+  }
+
+  const themeList = Array.isArray(extractPayload.themes) ? extractPayload.themes : [];
+  for (const theme of themeList) {
+    const name = typeof theme?.name === "string" ? theme.name : null;
+    if (!name) continue;
+    addEntry(name, "theme", {});
+  }
+
+  if (!entries.length) {
+    addEntry(projectId, "layer", {});
+  }
+
+  const defaultTileProfile = entries.length
+    ? {
+        scheme: entries[0].scheme,
+        tileCrs: entries[0].tile_crs,
+        tileMatrixPreset: entries[0].tile_matrix_preset || null
+      }
+    : null;
+
+  return { entries, projectExtent, projectExtentWgs, projectCrs, defaultTileProfile };
+};
+
+const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false) => {
+  if (!ENABLE_PROJECT_BOOTSTRAP) return false;
+  if (!projectId || !projectPath) return false;
+  let existing;
+  try {
+    existing = loadProjectIndexData(projectId);
+    if (!force && Array.isArray(existing.layers) && existing.layers.length > 0) {
+      return false;
+    }
+  } catch (err) {
+    console.warn(`[bootstrap] Failed to read existing index for ${projectId}`, err?.message || err);
+    existing = null;
+  }
+  let extractPayload;
+  try {
+    extractPayload = await runExtractInfoForProject(projectPath);
+  } catch (err) {
+    console.warn(`[bootstrap] Metadata extraction failed for ${projectId}`, err?.message || err);
+    return false;
+  }
+  if (!extractPayload) {
+    return false;
+  }
+  const {
+    entries,
+    projectExtent,
+    projectExtentWgs,
+    projectCrs,
+    defaultTileProfile
+  } = buildBootstrapEntriesFromExtract(projectId, projectPath, extractPayload);
+  if (!entries.length) {
+    return false;
+  }
+  const now = new Date().toISOString();
+  const base = existing && typeof existing === "object" ? { ...existing } : {};
+  const payload = {
+    ...base,
+    project: extractPayload.project?.path || projectPath,
+    id: projectId,
+    created: base.created || now,
+    updated: now,
+    layers: entries,
+    bootstrap: true
+  };
+  try {
+    writeProjectIndexData(projectId, payload);
+    console.log(`[bootstrap] Initialized cache index for project ${projectId} (${entries.length} placeholder layer(s))`);
+    seedProjectConfigFromBootstrap(projectId, {
+      projectExtent,
+      projectExtentWgs,
+      projectCrs,
+      zoomMin: BOOTSTRAP_ZOOM_MIN,
+      zoomMax: BOOTSTRAP_ZOOM_MAX,
+      tileProfile: defaultTileProfile
+    });
+    return true;
+  } catch (err) {
+    console.warn(`[bootstrap] Failed to persist index for ${projectId}`, err?.message || err);
+    return false;
+  }
+};
+
+const seedProjectConfigFromBootstrap = (projectId, info = {}) => {
+  if (!projectId) return;
+  try {
+    const current = readProjectConfig(projectId, { useCache: false });
+    if (!current) return;
+    const patch = {};
+    const nowIso = new Date().toISOString();
+
+    const bbox = sanitizeExtentCoordinates(info.projectExtent);
+    const currentBbox = current?.extent?.bbox;
+    const extentMissing = !Array.isArray(currentBbox) || currentBbox.length !== 4 || currentBbox.some((value) => value == null);
+    if (bbox && extentMissing) {
+      patch.extent = {
+        bbox,
+        crs: info.projectCrs || current?.extent?.crs || null,
+        updatedAt: nowIso
+      };
+    }
+
+    const currentZoomMin = current?.zoom?.min;
+    const currentZoomMax = current?.zoom?.max;
+    if (currentZoomMin == null || currentZoomMax == null) {
+      const seededMin = currentZoomMin != null ? currentZoomMin : (info.zoomMin != null ? info.zoomMin : BOOTSTRAP_ZOOM_MIN);
+      const seededMaxCandidate = currentZoomMax != null ? currentZoomMax : (info.zoomMax != null ? info.zoomMax : BOOTSTRAP_ZOOM_MAX);
+      const seededMax = Math.max(seededMaxCandidate, seededMin);
+      patch.zoom = {
+        min: seededMin,
+        max: seededMax,
+        updatedAt: nowIso
+      };
+    }
+
+    if (info.tileProfile && info.tileProfile.tileCrs) {
+      const prefs = current.cachePreferences || {};
+      const needsTileCrs = !prefs.tileCrs || prefs.tileCrs === BOOTSTRAP_TILE_CRS || prefs.tileCrs === "EPSG:3857";
+      const needsMode = !prefs.mode || prefs.mode === "xyz";
+      if (needsTileCrs || needsMode || !prefs.updatedAt) {
+        patch.cachePreferences = {
+          mode: info.tileProfile.scheme || prefs.mode || "xyz",
+          tileCrs: info.tileProfile.tileCrs || prefs.tileCrs || BOOTSTRAP_TILE_CRS,
+          allowRemote: typeof prefs.allowRemote === "boolean" ? prefs.allowRemote : false,
+          throttleMs: Number.isFinite(Number(prefs.throttleMs)) ? Number(prefs.throttleMs) : 0,
+          updatedAt: nowIso
+        };
+      }
+    }
+
+    if (Object.keys(patch).length) {
+      updateProjectConfig(projectId, patch, { skipReschedule: true });
+      console.log(`[bootstrap] Seeded project config for ${projectId} (extent/zoom/cache preferences).`);
+    }
+  } catch (err) {
+    console.warn(`[bootstrap] Failed to seed project config for ${projectId}`, err?.message || err);
+  }
+};
+
 // utilidades de proyectos
 const listProjects = () => {
   try {
@@ -2369,51 +3656,6 @@ const listProjects = () => {
   } catch (e) { return []; }
 };
 const findProjectById = (id) => listProjects().find(p => p.id === id);
-
-const readProjectAccessSnapshot = () => {
-  const createDefaultSnapshot = () => ({ projects: {} });
-
-  const readSnapshotFrom = (filePath) => {
-    try {
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-      const raw = fs.readFileSync(filePath, "utf8");
-      if (!raw) return createDefaultSnapshot();
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch (err) {
-      if (err?.code !== "ENOENT") {
-        console.warn("Failed to read project access snapshot", err);
-      }
-    }
-    return null;
-  };
-
-  const snapshot = readSnapshotFrom(projectAccessPath);
-  if (snapshot) {
-    return snapshot;
-  }
-
-  for (const legacyPath of legacyProjectAccessPaths) {
-    const legacySnapshot = readSnapshotFrom(legacyPath);
-    if (!legacySnapshot) continue;
-    try {
-      fs.mkdirSync(path.dirname(projectAccessPath), { recursive: true });
-      fs.writeFileSync(projectAccessPath, JSON.stringify(legacySnapshot, null, 2), "utf8");
-      if (legacyPath !== projectAccessPath) {
-        console.log("Migrated project access snapshot", { from: legacyPath, to: projectAccessPath });
-      }
-    } catch (migrationErr) {
-      console.warn("Failed to migrate legacy project access snapshot", migrationErr);
-    }
-    return legacySnapshot;
-  }
-
-  return createDefaultSnapshot();
-};
 
 const persistProjectAccessSnapshot = (snapshot) => {
   if (!snapshot || typeof snapshot !== "object") return;
@@ -2433,6 +3675,71 @@ const persistProjectAccessSnapshot = (snapshot) => {
       }
     }
   }
+};
+
+const readProjectAccessSnapshot = () => {
+  const createDefaultSnapshot = () => ({ projects: {} });
+
+  const readSnapshotFrom = (filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return null;
+      }
+      const raw = fs.readFileSync(filePath, "utf8");
+      if (!raw) return createDefaultSnapshot();
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        if (!parsed.projects || typeof parsed.projects !== "object") {
+          parsed.projects = {};
+        }
+        return parsed;
+      }
+    } catch (err) {
+      if (err?.code !== "ENOENT") {
+        console.warn("Failed to read project access snapshot", { filePath, error: String(err?.message || err) });
+      }
+    }
+    return null;
+  };
+
+  const candidatePaths = [projectAccessPath, ...legacyProjectAccessPaths];
+  const candidates = [];
+  for (const filePath of candidatePaths) {
+    const snapshot = readSnapshotFrom(filePath);
+    if (!snapshot) continue;
+    let mtimeMs = 0;
+    try {
+      const stats = fs.statSync(filePath);
+      if (stats && Number.isFinite(stats.mtimeMs)) {
+        mtimeMs = stats.mtimeMs;
+      }
+    } catch (err) {
+      mtimeMs = 0;
+    }
+    candidates.push({ filePath, snapshot, mtimeMs });
+  }
+
+  if (!candidates.length) {
+    const defaults = createDefaultSnapshot();
+    try {
+      persistProjectAccessSnapshot(defaults);
+    } catch (err) {
+      console.warn("Failed to seed project access snapshot", String(err?.message || err));
+    }
+    return defaults;
+  }
+
+  candidates.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
+  const best = candidates[0];
+  if (best.filePath !== projectAccessPath) {
+    try {
+      persistProjectAccessSnapshot(best.snapshot);
+      console.log("Synchronized project access snapshot", { source: best.filePath, target: projectAccessPath });
+    } catch (err) {
+      console.warn("Failed to synchronize project access snapshot", { source: best.filePath, error: String(err?.message || err) });
+    }
+  }
+  return best.snapshot;
 };
 
 const removeProjectAccessEntry = (projectId) => {
@@ -2494,17 +3801,31 @@ const removeProjectLogs = (projectId) => {
   }
 };
 
-const isProjectPublic = (snapshot, projectId) => {
-  if (!snapshot || typeof snapshot !== "object") return false;
+const resolveProjectAccessEntry = (snapshot, projectId) => {
+  if (!snapshot || typeof snapshot !== "object") return null;
   const projects = snapshot.projects && typeof snapshot.projects === "object" ? snapshot.projects : {};
-  const entry = projects[projectId];
-  return !!(entry && typeof entry === "object" && entry.public === true);
+  if (!projectId) return null;
+  if (Object.prototype.hasOwnProperty.call(projects, projectId)) {
+    const directEntry = projects[projectId];
+    if (directEntry && typeof directEntry === "object") return directEntry;
+  }
+  const target = String(projectId).toLowerCase();
+  for (const key of Object.keys(projects)) {
+    if (key.toLowerCase() === target) {
+      const entry = projects[key];
+      if (entry && typeof entry === "object") return entry;
+    }
+  }
+  return null;
+};
+
+const isProjectPublic = (snapshot, projectId) => {
+  const entry = resolveProjectAccessEntry(snapshot, projectId);
+  return !!(entry && entry.public === true);
 };
 
 const deriveProjectAccess = (snapshot, user, projectId) => {
-  const projects = snapshot && typeof snapshot === "object" ? snapshot.projects : null;
-  const entry = projects && typeof projects === "object" ? projects[projectId] : null;
-  const accessEntry = entry && typeof entry === "object" ? entry : {};
+  const accessEntry = resolveProjectAccessEntry(snapshot, projectId) || {};
   if (user && user.role === "admin") {
     return {
       public: accessEntry.public === true,
@@ -2644,7 +3965,7 @@ app.get("/public/projects/:id", (req, res) => {
 
 app.get("/public/my-projects", (req, res) => {
   if (!security.isEnabled()) {
-    return res.status(501).json({ error: "auth_disabled" });
+    return res.status(404).json({ error: "auth_plugin_disabled" });
   }
   if (!req.user) {
     return res.status(401).json({ error: "auth_required" });
@@ -2720,12 +4041,65 @@ const startScheduleHeartbeat = () => {
 };
 
 // listar proyectos
-app.get("/projects", requireAdmin, (req, res) => {
-  return res.json(listProjects());
+app.get("/projects", (req, res) => {
+  const allProjects = listProjects();
+  const authEnabled = security.isEnabled && security.isEnabled();
+  
+  if (!authEnabled) {
+    return res.json({
+      projects: allProjects.map(p => ({ ...p, access: 'public' })),
+      authEnabled: false,
+      user: { role: 'admin' }
+    });
+  }
+
+  const user = req.user;
+  const isAdmin = user && user.role === 'admin';
+  const accessSnapshot = readProjectAccessSnapshot();
+  
+  console.log('[/projects] Debug:', {
+    totalProjects: allProjects.length,
+    projectIds: allProjects.map(p => p.id),
+    accessSnapshot: accessSnapshot.projects,
+    user: user ? { id: user.id, role: user.role } : null
+  });
+  
+  const visibleProjects = allProjects.map(p => {
+    const accessConfig = resolveProjectAccessEntry(accessSnapshot, p.id) || {};
+    const isPublic = accessConfig.public === true;
+    const allowedRoles = Array.isArray(accessConfig.allowedRoles) ? accessConfig.allowedRoles : [];
+    const allowedUsers = Array.isArray(accessConfig.allowedUsers) ? accessConfig.allowedUsers : [];
+    
+    let accessLevel = 'private';
+    if (isPublic) accessLevel = 'public';
+    else if (allowedRoles.includes('authenticated')) accessLevel = 'authenticated';
+    
+    return { 
+      ...p, 
+      access: accessLevel,
+      isPublic,
+      allowedRoles,
+      allowedUsers
+    };
+  }).filter(p => {
+    if (isAdmin) return true;
+    if (p.isPublic) return true;
+    if (!user) return false;
+    if (p.allowedRoles.includes('authenticated')) return true;
+    if (p.allowedRoles.includes(user.role)) return true;
+    if (p.allowedUsers.includes(user.id)) return true;
+    return false;
+  });
+
+  res.json({
+    projects: visibleProjects,
+    authEnabled: true,
+    user: user ? { id: user.id, role: user.role } : null
+  });
 });
 
 app.post("/projects", requireAdmin, (req, res) => {
-  projectUpload.single("project")(req, res, (err) => {
+  projectUpload.single("project")(req, res, async (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(413).json({ error: "file_too_large" });
@@ -2753,11 +4127,27 @@ app.post("/projects", requireAdmin, (req, res) => {
     }
     const targetPath = path.join(projectsDir, targetName);
     try {
-      fs.writeFileSync(targetPath, file.buffer);
+      if (!file.path) {
+        throw new Error("temporary_upload_missing");
+      }
+      await fs.promises.copyFile(file.path, targetPath);
     } catch (writeErr) {
       return res.status(500).json({ error: "write_failed", details: String(writeErr) });
+    } finally {
+      if (file.path) {
+        try {
+          await fs.promises.unlink(file.path);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
     }
     const finalId = targetName.replace(/\.(qgz|qgs)$/i, "");
+    try {
+      await bootstrapProjectCacheIndex(finalId, targetPath);
+    } catch (bootstrapErr) {
+      console.warn(`[bootstrap] Initialization failed for ${finalId}:`, bootstrapErr?.message || bootstrapErr);
+    }
     return res.status(201).json({ status: "uploaded", id: finalId, filename: targetName });
   });
 });
@@ -2774,8 +4164,8 @@ app.delete("/projects/:id", requireAdmin, (req, res) => {
 
   for (const [jobId, job] of runningJobs.entries()) {
     if (job.project === proj.id && job.status === "running") {
-      try { job.proc.kill(); job.status = "aborted"; job.endedAt = Date.now(); } catch {}
-      try { activeKeys.delete(`${job.project || ""}:${job.layer}`); } catch {}
+      try { job.proc.kill(); job.status = "aborted"; job.endedAt = Date.now(); } catch { }
+      try { activeKeys.delete(`${job.project || ""}:${job.layer}`); } catch { }
     }
   }
 
@@ -2790,7 +4180,7 @@ app.delete("/projects/:id", requireAdmin, (req, res) => {
   projectLogLastMessage.delete(proj.id);
   const batchTimer = projectBatchCleanupTimers.get(proj.id);
   if (batchTimer) {
-    try { clearTimeout(batchTimer); } catch {}
+    try { clearTimeout(batchTimer); } catch { }
     projectBatchCleanupTimers.delete(proj.id);
   }
   projectBatchRuns.delete(proj.id);
@@ -2799,6 +4189,34 @@ app.delete("/projects/:id", requireAdmin, (req, res) => {
   let cacheRemoved = false;
   if (fs.existsSync(projectCacheDir)) {
     try {
+      // Read index.json to find auto-generated preset
+      const indexPath = path.join(projectCacheDir, 'index.json');
+      if (fs.existsSync(indexPath)) {
+        try {
+          const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+          if (Array.isArray(indexData.layers)) {
+            for (const layer of indexData.layers) {
+              if (layer.tile_matrix_preset && typeof layer.tile_matrix_preset === 'string') {
+                const presetPath = path.join(tileGridDir, `${layer.tile_matrix_preset}.json`);
+                if (fs.existsSync(presetPath)) {
+                  try {
+                    const presetData = JSON.parse(fs.readFileSync(presetPath, 'utf8'));
+                    if (presetData.auto_generated === true && presetData.project_id === proj.id) {
+                      fs.unlinkSync(presetPath);
+                      console.log(`[cleanup] Removed auto-generated preset: ${layer.tile_matrix_preset}`);
+                      invalidateTileGridCaches();
+                    }
+                  } catch (presetErr) {
+                    console.warn(`[cleanup] Failed to check/delete preset ${layer.tile_matrix_preset}:`, presetErr);
+                  }
+                }
+              }
+            }
+          }
+        } catch (indexErr) {
+          console.warn(`[cleanup] Failed to read index.json for preset cleanup:`, indexErr);
+        }
+      }
       fs.rmSync(projectCacheDir, { recursive: true, force: true });
       cacheRemoved = true;
     } catch (err) {
@@ -2831,7 +4249,7 @@ app.delete("/projects/:id", requireAdmin, (req, res) => {
 });
 
 // capas por proyecto
-app.get("/projects/:id/layers", requireAdmin, (req, res) => {
+app.get("/projects/:id/layers", ensureProjectAccess(req => req.params.id), (req, res) => {
   const proj = findProjectById(req.params.id);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
   const script = path.join(pythonDir, "extract_info.py");
@@ -2854,7 +4272,7 @@ app.get("/projects/:id/layers", requireAdmin, (req, res) => {
   });
 });
 
-app.get("/projects/:id/config", requireAdmin, (req, res) => {
+app.get("/projects/:id/config", ensureProjectAccess(req => req.params.id), (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -2876,7 +4294,7 @@ app.patch("/projects/:id/config", requireAdmin, (req, res) => {
   }
 });
 
-app.get("/projects/:id/cache/project", requireAdmin, (req, res) => {
+app.get("/projects/:id/cache/project", ensureProjectAccess(req => req.params.id), (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -2930,7 +4348,7 @@ app.post("/projects/:id/cache/project", requireAdmin, (req, res) => {
       logProjectEvent(projectId, `Project cache run ${runId} completed (${layerNames.length} layers).`);
     } catch (err) {
       const message = err?.message || String(err);
-  updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
+      updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
       logProjectEvent(projectId, `Project cache run ${runId} failed: ${message}`, "error");
     }
   });
@@ -3007,7 +4425,9 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     render_timeout_ms = null,
     tile_retries = null,
     png_compression = null,
-    recache: recacheRaw = null
+    recache: recacheRaw = null,
+    tile_matrix_preset: tileMatrixPresetSnake = null,
+    tileMatrixPreset: tileMatrixPresetCamel = null
   } = req.body;
   if (!layer && !theme) return res.status(400).json({ error: "target_required", details: "Debe indicar layer o theme" });
   if (layer && theme) return res.status(400).json({ error: "too_many_targets", details: "Solo se permite layer o theme" });
@@ -3047,6 +4467,51 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
   }
 
   const recachePlan = computeRecachePlan({ existingEntry, zoomMin, zoomMax, requestBody: req.body });
+  const normalizePresetName = (value) => {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    return trimmed || "";
+  };
+  const requestedTileMatrixPreset = normalizePresetName(tileMatrixPresetSnake)
+    || normalizePresetName(tileMatrixPresetCamel)
+    || normalizePresetName(req.body && req.body.tileMatrixPresetId);
+  const existingPreset = existingEntry ? normalizePresetName(existingEntry.tile_matrix_preset || existingEntry.tileMatrixPreset) : "";
+  let effectiveTileMatrixPreset = requestedTileMatrixPreset || existingPreset || "";
+
+  if (!effectiveTileMatrixPreset) {
+    const tileCrsCandidates = [
+      tile_crs,
+      req.body?.project_crs,
+      req.body?.cache_crs,
+      existingEntry?.tile_crs,
+      existingEntry?.crs
+    ].map((candidate) => (typeof candidate === "string" ? candidate.trim() : ""))
+      .filter(Boolean);
+    const matchCrs = tileCrsCandidates.length ? tileCrsCandidates[0] : null;
+    const presetMatch = matchCrs ? findTileMatrixPresetForCrs(matchCrs) : null;
+    if (presetMatch) {
+      const presetNameForCli = presetMatch.fileName || presetMatch.id || "";
+      effectiveTileMatrixPreset = presetNameForCli;
+      console.log(`[cache] Auto-selected tile matrix preset ${presetNameForCli} for CRS ${matchCrs}`);
+    }
+  }
+
+  const requestedPublishZoomMin = normalizeZoomInput(req.body?.publish_zoom_min);
+  const requestedPublishZoomMax = normalizeZoomInput(req.body?.publish_zoom_max);
+  const existingPublishMin = normalizeZoomInput(existingEntry?.published_zoom_min ?? existingEntry?.zoom_min ?? existingEntry?.cached_zoom_min);
+  const existingPublishMax = normalizeZoomInput(existingEntry?.published_zoom_max ?? existingEntry?.zoom_max ?? existingEntry?.cached_zoom_max);
+
+  let publishZoomMin = requestedPublishZoomMin != null
+    ? requestedPublishZoomMin
+    : (existingPublishMin != null ? existingPublishMin : DEFAULT_PUBLISH_ZOOM_MIN);
+  let publishZoomMax = requestedPublishZoomMax != null
+    ? requestedPublishZoomMax
+    : (existingPublishMax != null ? existingPublishMax : DEFAULT_PUBLISH_ZOOM_MAX);
+
+  if (publishZoomMin == null) publishZoomMin = DEFAULT_PUBLISH_ZOOM_MIN;
+  if (publishZoomMax == null) publishZoomMax = Math.max(DEFAULT_PUBLISH_ZOOM_MAX, zoomMax);
+  publishZoomMin = Math.min(publishZoomMin, zoomMin);
+  publishZoomMax = Math.max(publishZoomMax, zoomMax, publishZoomMin);
 
   let explicitTileBaseDir = null;
   if (projectKey) {
@@ -3070,6 +4535,8 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
   args.push(
     "--zoom_min", String(zoomMin),
     "--zoom_max", String(zoomMax),
+    "--publish_zoom_min", String(publishZoomMin),
+    "--publish_zoom_max", String(publishZoomMax),
     "--output_dir", outBase,
     "--index_path", projectIndex,
     "--scheme", scheme,
@@ -3078,7 +4545,12 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
   if (tile_crs) {
     args.push("--tile_crs", tile_crs);
   }
-  if (wmts) {
+  let useWmts = Boolean(wmts);
+  if (effectiveTileMatrixPreset) {
+    args.push("--tile_matrix_preset", effectiveTileMatrixPreset);
+    useWmts = true;
+  }
+  if (useWmts) {
     args.push("--wmts");
   }
   if (allow_remote) {
@@ -3163,6 +4635,9 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     requestedTileCrs: tile_crs,
     xyzMode: xyz_mode,
     metadata: null,
+    tileMatrixPreset: effectiveTileMatrixPreset || null,
+    publishZoomMin,
+    publishZoomMax,
     lastProgressWriteAt: 0,
     lastIndexWriteAt: 0,
     lastProgress: null,
@@ -3226,7 +4701,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
       }
     }
     // liberar clave activa
-    try { activeKeys.delete(key); } catch {}
+    try { activeKeys.delete(key); } catch { }
     // limpiar mapa después de un TTL para permitir polling de UI
     const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
     job.cleanupTimer = setTimeout(() => {
@@ -3294,7 +4769,7 @@ app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
     try {
       const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
       activeKeys.delete(activeKey);
-    } catch {}
+    } catch { }
     // 2) escalado forzado en Windows si persiste: taskkill /T /F /PID <pid>
     const graceMs = parseInt(process.env.ABORT_GRACE_MS || "1000", 10);
     setTimeout(() => {
@@ -3371,8 +4846,6 @@ app.get("/generate-cache/:id", requireAdmin, (req, res) => {
 
 // --- WMTS helpers -------------------------------------------------------
 
-const WEB_MERCATOR_EXTENT = 20037508.342789244;
-const TILE_SIZE_PX = 256;
 const DEFAULT_WMTS_STYLE = "default";
 
 const normalizeIdentifier = (value, fallback = "id") => {
@@ -3398,7 +4871,7 @@ const ensureUniqueIdentifier = (candidate, used, fallbackPrefix = "id") => {
 };
 
 const toCrsUrn = (crs) => {
-  const trimmed = (crs || "").trim();
+  const trimmed = String(crs || "").trim();
   if (!trimmed) return "urn:ogc:def:crs:EPSG::3857";
   if (/^urn:ogc:def:crs:/i.test(trimmed)) return trimmed;
   const normalized = trimmed.toUpperCase().replace(/\s+/g, "");
@@ -3409,24 +4882,35 @@ const toCrsUrn = (crs) => {
   return `urn:ogc:def:crs:${normalized.replace(":", "::")}`;
 };
 
+const convertCoordsToXY = (coords, axisOrder = "xy") => {
+  const axis = typeof axisOrder === "string" ? axisOrder.toLowerCase() : "xy";
+  if (!Array.isArray(coords) || coords.length < 2) return [0, 0];
+  const first = Number(coords[0]) || 0;
+  const second = Number(coords[1]) || 0;
+  return axis === "yx" ? [second, first] : [first, second];
+};
+
 const normalizeTileMatrixSet = (rawSet, context, usedIds) => {
   const tileWidth = Number(rawSet?.tile_width) || TILE_SIZE_PX;
   const tileHeight = Number(rawSet?.tile_height) || TILE_SIZE_PX;
-  const topLeft = Array.isArray(rawSet?.top_left_corner) && rawSet.top_left_corner.length === 2
-    ? [Number(rawSet.top_left_corner[0]), Number(rawSet.top_left_corner[1])]
-    : [0, 0];
+  const axisOrder = typeof rawSet?.axis_order === "string" ? rawSet.axis_order.toLowerCase() : "xy";
+  const topLeft = convertCoordsToXY(rawSet?.top_left_corner || rawSet?.top_left || rawSet?.topLeftCorner, axisOrder);
   const supportedCrs = rawSet?.supported_crs || context?.tileCrs || "EPSG:3857";
   const rawId = rawSet?.id || `${context?.project || "proj"}_${context?.layer || "layer"}`;
   const initialId = normalizeIdentifier(rawId, "set");
   const id = ensureUniqueIdentifier(initialId, usedIds, "set");
 
-  const matrices = Array.isArray(rawSet?.matrices) ? rawSet.matrices.slice() : [];
+  const rawMatrices = Array.isArray(rawSet?.matrices) ? rawSet.matrices : (Array.isArray(rawSet?.matrixSet) ? rawSet.matrixSet : []);
+  const matrices = rawMatrices.slice();
   matrices.sort((a, b) => Number(a?.z ?? 0) - Number(b?.z ?? 0));
   const usedMatrixIdentifiers = new Set();
   const normalizedMatrices = matrices.map((entry, idx) => {
     const sourceLevel = Number.isFinite(Number(entry?.z)) ? Number(entry.z) : idx;
-    const fallbackIdentifier = Number.isFinite(Number(entry?.identifier)) ? Number(entry.identifier) : sourceLevel;
-    let identifier = entry?.identifier != null ? String(entry.identifier) : String(fallbackIdentifier);
+    const numericIdentifier = Number(entry?.identifier);
+    const fallbackIdentifier = Number.isFinite(numericIdentifier) ? numericIdentifier : sourceLevel;
+    let identifierValue = Number.isFinite(numericIdentifier) ? numericIdentifier : fallbackIdentifier;
+    if (!Number.isFinite(identifierValue)) identifierValue = sourceLevel;
+    let identifier = String(identifierValue);
     if (!identifier) identifier = String(sourceLevel);
     if (usedMatrixIdentifiers.has(identifier)) {
       let dedupe = 1;
@@ -3439,9 +4923,7 @@ const normalizeTileMatrixSet = (rawSet, context, usedIds) => {
     const scaleDen = Number(entry?.scale_denominator) || (Number(entry?.resolution) ? Number(entry.resolution) / 0.00028 : 0);
     const matrixWidth = Math.max(1, Number(entry?.matrix_width) || 1);
     const matrixHeight = Math.max(1, Number(entry?.matrix_height) || 1);
-    const entryTopLeft = Array.isArray(entry?.top_left) && entry.top_left.length === 2
-      ? [Number(entry.top_left[0]), Number(entry.top_left[1])]
-      : topLeft;
+    const entryTopLeft = convertCoordsToXY(entry?.top_left || entry?.top_left_corner || entry?.topLeftCorner, entry?.axis_order || axisOrder) || topLeft;
     return {
       identifier,
       scaleDenominator: scaleDen,
@@ -3459,6 +4941,7 @@ const normalizeTileMatrixSet = (rawSet, context, usedIds) => {
     supportedCrs,
     tileWidth,
     tileHeight,
+    axisOrder,
     topLeftCorner: topLeft,
     matrices: normalizedMatrices
   };
@@ -3587,6 +5070,7 @@ const buildWmtsInventory = (options = {}) => {
   const layerKeysByProject = new Map();
   const layers = [];
   const layerRouting = new Map();
+  const presetNormalizedSetCache = new Map();
   let maxWebMercatorZoom = 0;
 
   const loadIndex = (projectId) => {
@@ -3620,11 +5104,30 @@ const buildWmtsInventory = (options = {}) => {
       const tileCrs = (layerEntry.tile_crs || layerEntry.crs || "EPSG:3857").toUpperCase();
       const kind = typeof layerEntry.kind === "string" ? layerEntry.kind.toLowerCase() : "layer";
       const isTheme = kind === "theme";
-      const hasCustomSet = layerEntry.tile_matrix_set && Array.isArray(layerEntry.tile_matrix_set.matrices);
+      const layerPresetIdRaw = typeof layerEntry.tile_matrix_preset === "string" ? layerEntry.tile_matrix_preset.trim() : "";
+      let layerPresetId = layerPresetIdRaw || null;
+      if (layerPresetId && layerPresetId.endsWith(".json")) {
+        layerPresetId = layerPresetId.replace(/\.json$/i, "");
+      }
+      let rawTileMatrixSet = layerEntry.tile_matrix_set && (Array.isArray(layerEntry.tile_matrix_set.matrices) || Array.isArray(layerEntry.tile_matrix_set.matrixSet))
+        ? layerEntry.tile_matrix_set
+        : null;
+      if (!rawTileMatrixSet && layerPresetId) {
+        const presetDef = getTileMatrixPresetRaw(layerPresetId);
+        if (presetDef && (Array.isArray(presetDef.matrices) || Array.isArray(presetDef.matrixSet))) {
+          try {
+            rawTileMatrixSet = JSON.parse(JSON.stringify(presetDef));
+          } catch (err) {
+            rawTileMatrixSet = presetDef;
+          }
+        }
+      }
+      const hasCustomSet = rawTileMatrixSet && (Array.isArray(rawTileMatrixSet.matrices) || Array.isArray(rawTileMatrixSet.matrixSet));
       const isWebMercator = scheme === "xyz" && tileCrs === "EPSG:3857";
       if (!hasCustomSet && !isWebMercator) continue;
 
       const layerName = layerEntry.name || layerEntry.layer || layerEntry.theme || "layer";
+      const storageName = layerEntry.layer || layerEntry.theme || layerEntry.name || layerName;
       const extent = sanitizeExtent(layerEntry.extent);
       const extentWgs = sanitizeExtent(layerEntry.extent_wgs84);
       const zoomMin = Number.isFinite(Number(layerEntry.zoom_min)) ? Number(layerEntry.zoom_min) : 0;
@@ -3658,11 +5161,20 @@ const buildWmtsInventory = (options = {}) => {
         ], zoomMin, zoomMax);
         maxWebMercatorZoom = Math.max(maxWebMercatorZoom, zoomMax);
       } else if (hasCustomSet) {
-        const normalizedSet = normalizeTileMatrixSet(layerEntry.tile_matrix_set, {
-          project,
-          layer: layerName,
-          tileCrs
-        }, usedSetIdentifiers);
+        const presetKey = layerPresetId ? layerPresetId.toLowerCase() : null;
+        let normalizedSet = null;
+        if (presetKey && presetNormalizedSetCache.has(presetKey)) {
+          normalizedSet = presetNormalizedSetCache.get(presetKey);
+        } else {
+          normalizedSet = normalizeTileMatrixSet(rawTileMatrixSet, {
+            project,
+            layer: layerName,
+            tileCrs
+          }, usedSetIdentifiers);
+          if (presetKey) {
+            presetNormalizedSetCache.set(presetKey, normalizedSet);
+          }
+        }
         tileMatrixSetId = normalizedSet.id;
         tileMatrixSet = normalizedSet;
         tileMatrixLimits = computeRegularLimits(normalizedSet);
@@ -3682,27 +5194,33 @@ const buildWmtsInventory = (options = {}) => {
         identifier: layerIdentifier,
         projectId: project,
         projectKey,
-        layerName,
         layerKey,
-        kind,
-        type: isWebMercator ? "xyz3857" : "wmts",
+        targetName: storageName,
+        isTheme,
+        layerName,
+        displayTitle,
         extent,
         extentWgs,
-        tileCrs,
-        tileCrsUrn: toCrsUrn(tileCrs),
         zoomMin,
         zoomMax,
+        styles: layerStyles,
+        scheme,
+        type: isWebMercator ? "xyz3857" : "wmts",
         tileMatrixSetId,
         tileMatrixSet,
         tileMatrixLimits,
-        styles: layerStyles,
-        displayTitle,
         storage: {
           type: isTheme ? "theme" : "layer",
-          name: layerName
-        }
+          name: storageName
+        },
+        kind,
+        layerEntry,
+        tileCrs,
+        tileCrsUrn: toCrsUrn(tileCrs),
+        tileMatrixPresetId: layerPresetId
       });
     }
+
   }
 
   const tileMatrixSetsMap = new Map();
@@ -3818,7 +5336,36 @@ app.get(
 
     fs.access(filePath, fs.constants.F_OK, (err) => {
       if (err) {
-        return res.status(404).send("Tile not found");
+        // Tile missing: enqueue on-demand render and respond 202 (Accepted)
+        try {
+          const renderParams = { project: layer.project, layer: layer.layerName, z: sourceLevel, x: tileCol, y: tileRow };
+          queueTileRender(renderParams, filePath, (qerr, out) => {
+            // callback after render finishes; we only log here
+            if (qerr) {
+              logProjectEvent(layer.project, `On-demand render failed for ${filePath}: ${String(qerr)}`);
+            } else {
+              logProjectEvent(layer.project, `On-demand render completed: ${out}`);
+            }
+          });
+        } catch (queueErr) {
+          console.warn('Failed to queue tile render', queueErr);
+        }
+        // Provide estimated retry time based on current queue length
+        try {
+          const queuePos = Math.max(0, renderQueue.length - 1); // position (0-based) assuming push already happened
+          const queueLen = renderQueue.length;
+          // heuristic: each batch of MAX_RENDER_PROCS adds ~2 seconds (conservative)
+          const estSeconds = Math.min(60, 2 + Math.floor(queuePos / Math.max(1, MAX_RENDER_PROCS)) * 2);
+          res.set('Retry-After', String(estSeconds));
+          res.set('X-Tile-Status', 'generating');
+          res.set('X-Queue-Position', String(queuePos));
+          res.set('X-Queue-Length', String(queueLen));
+          return res.status(202).json({ status: 'generating', retry_after: estSeconds, queue_position: queuePos, queue_length: queueLen, requested: { z: sourceLevel, x: tileCol, y: tileRow } });
+        } catch (hdrErr) {
+          res.set('Retry-After', '2');
+          res.set('X-Tile-Status', 'generating');
+          return res.status(202).json({ status: 'generating', retry_after: 2, requested: { z: sourceLevel, x: tileCol, y: tileRow } });
+        }
       }
       res.sendFile(filePath, (sendErr) => {
         if (sendErr) {
@@ -3929,7 +5476,7 @@ app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
       created: new Date().toISOString(),
       layers: []
     };
-    try { fs.writeFileSync(pIndex, JSON.stringify(skeleton, null, 2), "utf8"); } catch {}
+    try { fs.writeFileSync(pIndex, JSON.stringify(skeleton, null, 2), "utf8"); } catch { }
     return res.json(skeleton);
   } catch (e) {
     return res.status(500).json({ error: String(e) });
@@ -3937,42 +5484,187 @@ app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
 });
 
 // Delete entire project cache (all layers + index)
-app.delete("/cache/:project", requireAdmin, (req, res) => {
+app.delete("/cache/:project", requireAdmin, async (req, res) => {
   const p = req.params.project;
   const pDir = path.join(cacheDir, p);
   // abort running jobs for this project
   for (const [id, job] of runningJobs.entries()) {
     if (job.project === p && job.status === 'running') {
-      try { job.proc.kill(); job.status = 'aborted'; job.endedAt = Date.now(); } catch {}
+      try { job.proc.kill(); job.status = 'aborted'; job.endedAt = Date.now(); } catch { }
       try {
         const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
         activeKeys.delete(activeKey);
-      } catch {}
+      } catch { }
     }
   }
   try {
+    // debug: report the paths and existence
+    try { logProjectEvent(p, `Request delete cache for project=${p} path=${pDir}`); } catch {}
+    console.log(`[DEBUG] delete cache requested for project='${p}' path='${pDir}'`);
+
     if (fs.existsSync(pDir)) {
-      fs.rmSync(pDir, { recursive: true, force: true });
-      return res.json({ status: 'deleted', project: p });
+      const stat = fs.statSync(pDir);
+      if (!stat.isDirectory()) {
+        // Unexpected file at project cache path
+        const msg = `project cache path exists but is not a directory: ${pDir}`;
+        try { logProjectEvent(p, msg); } catch {}
+        return res.status(500).json({ error: 'invalid_cache_path', details: msg });
+      }
+
+      try {
+        fs.rmSync(pDir, { recursive: true, force: true });
+        try { logProjectEvent(p, `Cache deleted for project ${p}`); } catch {}
+        
+        // Re-bootstrap index.json immediately to restore "uncached" state
+        const proj = findProjectById(p);
+        if (proj && proj.file) {
+          try {
+            // Force bootstrap to overwrite any stale/empty index
+            await bootstrapProjectCacheIndex(p, proj.file, true);
+          } catch (err) {
+            console.warn(`[bootstrap] Failed to re-bootstrap index after delete for ${p}`, err);
+          }
+        }
+
+        return res.json({ status: 'deleted', project: p, path: pDir });
+      } catch (rmErr) {
+        const details = String(rmErr?.stack || rmErr);
+        try { logProjectEvent(p, `Cache delete failed for ${p}: ${details}`); } catch {}
+        console.error('[ERROR] cache delete failed', details);
+        return res.status(500).json({ error: 'delete_failed', details });
+      }
     }
-    return res.status(404).json({ error: 'project_cache_not_found', project: p });
+
+    return res.status(404).json({ error: 'project_cache_not_found', project: p, path: pDir });
   } catch (e) {
     return res.status(500).json({ error: 'delete_failed', details: String(e) });
   }
 });
 
+// DELETE cache for a specific layer or theme within a project
+app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
+  const project = req.params.project;
+  const name = req.params.name;
+  const force = (req.query && (req.query.force === '1' || req.query.force === 'true')) || false;
+  const layerPath = path.join(cacheDir, project, name);
+  const themePath = path.join(cacheDir, project, '_themes', name);
+  try {
+    // prefer layer
+    if (fs.existsSync(layerPath)) {
+      await deleteLayerCacheInternal(project, name, { force: Boolean(force), silent: false });
+      return res.json({ status: 'deleted', project, layer: name, path: layerPath, force });
+    }
+    if (fs.existsSync(themePath)) {
+      await deleteThemeCacheInternal(project, name, { force: Boolean(force), silent: false });
+      return res.json({ status: 'deleted', project, theme: name, path: themePath, force });
+    }
+    return res.status(404).json({ error: 'cache_not_found', project, name });
+  } catch (err) {
+    const details = String(err?.stack || err);
+    try { logProjectEvent(project, `Failed to delete cache ${name}: ${details}`); } catch {}
+    console.error('[ERROR] delete cache failed', details);
+    if (err && err.code === 'job_running') {
+      return res.status(409).json({ error: 'job_running', jobId: err.jobId, message: 'A render job is running for this layer/theme. Retry with ?force=1 to abort and delete.' });
+    }
+    return res.status(500).json({ error: 'delete_failed', details });
+  }
+});
+
+// Diagnostic: list files/directories under a project's cache directory
+app.get('/cache/:project/list', requireAdmin, (req, res) => {
+  const project = req.params.project;
+  const dir = path.join(cacheDir, project);
+  try {
+    if (!fs.existsSync(dir)) return res.status(404).json({ error: 'project_cache_not_found', project });
+    const entries = fs.readdirSync(dir).map((name) => {
+      try {
+        const p = path.join(dir, name);
+        const st = fs.statSync(p);
+        return { name, path: p, isDirectory: st.isDirectory(), size: st.size };
+      } catch (e) {
+        return { name, error: String(e) };
+      }
+    });
+    return res.json({ project, path: dir, entries });
+  } catch (e) {
+    return res.status(500).json({ error: 'list_failed', details: String(e) });
+  }
+});
+
+// --- DEBUG: expose WMTS inventory and tile path diagnostics (local use only) ---
+// Public debug endpoint (temporary): expose WMTS inventory JSON for troubleshooting
+app.get('/wmts/debug/inventory', (req, res) => {
+  try {
+    const filterProject = req.query.project ? String(req.query.project).trim() : null;
+    const inventory = buildWmtsInventory(filterProject ? { filterProjectId: filterProject } : {});
+    return res.json({ ok: true, filterProject: filterProject || null, layers: inventory.layers, tileMatrixSets: inventory.tileMatrixSets });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
+// Compute expected tile file path and existence for a given project/layer/theme/z/x/y
+// Public debug endpoint (temporary): compute expected tile file path and existence
+app.get('/wmts/debug/tilepath', (req, res) => {
+  try {
+    const project = req.query.project ? String(req.query.project) : null;
+    const name = req.query.name ? String(req.query.name) : null; // layer or theme name
+    const z = req.query.z != null ? Number(req.query.z) : null;
+    const x = req.query.x != null ? Number(req.query.x) : null;
+    const y = req.query.y != null ? Number(req.query.y) : null;
+    if (!project || !name || !Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y)) {
+      return res.status(400).json({ ok: false, error: 'Missing required query params: project, name, z, x, y' });
+    }
+
+    const cfgPath = path.join(cacheDir, project, PROJECT_CONFIG_FILENAME);
+    let isTheme = false;
+    try {
+      if (fs.existsSync(cfgPath)) {
+        const raw = fs.readFileSync(cfgPath, 'utf8');
+        const cfg = JSON.parse(raw || '{}');
+        isTheme = !!(cfg && cfg.themes && Object.prototype.hasOwnProperty.call(cfg.themes, name));
+      }
+    } catch (e) {
+      // ignore parsing errors; we'll still try to compute path
+    }
+
+    const baseDir = isTheme ? path.join(cacheDir, project, '_themes', name) : path.join(cacheDir, project, name);
+    const filePath = path.join(baseDir, String(z), String(x), `${y}.png`);
+    const exists = fs.existsSync(filePath);
+    let stats = null;
+    try { if (exists) stats = fs.statSync(filePath); } catch (e) { stats = null; }
+
+    return res.json({ ok: true, project, name, isTheme, filePath, exists, stats: stats ? { size: stats.size, mtime: stats.mtime } : null });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 // DELETE cache for a layer and update index.json
 // --- Control de concurrencia y cola para render on-demand ---
-const MAX_RENDER_PROCS = 2;
+const MAX_RENDER_PROCS = 8;
 // Por defecto, tiempo máximo que dejamos a la invocación de Python para renderizar (ms)
-const RENDER_TIMEOUT_MS = Number.isFinite(Number(process.env.RENDER_TIMEOUT_MS || 120000)) ? Number(process.env.RENDER_TIMEOUT_MS || 120000) : 120000;
+const RENDER_TIMEOUT_MS = Number.isFinite(Number(process.env.RENDER_TIMEOUT_MS || 180000)) ? Number(process.env.RENDER_TIMEOUT_MS || 180000) : 180000;
 // Número de reintentos por tile en llamadas internas (on-demand)
 const RENDER_TILE_RETRIES = Number.isFinite(Number(process.env.RENDER_TILE_RETRIES || 1)) ? Number(process.env.RENDER_TILE_RETRIES || 1) : 1;
 const activeRenders = new Set();
 const renderQueue = [];
+const ENABLE_RENDER_FILE_LOGS = (() => {
+  const raw = String(process.env.ENABLE_RENDER_FILE_LOGS || process.env.RENDER_FILE_LOGS || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+})();
 
 function queueTileRender(params, filePath, cb) {
-  const key = `${params.project}|${params.layer||params.theme}|${params.z}|${params.x}|${params.y}`;
+  const key = `${params.project}|${params.layer || params.theme}|${params.z}|${params.x}|${params.y}`;
+  try {
+    const targetMode = params.targetMode || (params.theme ? "theme" : "layer");
+    const targetName = params.theme || params.layer || params.name || null;
+    if (params.project && targetName) {
+      recordOnDemandRequest(params.project, targetMode, targetName);
+    }
+  } catch (err) {
+    console.warn("Failed to record on-demand metadata", { project: params.project, layer: params.layer || params.theme, error: err?.message || err });
+  }
   if (activeRenders.has(key)) {
     // Ya en proceso, espera y reintenta
     let tries = 0;
@@ -3980,11 +5672,11 @@ function queueTileRender(params, filePath, cb) {
       if (fs.existsSync(filePath)) {
         clearInterval(interval);
         cb(null, filePath);
-      } else if (++tries > 30) {
+      } else if (++tries > 150) { // 150 × 1000ms = 150 segundos (2.5 minutos)
         clearInterval(interval);
         cb(new Error('Timeout esperando tile'), null);
       }
-    }, 200);
+    }, 1000); // Check every second instead of 200ms
     return;
   }
   const task = { params, filePath, cb, key };
@@ -4015,6 +5707,33 @@ function processRenderQueue() {
     '--y', String(next.params.y),
     '--output_dir', path.dirname(next.filePath)
   ].filter(Boolean);
+  // If cache index metadata exists for this project+layer, compute a precise
+  // bbox in the layer's tile CRS and pass it to the Python script so it can
+  // render the correct extent (needed for non-EPSG:3857 tile grids).
+  let cachedEntryPreset = null;
+  try {
+    const pIndexPath = path.join(cacheDir, next.params.project, 'index.json');
+    if (fs.existsSync(pIndexPath)) {
+      try {
+        const raw = fs.readFileSync(pIndexPath, 'utf8');
+        const idx = JSON.parse(raw || '{}');
+        const layers = Array.isArray(idx.layers) ? idx.layers : [];
+        const entry = layers.find((e) => e && (e.name === next.params.layer || e.name === next.params.theme));
+        if (entry && typeof entry.tile_matrix_preset === "string") {
+          const trimmed = entry.tile_matrix_preset.trim();
+          if (trimmed) cachedEntryPreset = trimmed;
+        }
+        // Removed manual bbox calculation here. generate_cache.py handles it correctly using the preset.
+      } catch (e) {
+        // ignore parsing errors; continue with default args
+      }
+    }
+  } catch (e) {
+    // ignore any fs errors
+  }
+  if (cachedEntryPreset) {
+    args.push('--tile_matrix_preset', cachedEntryPreset);
+  }
   // Lanzar proceso
   // import { spawn } from 'child_process' ya está al inicio del archivo
   // Elimina el require redundante y usa el import existente
@@ -4042,16 +5761,32 @@ function processRenderQueue() {
   console.log('SPAWN via o4w helper:', wrapperBatch, ...spawnArgs);
   // Prepare persistent per-render log
   try {
-    const renderLogName = `render-${next.params.project}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.log`;
-    const renderLogPath = path.join(logsDir, renderLogName);
-    const renderStream = fs.createWriteStream(renderLogPath, { flags: 'a' });
-    renderStream.write(`[${new Date().toISOString()}] Render request: ${JSON.stringify(next.params)}\n`);
-    renderStream.write(`[${new Date().toISOString()}] Spawn wrapper: ${wrapperBatch} ${spawnArgs.join(' ')}\n`);
-    try { renderStream.write(`[ENV PATH] ${childEnv.PATH || ''}\n`); } catch (e) {}
-    // Attach render path to project log for traceability
-    logProjectEvent(next.params.project, `Render log: ${renderLogPath}`);
+    const shouldWriteRenderLog = ENABLE_RENDER_FILE_LOGS === true;
+    let renderStream = null;
+    const appendRenderLog = (message) => {
+      if (!renderStream) return;
+      try {
+        renderStream.write(`[${new Date().toISOString()}] ${message}\n`);
+      } catch (_) {
+        // ignore file logging errors to avoid breaking rendering
+      }
+    };
 
-    // Ensure args include render timeout and retries if configured
+    if (shouldWriteRenderLog) {
+      try {
+        const renderLogName = `render-${next.params.project}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`;
+        const renderLogPath = path.join(logsDir, renderLogName);
+        renderStream = fs.createWriteStream(renderLogPath, { flags: 'a' });
+        appendRenderLog(`Render request: ${JSON.stringify(next.params)}`);
+        appendRenderLog(`[ENV PATH] ${childEnv.PATH || ''}`);
+        logProjectEvent(next.params.project, `Render log: ${renderLogPath}`);
+      } catch (logErr) {
+        console.warn('Failed to open render log file', logErr?.message || logErr);
+        renderStream = null;
+      }
+    }
+
+    // Build augmented args (include timeouts/retries) and use them as final spawn args
     const augmentedArgs = args.slice();
     if (Number.isFinite(Number(RENDER_TIMEOUT_MS)) && Number(RENDER_TIMEOUT_MS) > 0) {
       augmentedArgs.push('--render_timeout_ms', String(Math.floor(Number(RENDER_TIMEOUT_MS))));
@@ -4060,18 +5795,22 @@ function processRenderQueue() {
       augmentedArgs.push('--tile_retries', String(Math.floor(Number(RENDER_TILE_RETRIES))));
     }
 
-    // Use helper that runs o4w_env.bat and then python in the same shell to ensure proper QGIS/Python env
-    const proc = runPythonViaOSGeo4W(scriptPath, augmentedArgs, {
+    // final spawn args: script path + augmented args
+    const spawnArgsFinal = [scriptPath, ...augmentedArgs];
+    appendRenderLog(`Spawn wrapper: ${wrapperBatch} ${spawnArgsFinal.map(a => typeof a === 'string' && a.includes(' ') ? `"${a}"` : a).join(' ')}`);
+
+    // Spawn the process via wrapper batch (use ComSpec so Windows cmd is located)
+    const comspec = process.env.ComSpec || 'cmd.exe';
+    const proc = spawn(comspec, ['/c', wrapperBatch, ...spawnArgsFinal], {
       env: childEnv,
       cwd: __dirname,
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
-    // Log the actual spawn arguments for debugging (helps see exact cmd used)
     try {
       if (proc && Array.isArray(proc.spawnargs)) {
         logProjectEvent(next.params.project, `SPAWN_CMD: ${JSON.stringify(proc.spawnargs)}`);
-        renderStream.write(`[${new Date().toISOString()}] SPAWN_CMD: ${proc.spawnargs.join(' ')}\n`);
+        appendRenderLog(`SPAWN_CMD: ${proc.spawnargs.join(' ')}`);
       }
     } catch (e) {
       // ignore logging errors
@@ -4081,18 +5820,22 @@ function processRenderQueue() {
     proc.stdout.on('data', (data) => {
       const s = data.toString();
       stdout += s;
+      appendRenderLog(`[PYTHON OUT] ${s.trim()}`);
       logProjectEvent(next.params.project, `[PYTHON OUT] ${s.trim()}`);
-      try { renderStream.write(`[PYTHON OUT] ${s}`); } catch (e) {}
+      console.log('[PYTHON OUT]', s.trim());
     });
     proc.stderr.on('data', (data) => {
       const s = data.toString();
       stderr += s;
+      appendRenderLog(`[PYTHON ERR] ${s.trim()}`);
       logProjectEvent(next.params.project, `[PYTHON ERR] ${s.trim()}`);
-      try { renderStream.write(`[PYTHON ERR] ${s}`); } catch (e) {}
+      console.error('[PYTHON ERR]', s.trim());
     });
     proc.on('close', (code) => {
-      try { renderStream.write(`[${new Date().toISOString()}] Exit code: ${code}\n`); } catch (e) {}
-      try { renderStream.end(); } catch (e) {}
+      appendRenderLog(`[CLOSE] code: ${code}`);
+      if (renderStream) {
+        try { renderStream.end(); } catch (_) {}
+      }
       activeRenders.delete(next.key);
       if (fs.existsSync(next.filePath)) {
         logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code} | stdout: ${stdout}`);
@@ -4103,98 +5846,122 @@ function processRenderQueue() {
       }
       processRenderQueue();
     });
-  } catch (err) {
-    // if logging setup fails, fall back to previous behavior without persistent log
-    logProjectEvent(next.params.project, `Render logging setup failed: ${String(err)}`);
-    const proc = runPythonViaOSGeo4W(scriptPath, args, {
-      env: childEnv,
-      cwd: __dirname,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    let stdout = '', stderr = '';
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
-    proc.on('close', (code) => {
-      activeRenders.delete(next.key);
-      if (fs.existsSync(next.filePath)) {
-        logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code}`);
-        next.cb(null, next.filePath);
-      } else {
-        logProjectEvent(next.params.project, `Tile generation FAILED: ${next.filePath} | code: ${code} | stderr: ${stderr}`);
-        next.cb(new Error('No se pudo generar tile'), null);
-      }
-      processRenderQueue();
-    });
-  }
-  // Log the actual spawn arguments for debugging (helps see exact cmd used)
-  try {
-    if (proc && Array.isArray(proc.spawnargs)) {
-      logProjectEvent(next.params.project, `SPAWN_CMD: ${JSON.stringify(proc.spawnargs)}`);
-      console.log('SPAWN_CMD:', proc.spawnargs.join(' '));
-    }
   } catch (e) {
-    // ignore logging errors
+    try { logProjectEvent(next.params.project, `Render outer error: ${e?.stack || e}`); } catch { }
+    try { if (typeof next === 'object' && next && typeof next.cb === 'function') next.cb(new Error('Render failed'), null); } catch { }
+    try { processRenderQueue(); } catch { }
   }
-  let stdout = '', stderr = '';
-  proc.stdout.on('data', (data) => {
-    const s = data.toString();
-    stdout += s;
-    logProjectEvent(next.params.project, `[PYTHON OUT] ${s.trim()}`);
-    console.log('[PYTHON OUT]', s.trim());
-  });
-  proc.stderr.on('data', (data) => {
-    const s = data.toString();
-    stderr += s;
-    logProjectEvent(next.params.project, `[PYTHON ERR] ${s.trim()}`);
-    console.error('[PYTHON ERR]', s.trim());
-  });
-  proc.on('close', (code) => {
-    activeRenders.delete(next.key);
-    if (fs.existsSync(next.filePath)) {
-      logProjectEvent(next.params.project, `Tile generated OK: ${next.filePath} | code: ${code} | stdout: ${stdout}`);
-      next.cb(null, next.filePath);
-    } else {
-      logProjectEvent(next.params.project, `Tile generation FAILED: ${next.filePath} | code: ${code} | stderr: ${stderr}`);
-      next.cb(new Error('No se pudo generar tile'), null);
-    }
-    processRenderQueue();
-  });
 }
-
+// servir tiles on-demand
 // servir tiles on-demand
 app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, theme, z, x, y } = req.params;
-  const file = path.join(cacheDir, project, "_themes", theme, z, x, `${y}.png`);
+  
+  // Evitar caché agresiva del navegador para tiles dinámicas
+  try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
+  
+  let file = path.join(cacheDir, project, "_themes", theme, z, x, `${y}.png`);
+  
+  // 1. Si la tile YA EXISTE, enviarla inmediatamente
   if (fs.existsSync(file)) {
     logProjectEvent(project, `Tile hit: ${file}`);
     return res.sendFile(file);
   }
+
+  // Lógica de fallback (si el tema no existe, buscar capa con el mismo nombre)
+  const cfgPath = path.join(cacheDir, project, PROJECT_CONFIG_FILENAME);
+  let hasThemes = false;
+  let hasLayerWithName = false;
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const raw = fs.readFileSync(cfgPath, 'utf8');
+      const cfg = JSON.parse(raw || '{}');
+      hasThemes = cfg && cfg.themes && Object.keys(cfg.themes || {}).length > 0;
+      hasLayerWithName = cfg && cfg.layers && Object.prototype.hasOwnProperty.call(cfg.layers, theme);
+    } catch (e) {
+      logProjectEvent(project, `Config parse error for fallback: ${e?.message || e}`);
+    }
+  }
+
+  // Si no hay temas y existe la capa, usar fallback forzado
+  if (!hasThemes && hasLayerWithName) {
+    const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
+    logProjectEvent(project, `Theme '${theme}' not defined; forced fallback to layer '${theme}' -> ${fallbackFile}`);
+    
+    if (fs.existsSync(fallbackFile)) {
+      logProjectEvent(project, `Tile hit (fallback): ${fallbackFile}`);
+      return res.sendFile(fallbackFile);
+    }
+    
+    logProjectEvent(project, `Tile miss (fallback): ${fallbackFile}. Generating on-demand...`);
+    
+    // Generar fallback on-demand Y ESPERAR
+    return queueTileRender({ project, layer: theme, z, x, y }, fallbackFile, (err, outFile) => {
+      if (err) {
+        logProjectEvent(project, `Tile render error (fallback): ${fallbackFile} | ${err?.message || err}`);
+        if (!res.headersSent) return res.status(500).send('Tile generation failed');
+      } else {
+        logProjectEvent(project, `Tile render success (fallback): ${outFile}`);
+        if (!res.headersSent) return res.sendFile(outFile);
+      }
+    });
+  }
+
+  // 2. Generación normal de tema on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
+  
   queueTileRender({ project, theme, z, x, y }, file, (err, outFile) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
-      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+      
+      // Intento de fallback a capa si el render de tema falló
+      if (hasLayerWithName) {
+        const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
+        logProjectEvent(project, `Theme render failed; forced fallback to layer '${theme}' -> ${fallbackFile}`);
+        
+        return queueTileRender({ project, layer: theme, z, x, y }, fallbackFile, (layerErr, layerOutFile) => {
+          if (layerErr) {
+             logProjectEvent(project, `Tile render error (forced fallback): ${fallbackFile} | ${layerErr?.message || layerErr}`);
+             if (!res.headersSent) return res.status(500).send('Tile generation failed');
+          } else {
+             logProjectEvent(project, `Tile render success (forced fallback): ${layerOutFile}`);
+             if (!res.headersSent) return res.sendFile(layerOutFile);
+          }
+        });
+      }
+      
+      if (!res.headersSent) return res.status(500).send('Tile generation failed');
+    } else {
+      logProjectEvent(project, `Tile render success: ${outFile}`);
+      if (!res.headersSent) return res.sendFile(outFile);
     }
-    logProjectEvent(project, `Tile render success: ${outFile}`);
-    res.sendFile(outFile);
   });
 });
 
 app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, layer, z, x, y } = req.params;
+  
+  try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
+  
   const file = path.join(cacheDir, project, layer, z, x, `${y}.png`);
+
+  // 1. Si existe, enviar inmediatamente
   if (fs.existsSync(file)) {
     logProjectEvent(project, `Tile hit: ${file}`);
     return res.sendFile(file);
   }
+
+  // 2. Si no existe, Generar on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
+  
   queueTileRender({ project, layer, z, x, y }, file, (err, outFile) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
-      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+      if (!res.headersSent) return res.status(500).send('Tile generation failed');
+    } else {
+      logProjectEvent(project, `Tile render success: ${outFile}`);
+      if (!res.headersSent) return res.sendFile(outFile);
     }
-    logProjectEvent(project, `Tile render success: ${outFile}`);
-    res.sendFile(outFile);
   });
 });
 
@@ -4216,149 +5983,722 @@ app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
     res.sendFile(outFile);
   });
 });
-app.get("/wmts", ensureProjectAccessFromQuery(), (req, res) => {
-  const svc = String(req.query.SERVICE || "").toUpperCase();
-  const reqType = String(req.query.REQUEST || "").toUpperCase();
-  if (svc !== "WMTS" || reqType !== "GETCAPABILITIES") {
-    return res.status(400).json({ error: "unsupported", details: "Use SERVICE=WMTS&REQUEST=GetCapabilities" });
+// KVP GetTile shortcut: handle WMTS GetTile KVP requests (used by QGIS)
+// ---------------------------------------------------------
+// 1. HANDLER KVP: Atrapa peticiones de tiles de QGIS (?REQUEST=GetTile)
+// ---------------------------------------------------------
+app.get("/wmts", (req, res, next) => {
+  // helper: find query param case-insensitively
+  const findQ = (name) => {
+    const low = name.toLowerCase();
+    for (const k of Object.keys(req.query || {})) {
+      if (k.toLowerCase() === low) return req.query[k];
+    }
+    return undefined;
+  };
+  const svc = String(findQ('SERVICE') || findQ('service') || "").toUpperCase();
+  const reqType = String(findQ('REQUEST') || findQ('request') || "").toUpperCase();
+
+  if (svc !== "WMTS") {
+    return next();
   }
 
-  const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
-  const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
+  if (reqType === "GETCAPABILITIES") {
+    const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
+    const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
+
+    // For GetCapabilities, check project access if a specific project is requested
+    const executeGetCapabilities = () => {
+      try {
+        const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
+        const { layers, tileMatrixSets } = inventory;
+
+        const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const formatNumber = (value) => {
+          const num = Number(value);
+          if (!Number.isFinite(num)) return "0";
+          if (Number.isInteger(num)) return num.toString();
+          return num.toPrecision(15).replace(/0+$/g, "").replace(/\.$/, "");
+        };
+        const formatCorner = (coords) => `${formatNumber(coords[0])} ${formatNumber(coords[1])}`;
+        
+        const configuredBaseUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/g, "");
+        let proto = req.protocol || "http";
+        if (req.get("x-forwarded-proto")) proto = req.get("x-forwarded-proto").split(",")[0].trim();
+        
+        const host = req.get("host");
+        const derivedBaseUrl = host ? `${proto}://${host}` : "";
+        const baseUrl = configuredBaseUrl || derivedBaseUrl;
+
+        let kvpUrl = baseUrl + "/wmts?";
+        if (filterProjectId) {
+            kvpUrl += "project=" + encodeURIComponent(filterProjectId) + "&";
+        }
+
+        const metadataSnapshot = serviceMetadata || serviceMetadataDefaults;
+        const sidMeta = metadataSnapshot?.serviceIdentification || {};
+        const providerMeta = metadataSnapshot?.serviceProvider || {};
+        const contactMeta = providerMeta?.contact || {};
+        const addressMeta = contactMeta?.address || {};
+        const operationsMeta = metadataSnapshot?.operations || {};
+
+        const xmlParts = [];
+        xmlParts.push("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        xmlParts.push("<Capabilities xmlns=\"http://www.opengis.net/wmts/1.0\" xmlns:ows=\"http://www.opengis.net/ows/1.1\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:gml=\"http://www.opengis.net/gml\" version=\"1.0.0\">");
+        const serviceTitle = sidMeta.title || "Local WMTS";
+        const serviceType = sidMeta.serviceType || "OGC WMTS";
+        const serviceTypeVersion = sidMeta.serviceTypeVersion || "1.0.0";
+        xmlParts.push("<ows:ServiceIdentification>");
+        xmlParts.push(`<ows:Title>${xmlEscape(serviceTitle)}</ows:Title>`);
+        if (sidMeta.abstract) {
+          xmlParts.push(`<ows:Abstract>${xmlEscape(sidMeta.abstract)}</ows:Abstract>`);
+        }
+        if (Array.isArray(sidMeta.keywords) && sidMeta.keywords.length) {
+          xmlParts.push("<ows:Keywords>");
+          for (const keyword of sidMeta.keywords) {
+            if (keyword == null) continue;
+            xmlParts.push(`<ows:Keyword>${xmlEscape(keyword)}</ows:Keyword>`);
+          }
+          xmlParts.push("</ows:Keywords>");
+        }
+        xmlParts.push(`<ows:ServiceType>${xmlEscape(serviceType)}</ows:ServiceType>`);
+        xmlParts.push(`<ows:ServiceTypeVersion>${xmlEscape(serviceTypeVersion)}</ows:ServiceTypeVersion>`);
+        if (sidMeta.fees != null) {
+          xmlParts.push(`<ows:Fees>${xmlEscape(sidMeta.fees)}</ows:Fees>`);
+        }
+        if (sidMeta.accessConstraints != null) {
+          xmlParts.push(`<ows:AccessConstraints>${xmlEscape(sidMeta.accessConstraints)}</ows:AccessConstraints>`);
+        }
+        xmlParts.push("</ows:ServiceIdentification>");
+
+        xmlParts.push("<ows:ServiceProvider>");
+        xmlParts.push(`<ows:ProviderName>${xmlEscape(providerMeta.providerName || "Local")}</ows:ProviderName>`);
+        if (providerMeta.providerSite) {
+          xmlParts.push(`<ows:ProviderSite xlink:href="${xmlEscape(providerMeta.providerSite)}"/>`);
+        }
+        const hasContactInfo = contactMeta && (contactMeta.individualName || contactMeta.positionName || contactMeta.phoneVoice || contactMeta.phoneFacsimile || addressMeta.deliveryPoint || addressMeta.city || addressMeta.administrativeArea || addressMeta.postalCode || addressMeta.country || addressMeta.email);
+        if (hasContactInfo) {
+          xmlParts.push("<ows:ServiceContact>");
+          if (contactMeta.individualName) {
+            xmlParts.push(`<ows:IndividualName>${xmlEscape(contactMeta.individualName)}</ows:IndividualName>`);
+          }
+          if (contactMeta.positionName) {
+            xmlParts.push(`<ows:PositionName>${xmlEscape(contactMeta.positionName)}</ows:PositionName>`);
+          }
+          const hasPhone = contactMeta.phoneVoice || contactMeta.phoneFacsimile;
+          const hasAddress = addressMeta.deliveryPoint || addressMeta.city || addressMeta.administrativeArea || addressMeta.postalCode || addressMeta.country || addressMeta.email;
+          if (hasPhone || hasAddress) {
+            xmlParts.push("<ows:ContactInfo>");
+            if (hasPhone) {
+              xmlParts.push("<ows:Phone>");
+              if (contactMeta.phoneVoice) {
+                xmlParts.push(`<ows:Voice>${xmlEscape(contactMeta.phoneVoice)}</ows:Voice>`);
+              }
+              if (contactMeta.phoneFacsimile) {
+                xmlParts.push(`<ows:Facsimile>${xmlEscape(contactMeta.phoneFacsimile)}</ows:Facsimile>`);
+              }
+              xmlParts.push("</ows:Phone>");
+            }
+            if (hasAddress) {
+              xmlParts.push("<ows:Address>");
+              if (addressMeta.deliveryPoint) xmlParts.push(`<ows:DeliveryPoint>${xmlEscape(addressMeta.deliveryPoint)}</ows:DeliveryPoint>`);
+              if (addressMeta.city) xmlParts.push(`<ows:City>${xmlEscape(addressMeta.city)}</ows:City>`);
+              if (addressMeta.administrativeArea) xmlParts.push(`<ows:AdministrativeArea>${xmlEscape(addressMeta.administrativeArea)}</ows:AdministrativeArea>`);
+              if (addressMeta.postalCode) xmlParts.push(`<ows:PostalCode>${xmlEscape(addressMeta.postalCode)}</ows:PostalCode>`);
+              if (addressMeta.country) xmlParts.push(`<ows:Country>${xmlEscape(addressMeta.country)}</ows:Country>`);
+              if (addressMeta.email) xmlParts.push(`<ows:ElectronicMailAddress>${xmlEscape(addressMeta.email)}</ows:ElectronicMailAddress>`);
+              xmlParts.push("</ows:Address>");
+            }
+            xmlParts.push("</ows:ContactInfo>");
+          }
+          xmlParts.push("</ows:ServiceContact>");
+        }
+        xmlParts.push("</ows:ServiceProvider>");
+        
+        const pushOperation = (name) => {
+          xmlParts.push(`<ows:Operation name="${name}">`);
+          xmlParts.push("<ows:DCP><ows:HTTP><ows:Get xlink:href=\"" + xmlEscape(kvpUrl) + "\"><ows:Constraint name=\"GetEncoding\"><ows:AllowedValues><ows:Value>KVP</ows:Value></ows:AllowedValues></ows:Constraint></ows:Get></ows:HTTP></ows:DCP>");
+          xmlParts.push("</ows:Operation>");
+        };
+        xmlParts.push("<ows:OperationsMetadata>");
+        pushOperation("GetCapabilities");
+        pushOperation("GetTile");
+        if (operationsMeta.getFeatureInfo) {
+          pushOperation("GetFeatureInfo");
+        }
+        xmlParts.push("</ows:OperationsMetadata>");
+
+        xmlParts.push("<Contents>");
+
+        for (const layer of layers) {
+          xmlParts.push("<Layer>");
+          xmlParts.push(`<ows:Title>${xmlEscape(layer.displayTitle || layer.identifier)}</ows:Title>`);
+          xmlParts.push(`<ows:Identifier>${xmlEscape(layer.identifier)}</ows:Identifier>`);
+          
+          // WGS84 BBox
+          const wgsExtent = deriveWgs84Extent(layer);
+          if (wgsExtent) {
+            xmlParts.push("<ows:WGS84BoundingBox>");
+            xmlParts.push(`<ows:LowerCorner>${formatNumber(wgsExtent[0])} ${formatNumber(wgsExtent[1])}</ows:LowerCorner>`);
+            xmlParts.push(`<ows:UpperCorner>${formatNumber(wgsExtent[2])} ${formatNumber(wgsExtent[3])}</ows:UpperCorner>`);
+            xmlParts.push("</ows:WGS84BoundingBox>");
+          }
+          
+          if (Array.isArray(layer.extent) && layer.extent.length === 4) {
+             const [minx, miny, maxx, maxy] = layer.extent;
+             xmlParts.push(`<ows:BoundingBox crs=\"${xmlEscape(layer.tileCrsUrn)}\">`);
+             xmlParts.push(`<ows:LowerCorner>${formatNumber(minx)} ${formatNumber(miny)}</ows:LowerCorner>`);
+             xmlParts.push(`<ows:UpperCorner>${formatNumber(maxx)} ${formatNumber(maxy)}</ows:UpperCorner>`);
+             xmlParts.push("</ows:BoundingBox>");
+          }
+
+          xmlParts.push(`<ows:SupportedCRS>${xmlEscape(layer.tileCrsUrn)}</ows:SupportedCRS>`);
+          
+          for (const style of layer.styles) {
+            xmlParts.push(`<Style isDefault=\"${style.isDefault ? "true" : "false"}\">`);
+            xmlParts.push(`<ows:Identifier>${xmlEscape(style.id)}</ows:Identifier>`);
+            xmlParts.push("</Style>");
+          }
+
+          xmlParts.push("<Format>image/png</Format>");
+          xmlParts.push(`<TileMatrixSetLink><TileMatrixSet>${xmlEscape(layer.tileMatrixSetId)}</TileMatrixSet>`);
+          xmlParts.push("</TileMatrixSetLink>");
+          
+          if (baseUrl) {
+             const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png`;
+             xmlParts.push(`<ResourceURL format=\"image/png\" resourceType=\"tile\" template=\"${xmlEscape(template)}\"/>`);
+          }
+          
+          xmlParts.push("</Layer>");
+        }
+
+        for (const set of tileMatrixSets) {
+           xmlParts.push("<TileMatrixSet>");
+           xmlParts.push(`<ows:Identifier>${xmlEscape(set.id)}</ows:Identifier>`);
+           xmlParts.push(`<ows:SupportedCRS>${xmlEscape(toCrsUrn(set.supportedCrs))}</ows:SupportedCRS>`);
+           for (const matrix of set.matrices || []) {
+              xmlParts.push("<TileMatrix>");
+              xmlParts.push(`<ows:Identifier>${xmlEscape(matrix.identifier)}</ows:Identifier>`);
+              xmlParts.push(`<ScaleDenominator>${formatNumber(matrix.scaleDenominator)}</ScaleDenominator>`);
+              const tl = (matrix.topLeftCorner && matrix.topLeftCorner.length===2) ? matrix.topLeftCorner : [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT];
+              xmlParts.push(`<TopLeftCorner>${formatCorner(tl)}</TopLeftCorner>`);
+              xmlParts.push(`<TileWidth>${formatNumber(matrix.tileWidth || 256)}</TileWidth>`);
+              xmlParts.push(`<TileHeight>${formatNumber(matrix.tileHeight || 256)}</TileHeight>`);
+              xmlParts.push(`<MatrixWidth>${formatNumber(matrix.matrixWidth)}</MatrixWidth>`);
+              xmlParts.push(`<MatrixHeight>${formatNumber(matrix.matrixHeight)}</MatrixHeight>`);
+              xmlParts.push("</TileMatrix>");
+           }
+           xmlParts.push("</TileMatrixSet>");
+        }
+
+        xmlParts.push("</Contents>");
+        xmlParts.push("</Capabilities>");
+
+        res.setHeader("Content-Type", "application/xml");
+        return res.send(xmlParts.join(""));
+      } catch (error) {
+        console.error("WMTS capabilities error", error);
+        return res.status(500).json({ error: "wmts_capabilities_failed", details: String(error) });
+      }
+    };
+
+    // Check access if specific project is requested
+    if (filterProjectId) {
+      const checkAccess = security.ensureProjectAccess(req, res, executeGetCapabilities, filterProjectId);
+      if (checkAccess && typeof checkAccess.then === 'function') checkAccess.catch(next);
+      return;
+    }
+    
+    // No specific project - return all accessible layers
+    return executeGetCapabilities();
+  }
+
+  if (reqType !== "GETTILE") {
+    return next();
+  }
+
+  const layerId = String(findQ('LAYER') || findQ('Layer') || findQ('layer') || "");
+  const tileMatrix = String(findQ('TileMatrix') || findQ('TILEMATRIX') || findQ('tilematrix') || "");
+  const tileRow = Number(findQ('TileRow') || findQ('TILEROW') || findQ('tilerow'));
+  const tileCol = Number(findQ('TileCol') || findQ('TILECOL') || findQ('tilecol'));
+
+  if (!layerId || !Number.isInteger(tileRow) || !Number.isInteger(tileCol)) {
+    return res.status(400).send("Invalid KVP parameters");
+  }
 
   try {
-    const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
-    const { layers, tileMatrixSets } = inventory;
+    // Buscar la capa en el inventario
+    const inventory = buildWmtsInventory();
+    let layerEntry = inventory.layers.find(l => l.identifier === layerId);
 
-    const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Fallbacks: aceptar identificadores más cortos o solo el nombre de la capa.
+    // Ej: cliente puede enviar `LAYER=orto` mientras que el inventario usa `orto_orto`.
+    if (!layerEntry) {
+      layerEntry = inventory.layers.find((l) => {
+        try {
+          if (!l) return false;
+          if (String(l.layerName || '').toLowerCase() === String(layerId || '').toLowerCase()) return true;
+          if (String(l.layerKey || '').toLowerCase() === String(layerId || '').toLowerCase()) return true;
+          // identifier puede ser 'project_layer' — aceptar coincidencia por sufijo
+          if (String(l.identifier || '').toLowerCase().endsWith('_' + String(layerId || '').toLowerCase())) return true;
+          // o coincidencia por igualdad parcial
+          if (String(l.identifier || '').toLowerCase() === String(layerId || '').toLowerCase()) return true;
+        } catch (e) {
+          return false;
+        }
+        return false;
+      });
+    }
+
+    if (!layerEntry) {
+      console.warn(`[WMTS-KVP] Layer not found: ${layerId}`);
+      return res.status(404).send("Layer not found");
+    }
+
+    // --- FIX DEL CRASH: Asegurar que existen projectId y layerName ---
+    if (!layerEntry.projectId || !layerEntry.layerName) {
+       console.error(`[WMTS-KVP] Invalid inventory entry for ${layerId}`, layerEntry);
+       return res.status(500).send("Server configuration error: Invalid layer metadata");
+    }
+
+    const projectId = String(layerEntry.projectId); // Forzar string para path.join
+    const targetName = layerEntry.storage ? layerEntry.storage.name : layerEntry.layerName;
+    const isTheme = layerEntry.storage ? layerEntry.storage.type === 'theme' : false;
+
+    // Verificar acceso al proyecto
+    // Normalizar TileMatrix: aceptar formatos como 'EPSG:3006:5' o '3006:5' y tomar la última parte
+    let tileMatrixId = String(tileMatrix || '');
+    if (tileMatrixId.includes(':')) {
+      const parts = tileMatrixId.split(':');
+      tileMatrixId = parts[parts.length - 1];
+    }
+
+    const checkAccess = security.ensureProjectAccess(req, res, () => {
+        let z = tileMatrixId;
+        // Ensure reqCol/reqRow exist before any heuristic remapping to avoid TDZ errors
+        let reqCol = Number(tileCol);
+        let reqRow = Number(tileRow);
+
+        // localizar TileMatrixSet para esta capa (puede venir embebido en layerEntry)
+        const tset = layerEntry.tileMatrixSet || inventory.tileMatrixSets.find(tm => String(tm.id) === String(layerEntry.tileMatrixSetId));
+        if (!tset || !Array.isArray(tset.matrices)) {
+          console.warn(`[WMTS-KVP] TileMatrixSet not available for layer ${layerId}`);
+          return res.status(404).send('TileMatrixSet not available');
+        }
+        let matrixEntry = tset.matrices.find(m => String(m.identifier) === String(z));
+        // If exact TileMatrix not found, try heuristics: map requested numeric zoom to nearest available matrix
+        if (!matrixEntry) {
+          const tryNum = Number(z);
+          if (Number.isFinite(tryNum)) {
+            const available = tset.matrices.map(m => {
+              return { id: String(m.identifier), z: Number(m.identifier), matrixWidth: Number(m.matrixWidth || m.matrix_width || 0), matrixHeight: Number(m.matrixHeight || m.matrix_height || 0) };
+            }).filter(a => Number.isFinite(a.z));
+            if (available.length > 0) {
+              // find nearest matrix by identifier numeric value
+              let nearest = available[0];
+              let bestDiff = Math.abs(available[0].z - tryNum);
+              for (const a of available) {
+                const d = Math.abs(a.z - tryNum);
+                if (d < bestDiff) { nearest = a; bestDiff = d; }
+              }
+              // map requested indices to nearest matrix
+              const zTarget = nearest.z;
+              const factor = Math.pow(2, zTarget - tryNum);
+              const mappedCol = Math.max(0, Math.floor(Number(tileCol) * factor));
+              const mappedRow = Math.max(0, Math.floor(Number(tileRow) * factor));
+              logProjectEvent(projectId, `KVP heuristic: remapping request z=${tryNum},col=${tileCol},row=${tileRow} -> z=${zTarget},col=${mappedCol},row=${mappedRow} (factor=${factor})`);
+              // use the target matrixEntry and override requested indices below by setting tileCol/tileRow local vars
+              matrixEntry = tset.matrices.find(m => Number(m.identifier) === zTarget);
+              // update local tile indices variables for later use
+              // we'll shadow tileCol/tileRow via reqCol/reqRow later when constructing filePath
+              // store mapped values in local vars for use below
+              reqCol = mappedCol;
+              reqRow = mappedRow;
+              // override z for path building
+              z = String(zTarget);
+            }
+          }
+          if (!matrixEntry) {
+            console.warn(`[WMTS-KVP] TileMatrix not found for id=${z} layer=${layerId}`);
+            return res.status(404).send('TileMatrix not found');
+          }
+        }
+
+        const matrixWidth = Number(matrixEntry.matrixWidth || matrixEntry.matrix_width || 0);
+        const matrixHeight = Number(matrixEntry.matrixHeight || matrixEntry.matrix_height || 0);
+        // Validate indices and attempt TMS row flip if out-of-bounds
+        if (!Number.isInteger(reqCol) || !Number.isInteger(reqRow) || reqCol < 0 || reqRow < 0) {
+          return res.status(400).send('Invalid tile indices');
+        }
+        if (reqCol > matrixWidth - 1 || reqRow > matrixHeight - 1) {
+          // Try flipping row (TMS bottom-left origin -> WMTS top-left)
+          const flipped = matrixHeight - 1 - reqRow;
+          if (flipped >= 0 && flipped <= matrixHeight - 1) {
+            logProjectEvent(projectId, `KVP: flipping TileRow ${reqRow} -> ${flipped} (TMS->WMTS) for layer ${layerId}`);
+            reqRow = flipped;
+          } else {
+            console.warn(`[WMTS-KVP] Tile outside matrix bounds for layer=${layerId} z=${z} col=${reqCol} row=${reqRow} (matrix ${matrixWidth}x${matrixHeight})`);
+            return res.status(404).send('Tile outside matrix bounds');
+          }
+        }
+
+        // Construcción segura de la ruta
+        const baseDir = isTheme 
+            ? path.join(cacheDir, projectId, "_themes", targetName)
+            : path.join(cacheDir, projectId, targetName);
+
+        const filePath = path.join(baseDir, String(z), String(reqCol), `${reqRow}.png`);
+
+        // Verificar existencia o Generar On-Demand
+        fs.access(filePath, fs.constants.F_OK, (err) => {
+            if (err) {
+                // NO EXISTE: Generar y ESPERAR
+                const renderParams = { 
+                  project: projectId, 
+                  [isTheme ? 'theme' : 'layer']: targetName, 
+                  z: Number(z), 
+                  x: reqCol, 
+                  y: reqRow 
+                };
+                
+                logProjectEvent(projectId, `KVP Tile miss (QGIS): ${filePath}. Generating...`);
+                
+                queueTileRender(renderParams, filePath, (qerr, outFile) => {
+                    if (qerr) {
+                        logProjectEvent(projectId, `KVP Render failed: ${String(qerr)}`);
+                        if (!res.headersSent) res.status(500).send("Generation failed");
+                    } else {
+                        // Éxito: enviar archivo generado
+                        if (!res.headersSent) res.sendFile(outFile);
+                    }
+                });
+            } else {
+                // EXISTE: Enviar archivo
+                if (!res.headersSent) res.sendFile(filePath);
+            }
+        });
+    }, projectId);
+
+    if (checkAccess && typeof checkAccess.then === 'function') checkAccess.catch(next);
+
+  } catch (e) {
+    console.error("[WMTS-KVP] Handler Critical Error", e);
+    next(e);
+  }
+});
+
+// ---------------------------------------------------------
+// 2. HANDLER CAPABILITIES: Genera el XML para QGIS (?REQUEST=GetCapabilities)
+// ---------------------------------------------------------
+app.get("/debug/bootstrap/:project", async (req, res) => {
+  const p = req.params.project;
+  const proj = findProjectById(p);
+  if (!proj) return res.status(404).send("Project not found");
+  try {
+    const result = await bootstrapProjectCacheIndex(p, proj.file, true);
+    res.json({ success: result });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+
+
+// =============================================================================
+// WMS SERVICE ENDPOINTS
+// =============================================================================
+
+// WMS GetCapabilities and GetMap
+app.get("/wms", ensureProjectAccessFromQuery(), (req, res) => {
+  const findQ = (name) => {
+    const low = name.toLowerCase();
+    for (const k of Object.keys(req.query || {})) {
+      if (k.toLowerCase() === low) return req.query[k];
+    }
+    return undefined;
+  };
+
+  const service = String(findQ('SERVICE') || findQ('service') || "").toUpperCase();
+  const request = String(findQ('REQUEST') || findQ('request') || "").toUpperCase();
+
+  if (service !== "WMS") {
+    return res.status(400).json({ error: "unsupported_service", details: "Use SERVICE=WMS" });
+  }
+
+  if (request === "GETCAPABILITIES") {
+    return handleWmsGetCapabilities(req, res);
+  } else if (request === "GETMAP") {
+    return handleWmsGetMap(req, res);
+  } else {
+    return res.status(400).json({ error: "unsupported_request", details: "Use REQUEST=GetCapabilities or GetMap" });
+  }
+});
+
+// WMS GetCapabilities Handler
+function handleWmsGetCapabilities(req, res) {
+  try {
+    const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
+    const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
+
+    const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
+    const { layers } = inventory;
+
+    const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const formatNumber = (value) => {
       const num = Number(value);
       if (!Number.isFinite(num)) return "0";
-      if (Number.isInteger(num)) return num.toString();
-      return num.toPrecision(15).replace(/0+$/g, "").replace(/\.$/, "");
+      return num.toString();
     };
-    const formatCorner = (coords) => `${formatNumber(coords[0])} ${formatNumber(coords[1])}`;
-    const configuredBaseUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/g, "");
-    let proto = req.protocol || "";
-    const forwardedProtoHeader = req.get("x-forwarded-proto");
-    if (forwardedProtoHeader) {
-      proto = forwardedProtoHeader.split(",")[0].trim();
-    } else {
-      const forwardedHeader = req.get("forwarded");
-      if (forwardedHeader) {
-        const match = forwardedHeader.match(/proto=([a-zA-Z]+)/);
-        if (match && match[1]) {
-          proto = match[1].toLowerCase();
-        }
-      }
-    }
-    if (!proto) proto = "http";
-    const host = req.get("host");
-    const derivedBaseUrl = host ? `${proto}://${host}` : "";
-    const baseUrl = configuredBaseUrl || derivedBaseUrl;
+
+    const baseUrl = `http://${req.get('host') || 'localhost:3000'}`;
+    const wmsUrl = filterProjectId 
+      ? `${baseUrl}/wms?project=${encodeURIComponent(filterProjectId)}`
+      : `${baseUrl}/wms`;
 
     const xmlParts = [];
-    xmlParts.push("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-    xmlParts.push("<Capabilities xmlns=\"http://www.opengis.net/wmts/1.0\" xmlns:ows=\"http://www.opengis.net/ows/1.1\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xmlns:gml=\"http://www.opengis.net/gml\" version=\"1.0.0\">");
-    xmlParts.push("<ows:ServiceIdentification><ows:Title>Local WMTS</ows:Title><ows:ServiceType>OGC WMTS</ows:ServiceType><ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion></ows:ServiceIdentification>");
-    xmlParts.push("<ows:ServiceProvider><ows:ProviderName>Local</ows:ProviderName></ows:ServiceProvider>");
-    xmlParts.push("<Contents>");
+    xmlParts.push('<?xml version="1.0" encoding="UTF-8"?>');
+    xmlParts.push('<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd">');
+    
+    // Service
+    xmlParts.push('<Service>');
+    xmlParts.push('<Name>WMS</Name>');
+    xmlParts.push('<Title>Qtiler WMS Service</Title>');
+    xmlParts.push('<Abstract>Tiled WMS service powered by Qtiler</Abstract>');
+    xmlParts.push('<OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(baseUrl) + '"/>');
+    xmlParts.push('</Service>');
+
+    // Capability
+    xmlParts.push('<Capability>');
+    xmlParts.push('<Request>');
+    xmlParts.push('<GetCapabilities>');
+    xmlParts.push('<Format>text/xml</Format>');
+    xmlParts.push('<DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(wmsUrl) + '"/></Get></HTTP></DCPType>');
+    xmlParts.push('</GetCapabilities>');
+    xmlParts.push('<GetMap>');
+    xmlParts.push('<Format>image/png</Format>');
+    xmlParts.push('<DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(wmsUrl) + '"/></Get></HTTP></DCPType>');
+    xmlParts.push('</GetMap>');
+    xmlParts.push('</Request>');
+
+    // Parent Layer (queryable container)
+    xmlParts.push('<Layer queryable="1">');
+    xmlParts.push('<Title>Qtiler Layers</Title>');
+    
+    // Add CRS to parent layer
+    xmlParts.push('<CRS>CRS:84</CRS>');
+    xmlParts.push('<CRS>EPSG:4326</CRS>');
+    xmlParts.push('<CRS>EPSG:3857</CRS>');
+    xmlParts.push('<CRS>EPSG:3006</CRS>');
 
     for (const layer of layers) {
-      xmlParts.push("<Layer>");
-      xmlParts.push(`<ows:Title>${xmlEscape(layer.displayTitle || layer.identifier)}</ows:Title>`);
-      xmlParts.push(`<ows:Identifier>${xmlEscape(layer.identifier)}</ows:Identifier>`);
+      const crs = layer.tileCrs || 'EPSG:3857';
+      const extent = layer.extent || [-20037508.34, -20037508.34, 20037508.34, 20037508.34];
+      const extentWgs = layer.extentWgs || [-180, -85, 180, 85];
 
-      const wgsExtent = deriveWgs84Extent(layer);
-      if (wgsExtent) {
-        xmlParts.push("<ows:WGS84BoundingBox>");
-        xmlParts.push(`<ows:LowerCorner>${formatNumber(wgsExtent[0])} ${formatNumber(wgsExtent[1])}</ows:LowerCorner>`);
-        xmlParts.push(`<ows:UpperCorner>${formatNumber(wgsExtent[2])} ${formatNumber(wgsExtent[3])}</ows:UpperCorner>`);
-        xmlParts.push("</ows:WGS84BoundingBox>");
+      xmlParts.push('<Layer queryable="1">');
+      xmlParts.push('<Name>' + xmlEscape(layer.identifier) + '</Name>');
+      xmlParts.push('<Title>' + xmlEscape(layer.displayTitle || layer.identifier) + '</Title>');
+      
+      // CRS - add more common CRS
+      xmlParts.push('<CRS>CRS:84</CRS>');
+      xmlParts.push('<CRS>EPSG:4326</CRS>');
+      xmlParts.push('<CRS>EPSG:3857</CRS>');
+      xmlParts.push('<CRS>' + xmlEscape(crs) + '</CRS>');
+
+      // EX_GeographicBoundingBox (WGS84 - always lon/lat order)
+      xmlParts.push('<EX_GeographicBoundingBox>');
+      xmlParts.push('<westBoundLongitude>' + formatNumber(extentWgs[0]) + '</westBoundLongitude>');
+      xmlParts.push('<eastBoundLongitude>' + formatNumber(extentWgs[2]) + '</eastBoundLongitude>');
+      xmlParts.push('<southBoundLatitude>' + formatNumber(extentWgs[1]) + '</southBoundLatitude>');
+      xmlParts.push('<northBoundLatitude>' + formatNumber(extentWgs[3]) + '</northBoundLatitude>');
+      xmlParts.push('</EX_GeographicBoundingBox>');
+
+      // BoundingBox in native CRS (WMS 1.3.0 format)
+      // For EPSG:3006 and similar CRS with northing/easting, use miny/minx/maxy/maxx order
+      if (crs === 'EPSG:3006' || crs === 'EPSG:3010' || crs === 'EPSG:3011') {
+        xmlParts.push('<BoundingBox CRS="' + xmlEscape(crs) + '" miny="' + formatNumber(extent[0]) + '" minx="' + formatNumber(extent[1]) + '" maxy="' + formatNumber(extent[2]) + '" maxx="' + formatNumber(extent[3]) + '"/>');
+      } else {
+        xmlParts.push('<BoundingBox CRS="' + xmlEscape(crs) + '" minx="' + formatNumber(extent[0]) + '" miny="' + formatNumber(extent[1]) + '" maxx="' + formatNumber(extent[2]) + '" maxy="' + formatNumber(extent[3]) + '"/>');
       }
-
-      if (Array.isArray(layer.extent) && layer.extent.length === 4) {
-        const lower = [layer.extent[0], layer.extent[1]];
-        const upper = [layer.extent[2], layer.extent[3]];
-        xmlParts.push(`<ows:BoundingBox crs=\"${xmlEscape(layer.tileCrsUrn)}\">`);
-        xmlParts.push(`<ows:LowerCorner>${formatCorner(lower)}</ows:LowerCorner>`);
-        xmlParts.push(`<ows:UpperCorner>${formatCorner(upper)}</ows:UpperCorner>`);
-        xmlParts.push("</ows:BoundingBox>");
+      
+      // Also add EPSG:3857 bounding box for web mercator clients
+      if (crs !== 'EPSG:3857') {
+        xmlParts.push('<BoundingBox CRS="EPSG:3857" minx="-20037508.34" miny="-20037508.34" maxx="20037508.34" maxy="20037508.34"/>');
       }
+      
+      // EPSG:4326 bounding box (lat/lon order for WMS 1.3.0)
+      xmlParts.push('<BoundingBox CRS="EPSG:4326" miny="' + formatNumber(extentWgs[0]) + '" minx="' + formatNumber(extentWgs[1]) + '" maxy="' + formatNumber(extentWgs[2]) + '" maxx="' + formatNumber(extentWgs[3]) + '"/>');
+      
+      xmlParts.push('<EX_GeographicBoundingBox>');
+      xmlParts.push('<westBoundLongitude>' + formatNumber(extentWgs[0]) + '</westBoundLongitude>');
+      xmlParts.push('<eastBoundLongitude>' + formatNumber(extentWgs[2]) + '</eastBoundLongitude>');
+      xmlParts.push('<southBoundLatitude>' + formatNumber(extentWgs[1]) + '</southBoundLatitude>');
+      xmlParts.push('<northBoundLatitude>' + formatNumber(extentWgs[3]) + '</northBoundLatitude>');
+      xmlParts.push('</EX_GeographicBoundingBox>');
 
-      xmlParts.push(`<ows:SupportedCRS>${xmlEscape(layer.tileCrsUrn)}</ows:SupportedCRS>`);
+      // Styles
+      xmlParts.push('<Style>');
+      xmlParts.push('<Name>default</Name>');
+      xmlParts.push('<Title>Default</Title>');
+      xmlParts.push('</Style>');
 
-      for (const style of layer.styles) {
-        xmlParts.push(`<Style isDefault=\"${style.isDefault ? "true" : "false"}\">`);
-        xmlParts.push(`<ows:Identifier>${xmlEscape(style.id)}</ows:Identifier>`);
-        if (style.title) {
-          xmlParts.push(`<ows:Title>${xmlEscape(style.title)}</ows:Title>`);
-        }
-        xmlParts.push("</Style>");
-      }
-
-      xmlParts.push("<Format>image/png</Format>");
-      xmlParts.push(`<TileMatrixSetLink><TileMatrixSet>${xmlEscape(layer.tileMatrixSetId)}</TileMatrixSet>`);
-
-      if (Array.isArray(layer.tileMatrixLimits) && layer.tileMatrixLimits.length > 0) {
-        xmlParts.push("<TileMatrixSetLimits>");
-        for (const limit of layer.tileMatrixLimits) {
-          xmlParts.push("<TileMatrixLimits>");
-          xmlParts.push(`<TileMatrix>${xmlEscape(limit.tileMatrix)}</TileMatrix>`);
-          xmlParts.push(`<MinTileRow>${formatNumber(limit.minTileRow)}</MinTileRow>`);
-          xmlParts.push(`<MaxTileRow>${formatNumber(limit.maxTileRow)}</MaxTileRow>`);
-          xmlParts.push(`<MinTileCol>${formatNumber(limit.minTileCol)}</MinTileCol>`);
-          xmlParts.push(`<MaxTileCol>${formatNumber(limit.maxTileCol)}</MaxTileCol>`);
-          xmlParts.push("</TileMatrixLimits>");
-        }
-        xmlParts.push("</TileMatrixSetLimits>");
-      }
-
-      xmlParts.push("</TileMatrixSetLink>");
-
-      if (baseUrl) {
-        const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png`;
-        xmlParts.push(`<ResourceURL format=\"image/png\" resourceType=\"tile\" template=\"${xmlEscape(template)}\"/>`);
-      }
-
-      xmlParts.push("</Layer>");
+      xmlParts.push('</Layer>');
     }
 
-    for (const set of tileMatrixSets) {
-      const supportedCrsUrn = toCrsUrn(set.supportedCrs || "EPSG:3857");
-      const defaultTopLeft = Array.isArray(set.topLeftCorner) && set.topLeftCorner.length === 2
-        ? set.topLeftCorner
-        : [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT];
-      xmlParts.push("<TileMatrixSet>");
-      xmlParts.push(`<ows:Identifier>${xmlEscape(set.id)}</ows:Identifier>`);
-      xmlParts.push(`<ows:SupportedCRS>${xmlEscape(supportedCrsUrn)}</ows:SupportedCRS>`);
-      for (const matrix of set.matrices || []) {
-        const matrixTopLeft = Array.isArray(matrix.topLeftCorner) && matrix.topLeftCorner.length === 2
-          ? matrix.topLeftCorner
-          : defaultTopLeft;
-        xmlParts.push("<TileMatrix>");
-        xmlParts.push(`<ows:Identifier>${xmlEscape(matrix.identifier)}</ows:Identifier>`);
-        xmlParts.push(`<ScaleDenominator>${formatNumber(matrix.scaleDenominator)}</ScaleDenominator>`);
-        xmlParts.push(`<TopLeftCorner>${formatCorner(matrixTopLeft)}</TopLeftCorner>`);
-        xmlParts.push(`<TileWidth>${formatNumber(matrix.tileWidth || set.tileWidth || TILE_SIZE_PX)}</TileWidth>`);
-        xmlParts.push(`<TileHeight>${formatNumber(matrix.tileHeight || set.tileHeight || TILE_SIZE_PX)}</TileHeight>`);
-        xmlParts.push(`<MatrixWidth>${formatNumber(matrix.matrixWidth)}</MatrixWidth>`);
-        xmlParts.push(`<MatrixHeight>${formatNumber(matrix.matrixHeight)}</MatrixHeight>`);
-        xmlParts.push("</TileMatrix>");
-      }
-      xmlParts.push("</TileMatrixSet>");
-    }
-
-    xmlParts.push("</Contents>");
-    xmlParts.push("</Capabilities>");
+    xmlParts.push('</Layer>');
+    xmlParts.push('</Capability>');
+    xmlParts.push('</WMS_Capabilities>');
 
     res.setHeader("Content-Type", "application/xml");
     return res.send(xmlParts.join(""));
   } catch (error) {
-    console.error("WMTS capabilities error", error);
-    return res.status(500).json({ error: "wmts_capabilities_failed", details: String(error) });
+    console.error("WMS GetCapabilities error", error);
+    return res.status(500).json({ error: "wms_capabilities_failed", details: String(error) });
   }
-});
+}
+
+// WMS GetMap Handler (returns tile from cache or triggers on-demand rendering)
+async function handleWmsGetMap(req, res) {
+  try {
+    const findQ = (name) => {
+      const low = name.toLowerCase();
+      for (const k of Object.keys(req.query || {})) {
+        if (k.toLowerCase() === low) return req.query[k];
+      }
+      return undefined;
+    };
+
+    const layers = String(findQ('LAYERS') || findQ('layers') || "");
+    const bbox = String(findQ('BBOX') || findQ('bbox') || "");
+    const width = parseInt(findQ('WIDTH') || findQ('width') || "256", 10);
+    const height = parseInt(findQ('HEIGHT') || findQ('height') || "256", 10);
+    const crs = String(findQ('CRS') || findQ('crs') || findQ('SRS') || findQ('srs') || "EPSG:3857");
+    const format = String(findQ('FORMAT') || findQ('format') || "image/png");
+
+    if (!layers) {
+      return res.status(400).json({ error: "missing_layers", details: "LAYERS parameter required" });
+    }
+
+    if (!bbox) {
+      return res.status(400).json({ error: "missing_bbox", details: "BBOX parameter required" });
+    }
+
+    // Parse bbox
+    const bboxParts = bbox.split(',').map(v => parseFloat(v));
+    if (bboxParts.length !== 4 || bboxParts.some(v => !Number.isFinite(v))) {
+      return res.status(400).json({ error: "invalid_bbox", details: "BBOX must be minx,miny,maxx,maxy" });
+    }
+    const [minx, miny, maxx, maxy] = bboxParts;
+
+    // Parse layer identifier to get project and layer
+    const layerParts = layers.split('_');
+    if (layerParts.length < 2) {
+      return res.status(400).json({ error: "invalid_layer", details: "Layer format should be project_layer" });
+    }
+
+    const project = layerParts[0];
+    const layerIdentifier = layerParts.slice(1).join('_');
+
+    // Load project index to get tile matrix info
+    const projectDir = path.join(cacheDir, project);
+    const indexPath = path.join(projectDir, 'index.json');
+    
+    let indexData;
+    try {
+      const indexContent = await fs.promises.readFile(indexPath, 'utf-8');
+      indexData = JSON.parse(indexContent);
+    } catch (err) {
+      return res.status(404).json({ error: "project_not_found", details: `Project ${project} not found` });
+    }
+
+    // Find the layer by identifier or by normalizing the name
+    let layerInfo = indexData.layers?.find(l => l.name === layerIdentifier);
+    if (!layerInfo) {
+      // Try to find by normalizing layer names (spaces to underscores)
+      layerInfo = indexData.layers?.find(l => {
+        const normalizedName = l.name?.replace(/\s+/g, '_');
+        return normalizedName === layerIdentifier;
+      });
+    }
+    if (!layerInfo) {
+      return res.status(404).json({ error: "layer_not_found", details: `Layer ${layerIdentifier} not found in project ${project}` });
+    }
+
+    // Use the actual layer name (with spaces) for file paths
+    const layer = layerInfo.name;
+
+    // Get tile matrix set
+    const tileMatrixSet = indexData.tile_matrix_set;
+    if (!tileMatrixSet || !Array.isArray(tileMatrixSet.matrices)) {
+      return res.status(500).json({ error: "invalid_tile_matrix", details: "Tile matrix set not found" });
+    }
+
+    // Calculate which zoom level best matches the request resolution
+    const bboxWidth = maxx - minx;
+    const bboxHeight = maxy - miny;
+    const requestedResX = bboxWidth / width;
+    const requestedResY = bboxHeight / height;
+    const requestedRes = Math.max(requestedResX, requestedResY);
+
+    // Find closest zoom level
+    let bestZoom = 0;
+    let bestResDiff = Infinity;
+    for (const matrix of tileMatrixSet.matrices) {
+      const res = matrix.resolution || matrix.scaleDenominator * 0.00028;
+      const diff = Math.abs(res - requestedRes);
+      if (diff < bestResDiff) {
+        bestResDiff = diff;
+        bestZoom = matrix.zoom || matrix.identifier;
+      }
+    }
+
+    const matrix = tileMatrixSet.matrices.find(m => (m.zoom || m.identifier) === bestZoom);
+    if (!matrix) {
+      return res.status(500).json({ error: "matrix_not_found", details: `Matrix for zoom ${bestZoom} not found` });
+    }
+
+    // Get tile matrix info
+    const tileWidth = matrix.tile_width || 256;
+    const tileHeight = matrix.tile_height || 256;
+    const matrixWidth = matrix.matrix_width;
+    const matrixHeight = matrix.matrix_height;
+    const resolution = matrix.resolution || matrix.scaleDenominator * 0.00028;
+    
+    // Get top-left corner
+    let topLeftX, topLeftY;
+    if (matrix.top_left_corner) {
+      topLeftX = matrix.top_left_corner[0];
+      topLeftY = matrix.top_left_corner[1];
+    } else if (matrix.topLeftCorner) {
+      topLeftX = matrix.topLeftCorner[0];
+      topLeftY = matrix.topLeftCorner[1];
+    } else {
+      topLeftX = tileMatrixSet.extent[0];
+      topLeftY = tileMatrixSet.extent[3];
+    }
+
+    // Calculate tile coordinates for bbox center
+    const centerX = (minx + maxx) / 2;
+    const centerY = (miny + maxy) / 2;
+    
+    const tileX = Math.floor((centerX - topLeftX) / (tileWidth * resolution));
+    const tileY = Math.floor((topLeftY - centerY) / (tileHeight * resolution));
+
+    // Clamp to valid range
+    const clampedX = Math.max(0, Math.min(tileX, matrixWidth - 1));
+    const clampedY = Math.max(0, Math.min(tileY, matrixHeight - 1));
+
+    // Redirect to tile endpoint (which handles on-demand rendering)
+    const tileUrl = `/wmts/${project}/${layer}/${bestZoom}/${clampedX}/${clampedY}.png`;
+    
+    // Instead of redirect, proxy the request to maintain WMS compatibility
+    return res.redirect(tileUrl);
+
+  } catch (error) {
+    console.error("WMS GetMap error", error);
+    return res.status(500).json({ error: "wms_getmap_failed", details: String(error) });
+  }
+}
 
 const startServer = async () => {
   try {
@@ -4368,7 +6708,11 @@ const startServer = async () => {
   }
   initializeProjectSchedules();
   startScheduleHeartbeat();
-  app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
+  const server = app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
+  // Increase timeout for tile rendering requests (default is 2 minutes)
+  server.timeout = 300000; // 5 minutes
+  server.keepAliveTimeout = 310000; // Slightly longer than timeout
+  server.headersTimeout = 320000; // Slightly longer than keepAliveTimeout
 };
 
 startServer().catch((err) => {

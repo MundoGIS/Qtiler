@@ -3,37 +3,33 @@
   If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
   Copyright (C) 2025 MundoGIS.
 -->
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8">
-  <title>Qtiler · MundoGIS</title>
-    <link rel="stylesheet" href="/styles.css">
-  </head>
-  <body>
+<%- include('partials/html-open', {
+  pageLang,
+  pageTitle: 'Qtiler · MundoGIS',
+  headScripts: [
+    { src: 'https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.min.js', crossorigin: 'anonymous' }
+  ]
+}) %>
     <div class="app-shell">
-      <header class="app-header">
-        <div class="header-inner">
-          <div class="brand">
-            <a href="/index.html" class="brand-logo">Qtiler</a>
-            <span class="brand-tagline" data-i18n="MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.">MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.</span>
-          </div>
-          <nav class="main-nav" aria-label="Primary">
-            <a href="/index.html" class="nav-link is-active" aria-current="page" data-i18n="Dashboard">Dashboard</a>
-            <button id="open_guide" class="nav-button" type="button" data-i18n="User guide">User guide</button>
-            <a href="/viewer.html" class="nav-link" target="_blank" rel="noopener" data-i18n="Tile viewer">Tile viewer</a>
-            <div class="nav-divider" aria-hidden="true"></div>
-            <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
-            <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="sv">Svenska</option>
-            </select>
-          </nav>
-        </div>
-      </header>
+      <%- include('partials/header', { headerMode: 'dashboard', user, activeNav: activeNav || 'dashboard' }) %>
 
       <main class="app-main">
+        <div id="auth_plugin_notice" class="app-notice app-notice-warning" role="alert" hidden>
+          <div class="app-notice-body">
+            <div class="app-notice-text">
+              <h2 class="app-notice-heading" data-i18n="Authentication plugin unavailable">Authentication plugin unavailable</h2>
+              <p data-i18n="You haven't purchased the authentication plugin yet? Contact MundoGIS or visit https://mundogis.se to learn more about this plugin.">You haven't purchased the authentication plugin yet? Contact MundoGIS or visit https://mundogis.se to learn more about this plugin.</p>
+              <label class="app-notice-dismiss" for="auth_plugin_notice_dismiss">
+                <input id="auth_plugin_notice_dismiss" type="checkbox">
+                <span data-i18n="Don't show this again">Don't show this again</span>
+              </label>
+            </div>
+            <div class="app-notice-actions">
+              <a id="auth_plugin_notice_learn_more" class="btn btn-outline" href="https://mundogis.se" target="_blank" rel="noopener" data-i18n="Learn more">Learn more</a>
+              <button id="auth_plugin_notice_close" class="btn btn-secondary" type="button" data-i18n="Close">Close</button>
+            </div>
+          </div>
+        </div>
         <div class="main-layout">
           <aside class="control-panel">
           <div class="control-toolbar">
@@ -58,10 +54,10 @@
             </div>
             <div class="field field-remote">
               <label class="checkbox">
-                <input id="allow_remote" type="checkbox">
+                <input id="allow_remote" type="checkbox" checked>
                 <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span>
               </label>
-              <input id="throttle_ms" class="input-number" type="number" min="0" value="0" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
+              <input id="throttle_ms" class="input-number" type="number" min="0" value="200" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
             </div>
           </div>
           </aside>
@@ -89,13 +85,60 @@
     </div>
 
     <script>
-      const SUPPORTED_LANGS = ["en", "es", "sv"];
+      // === Inactivity Timeout Auto-Logout ===
+      const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+      let inactivityTimer = null;
+
+      function resetInactivityTimer() {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          console.log('Inactivity timeout reached - logging out');
+          fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+            .catch(() => {})
+            .finally(() => {
+              window.location.href = '/login?reason=inactivity';
+            });
+        }, INACTIVITY_TIMEOUT_MS);
+      }
+
+      function initInactivityMonitor() {
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+        events.forEach(event => {
+          document.addEventListener(event, resetInactivityTimer, true);
+        });
+        resetInactivityTimer();
+      }
+
+      // Start monitoring after user is authenticated
+      let inactivityMonitorActive = false;
+
+      const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
+        ? window.qtilerLang.SUPPORTED_LANGS
+        : ["en", "es", "sv"];
+      const normalizeLang = window.qtilerLang?.normalize || ((value) => {
+        const raw = (value || "").toLowerCase();
+        if (SUPPORTED_LANGS.includes(raw)) return raw;
+        const base = raw.split("-")[0];
+        return SUPPORTED_LANGS.includes(base) ? base : "en";
+      });
+      let currentLang = window.qtilerLang?.get?.() || normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
       const TRANSLATIONS = {
         es: {
           "Dashboard": "Panel principal",
-          "Tile viewer": "Visor de teselas",
           "Guide": "Guía",
           "Language": "Idioma",
+          "Login": "Iniciar sesión",
+          "Logout": "Cerrar sesión",
+          "Admin console": "Consola de administración",
+          "Install auth plugin": "Instalar plugin de autenticación",
+          "Install Admin Dashboard": "Instalar Panel de Administración",
+          "Authentication features are paused until the authentication plugin is installed.": "Las funciones de autenticación están en pausa hasta instalar el plugin de autenticación.",
+          "Authentication plugin unavailable": "Plugin de autenticación no disponible",
+          "You haven't purchased the authentication plugin yet? Contact MundoGIS or visit https://mundogis.se to learn more about this plugin.": "¿Aún no has adquirido el plugin de autenticación? Contacta con MundoGIS o visita https://mundogis.se para saber más sobre este plugin.",
+          "Don't show this again": "No volver a mostrar este mensaje",
+          "Learn more": "Leer más",
+          "Close": "Cerrar",
+          "Signed in as {user}": "Sesión como {user}",
           "Upload project": "Subir proyecto",
           "Reload layers": "Recargar capas",
           "User guide": "Guía de uso",
@@ -108,7 +151,7 @@
           "Tile CRS:": "CRS de tesela:",
           "Allow remote (WMS/XYZ)": "Permitir remoto (WMS/XYZ)",
           "Delay between tiles (ms)": "Retardo entre teselas (ms)",
-          "MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.": "Consola de teselado de MundoGIS para proyectos QGIS. Elige una capa y presiona “Generar caché”.",
+          "MundoGIS tile caching for QGIS projects. Pick a layer and hit “Generate cache”.": "Consola de teselado de MundoGIS para proyectos QGIS. Elige una capa y presiona “Generar caché”.",
           "Loading projects…": "Cargando proyectos…",
           "No projects in qgisprojects/": "No hay proyectos en qgisprojects/",
           "Failed to load layers: HTTP {status}": "Error al cargar capas: HTTP {status}",
@@ -213,9 +256,20 @@
         },
         sv: {
           "Dashboard": "Översikt",
-          "Tile viewer": "Tile-visare",
           "Guide": "Guide",
           "Language": "Språk",
+          "Login": "Logga in",
+          "Logout": "Logga ut",
+          "Admin console": "Admin-konsol",
+          "Install auth plugin": "Installera autentiseringsplugin",
+          "Install Admin Dashboard": "Installera administrationspanel",
+          "Authentication features are paused until the authentication plugin is installed.": "Autentiseringsfunktionerna är pausade tills pluginet är installerat.",
+          "Authentication plugin unavailable": "Autentiseringsplugin inte tillgänglig",
+          "You haven't purchased the authentication plugin yet? Contact MundoGIS or visit https://mundogis.se to learn more about this plugin.": "Har du ännu inte köpt autentiseringspluginet? Kontakta MundoGIS eller besök https://mundogis.se för att läsa mer om pluginet.",
+          "Don't show this again": "Visa inte detta igen",
+          "Learn more": "Läs mer",
+          "Close": "Stäng",
+          "Signed in as {user}": "Inloggad som {user}",
           "Upload project": "Ladda upp projekt",
           "Reload layers": "Ladda om lager",
           "User guide": "Användarguide",
@@ -228,7 +282,7 @@
           "Tile CRS:": "Tile-CRS:",
           "Allow remote (WMS/XYZ)": "Tillåt fjärrlager (WMS/XYZ)",
           "Delay between tiles (ms)": "Fördröjning mellan tiles (ms)",
-          "MundoGIS tile caching console for QGIS projects. Pick a layer and hit “Generate cache”.": "MundoGIS cachekonsol för QGIS-projekt. Välj ett lager och klicka på ”Generera cache”.",
+          "MundoGIS tile caching for QGIS projects. Pick a layer and hit “Generate cache”.": "MundoGIS cachekonsol för QGIS-projekt. Välj ett lager och klicka på ”Generera cache”.",
           "Loading projects…": "Laddar projekt…",
           "No projects in qgisprojects/": "Inga projekt i qgisprojects/",
           "Failed to load layers: HTTP {status}": "Kunde inte läsa lager: HTTP {status}",
@@ -331,14 +385,6 @@
         }
       };
 
-      const normalizeLang = (value) => {
-        const raw = (value || "").toLowerCase();
-        if (SUPPORTED_LANGS.includes(raw)) return raw;
-        const base = raw.split("-")[0];
-        return SUPPORTED_LANGS.includes(base) ? base : "en";
-      };
-
-      let currentLang = normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
       const PROJECT_COLLAPSE_STORAGE_KEY = 'qtiler.projectCollapse.v1';
       let collapsePrefsCache = null;
 
@@ -398,6 +444,100 @@
         return template.replace(/\{(\w+)\}/g, (_, token) => (token in replacements ? replacements[token] : ""));
       };
 
+      const authButton = document.getElementById('auth_button');
+        const authUserBadge = document.getElementById('auth_user_badge');
+        const adminConsoleLink = document.getElementById('admin_console_link');
+        const adminInstallLink = document.getElementById('admin_install_auth');
+        const authPluginNotice = document.getElementById('auth_plugin_notice');
+        const authPluginNoticeClose = document.getElementById('auth_plugin_notice_close');
+        const authPluginLearnMore = document.getElementById('auth_plugin_notice_learn_more');
+        const authPluginDismissCheckbox = document.getElementById('auth_plugin_notice_dismiss');
+  const AUTH_PLUGIN_INSTALL_URL = '/admin';
+      const AUTH_PLUGIN_LEARN_MORE_URL = 'https://mundogis.se';
+      const AUTH_NOTICE_DISMISS_KEY = 'qtiler.dismissAuthNotice';
+      const setAuthNoticeDismissed = (value) => {
+        try {
+          localStorage.setItem(AUTH_NOTICE_DISMISS_KEY, value ? '1' : '0');
+        } catch {}
+      };
+      const isAuthNoticeDismissed = () => {
+        try {
+          return localStorage.getItem(AUTH_NOTICE_DISMISS_KEY) === '1';
+        } catch {
+          return false;
+        }
+      };
+      const syncAuthNoticeCheckbox = () => {
+        if (!authPluginDismissCheckbox) return;
+        authPluginDismissCheckbox.checked = isAuthNoticeDismissed();
+      };
+      let authUser = null;
+      let authCheckInFlight = false;
+      let authPluginMissing = false;
+  let authPluginMissingMessageShown = false;
+
+      /* Removed refreshAuthUi() and fetchAuthState() - functionality now handled by checkAuthPlugin() IIFE */
+      /*
+      const refreshAuthUi = () => { ... };
+      const updateAuthUser = (user) => { ... };
+      const fetchAuthState = async () => { ... };
+      */
+
+
+      if (authButton) {
+        authButton.addEventListener('click', async () => {
+          const buttonText = authButton.textContent.trim();
+          
+          // Check if button says "Logout" (or translated equivalent)
+          // We use 'Logout' key because that's what checkAuthPlugin sets
+          if (buttonText === tr('Logout') || buttonText === 'Logout' || buttonText === 'Sign out') {
+            authButton.disabled = true;
+            try {
+              await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+            } catch {}
+            window.location.href = '/';
+            return;
+          }
+          
+          // Otherwise redirect to login
+          window.location.href = '/login';
+        });
+      }
+
+      if (authPluginNotice && authPluginNoticeClose) {
+        syncAuthNoticeCheckbox();
+
+        if (isAuthNoticeDismissed()) {
+          authPluginNotice.hidden = true;
+        }
+
+        if (authPluginDismissCheckbox) {
+          authPluginDismissCheckbox.addEventListener('change', () => {
+            setAuthNoticeDismissed(authPluginDismissCheckbox.checked);
+            if (authPluginDismissCheckbox.checked) {
+              authPluginNotice.hidden = true;
+            } else if (authPluginMissing) {
+              authPluginNotice.hidden = false;
+            }
+          });
+        }
+
+        authPluginNoticeClose.addEventListener('click', () => {
+          authPluginNotice.hidden = true;
+          setAuthNoticeDismissed(!!authPluginDismissCheckbox?.checked);
+        });
+
+        if (authPluginLearnMore) {
+          authPluginLearnMore.addEventListener('click', (event) => {
+            event.preventDefault();
+            window.open(AUTH_PLUGIN_LEARN_MORE_URL, '_blank', 'noopener');
+            if (authPluginDismissCheckbox?.checked) {
+              setAuthNoticeDismissed(true);
+            }
+          });
+        }
+      }
+
       const applyStaticTranslations = () => {
         document.documentElement.setAttribute("lang", currentLang);
         document.querySelectorAll("[data-i18n]").forEach(el => {
@@ -415,12 +555,24 @@
           if (!key) return;
           el.placeholder = tr(key);
         });
+        if (typeof checkAuthPlugin === 'function') {
+          checkAuthPlugin();
+        }
       };
 
       const setLanguage = (lang) => {
+        if (window.qtilerLang?.set) {
+          window.qtilerLang.set(lang);
+          return;
+        }
         currentLang = normalizeLang(lang);
-        localStorage.setItem("qtiler.lang", currentLang);
+        try {
+          localStorage.setItem("qtiler.lang", currentLang);
+        } catch {}
         applyStaticTranslations();
+        if (languageSelect && languageSelect.value !== currentLang) {
+          languageSelect.value = currentLang;
+        }
       };
 
       // --- Project extent maps (per project) ---
@@ -437,6 +589,130 @@
       if (footerYearEl) {
         footerYearEl.textContent = String(new Date().getFullYear());
       }
+
+      // Check if auth plugin is enabled and update header buttons
+      async function checkAuthPlugin() {
+        try {
+          const res = await fetch('/plugins');
+          if (res.ok) {
+            const data = await res.json();
+            const authEnabled = data.enabled && data.enabled.includes('QtilerAuth');
+            const installBtn = document.getElementById('admin_install_dashboard');
+            const loginBtn = document.getElementById('auth_button');
+            const adminLink = document.getElementById('admin_console_link');
+            const userBadge = document.getElementById('auth_user_badge');
+            
+            if (authEnabled) {
+              // Plugin is installed, hide install button
+              if (installBtn) {
+                installBtn.hidden = true;
+                installBtn.style.display = 'none';
+              }
+              
+              // Check if user is logged in
+              try {
+                const authRes = await fetch('/auth/me', { credentials: 'include' });
+                if (authRes.ok) {
+                  const authData = await authRes.json();
+                  if (authData.user) {
+                    // User is logged in
+                    if (loginBtn) {
+                      loginBtn.textContent = tr('Logout');
+                      loginBtn.setAttribute('data-i18n', 'Logout');
+                      loginBtn.hidden = false;
+                      loginBtn.style.display = 'inline-block';
+                    }
+                    if (userBadge) {
+                        const name = authData.user.username || authData.user.displayName || authData.user.id || 'user';
+                        userBadge.textContent = tr('Signed in as {user}', { user: name });
+                        userBadge.hidden = false;
+                        userBadge.style.display = 'inline-block';
+                    }
+                    if (adminLink && authData.user.role === 'admin') {
+                      adminLink.hidden = false;
+                      adminLink.style.display = 'inline-block'; // Force display
+                    }
+                    // Update global authUser for click handler
+                    authUser = authData.user;
+                    
+                    // Start inactivity monitor when user is authenticated
+                    if (!inactivityMonitorActive) {
+                      initInactivityMonitor();
+                      inactivityMonitorActive = true;
+                    }
+                  } else {
+                    // Not logged in
+                    if (loginBtn) {
+                      loginBtn.textContent = tr('Login');
+                      loginBtn.setAttribute('data-i18n', 'Login');
+                      loginBtn.hidden = false;
+                      loginBtn.style.display = 'inline-block';
+                    }
+                    if (userBadge) {
+                      userBadge.hidden = true;
+                      userBadge.style.display = 'none';
+                    }
+                    if (adminLink) {
+                      adminLink.hidden = true;
+                      adminLink.style.display = 'none';
+                    }
+                    authUser = null;
+                  }
+                } else {
+                  // Not logged in (or error)
+                  if (loginBtn) {
+                    loginBtn.textContent = tr('Login');
+                    loginBtn.setAttribute('data-i18n', 'Login');
+                    loginBtn.hidden = false;
+                    loginBtn.style.display = 'inline-block';
+                  }
+                  if (userBadge) {
+                    userBadge.hidden = true;
+                    userBadge.style.display = 'none';
+                  }
+                  if (adminLink) {
+                    adminLink.hidden = true;
+                    adminLink.style.display = 'none';
+                  }
+                  authUser = null;
+                }
+              } catch (err) {
+                console.error('Failed to check auth status', err);
+                if (loginBtn) {
+                  loginBtn.textContent = tr('Login');
+                  loginBtn.setAttribute('data-i18n', 'Login');
+                  loginBtn.hidden = false;
+                  loginBtn.style.display = 'inline-block';
+                }
+                authUser = null;
+              }
+            } else {
+              // Plugin not installed
+              if (installBtn) {
+                installBtn.hidden = false;
+                installBtn.style.display = 'inline-block';
+              }
+              if (loginBtn) {
+                loginBtn.hidden = true;
+                loginBtn.style.display = 'none';
+              }
+              if (adminLink) {
+                adminLink.hidden = true;
+                adminLink.style.display = 'none';
+              }
+              if (userBadge) {
+                userBadge.hidden = true;
+                userBadge.style.display = 'none';
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to check auth plugin', err);
+        }
+      };
+      
+      // Run immediately
+      checkAuthPlugin();
 
       const deepMergeObjects = (target, patch) => {
         if (!patch || typeof patch !== 'object') return target;
@@ -1269,6 +1545,10 @@
         if (!force && projectConfigs.has(projectId)) return projectConfigs.get(projectId);
         try {
           const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config');
+          if (res.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return null;
+          }
           if (!res.ok) throw new Error(res.statusText || 'config fetch failed');
           const cfg = await res.json();
           projectConfigs.set(projectId, cfg);
@@ -1345,9 +1625,7 @@
         const state = getProjectState(projectId);
         if (state) {
           state.config = merged;
-          if (patch.extent && Object.prototype.hasOwnProperty.call(patch.extent, 'bbox')) {
-            state.extent = Array.isArray(patch.extent.bbox) && patch.extent.bbox.length === 4 ? patch.extent.bbox.slice() : null;
-          }
+          hydrateStateExtentFromConfig(projectId, merged);
         }
         if (state && state.metaInfoEl) refreshProjectMetaInfo({ id: projectId }, null, merged);
       }
@@ -1372,6 +1650,7 @@
           const state = getProjectState(projectId);
           if (state) {
             state.config = updated;
+            hydrateStateExtentFromConfig(projectId, updated);
             if (state.metaInfoEl) refreshProjectMetaInfo({ id: projectId }, null, updated);
           }
         } catch (err) {
@@ -1465,6 +1744,10 @@
         projectBatchFetches.set(projectId, true);
         try {
           const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/cache/project');
+          if (res.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
           if (!res.ok) {
             setProjectBatchPolling(projectId, false);
             const state = getProjectState(projectId);
@@ -1504,7 +1787,7 @@
         const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
         const state = getProjectState(project.id);
         const extent = state?.extent && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
-        const skipped = [];
+        const extentPayload = getProjectedExtentPayload(project.id);
         const payloadLayers = [];
         layers.forEach(layer => {
           if (!layer?.name) return;
@@ -1533,9 +1816,9 @@
             // auto mode: let backend choose scheme, but honor explicit CRS overrides
             if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
           }
-          if (extent) {
-            params.project_extent = extent.join(',');
-            params.extent_crs = 'EPSG:4326';
+          if (extentPayload) {
+            params.project_extent = extentPayload.extentString;
+            params.extent_crs = extentPayload.crs;
           }
           if (allowRemote) params.allow_remote = true;
           if (allowRemote && throttleVal > 0) params.throttle_ms = throttleVal;
@@ -1642,6 +1925,8 @@
           const storedCollapse = getStoredCollapse(projectId);
           extentStates.set(projectId, {
             extent: null,
+            extentNative: null,
+            extentNativeCrs: null,
             open: false,
             map: null,
             metaInfoEl: null,
@@ -1788,6 +2073,207 @@
           Math.max(curMaxLon, maxLon),
           Math.max(curMaxLat, maxLat)
         ];
+      };
+
+      const parseProj4PresetsDataset = () => {
+        const encoded = document.body?.dataset?.proj4Presets;
+        if (!encoded) return {};
+        try {
+          return JSON.parse(decodeURIComponent(encoded));
+        } catch (err) {
+          console.warn('Failed to parse proj4 presets payload', err);
+          return {};
+        }
+      };
+
+      const PROJ4_PRESETS = Object.freeze(parseProj4PresetsDataset());
+
+      const canUseProj4 = () => (typeof proj4 === 'function' && typeof proj4.defs === 'function');
+
+      const ensureProj4Definition = (code) => {
+        if (!canUseProj4()) return false;
+        if (!code || typeof code !== 'string') return false;
+        const key = code.trim();
+        if (!key) return false;
+        if (proj4.defs(key)) return true;
+        const upper = key.toUpperCase();
+        if (proj4.defs(upper)) {
+          if (upper !== key) proj4.defs(key, proj4.defs(upper));
+          return true;
+        }
+        const preset = PROJ4_PRESETS[upper];
+        if (!preset) return false;
+        proj4.defs(upper, preset);
+        if (upper !== key) {
+          proj4.defs(key, proj4.defs(upper));
+        }
+        return true;
+      };
+
+      const transformExtentBetweenCrs = (extentList, sourceCrs, targetCrs) => {
+        const norm = normalizeExtentList(extentList);
+        if (!norm) return null;
+        const source = (typeof sourceCrs === 'string' && sourceCrs.trim()) ? sourceCrs.trim() : 'EPSG:4326';
+        const target = (typeof targetCrs === 'string' && targetCrs.trim()) ? targetCrs.trim() : 'EPSG:4326';
+        if (source.toUpperCase() === target.toUpperCase()) {
+          return { bbox: norm.slice(), crs: target, transformed: false };
+        }
+        if (!canUseProj4()) {
+          console.warn('proj4 not available; cannot transform extent from', source, 'to', target);
+          return null;
+        }
+        if (!ensureProj4Definition(source) || !ensureProj4Definition(target)) {
+          console.warn('Missing proj4 definition for extent transform', source, target);
+          return null;
+        }
+        try {
+          const corners = [
+            [norm[0], norm[1]],
+            [norm[0], norm[3]],
+            [norm[2], norm[1]],
+            [norm[2], norm[3]]
+          ];
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          for (const [xVal, yVal] of corners) {
+            const projected = proj4(source, target, [xVal, yVal]);
+            const px = Array.isArray(projected) ? projected[0] : Number.NaN;
+            const py = Array.isArray(projected) ? projected[1] : Number.NaN;
+            if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error('Invalid projection result');
+            minX = Math.min(minX, px);
+            minY = Math.min(minY, py);
+            maxX = Math.max(maxX, px);
+            maxY = Math.max(maxY, py);
+          }
+          return { bbox: [minX, minY, maxX, maxY], crs: target, transformed: true };
+        } catch (err) {
+          console.warn('Failed to transform extent from', source, 'to', target, err);
+          return null;
+        }
+      };
+
+      const transformExtentToProjectCrs = (extentList, projectCrs) => {
+        return transformExtentBetweenCrs(extentList, 'EPSG:4326', projectCrs);
+      };
+
+      const transformExtentFromProjectCrs = (extentList, sourceCrs) => {
+        return transformExtentBetweenCrs(extentList, sourceCrs, 'EPSG:4326');
+      };
+
+      function hydrateStateExtentFromConfig(projectId, overrideConfig){
+        const state = getProjectState(projectId);
+        if (!state) return { wgsExtent: null };
+        const projectConfig = overrideConfig || state.config || projectConfigs.get(projectId) || null;
+        let wgsExtent = null;
+        let nativeExtent = null;
+        let nativeCrs = null;
+        if (projectConfig) {
+          if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox)) {
+            const normalizedNative = normalizeExtentList(projectConfig.extent.bbox);
+            if (normalizedNative) {
+              nativeExtent = normalizedNative.slice();
+              nativeCrs = typeof projectConfig.extent.crs === 'string' ? projectConfig.extent.crs : null;
+              const transformed = transformExtentFromProjectCrs(normalizedNative, nativeCrs || state.projectMeta?.crs);
+              if (transformed && Array.isArray(transformed.bbox)) {
+                wgsExtent = transformed.bbox.slice();
+              }
+            }
+          }
+          const wgsEntry = projectConfig.extentWgs84 || projectConfig.extent_wgs84;
+          if (!wgsExtent && wgsEntry && Array.isArray(wgsEntry.bbox)) {
+            const normalizedWgs = normalizeExtentList(wgsEntry.bbox);
+            if (normalizedWgs) {
+              wgsExtent = normalizedWgs.slice();
+            }
+          }
+        }
+        state.extentNative = nativeExtent ? nativeExtent.slice() : null;
+        state.extentNativeCrs = nativeCrs || state.projectMeta?.crs || null;
+        if (!state.extentNative && wgsExtent) {
+          const fallbackNative = transformExtentToProjectCrs(wgsExtent, state.projectMeta?.crs || null);
+          if (fallbackNative && Array.isArray(fallbackNative.bbox)) {
+            state.extentNative = fallbackNative.bbox.slice();
+            state.extentNativeCrs = fallbackNative.crs || state.projectMeta?.crs || null;
+          }
+        }
+        state.extent = wgsExtent ? wgsExtent.slice() : null;
+        if (state.extent && !state.extentNative) {
+          const derivedNative = transformExtentToProjectCrs(state.extent, state.projectMeta?.crs || null);
+          if (derivedNative && Array.isArray(derivedNative.bbox)) {
+            state.extentNative = derivedNative.bbox.slice();
+            state.extentNativeCrs = derivedNative.crs || state.projectMeta?.crs || null;
+          }
+        }
+        return { wgsExtent: state.extent ? state.extent.slice() : null };
+      }
+
+      const buildExtentPatch = (projectId, extentList) => {
+        const nowIso = new Date().toISOString();
+        const state = getProjectState(projectId);
+        const projectCrs = state?.extentNativeCrs || state?.projectMeta?.crs || null;
+        if (!Array.isArray(extentList) || extentList.length !== 4) {
+          state.extent = null;
+          state.extentNative = null;
+          state.extentNativeCrs = projectCrs || state?.projectMeta?.crs || null;
+          return {
+            extent: { bbox: null, crs: projectCrs || 'EPSG:4326', updatedAt: nowIso },
+            extentWgs84: { bbox: null, crs: 'EPSG:4326', updatedAt: nowIso }
+          };
+        }
+        const norm = normalizeExtentList(extentList);
+        if (!norm) {
+          state.extent = null;
+          state.extentNative = null;
+          state.extentNativeCrs = projectCrs || state?.projectMeta?.crs || null;
+          return {
+            extent: { bbox: null, crs: projectCrs || 'EPSG:4326', updatedAt: nowIso },
+            extentWgs84: { bbox: null, crs: 'EPSG:4326', updatedAt: nowIso }
+          };
+        }
+        state.extent = norm.slice();
+        const converted = transformExtentToProjectCrs(norm, projectCrs);
+        let nativeBbox = null;
+        let nativeCrs = converted?.crs || projectCrs || 'EPSG:4326';
+        if (converted && Array.isArray(converted.bbox)) {
+          nativeBbox = converted.bbox.slice();
+        } else {
+          nativeBbox = norm.slice();
+          nativeCrs = 'EPSG:4326';
+        }
+        state.extentNative = nativeBbox.slice();
+        state.extentNativeCrs = nativeCrs;
+        return {
+          extent: { bbox: nativeBbox, crs: nativeCrs, updatedAt: nowIso },
+          extentWgs84: { bbox: norm.slice(), crs: 'EPSG:4326', updatedAt: nowIso }
+        };
+      };
+
+      const getProjectedExtentPayload = (projectId) => {
+        const state = getProjectState(projectId);
+        if (!state) return null;
+        if (Array.isArray(state.extentNative) && state.extentNative.length === 4) {
+          const bbox = state.extentNative.map((value) => Number.isFinite(value) ? value : 0);
+          const crs = state.extentNativeCrs || state?.projectMeta?.crs || 'EPSG:4326';
+          return {
+            bbox,
+            extentString: bbox.join(','),
+            crs
+          };
+        }
+        if (!Array.isArray(state.extent) || state.extent.length !== 4) return null;
+        const projectCrs = state?.projectMeta?.crs || null;
+        const converted = transformExtentToProjectCrs(state.extent, projectCrs);
+        if (!converted || !Array.isArray(converted.bbox)) return null;
+        const bbox = converted.bbox.map((value) => Number.isFinite(value) ? value : 0);
+        state.extentNative = converted.bbox.slice();
+        state.extentNativeCrs = converted.crs || projectCrs || 'EPSG:4326';
+        return {
+          bbox,
+          extentString: bbox.join(','),
+          crs: state.extentNativeCrs
+        };
       };
 
       const focusMapToExtent = (projectId, extentList, options = {}) => {
@@ -2028,7 +2514,7 @@
             const b = e.layer.getBounds();
             state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
             updateInfo();
-            queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+            queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
           });
           map.on('draw:edited', () => {
             const layer = drawnItems.getLayers()[0];
@@ -2036,12 +2522,12 @@
             const b = layer.getBounds();
             state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
             updateInfo();
-            queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+            queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
           });
           map.on('draw:deleted', () => {
             state.extent = null;
             updateInfo();
-            queueProjectConfigSave(project.id, { extent: { bbox: null, crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+            queueProjectConfigSave(project.id, buildExtentPatch(project.id, null));
           });
         } catch {}
 
@@ -2086,7 +2572,7 @@
           state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
           applyExtentRectangle(state.extent);
           updateInfo();
-          queueProjectConfigSave(project.id, { extent: { bbox: state.extent.slice(), crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+          queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
         };
         const btnCenterProject = document.createElement('button');
         btnCenterProject.className = 'btn btn-secondary';
@@ -2153,7 +2639,7 @@
           drawnItems.clearLayers();
           updateInfo();
           showStatus('Extent cleared.');
-          queueProjectConfigSave(project.id, { extent: { bbox: null, crs: 'EPSG:4326', updatedAt: new Date().toISOString() } });
+          queueProjectConfigSave(project.id, buildExtentPatch(project.id, null));
         };
         buttons.appendChild(btnClear);
 
@@ -2173,20 +2659,25 @@
   const uploadBtn = document.getElementById('upload_project_btn');
   const uploadInput = document.getElementById('project_upload_input');
   const languageSelect = document.getElementById('language_selector');
+  if (window.qtilerLang?.subscribe) {
+    window.qtilerLang.subscribe((lang) => {
+      const normalized = normalizeLang(lang);
+      if (normalized === currentLang) return;
+      currentLang = normalized;
+      applyStaticTranslations();
+      if (languageSelect && languageSelect.value !== currentLang) {
+        languageSelect.value = currentLang;
+      }
+    });
+  }
   const zoomMinInput = document.getElementById('zoom_min');
   const zoomMaxInput = document.getElementById('zoom_max');
   const modeSelect = document.getElementById('cache_mode');
   const tileCrsInput = document.getElementById('tile_crs');
   const allowRemoteCheckbox = document.getElementById('allow_remote');
   const throttleInput = document.getElementById('throttle_ms');
-  const guideBtn = document.getElementById('open_guide');
   const jobsWrap = document.getElementById('jobs');
   const jobsList = document.getElementById('jobsList');
-      if (guideBtn) {
-        guideBtn.addEventListener('click', () => {
-          window.open('/guide.html', '_blank', 'noopener');
-        });
-      }
   let loadLayersRunning = false;
   let loadLayersQueued = false;
   let loadLayersQueuedOptions = null;
@@ -2275,19 +2766,49 @@
 
       async function loadLayers(options = {}) {
         const forceConfigReload = !!options.forceConfigReload;
-  if (loadLayersRunning) {
-    loadLayersQueued = true;
-    loadLayersQueuedOptions = options ? { ...options } : {};
-        return;
-      }
-      loadLayersRunning = true;
-      loadLayersQueued = false;
-      loadLayersQueuedOptions = null;
-  layersEl.textContent = tr('Loading projects…');
+        if (loadLayersRunning) {
+          loadLayersQueued = true;
+          loadLayersQueuedOptions = options ? { ...options } : {};
+          return;
+        }
+        loadLayersRunning = true;
+        loadLayersQueued = false;
+        loadLayersQueuedOptions = null;
+        layersEl.textContent = tr('Loading projects…');
         try {
           const r = await fetch('/projects');
-          const projects = await r.json();
-          if (!Array.isArray(projects) || projects.length === 0) {
+          if (r.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
+          const data = await r.json();
+          const projects = Array.isArray(data) ? data : (Array.isArray(data.projects) ? data.projects : []);
+          
+          console.log('Projects loaded:', { 
+            count: projects.length, 
+            authEnabled: data.authEnabled, 
+            user: data.user,
+            projects: projects.map(p => ({ id: p.id, isPublic: p.isPublic, access: p.access }))
+          });
+          
+          window.appState = {
+            authEnabled: data.authEnabled === true,
+            user: data.user || null
+          };
+          
+          // Fallback for legacy response
+          if (Array.isArray(data)) {
+             window.appState.authEnabled = false;
+             window.appState.user = { role: 'admin' };
+          }
+
+          const isAdmin = !window.appState.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+          const uploadBtn = document.getElementById('upload_project_btn');
+          const reloadBtn = document.getElementById('reload');
+          if (uploadBtn) uploadBtn.style.display = isAdmin ? '' : 'none';
+          if (reloadBtn) reloadBtn.style.display = isAdmin ? '' : 'none';
+
+          if (projects.length === 0) {
             layersEl.innerHTML = '<div>' + tr('No projects in qgisprojects/') + '</div>';
             return;
           }
@@ -2322,14 +2843,16 @@
             });
             heading.appendChild(toggleBtn);
 
-            const headingActions = document.createElement('div');
-            headingActions.style.marginLeft = 'auto';
-            headingActions.style.display = 'flex';
-            headingActions.style.gap = '8px';
-            const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
-            deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
-            headingActions.appendChild(deleteProjectBtn);
-            heading.appendChild(headingActions);
+            if (isAdmin) {
+              const headingActions = document.createElement('div');
+              headingActions.style.marginLeft = 'auto';
+              headingActions.style.display = 'flex';
+              headingActions.style.gap = '8px';
+              const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+              deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
+              headingActions.appendChild(deleteProjectBtn);
+              heading.appendChild(headingActions);
+            }
 
             wrap.appendChild(heading);
             const listEl = document.createElement('div');
@@ -2340,6 +2863,10 @@
             setProjectCollapsed(p.id, state.collapsed, { store: false, silent: true, element: wrap });
             try {
               const lr = await fetch('/projects/' + encodeURIComponent(p.id) + '/layers');
+              if (lr.status === 401) {
+                window.location.href = '/login?reason=session_expired';
+                return;
+              }
               const text = await lr.text();
               if (!lr.ok) {
                 listEl.innerHTML = '<div class="error">' + tr('Failed to load layers: HTTP {status}', { status: lr.status }) + '</div>';
@@ -2478,6 +3005,10 @@
 
         try {
           const lr = await fetch('/projects/' + encodeURIComponent(project.id) + '/layers');
+          if (lr.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
           const text = await lr.text();
           if (!lr.ok) {
             if (listEl) {
@@ -2711,23 +3242,25 @@
     state.themeExtents = new Map();
     state.layerExtentUnion = null;
 
+        // Determine user permissions
+        const isAdmin = !window.appState.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+        const canView = isAdmin || project.isPublic || (window.appState.user && project.allowedRoles && project.allowedRoles.includes('authenticated')) || (window.appState.user && project.allowedUsers && project.allowedUsers.includes(window.appState.user.id));
+
         const metaViewExtent = normalizeExtentList(projectMeta && projectMeta.view_extent_wgs84);
         const metaExtentDefault = normalizeExtentList(projectMeta && projectMeta.extent_wgs84);
         state.projectViewExtent = metaViewExtent ? metaViewExtent.slice() : null;
   const projectConfig = await loadProjectConfig(project.id, { force: forceConfigReload });
-        let configExtent = null;
+        let hydratedExtent = null;
         if (projectConfig) {
           state.config = projectConfig;
-          if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox)) {
-            const normalized = normalizeExtentList(projectConfig.extent.bbox);
-            if (normalized) {
-              configExtent = normalized;
-            }
-          }
+          const hydration = hydrateStateExtentFromConfig(project.id, projectConfig);
+          hydratedExtent = hydration?.wgsExtent || null;
+        } else {
+          const hydration = hydrateStateExtentFromConfig(project.id, null);
+          hydratedExtent = hydration?.wgsExtent || null;
         }
-        state.extent = configExtent ? configExtent.slice() : null;
-        if (configExtent) {
-          state.defaultMapExtent = configExtent.slice();
+        if (hydratedExtent) {
+          state.defaultMapExtent = hydratedExtent.slice();
         } else if (state.projectViewExtent) {
           state.defaultMapExtent = state.projectViewExtent.slice();
         } else if (metaExtentDefault) {
@@ -2780,19 +3313,23 @@
           controlsBox.style.display = 'flex';
           controlsBox.style.gap = '8px';
 
-          const copyWmtsBtn = document.createElement('button');
-          copyWmtsBtn.className = 'btn btn-outline';
-          copyWmtsBtn.type = 'button';
-          copyWmtsBtn.textContent = 'Copy WMTS URL';
-          copyWmtsBtn.addEventListener('click', () => {
-            const wmtsUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
-            navigator.clipboard.writeText(wmtsUrl).then(() => {
-              showStatus('WMTS capabilities URL copied: ' + wmtsUrl);
-            }).catch(err => {
-              showStatus('Copy failed: ' + String(err), true);
+          // isAdmin and canView already defined at top of function - no need to redefine
+
+          if (canView) {
+            const copyWmtsBtn = document.createElement('button');
+            copyWmtsBtn.className = 'btn btn-outline';
+            copyWmtsBtn.type = 'button';
+            copyWmtsBtn.textContent = 'Copy WMTS URL';
+            copyWmtsBtn.addEventListener('click', () => {
+              const wmtsUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              navigator.clipboard.writeText(wmtsUrl).then(() => {
+                showStatus('WMTS capabilities URL copied: ' + wmtsUrl);
+              }).catch(err => {
+                showStatus('Copy failed: ' + String(err), true);
+              });
             });
-          });
-          controlsBox.appendChild(copyWmtsBtn);
+            controlsBox.appendChild(copyWmtsBtn);
+          }
 
           const extentToggle = document.createElement('button');
           extentToggle.className = 'btn btn-outline';
@@ -2812,31 +3349,33 @@
           parent.insertBefore(metaRow, targetEl);
           parent.insertBefore(extentContainer, targetEl);
 
-          const batchRow = document.createElement('div');
-          batchRow.dataset.role = 'project-batch';
-          batchRow.style.display = 'flex';
-          batchRow.style.alignItems = 'center';
-          batchRow.style.justifyContent = 'space-between';
-          batchRow.style.gap = '12px';
-          batchRow.style.margin = '4px 0 10px 0';
-          const batchInfo = document.createElement('div');
-          batchInfo.className = 'meta';
-          batchInfo.textContent = 'Project cache idle';
-          const batchActions = document.createElement('div');
-          batchActions.style.display = 'flex';
-          batchActions.style.gap = '8px';
-          const runAllBtn = document.createElement('button');
-          runAllBtn.className = 'btn btn-primary';
-          runAllBtn.type = 'button';
-          runAllBtn.textContent = 'Cache all layers';
-          runAllBtn.addEventListener('click', () => startProjectCache(project, layers, runAllBtn));
-          batchActions.appendChild(runAllBtn);
-          batchRow.appendChild(batchInfo);
-          batchRow.appendChild(batchActions);
-          parent.insertBefore(batchRow, targetEl);
-          state.batchInfoEl = batchInfo;
-          state.batchButton = runAllBtn;
-          refreshProjectBatchStatus(project.id);
+          if (isAdmin) {
+            const batchRow = document.createElement('div');
+            batchRow.dataset.role = 'project-batch';
+            batchRow.style.display = 'flex';
+            batchRow.style.alignItems = 'center';
+            batchRow.style.justifyContent = 'space-between';
+            batchRow.style.gap = '12px';
+            batchRow.style.margin = '4px 0 10px 0';
+            const batchInfo = document.createElement('div');
+            batchInfo.className = 'meta';
+            batchInfo.textContent = 'Project cache idle';
+            const batchActions = document.createElement('div');
+            batchActions.style.display = 'flex';
+            batchActions.style.gap = '8px';
+            const runAllBtn = document.createElement('button');
+            runAllBtn.className = 'btn btn-primary';
+            runAllBtn.type = 'button';
+            runAllBtn.textContent = 'Cache all layers';
+            runAllBtn.addEventListener('click', () => startProjectCache(project, layers, runAllBtn));
+            batchActions.appendChild(runAllBtn);
+            batchRow.appendChild(batchInfo);
+            batchRow.appendChild(batchActions);
+            parent.insertBefore(batchRow, targetEl);
+            state.batchInfoEl = batchInfo;
+            state.batchButton = runAllBtn;
+            refreshProjectBatchStatus(project.id);
+          }
 
           if (state.open) {
             toggleProjectExtentPanel(project, projectMeta, extentContainer)
@@ -2885,10 +3424,12 @@
           }
         }
         layers.forEach(l => {
+          try {
           const d = document.createElement('div');
           d.className = 'layer';
           const info = document.createElement('div');
           const provider = (l.provider || '').toLowerCase();
+          const remoteSource = l.remote_source || null;
           const cacheable = !!l.cacheable;
           const badges = [];
           if (!cacheable) badges.push('<span class="layer-badge layer-badge-remote">remote</span>');
@@ -2974,60 +3515,53 @@
           controls.setAttribute('role', 'group');
           controls.addEventListener('click', (event) => event.stopPropagation());
 
-          const remoteSource = l.remote_source || null;
           const hasCache = !!cachedEntry;
-          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
-          if (hasCache) {
-            genBtn.title = 'Recache layer (rebuild tiles)';
-            genBtn.addEventListener('click', async () => {
-              const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
-              if (!selection) return;
-              try {
-                await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
-              } catch (err) {
-                console.error('Recache request failed', err);
-              }
-            });
-          } else {
-            genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
-          }
-          if (l.cacheable === false) {
-            genBtn.disabled = true;
-            genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
-            // if user toggles allow_remote later, we re-enable dynamically
-            genBtn.dataset.remote = '1';
-          }
+          
+          if (isAdmin) {
+            const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
+            if (hasCache) {
+              genBtn.title = 'Recache layer (rebuild tiles)';
+              genBtn.addEventListener('click', async () => {
+                const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
+                if (!selection) return;
+                try {
+                  await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
+                } catch (err) {
+                  console.error('Recache request failed', err);
+                }
+              });
+            } else {
+              genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
+            }
+            if (l.cacheable === false) {
+              genBtn.disabled = true;
+              genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
+              // if user toggles allow_remote later, we re-enable dynamically
+              genBtn.dataset.remote = '1';
+            }
 
-          const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
+            const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
 
-          const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
+            const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
+            
+            controls.appendChild(scheduleBtn);
+            controls.appendChild(genBtn);
+            if (cachedEntry) {
+              controls.appendChild(delBtn);
+            }
+          }
 
           let viewCacheBtn = null;
-          if (hasCache) {
-            const baseUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
-            const cacheUrl = remoteSource ? baseUrl + '&mode=cache' : baseUrl;
-            const cacheLabel = remoteSource ? tr('View cached tiles') : tr('Open map viewer');
-            viewCacheBtn = makeIconButton(cacheLabel, 'eye', () => {
-              window.open(cacheUrl, '_blank', 'noopener');
+          if (hasCache && canView) {
+            const viewerUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
+            viewCacheBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
+              window.open(viewerUrl, '_blank', 'noopener');
             }, 'btn-secondary');
           }
 
-          let viewRemoteBtn = null;
-          if (remoteSource) {
-            const remoteUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name) + '&mode=remote';
-            viewRemoteBtn = makeIconButton(tr('Open remote source'), 'cloud', () => {
-              window.open(remoteUrl, '_blank', 'noopener');
-            }, 'btn-secondary');
-          }
-
-          controls.appendChild(scheduleBtn);
-          controls.appendChild(genBtn);
-          if (cachedEntry) {
-            controls.appendChild(delBtn);
-          }
-          if (copyBtn) controls.appendChild(copyBtn);
+          if (copyBtn && canView) controls.appendChild(copyBtn);
           if (viewCacheBtn) controls.appendChild(viewCacheBtn);
-          if (viewRemoteBtn) controls.appendChild(viewRemoteBtn);
+          
 
           d.appendChild(info);
           if (exampleLink) d.appendChild(exampleLink);
@@ -3043,6 +3577,7 @@
             if (focusLayer) focusLayer();
           });
           targetEl.appendChild(d);
+          } catch (err) { console.error('Error rendering layer', l, err); }
         });
         if (themes && themes.length) {
           const themeHeader = document.createElement('h3');
@@ -3052,6 +3587,7 @@
           themeHeader.style.fontWeight = '600';
           targetEl.appendChild(themeHeader);
           themes.forEach(theme => {
+            try {
             if (!theme || !theme.name) return;
             const themeRow = document.createElement('div');
             themeRow.className = 'layer';
@@ -3098,30 +3634,35 @@
             actions.addEventListener('click', (event) => event.stopPropagation());
 
             const themeObj = { name: theme.name, layers: sources };
-            const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
-            const scheduleThemeBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'theme', targetName: theme.name, configEntry: configTheme || null }));
-            actions.appendChild(scheduleThemeBtn);
-            actions.appendChild(cacheBtn);
-
-            const themeScheme = cachedTheme && cachedTheme.scheme ? cachedTheme.scheme : null;
-            const themeTileCrs = (cachedTheme && typeof cachedTheme.tile_crs === 'string') ? cachedTheme.tile_crs.toUpperCase() : '';
-            if (cachedTheme && themeScheme === 'xyz' && WEB_MERCATOR_CODES.includes(themeTileCrs)) {
-              const copyThemeBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
-                const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
-                navigator.clipboard.writeText(template).then(() => {
-                  showStatus(tr('Tile template copied to clipboard: {url}', { url: template }));
-                }).catch(err => {
-                  showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
-                });
-              });
-              actions.appendChild(copyThemeBtn);
+            
+            if (isAdmin) {
+              const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
+              const scheduleThemeBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'theme', targetName: theme.name, configEntry: configTheme || null }));
+              actions.appendChild(scheduleThemeBtn);
+              actions.appendChild(cacheBtn);
             }
 
-            const viewThemeBtn = makeIconButton('Open map viewer', 'eye', () => {
-              const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
-              window.open(url, '_blank', 'noopener');
-            }, 'btn-secondary');
-            actions.appendChild(viewThemeBtn);
+            if (canView) {
+              const viewThemeBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
+                const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
+                window.open(url, '_blank', 'noopener');
+              }, 'btn-secondary');
+              actions.appendChild(viewThemeBtn);
+
+              const themeScheme = cachedTheme && cachedTheme.scheme ? cachedTheme.scheme : null;
+              const themeTileCrs = (cachedTheme && typeof cachedTheme.tile_crs === 'string') ? cachedTheme.tile_crs.toUpperCase() : '';
+              if (cachedTheme && themeScheme === 'xyz' && WEB_MERCATOR_CODES.includes(themeTileCrs)) {
+                const copyThemeBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
+                  const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
+                  navigator.clipboard.writeText(template).then(() => {
+                    showStatus(tr('Tile template copied to clipboard: {url}', { url: template }));
+                  }).catch(err => {
+                    showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+                  });
+                });
+                actions.appendChild(copyThemeBtn);
+              }
+            }
 
             themeRow.appendChild(actions);
             let focusTheme = null;
@@ -3135,6 +3676,9 @@
               if (focusTheme) focusTheme();
             });
             targetEl.appendChild(themeRow);
+            } catch (err) {
+              console.error('Error rendering theme:', theme, err);
+            }
           });
         }
         syncRemoteButtons();
@@ -3243,10 +3787,10 @@
           }
           // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
           const state = extentStates.get(projectId);
-          const captured = state && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
-          if (captured) {
-            body.project_extent = captured.join(',');
-            body.extent_crs = 'EPSG:4326';
+          const extentPayload = getProjectedExtentPayload(projectId);
+          if (extentPayload) {
+            body.project_extent = extentPayload.extentString;
+            body.extent_crs = extentPayload.crs;
           }
           // remote opt-in
           if (allowRemoteCheckbox && allowRemoteCheckbox.checked) {
@@ -3315,6 +3859,10 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
           });
+          if (res.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
           const data = await res.json().catch(()=>null);
           if (!res.ok) {
             showStatus('Error: ' + (data?.details || res.statusText || JSON.stringify(data)), true);
@@ -3555,5 +4103,4 @@
         applyModeUI();
       }
     </script>
-  </body>
-</html>
+<%- include('partials/html-close') %>

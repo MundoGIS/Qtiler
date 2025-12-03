@@ -1,0 +1,75 @@
+<% const mode = headerMode || 'dashboard';
+   const active = typeof activeNav !== 'undefined' && activeNav ? String(activeNav) : null;
+   const isActive = (key) => (active === key ? ' is-active' : '');
+   const ariaCurrent = (key) => (active === key ? ' aria-current="page"' : '');
+   const isSimple = mode === 'simple' || mode === 'login' || mode === 'viewer' || mode === 'access';
+   const defaultTaglineKey = mode === 'portal' ? 'portal.tagline' : 'Tile caching console for QGIS projects.';
+   const defaultTaglineText = mode === 'portal'
+     ? 'WMTS services shared by MundoGIS'
+     : 'Tile caching console for QGIS projects.';
+   const taglineKey = (typeof headerTaglineKey !== 'undefined' && headerTaglineKey) ? headerTaglineKey : defaultTaglineKey;
+   const taglineText = (typeof headerTaglineText !== 'undefined' && headerTaglineText)
+     ? headerTaglineText
+     : defaultTaglineText;
+%>
+<header class="app-header<%= mode === 'portal' ? ' portal-header' : '' %>">
+  <div class="header-inner">
+    <div class="brand">
+      <a href="/index.html" class="brand-logo">Qtiler</a>
+      <span class="brand-tagline" data-i18n="<%= taglineKey %>"><%= taglineText %></span>
+    </div>
+    <% if (mode === 'portal') { %>
+      <nav class="main-nav" aria-label="Primary">
+        <a href="/index.html" class="nav-link<%= isActive('dashboard') %>"<%= ariaCurrent('dashboard') %> data-i18n="Dashboard">Dashboard</a>
+        <a href="/guide.html" class="nav-link" target="_blank" rel="noopener" data-i18n="User guide">User guide</a>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <% if (mode !== 'viewer') { %>
+          <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+          <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="sv">Svenska</option>
+          </select>
+        <% } %>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <div class="portal-actions">
+          <span id="session_badge" class="portal-badge" hidden></span>
+          <a id="portal_admin_link" class="portal-button" href="/admin" hidden style="display: none;" data-i18n="Admin console">Admin console</a>
+          <a id="portal_login_button" class="portal-button" href="/login" data-portal-login data-i18n="portal.login" style="display: none;">Sign in</a>
+          <button id="portal_logout_button" class="portal-button" type="button" data-i18n="portal.logout" hidden style="display: none;">Sign out</button>
+        </div>
+      </nav>
+    <% } else if (isSimple) { %>
+      <nav class="main-nav" aria-label="Primary">
+        <a href="/index.html" class="nav-link<%= isActive('dashboard') %>"<%= ariaCurrent('dashboard') %> data-i18n="Dashboard">Dashboard</a>
+        <a href="/guide.html" class="nav-link" target="_blank" rel="noopener" data-i18n="User guide">User guide</a>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+        <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="sv">Svenska</option>
+        </select>
+      </nav>
+    <% } else { %>
+      <nav class="main-nav" aria-label="Primary">
+        <a href="/index.html" class="nav-link<%= isActive('dashboard') %>"<%= ariaCurrent('dashboard') %> data-i18n="Dashboard">Dashboard</a>
+        <a href="/guide.html" class="nav-link<%= isActive('guide') %>"<%= ariaCurrent('guide') %> target="_blank" rel="noopener" data-i18n="User guide">User guide</a>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <label class="visually-hidden" for="language_selector" data-i18n="Language">Language</label>
+        <select id="language_selector" class="input-select nav-language-select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="sv">Svenska</option>
+        </select>
+        <div class="nav-divider" aria-hidden="true"></div>
+        <div class="nav-auth">
+          <span id="auth_user_badge" class="nav-user" hidden></span>
+          <a id="admin_console_link" href="/admin" class="nav-button" style="display: none;" data-i18n="Admin console">Admin console</a>
+          <a id="admin_install_dashboard" class="nav-button" href="/admin" style="display: none;" data-i18n="Install Admin Dashboard">Install Admin Dashboard</a>
+          <button id="auth_button" class="nav-button" type="button" style="display: none;" data-i18n="Login">Login</button>
+        </div>
+      </nav>
+    <% } %>
+  </div>
+</header>

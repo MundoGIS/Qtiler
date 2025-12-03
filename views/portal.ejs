@@ -1,0 +1,33 @@
+<%- include('partials/html-open', {
+  pageLang,
+  pageTitle: 'Qtiler · Public maps',
+  pageTitleI18nKey: 'portal.pageTitle',
+  extraStyles: ['/css/portal.css']
+}) %>
+  <div class="portal-shell">
+    <%- include('partials/header', { headerMode: 'portal', user, activeNav: activeNav || null }) %>
+
+    <main class="portal-main">
+      <section class="portal-intro">
+        <h1 data-i18n="portal.intro.heading">Available WMTS maps</h1>
+        <p data-i18n="portal.intro.subtitle">Browse publicly shared projects or sign in for more options.</p>
+      </section>
+
+      <section id="public_status" class="portal-status" aria-live="polite"></section>
+
+      <section id="public_empty" class="portal-empty" hidden>
+        <h2 data-i18n="portal.empty.heading">No public maps yet</h2>
+        <p data-i18n="portal.empty.detail">An administrator can share projects from the dashboard. Sign in to view the full console.</p>
+        <a class="portal-button primary" href="/login" data-portal-login data-i18n="portal.empty.button">Sign in</a>
+      </section>
+
+      <section id="public_list" class="portal-grid" hidden></section>
+    </main>
+
+    <%- include('partials/footer') %>
+  </div>
+<%- include('partials/html-close', {
+  footerScripts: [
+    { src: '/portal.js', type: 'module' }
+  ]
+}) %>
