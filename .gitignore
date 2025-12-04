@@ -36,9 +36,6 @@ Thumbs.db
 *.swp
 *.swo
 
-# Environment variables
-.env
-.env.local
 
 # QtilerAuth commercial files (not for public repo)
 tools/generate-qtilerauth-license.js
