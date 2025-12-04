@@ -39,3 +39,8 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+
+# QtilerAuth commercial files (not for public repo)
+tools/generate-qtilerauth-license.js
+tools/package-plugin.ps1
+plugins/QtilerAuth/LICENSE_QtilerAuth.txt
