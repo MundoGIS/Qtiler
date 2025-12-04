@@ -13,6 +13,10 @@ cache/
 temp_uploads/
 temp_zip/
 
+# Build and extras
+dist/
+extras/
+
 # Data files (sensitive information)
 data/auth-config.json
 data/auth-users.json
