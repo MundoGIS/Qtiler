@@ -97,25 +97,37 @@ a:focus {
   position: sticky;
   top: 0;
   z-index: 1400;
+  height: 101px;
+  overflow: visible;
 }
 
 
 .header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px 28px;
+  padding: 0 28px;
   display: flex;
   flex-wrap: nowrap;
   gap: 18px;
   align-items: center;
+  min-height: 101px;
+  height: 101px;
 }
 
 .brand {
   display: flex;
   flex-direction: row;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 0;
   min-width: 0;
+}
+
+.brand-logo-img {
+  height: 147px;
+  width: auto;
+  vertical-align: middle;
+  margin: -52px 0;
+  padding: 0;
 }
 
 .brand-logo {
