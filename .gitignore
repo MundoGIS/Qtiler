@@ -41,3 +41,4 @@ Thumbs.db
 tools/generate-qtilerauth-license.js
 tools/package-plugin.ps1
 plugins/QtilerAuth/LICENSE_QtilerAuth.txt
+package-qtilerauth.bat

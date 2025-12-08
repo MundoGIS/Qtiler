@@ -1094,6 +1094,305 @@
         }
       }
 
+      // Layer details modal (floating centered)
+      let layerDetailsOverlay = null;
+      let layerDetailsModal = null;
+
+      function ensureLayerDetailsModal() {
+        if (layerDetailsOverlay) return;
+        
+        layerDetailsOverlay = document.createElement('div');
+        layerDetailsOverlay.style.position = 'fixed';
+        layerDetailsOverlay.style.top = '0';
+        layerDetailsOverlay.style.left = '0';
+        layerDetailsOverlay.style.right = '0';
+        layerDetailsOverlay.style.bottom = '0';
+        layerDetailsOverlay.style.background = 'rgba(0, 0, 0, 0.5)';
+        layerDetailsOverlay.style.display = 'none';
+        layerDetailsOverlay.style.zIndex = '9999';
+        layerDetailsOverlay.style.alignItems = 'center';
+        layerDetailsOverlay.style.justifyContent = 'center';
+        layerDetailsOverlay.style.padding = '20px';
+        layerDetailsOverlay.style.overflow = 'auto';
+        
+        layerDetailsModal = document.createElement('div');
+        layerDetailsModal.style.background = 'white';
+        layerDetailsModal.style.borderRadius = '8px';
+        layerDetailsModal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+        layerDetailsModal.style.maxWidth = '900px';
+        layerDetailsModal.style.width = '100%';
+        layerDetailsModal.style.maxHeight = '90vh';
+        layerDetailsModal.style.overflow = 'auto';
+        layerDetailsModal.style.position = 'relative';
+        
+        layerDetailsOverlay.appendChild(layerDetailsModal);
+        document.body.appendChild(layerDetailsOverlay);
+        
+        layerDetailsOverlay.addEventListener('click', (e) => {
+          if (e.target === layerDetailsOverlay) {
+            closeLayerDetailsModal();
+          }
+        });
+      }
+
+      function closeLayerDetailsModal() {
+        if (layerDetailsOverlay) {
+          layerDetailsOverlay.style.display = 'none';
+          if (layerDetailsModal) {
+            layerDetailsModal.innerHTML = '';
+          }
+        }
+      }
+
+      async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin }) {
+        if (!projectId || !layerData) return;
+        
+        ensureLayerDetailsModal();
+        layerDetailsModal.innerHTML = '';
+        
+        // Header
+        const header = document.createElement('div');
+        header.style.padding = '24px';
+        header.style.borderBottom = '1px solid rgba(0, 0, 0, 0.1)';
+        
+        const title = document.createElement('h2');
+        title.style.margin = '0 0 8px 0';
+        title.style.fontSize = '20px';
+        title.textContent = 'Layer Details';
+        header.appendChild(title);
+        
+        const layerName = document.createElement('div');
+        layerName.style.fontSize = '14px';
+        layerName.style.color = 'rgba(0, 0, 0, 0.6)';
+        layerName.textContent = layerData.name || 'Unknown layer';
+        header.appendChild(layerName);
+        
+        layerDetailsModal.appendChild(header);
+        
+        // Content
+        const content = document.createElement('div');
+        content.style.padding = '24px';
+
+        // Fetch cached layer data to get tile_matrix_set
+        let tileMatrixSet = null;
+        try {
+          const cacheRes = await fetch(`/projects/${encodeURIComponent(projectId)}/cached`);
+          if (cacheRes.ok) {
+            const cacheData = await cacheRes.json();
+            const cachedLayer = cacheData.layers?.find(l => l.name === layerData.name);
+            if (cachedLayer) {
+              tileMatrixSet = cachedLayer.tile_matrix_set;
+              console.log('Found tile_matrix_set:', tileMatrixSet);
+            } else {
+              console.warn('Cached layer not found for:', layerData.name);
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to fetch cached data', err);
+        }
+        
+        // If we didn't get tile_matrix_set, try to get it from cachedEntry
+        if (!tileMatrixSet && cachedEntry && cachedEntry.tile_matrix_set) {
+          tileMatrixSet = cachedEntry.tile_matrix_set;
+          console.log('Using tile_matrix_set from cachedEntry');
+        }
+
+        // Build formatted output
+        const output = {};
+        
+        // Add layer name
+        output.layerName = layerData.name;
+        
+        // CRS
+        if (layerData.crs) {
+          output.crs = layerData.crs;
+        }
+        
+        // projection Extent from tile_matrix_set
+        if (tileMatrixSet && tileMatrixSet.topLeftCorner && cachedEntry && cachedEntry.extent) {
+          const tlc = tileMatrixSet.topLeftCorner;
+          const ext = cachedEntry.extent;
+          const matrices = tileMatrixSet.matrices || tileMatrixSet.matrixSet || [];
+          if (matrices.length > 0) {
+            const finestMatrix = matrices[matrices.length - 1];
+            const tileSize = tileMatrixSet.tile_width || 256;
+            const res = finestMatrix.resolution;
+            const width = finestMatrix.matrix_width * tileSize * res;
+            const height = finestMatrix.matrix_height * tileSize * res;
+            output.projectionExtent = [tlc[0], tlc[1] - height, tlc[0] + width, tlc[1]];
+          }
+        }
+
+        // Extent
+        if (cachedEntry && cachedEntry.extent) {
+          output.extent = cachedEntry.extent;
+        }
+        
+        // Origin / topLeftCorner
+        if (tileMatrixSet && tileMatrixSet.topLeftCorner) {
+          output.origin = tileMatrixSet.topLeftCorner;
+        }
+
+        // Center (calculate from extent)
+        if (output.extent && output.extent.length === 4) {
+          const [minX, minY, maxX, maxY] = output.extent;
+          output.center = [(minX + maxX) / 2, (minY + maxY) / 2];
+        }
+
+        // Resolutions from tile_matrix_set
+        if (tileMatrixSet) {
+          console.log('tileMatrixSet structure:', Object.keys(tileMatrixSet));
+          if (tileMatrixSet.matrices && Array.isArray(tileMatrixSet.matrices)) {
+            output.resolutions = tileMatrixSet.matrices.map(m => m.resolution);
+            console.log('Got resolutions from matrices:', output.resolutions.length);
+          } else if (tileMatrixSet.matrixSet && Array.isArray(tileMatrixSet.matrixSet)) {
+            output.resolutions = tileMatrixSet.matrixSet.map(m => m.resolution);
+            console.log('Got resolutions from matrixSet:', output.resolutions.length);
+          } else {
+            console.warn('No matrices or matrixSet found in tileMatrixSet');
+          }
+        } else {
+          console.warn('No tileMatrixSet available');
+        }
+
+        // Create output text
+        const outputText = JSON.stringify(output, null, 2);
+
+        // Create pre element for output
+        const pre = document.createElement('pre');
+        pre.style.margin = '0';
+        pre.style.fontSize = '13px';
+        pre.style.lineHeight = '1.5';
+        pre.style.whiteSpace = 'pre';
+        pre.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
+        pre.style.padding = '16px';
+        pre.style.background = '#f8f9fa';
+        pre.style.borderRadius = '4px';
+        pre.style.maxHeight = '400px';
+        pre.style.overflowX = 'auto';
+        pre.style.overflowY = 'auto';
+        pre.style.border = '1px solid #e0e0e0';
+        pre.textContent = outputText;
+        content.appendChild(pre);
+
+        pre.textContent = outputText;
+        content.appendChild(pre);
+
+        // If admin, add editable resolutions section
+        if (isAdmin && output.resolutions) {
+          const editSection = document.createElement('div');
+          editSection.style.marginTop = '24px';
+          editSection.style.paddingTop = '24px';
+          editSection.style.borderTop = '1px solid rgba(0, 0, 0, 0.1)';
+
+          const editLabel = document.createElement('div');
+          editLabel.style.fontSize = '14px';
+          editLabel.style.fontWeight = '600';
+          editLabel.style.marginBottom = '12px';
+          editLabel.style.color = '#333';
+          editLabel.textContent = 'Edit Resolutions (Admin only)';
+          editSection.appendChild(editLabel);
+
+          const resTextarea = document.createElement('textarea');
+          resTextarea.style.width = '100%';
+          resTextarea.style.minHeight = '200px';
+          resTextarea.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
+          resTextarea.style.fontSize = '12px';
+          resTextarea.style.lineHeight = '1.5';
+          resTextarea.style.padding = '12px';
+          resTextarea.style.borderRadius = '4px';
+          resTextarea.style.border = '1px solid #ccc';
+          resTextarea.style.background = '#f8f9fa';
+          resTextarea.style.resize = 'vertical';
+          resTextarea.value = JSON.stringify(output.resolutions, null, 2);
+          editSection.appendChild(resTextarea);
+
+          const saveBtn = document.createElement('button');
+          saveBtn.type = 'button';
+          saveBtn.className = 'btn btn-primary';
+          saveBtn.textContent = 'Save Resolutions';
+          saveBtn.style.marginTop = '12px';
+          saveBtn.addEventListener('click', async () => {
+            try {
+              const newResolutions = JSON.parse(resTextarea.value);
+              if (!Array.isArray(newResolutions)) {
+                throw new Error('Resolutions must be an array');
+              }
+              
+              const layerName = layerData.name;
+              const configRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`);
+              const config = await configRes.json();
+              
+              if (!config.layers) config.layers = {};
+              if (!config.layers[layerName]) config.layers[layerName] = {};
+              config.layers[layerName].resolutions = newResolutions;
+
+              const saveRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+              });
+
+              if (!saveRes.ok) throw new Error('Failed to save');
+              
+              showStatus(tr('Resolutions saved successfully'));
+              closeLayerDetailsModal();
+              loadLayers({ forceConfigReload: true });
+            } catch (err) {
+              showStatus(tr('Failed to save resolutions: {error}', { error: String(err.message || err) }), true);
+            }
+          });
+          editSection.appendChild(saveBtn);
+
+          content.appendChild(editSection);
+        }
+
+        layerDetailsModal.appendChild(content);
+
+        // Footer with buttons
+        const footer = document.createElement('div');
+        footer.style.padding = '16px 24px';
+        footer.style.borderTop = '1px solid rgba(0, 0, 0, 0.1)';
+        footer.style.display = 'flex';
+        footer.style.gap = '12px';
+        footer.style.justifyContent = 'flex-end';
+        footer.style.background = '#f8f9fa';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn btn-secondary';
+        copyBtn.textContent = 'Copy to clipboard';
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(outputText).then(() => {
+            showStatus(tr('Copied to clipboard'));
+          }).catch(err => {
+            showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+          });
+        });
+        footer.appendChild(copyBtn);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'btn btn-primary';
+        closeBtn.textContent = 'Close';
+        closeBtn.addEventListener('click', closeLayerDetailsModal);
+        footer.appendChild(closeBtn);
+
+        layerDetailsModal.appendChild(footer);
+
+        // Show modal
+        layerDetailsOverlay.style.display = 'flex';
+        
+        // ESC key to close
+        const escHandler = (e) => {
+          if (e.key === 'Escape') {
+            closeLayerDetailsModal();
+            document.removeEventListener('keydown', escHandler);
+          }
+        };
+        document.addEventListener('keydown', escHandler);
+      }
+
       function openScheduleDialog({ projectId, targetType, targetName, configEntry }){
         if (!projectId || !targetType || !targetName) return;
         ensureScheduleDialogElements();
@@ -1874,6 +2173,8 @@
         copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.75 4A3.75 3.75 0 0 0 6 7.75v8.5A3.75 3.75 0 0 0 9.75 20h8.5A3.75 3.75 0 0 0 22 16.25v-8.5A3.75 3.75 0 0 0 18.25 4h-8.5Zm0 1.5h8.5A2.25 2.25 0 0 1 20.5 7.75v8.5a2.25 2.25 0 0 1-2.25 2.25h-8.5A2.25 2.25 0 0 1 7.5 16.25v-8.5A2.25 2.25 0 0 1 9.75 5.5ZM4.75 7A.75.75 0 0 1 5.5 7.75v9a.75.75 0 0 1-1.5 0v-9A.75.75 0 0 1 4.75 7Z"/></svg>',
         eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c4.97 0 9.15 3.16 10.63 7.5C21.15 16.84 16.96 20 12 20s-9.15-3.16-10.63-7.5C2.85 8.16 7.04 5 12 5Zm0 1.5c-4.09 0-7.68 2.5-9.04 6 1.36 3.5 4.95 6 9.04 6 4.09 0 7.68-2.5 9.04-6-1.36-3.5-4.95-6-9.04-6Zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>',
         link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.06 5.53a3.75 3.75 0 0 1 5.3-.02l.13.13a3.75 3.75 0 0 1 0 5.3l-1.84 1.84a.75.75 0 0 1-1.06-1.06l1.84-1.84a2.25 2.25 0 0 0 0-3.18l-.13-.13a2.25 2.25 0 0 0-3.18 0l-1.84 1.84a.75.75 0 1 1-1.06-1.06l1.84-1.84Zm-6.25 6.23a.75.75 0 0 1 1.06 1.06l-1.84 1.84a2.25 2.25 0 0 0 0 3.18l.13.13a2.25 2.25 0 0 0 3.18 0l1.84-1.84a.75.75 0 0 1 1.06 1.06l-1.84 1.84a3.75 3.75 0 0 1-5.3 0l-.13-.13a3.75 3.75 0 0 1 0-5.3l1.84-1.84Zm6.59-4.13a.75.75 0 0 1 0 1.06l-5.02 5.02a.75.75 0 0 1-1.06-1.06l5.02-5.02a.75.75 0 0 1 1.06 0Z"/></svg>'
+        ,
+        info: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm0 7a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75ZM12 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/></svg>'
         ,
         refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 4a.75.75 0 0 1 .75.75v2.19A7.25 7.25 0 0 1 20.02 12a.75.75 0 0 1-1.5 0 5.75 5.75 0 1 0-10.95-2h2.18a.75.75 0 0 1 .53 1.28l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5A.75.75 0 0 1 2.75 11h2.18a7.25 7.25 0 0 1 13.57-3.56V4.75a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-.75.75h-4a.75.75 0 0 1 0-1.5h2.19A5.75 5.75 0 1 0 3.5 12a.75.75 0 0 1-1.5 0A7.25 7.25 0 0 1 5.5 6.94V4.75a.75.75 0 0 1 .75-.75Z"/></svg>'
         ,
@@ -3559,8 +3860,22 @@
             }, 'btn-secondary');
           }
 
+          // Layer details button (for cached layers)
+          let detailsBtn = null;
+          if (hasCache) {
+            detailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
+              toggleLayerDetails(d, { 
+                projectId: project.id, 
+                layerData: l, 
+                cachedEntry, 
+                isAdmin 
+              });
+            }, 'btn-secondary');
+          }
+
           if (copyBtn && canView) controls.appendChild(copyBtn);
           if (viewCacheBtn) controls.appendChild(viewCacheBtn);
+          if (detailsBtn) controls.appendChild(detailsBtn);
           
 
           d.appendChild(info);
@@ -3661,6 +3976,19 @@
                   });
                 });
                 actions.appendChild(copyThemeBtn);
+              }
+
+              // Theme details button
+              if (cachedTheme) {
+                const themeDetailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
+                  toggleLayerDetails(themeRow, { 
+                    projectId: project.id, 
+                    layerData: themeObj, 
+                    cachedEntry: cachedTheme, 
+                    isAdmin 
+                  });
+                }, 'btn-secondary');
+                actions.appendChild(themeDetailsBtn);
               }
             }
 
