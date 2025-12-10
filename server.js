@@ -2199,6 +2199,17 @@ const buildProjectConfigPatch = (input = {}) => {
       if (info.lastResult) layerPatch.lastResult = info.lastResult;
       if (info.lastMessage) layerPatch.lastMessage = info.lastMessage;
       if (info.lastRunAt) layerPatch.lastRunAt = info.lastRunAt;
+      
+      // Allow admin to set custom layer properties for technical configuration
+      if (info.layerName) layerPatch.layerName = info.layerName;
+      if (info.crs) layerPatch.crs = info.crs;
+      if (Array.isArray(info.extent)) layerPatch.extent = info.extent;
+      if (Array.isArray(info.projectionExtent)) layerPatch.projectionExtent = info.projectionExtent;
+      if (Array.isArray(info.origin)) layerPatch.origin = info.origin;
+      if (Array.isArray(info.center)) layerPatch.center = info.center;
+      if (Array.isArray(info.resolutions)) layerPatch.resolutions = info.resolutions;
+      if (info.tileGridId) layerPatch.tileGridId = info.tileGridId;
+      
       if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
         if (info.schedule === null) {
           layerPatch.schedule = {

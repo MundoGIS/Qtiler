@@ -323,6 +323,43 @@
                 <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
                 <p data-i18n-html="guide.leafletViewer.body">Launch the Leaflet viewer from the eye icon next to each layer or theme. Compare cached tiles against the remote source or preview the cache on its own.</p>
               </div>
+              <div class="card-mini" style="grid-column: 1 / -1;">
+                <h3 data-i18n="guide.origoTitle">Using Qtiler with Origo Map</h3>
+                <p data-i18n-html="guide.origo.body">For Origo-based portals, point the source to the REST XYZ template (not GetCapabilities) and keep the native CRS. Example source configuration:</p>
+                <pre><code>{
+  "source": "Qtiler_Topografiska_Webbkartan",
+  "url": "https://ext.rabbalshedekraft.se/wmts/bakgrunder/Topografiska_Webbkartan/{z}/{x}/{y}.png",
+  "type": "XYZ",
+  "projection": "EPSG:3006"
+}</code></pre>
+                <p data-i18n-html="guide.origo.layerLabel">Example layer entry that references the source:</p>
+                <pre><code>{
+  "name": "bakgrunder_Topografiska_Webbkartan",
+  "title": "Topografiska_Webbkartan",
+  "group": "background",
+  "source": "Qtiler_Topografiska_Webbkartan",
+  "type": "XYZ",
+  "format": "image/png",
+  "visible": true,
+  "style": "karta_farg",
+  "attribution": "&copy; Lantmäteriet",
+  "tileGrid": {
+    "alignBottomLeft": false,
+    "origin": [ -908609.3787282843, 7825048.779051208 ],
+    "resolutions": [
+      11426.844956133727, 5713.422478066864, 2856.711239033432,
+      1428.355619516716, 714.177809758358, 357.088904879179,
+      178.5444524395895, 89.27222621979475, 44.63611310989737,
+      22.318056554948686, 11.159028277474343, 5.579514138737172,
+      2.789757069368586, 1.394878534684293, 0.6974392673421465,
+      0.3487196336710732, 0.1743598168355366, 0.0871799084177683,
+      0.04358995420888415, 0.021794977104442077, 0.010897488552221038,
+      0.005448744276110519, 0.0027243721380552596
+    ]
+  }
+}</code></pre>
+                <div class="tip" data-i18n="guide.origo.extentTip">Get the origin, resolutions, and extent from the layer/theme info dialog (ⓘ) in the dashboard. Copy the values from the "Layer Details" modal under WMTS URLs.</div>
+              </div>
             </div>
           </section>
 
@@ -413,6 +450,10 @@
             "guide.tip2": "Las cachés viven en <code>cache/&lt;project&gt;/</code>. Cada ejecución actualiza <code>index.json</code> con <code>kind</code>, niveles de zoom, capas de origen y marcas de tiempo.",
             "guide.section4Title": "Publicar WMTS",
             "guide.section4.body": "El backend expone un endpoint mínimo de GetCapabilities en <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. Todas las capas y temas cacheados aparecen como capas WMTS listas para usar.",
+            "guide.origoTitle": "Usar Qtiler con Origo Map",
+            "guide.origo.body": "En portales Origo usa la plantilla REST XYZ (no GetCapabilities) manteniendo el CRS nativo. Ejemplo de fuente:",
+            "guide.origo.layerLabel": "Ejemplo de entrada de capa que referencia la fuente:",
+            "guide.origo.extentTip": "Obtén origen, resoluciones y extensión desde el diálogo de información (ⓘ) en el panel. Copia los valores desde el modal \"Layer Details\" en la sección WMTS URLs.",
             "guide.gisIntegration": "Integración en clientes GIS",
             "guide.gisIntegration.body1": "Carga la URL de capacidades para registrar todas las capas de una vez.",
             "guide.gisIntegration.body2": "Usa URLs de teselas individuales cuando solo necesites un recurso específico.",
@@ -478,6 +519,10 @@
             "guide.tip2": "Caches finns i <code>cache/&lt;project&gt;/</code>. Varje körning uppdaterar <code>index.json</code> med <code>kind</code>, zoomnivåer, källager och tidsstämplar.",
             "guide.section4Title": "Publicera WMTS",
             "guide.section4.body": "Backend:en exponerar ett minimalt GetCapabilities-endpoint på <code>/wmts?SERVICE=WMTS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code>. Alla cachade lager och teman visas som färdiga WMTS-lager.",
+            "guide.origoTitle": "Använd Qtiler med Origo Map",
+            "guide.origo.body": "För Origo-portaler: peka källan mot REST-XYZ-mallen (inte GetCapabilities) och behåll det ursprungliga CRS. Exempel på källa:",
+            "guide.origo.layerLabel": "Exempel på lagerpost som refererar till källan:",
+            "guide.origo.extentTip": "Hämta origin, upplösningar och extent via info-dialogen (ⓘ) i dashboarden. Kopiera värdena från modalen \"Layer Details\" under WMTS-URL:er.",
             "guide.gisIntegration": "GIS-klientintegration",
             "guide.gisIntegration.body1": "Ladda URL:en för Capabilities för att registrera alla lager på en gång.",
             "guide.gisIntegration.body2": "Använd enskilda tile-URL:er när du bara behöver en specifik resurs.",

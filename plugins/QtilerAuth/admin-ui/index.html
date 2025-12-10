@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>QtilerAuth Administration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/plugins/auth-admin/assets/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <div class="header-copy">
+        <h1>QtilerAuth Administration</h1>
+        <p>Manage WMTS access control for your deployment.</p>
+      </div>
+      <button id="go-dashboard" type="button" class="header-button" hidden>Back to dashboard</button>
+    </div>
+  </header>
+  <main>
+    <section id="messages" aria-live="polite"></section>
+
+    <section id="users-section" class="card">
+      <div class="section-head">
+        <h2>Users</h2>
+        <button id="refresh-users" type="button">Refresh</button>
+      </div>
+      <div class="section-body">
+        <div class="form-panel">
+          <h3 id="user-form-title">Create user</h3>
+          <form id="user-form" autocomplete="off">
+            <input type="hidden" name="userId" id="user-id">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="Leave blank to keep" autocomplete="new-password">
+
+            <label for="role">Role</label>
+            <select id="role" name="role">
+              <option value="authenticated">User</option>
+              <option value="admin">Administrator</option>
+            </select>
+
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="active">Active</option>
+              <option value="disabled">Suspended</option>
+            </select>
+
+            <label for="projects">Projects (comma-separated IDs)</label>
+            <input type="text" id="projects" name="projects" placeholder="e.g. demo,carto">
+
+            <div class="form-actions">
+              <button type="submit" id="user-form-submit">Save</button>
+              <button type="button" id="user-form-reset">Cancel</button>
+            </div>
+          </form>
+        </div>
+        <div class="table-panel">
+          <table id="users-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Projects</th>
+                <th>Created</th>
+                <th>Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="projects-section" class="card">
+      <div class="section-head">
+        <h2>WMTS project access</h2>
+        <button id="refresh-projects" type="button">Refresh</button>
+      </div>
+      <div class="section-body">
+        <div class="public-projects-panel">
+          <h3>Public projects</h3>
+          <p class="help">Public projects are accessible to everyone without authentication.</p>
+          <div id="public-projects-list"></div>
+        </div>
+        <div class="access-controls">
+          <h3>User-specific access</h3>
+          <p class="help">Assign private projects to specific users. Admins always have access to all projects.</p>
+          <table id="project-access-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Projects</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="license-section" class="card license-card">
+      <div class="section-head">
+        <h2>License &amp; support</h2>
+      </div>
+      <div class="section-body">
+        <p>QtilerAuth is distributed under the proprietary <strong>QtilerAuth Commercial License</strong>. Purchase grants a perpetual, non-transferable right to deploy the plugin inside your own Qtiler environments.</p>
+        <ul>
+          <li>Redistribution, resale, or public sharing of the ZIP is not allowed.</li>
+          <li>Refer to <code>LICENSE_QtilerAuth.txt</code> in this package for the complete agreement.</li>
+          <li>Need help with deployment or license questions? Contact <a href="mailto:abel.gonzalez@mundogis.se">abel.gonzalez@mundogis.se</a> or visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/plugins/auth-admin/assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "QtilerAuth",
+  "version": "0.1.0",
+  "displayName": "Authentication & Access Control",
+  "description": "Adds user management, JWT auth, and project-level permissions.",
+  "autoEnable": false,
+  "license": "QtilerAuth Commercial License",
+  "licenseFile": "LICENSE_QtilerAuth.txt",
+  "supportContact": "abel.gonzalez@mundogis.se"
+}

@@ -1161,11 +1161,11 @@
         title.textContent = 'Layer Details';
         header.appendChild(title);
         
-        const layerName = document.createElement('div');
-        layerName.style.fontSize = '14px';
-        layerName.style.color = 'rgba(0, 0, 0, 0.6)';
-        layerName.textContent = layerData.name || 'Unknown layer';
-        header.appendChild(layerName);
+        const layerNameEl = document.createElement('div');
+        layerNameEl.style.fontSize = '14px';
+        layerNameEl.style.color = 'rgba(0, 0, 0, 0.6)';
+        layerNameEl.textContent = layerData.name || 'Unknown layer';
+        header.appendChild(layerNameEl);
         
         layerDetailsModal.appendChild(header);
         
@@ -1175,24 +1175,9 @@
 
         // Fetch cached layer data to get tile_matrix_set
         let tileMatrixSet = null;
-        try {
-          const cacheRes = await fetch(`/projects/${encodeURIComponent(projectId)}/cached`);
-          if (cacheRes.ok) {
-            const cacheData = await cacheRes.json();
-            const cachedLayer = cacheData.layers?.find(l => l.name === layerData.name);
-            if (cachedLayer) {
-              tileMatrixSet = cachedLayer.tile_matrix_set;
-              console.log('Found tile_matrix_set:', tileMatrixSet);
-            } else {
-              console.warn('Cached layer not found for:', layerData.name);
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to fetch cached data', err);
-        }
         
-        // If we didn't get tile_matrix_set, try to get it from cachedEntry
-        if (!tileMatrixSet && cachedEntry && cachedEntry.tile_matrix_set) {
+        // Use tile_matrix_set from cachedEntry if available
+        if (cachedEntry && cachedEntry.tile_matrix_set) {
           tileMatrixSet = cachedEntry.tile_matrix_set;
           console.log('Using tile_matrix_set from cachedEntry');
         }
@@ -1239,7 +1224,7 @@
           output.center = [(minX + maxX) / 2, (minY + maxY) / 2];
         }
 
-        // Resolutions from tile_matrix_set
+        // Resolutions from tile_matrix_set (always use project tile grid)
         if (tileMatrixSet) {
           console.log('tileMatrixSet structure:', Object.keys(tileMatrixSet));
           if (tileMatrixSet.matrices && Array.isArray(tileMatrixSet.matrices)) {
@@ -1250,6 +1235,11 @@
             console.log('Got resolutions from matrixSet:', output.resolutions.length);
           } else {
             console.warn('No matrices or matrixSet found in tileMatrixSet');
+          }
+          
+          // Store tile grid ID for editing
+          if (tileMatrixSet.id) {
+            output.tileGridId = tileMatrixSet.id;
           }
         } else {
           console.warn('No tileMatrixSet available');
@@ -1275,11 +1265,117 @@
         pre.textContent = outputText;
         content.appendChild(pre);
 
-        pre.textContent = outputText;
-        content.appendChild(pre);
+        // WMTS URLs section
+        const wmtsSection = document.createElement('div');
+        wmtsSection.style.marginTop = '24px';
+        wmtsSection.style.paddingTop = '24px';
+        wmtsSection.style.borderTop = '1px solid rgba(0, 0, 0, 0.1)';
 
-        // If admin, add editable resolutions section
-        if (isAdmin && output.resolutions) {
+        const wmtsLabel = document.createElement('div');
+        wmtsLabel.style.fontSize = '14px';
+        wmtsLabel.style.fontWeight = '600';
+        wmtsLabel.style.marginBottom = '12px';
+        wmtsLabel.style.color = '#333';
+        wmtsLabel.textContent = 'WMTS URLs';
+        wmtsSection.appendChild(wmtsLabel);
+
+        // Determine if it's a theme or layer
+        const isTheme = layerData.layers && Array.isArray(layerData.layers);
+        const layerName = layerData.name;
+        const xyzPath = isTheme
+          ? `/wmts/${encodeURIComponent(projectId)}/themes/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`
+          : `/wmts/${encodeURIComponent(projectId)}/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`;
+
+        // XYZ URL (for Origo and similar clients)
+        const xyzUrl = `${window.location.origin}${xyzPath}`;
+        
+        const xyzLabel = document.createElement('div');
+        xyzLabel.style.fontSize = '12px';
+        xyzLabel.style.fontWeight = '600';
+        xyzLabel.style.marginTop = '12px';
+        xyzLabel.style.marginBottom = '4px';
+        xyzLabel.style.color = '#666';
+        xyzLabel.textContent = 'XYZ URL (for Origo Web Map):';
+        wmtsSection.appendChild(xyzLabel);
+
+        const xyzUrlContainer = document.createElement('div');
+        xyzUrlContainer.style.display = 'flex';
+        xyzUrlContainer.style.gap = '8px';
+        xyzUrlContainer.style.marginBottom = '16px';
+
+        const xyzUrlInput = document.createElement('input');
+        xyzUrlInput.type = 'text';
+        xyzUrlInput.readOnly = true;
+        xyzUrlInput.value = xyzUrl;
+        xyzUrlInput.style.flex = '1';
+        xyzUrlInput.style.padding = '8px';
+        xyzUrlInput.style.fontFamily = 'Consolas, Monaco, monospace';
+        xyzUrlInput.style.fontSize = '12px';
+        xyzUrlInput.style.border = '1px solid #ccc';
+        xyzUrlInput.style.borderRadius = '4px';
+        xyzUrlInput.style.background = '#f8f9fa';
+        xyzUrlContainer.appendChild(xyzUrlInput);
+
+        const xyzCopyBtn = document.createElement('button');
+        xyzCopyBtn.type = 'button';
+        xyzCopyBtn.className = 'btn btn-secondary btn-sm';
+        xyzCopyBtn.textContent = 'Copy';
+        xyzCopyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(xyzUrl).then(() => {
+            showStatus('XYZ URL copied to clipboard');
+          }).catch(err => {
+            showStatus('Copy failed: ' + String(err), true);
+          });
+        });
+        xyzUrlContainer.appendChild(xyzCopyBtn);
+        wmtsSection.appendChild(xyzUrlContainer);
+
+        // GetCapabilities URL (standard WMTS)
+        const capabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`;
+        
+        const capLabel = document.createElement('div');
+        capLabel.style.fontSize = '12px';
+        capLabel.style.fontWeight = '600';
+        capLabel.style.marginBottom = '4px';
+        capLabel.style.color = '#666';
+        capLabel.textContent = 'GetCapabilities URL (standard WMTS):';
+        wmtsSection.appendChild(capLabel);
+
+        const capUrlContainer = document.createElement('div');
+        capUrlContainer.style.display = 'flex';
+        capUrlContainer.style.gap = '8px';
+
+        const capUrlInput = document.createElement('input');
+        capUrlInput.type = 'text';
+        capUrlInput.readOnly = true;
+        capUrlInput.value = capabilitiesUrl;
+        capUrlInput.style.flex = '1';
+        capUrlInput.style.padding = '8px';
+        capUrlInput.style.fontFamily = 'Consolas, Monaco, monospace';
+        capUrlInput.style.fontSize = '12px';
+        capUrlInput.style.border = '1px solid #ccc';
+        capUrlInput.style.borderRadius = '4px';
+        capUrlInput.style.background = '#f8f9fa';
+        capUrlContainer.appendChild(capUrlInput);
+
+        const capCopyBtn = document.createElement('button');
+        capCopyBtn.type = 'button';
+        capCopyBtn.className = 'btn btn-secondary btn-sm';
+        capCopyBtn.textContent = 'Copy';
+        capCopyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(capabilitiesUrl).then(() => {
+            showStatus('GetCapabilities URL copied to clipboard');
+          }).catch(err => {
+            showStatus('Copy failed: ' + String(err), true);
+          });
+        });
+        capUrlContainer.appendChild(capCopyBtn);
+        wmtsSection.appendChild(capUrlContainer);
+
+        content.appendChild(wmtsSection);
+
+        // If admin, add editable fields section
+        if (isAdmin) {
           const editSection = document.createElement('div');
           editSection.style.marginTop = '24px';
           editSection.style.paddingTop = '24px';
@@ -1290,56 +1386,80 @@
           editLabel.style.fontWeight = '600';
           editLabel.style.marginBottom = '12px';
           editLabel.style.color = '#333';
-          editLabel.textContent = 'Edit Resolutions (Admin only)';
+          editLabel.textContent = 'Edit Configuration (Admin only)';
           editSection.appendChild(editLabel);
 
-          const resTextarea = document.createElement('textarea');
-          resTextarea.style.width = '100%';
-          resTextarea.style.minHeight = '200px';
-          resTextarea.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
-          resTextarea.style.fontSize = '12px';
-          resTextarea.style.lineHeight = '1.5';
-          resTextarea.style.padding = '12px';
-          resTextarea.style.borderRadius = '4px';
-          resTextarea.style.border = '1px solid #ccc';
-          resTextarea.style.background = '#f8f9fa';
-          resTextarea.style.resize = 'vertical';
-          resTextarea.value = JSON.stringify(output.resolutions, null, 2);
-          editSection.appendChild(resTextarea);
+          const editDescription = document.createElement('div');
+          editDescription.style.fontSize = '12px';
+          editDescription.style.marginBottom = '12px';
+          editDescription.style.color = '#666';
+          editDescription.innerHTML = 'Edit all fields including resolutions. <strong>Note:</strong> Changing resolutions affects the project tile grid (<code>' + (output.tileGridId || 'auto-generated') + '</code>).';
+          editSection.appendChild(editDescription);
+
+          const configTextarea = document.createElement('textarea');
+          configTextarea.style.width = '100%';
+          configTextarea.style.minHeight = '300px';
+          configTextarea.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
+          configTextarea.style.fontSize = '12px';
+          configTextarea.style.lineHeight = '1.5';
+          configTextarea.style.padding = '12px';
+          configTextarea.style.borderRadius = '4px';
+          configTextarea.style.border = '1px solid #ccc';
+          configTextarea.style.background = '#f8f9fa';
+          configTextarea.style.resize = 'vertical';
+          configTextarea.value = outputText;
+          editSection.appendChild(configTextarea);
 
           const saveBtn = document.createElement('button');
           saveBtn.type = 'button';
           saveBtn.className = 'btn btn-primary';
-          saveBtn.textContent = 'Save Resolutions';
+          saveBtn.textContent = 'Save Configuration';
           saveBtn.style.marginTop = '12px';
           saveBtn.addEventListener('click', async () => {
             try {
-              const newResolutions = JSON.parse(resTextarea.value);
-              if (!Array.isArray(newResolutions)) {
-                throw new Error('Resolutions must be an array');
-              }
+              const editedData = JSON.parse(configTextarea.value);
+              console.log('Parsed data to save:', editedData);
               
               const layerName = layerData.name;
-              const configRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`);
-              const config = await configRes.json();
+              console.log('Saving to layer:', layerName);
               
-              if (!config.layers) config.layers = {};
-              if (!config.layers[layerName]) config.layers[layerName] = {};
-              config.layers[layerName].resolutions = newResolutions;
+              // Build the patch request with layers object
+              const patchData = {
+                layers: {
+                  [layerName]: editedData
+                }
+              };
+              
+              console.log('Patch data:', patchData);
 
+              // Save configuration
               const saveRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                body: JSON.stringify(patchData)
               });
 
-              if (!saveRes.ok) throw new Error('Failed to save');
+              console.log('Save response status:', saveRes.status);
               
-              showStatus(tr('Resolutions saved successfully'));
+              if (!saveRes.ok) {
+                const errorText = await saveRes.text();
+                console.error('Save error response:', errorText);
+                throw new Error(`Server error (${saveRes.status}): ${errorText}`);
+              }
+              
+              const result = await saveRes.json();
+              console.log('Save result:', result);
+              console.log('Saved layer config:', result.layers?.[layerName]);
+              
+              showStatus('Configuration saved successfully');
               closeLayerDetailsModal();
               loadLayers({ forceConfigReload: true });
             } catch (err) {
-              showStatus(tr('Failed to save resolutions: {error}', { error: String(err.message || err) }), true);
+              console.error('Save failed:', err);
+              showStatus('Failed to save: ' + String(err.message || err), true);
             }
           });
           editSection.appendChild(saveBtn);
@@ -2165,7 +2285,8 @@
   project: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5A1.75 1.75 0 0 1 5.5 3.25h4.19c.46 0 .9.18 1.23.5l1.56 1.56c.33.32.77.5 1.23.5h6.29A1.75 1.75 0 0 1 21.5 7.5v10.75A2.75 2.75 0 0 1 18.75 21H5.25A2.75 2.75 0 0 1 2.5 18.25V5.75A.75.75 0 0 1 3.25 5h.5Zm.75 1.5v11.75c0 .69.56 1.25 1.25 1.25h13.5c.69 0 1.25-.56 1.25-1.25V8.5h-6.29c-.83 0-1.63-.33-2.22-.92L10.93 6H5.5a.75.75 0 0 0-.75.75Z"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.23 8.97a.75.75 0 0 1 1.06-.08L12 13.01l4.71-4.12a.75.75 0 0 1 .99 1.12l-5.2 4.55a.75.75 0 0 1-.99 0l-5.2-4.55a.75.75 0 0 1-.08-1.04Z"/></svg>',
         layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
-        wmts: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1.5 2.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 11.5v3h3v-3h-3Zm4.5 0v3h4v-3h-4Zm5.5 0v3h3v-3h-3ZM5.5 17v2h3v-2h-3Zm4.5 0v2h4v-2h-4Zm5.5 0v2h3v-2h-3Z"/></svg>',
+        wmts: '<img src="/css/images/wmts-letters.svg" alt="WMTS" width="28" height="18" loading="lazy" />',
+        tiles: '<img src="/css/images/xyz-letters.svg" alt="XYZ" width="28" height="18" loading="lazy" />',
         theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.75a.75.75 0 0 1 1.5 0V4h7V2.75a.75.75 0 0 1 1.5 0V4h1.25A2.75 2.75 0 0 1 21 6.75v11.5A2.75 2.75 0 0 1 18.25 21H5.75A2.75 2.75 0 0 1 3 18.25V6.75A2.75 2.75 0 0 1 5.75 4H7V2.75ZM5.75 5.5A1.25 1.25 0 0 0 4.5 6.75v1.25h15V6.75A1.25 1.25 0 0 0 18.25 5.5H5.75Zm12.5 4.5h-15v8.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V10Z"/></svg>',
         play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.27a1 1 0 0 1 1.52-.85l9 5.73a1 1 0 0 1 0 1.7l-9 5.73a1 1 0 0 1-1.52-.85V5.27Z"/></svg>',
@@ -3783,10 +3904,10 @@
                            '<div class="meta">' + metaSegments.map(escapeHtml).join(' · ') + '</div>';
 
           const tileTemplate = `/wmts/${encodeURIComponent(project.id)}/${encodeURIComponent(l.name)}/{z}/{x}/{y}.png`;
+          const xyzTemplateAbsolute = `${window.location.origin}${tileTemplate}`;
+          const layerCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`;
           const cachedScheme = cachedEntry && cachedEntry.scheme ? cachedEntry.scheme : null;
           const isCachedXYZ = cachedScheme === 'xyz';
-          const cachedTileCrs = (cachedEntry && typeof cachedEntry.tile_crs === 'string') ? cachedEntry.tile_crs.toUpperCase() : '';
-          const isWebMercatorXYZ = isCachedXYZ && WEB_MERCATOR_CODES.includes(cachedTileCrs);
 
           let exampleLink = null;
           if (cachedEntry && isCachedXYZ) {
@@ -3799,17 +3920,21 @@
             exampleLink.textContent = tr('View sample tile');
           }
 
-          let copyBtn = null;
-          if (cachedEntry && isWebMercatorXYZ) {
-            copyBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
-              const full = window.location.origin + tileTemplate;
-              navigator.clipboard.writeText(full).then(() => {
-                showStatus(tr('Tile template copied to clipboard: {url}', { url: full }));
-              }).catch(err => {
-                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
-              });
+          const copyXyzBtn = makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
+            navigator.clipboard.writeText(xyzTemplateAbsolute).then(() => {
+              showStatus(tr('Tile template copied to clipboard: {url}', { url: xyzTemplateAbsolute }));
+            }).catch(err => {
+              showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
             });
-          }
+          });
+
+          const copyWmtsBtn = makeIconButton(tr('Copy WMTS URL'), 'wmts', () => {
+            navigator.clipboard.writeText(layerCapabilitiesUrl).then(() => {
+              showStatus('WMTS capabilities URL copied: ' + layerCapabilitiesUrl);
+            }).catch(err => {
+              showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+            });
+          });
 
           const controls = document.createElement('div');
           controls.className = 'actions';
@@ -3873,7 +3998,8 @@
             }, 'btn-secondary');
           }
 
-          if (copyBtn && canView) controls.appendChild(copyBtn);
+          controls.appendChild(copyWmtsBtn);
+          controls.appendChild(copyXyzBtn);
           if (viewCacheBtn) controls.appendChild(viewCacheBtn);
           if (detailsBtn) controls.appendChild(detailsBtn);
           
@@ -3957,6 +4083,28 @@
               actions.appendChild(cacheBtn);
             }
 
+            const themeCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`;
+            const themeXyzTemplate = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
+
+            const copyThemeWmtsBtn = makeIconButton(tr('Copy WMTS URL'), 'wmts', () => {
+              navigator.clipboard.writeText(themeCapabilitiesUrl).then(() => {
+                showStatus('WMTS capabilities URL copied: ' + themeCapabilitiesUrl);
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+            });
+
+            const copyThemeXyzBtn = makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
+              navigator.clipboard.writeText(themeXyzTemplate).then(() => {
+                showStatus(tr('Tile template copied to clipboard: {url}', { url: themeXyzTemplate }));
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+            });
+
+            actions.appendChild(copyThemeWmtsBtn);
+            actions.appendChild(copyThemeXyzBtn);
+
             if (canView) {
               const viewThemeBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
                 const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
@@ -3964,21 +4112,6 @@
               }, 'btn-secondary');
               actions.appendChild(viewThemeBtn);
 
-              const themeScheme = cachedTheme && cachedTheme.scheme ? cachedTheme.scheme : null;
-              const themeTileCrs = (cachedTheme && typeof cachedTheme.tile_crs === 'string') ? cachedTheme.tile_crs.toUpperCase() : '';
-              if (cachedTheme && themeScheme === 'xyz' && WEB_MERCATOR_CODES.includes(themeTileCrs)) {
-                const copyThemeBtn = makeIconButton(tr('Copy XYZ URL'), 'link', () => {
-                  const template = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
-                  navigator.clipboard.writeText(template).then(() => {
-                    showStatus(tr('Tile template copied to clipboard: {url}', { url: template }));
-                  }).catch(err => {
-                    showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
-                  });
-                });
-                actions.appendChild(copyThemeBtn);
-              }
-
-              // Theme details button
               if (cachedTheme) {
                 const themeDetailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
                   toggleLayerDetails(themeRow, { 
