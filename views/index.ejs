@@ -6,6 +6,7 @@
 <%- include('partials/html-open', {
   pageLang,
   pageTitle: 'Qtiler · MundoGIS',
+  proj4Presets,
   headScripts: [
     { src: 'https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.min.js', crossorigin: 'anonymous' }
   ]
@@ -31,38 +32,14 @@
           </div>
         </div>
         <div class="main-layout">
-          <aside class="control-panel">
-          <div class="control-toolbar">
-            <div class="control-actions">
-              <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
-              <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
-              <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
+          <section class="content-panel content-panel-full">
+            <div class="content-toolbar">
+              <div class="toolbar-actions">
+                <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
+                <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
+                <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
+              </div>
             </div>
-          </div>
-          <div class="control-grid">
-            <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" class="input-number" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
-            <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" class="input-number" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
-            <div class="field"><span data-i18n="Mode:">Mode:</span>
-              <select id="cache_mode" class="input-select">
-                <option value="xyz" selected data-i18n="XYZ (EPSG:3857)">XYZ (EPSG:3857)</option>
-                <option value="wmts" data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
-                <option value="custom" data-i18n="Custom subdivision (bbox)">Custom subdivision (bbox)</option>
-              </select>
-            </div>
-            <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
-              <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="EPSG:3857" data-i18n-placeholder="Tile CRS" />
-            </div>
-            <div class="field field-remote">
-              <label class="checkbox">
-                <input id="allow_remote" type="checkbox" checked>
-                <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span>
-              </label>
-              <input id="throttle_ms" class="input-number" type="number" min="0" value="200" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
-            </div>
-          </div>
-          </aside>
-
-          <section class="content-panel">
             <div id="status"></div>
             <div id="jobs" class="jobs" style="display:none">
               <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
@@ -252,7 +229,21 @@
           "Add at least one yearly date.": "Agrega al menos una fecha anual.",
           "Configure auto cache": "Configurar caché automática",
           "Auto cache disabled for {name}": "Caché automática desactivada para {name}",
-          "Schedule saved for {name}": "Programación guardada para {name}"
+          "Schedule saved for {name}": "Programación guardada para {name}",
+          "Project already exists": "El proyecto ya existe",
+          "Do you want to replace it?": "¿Desea reemplazarlo?",
+          "WARNING: This will delete:": "ADVERTENCIA: Esto eliminará:",
+          "The current project and its configuration": "El proyecto actual y su configuración",
+          "All generated tile cache": "Toda la caché de tiles generada",
+          "Auto-generated tile-grids": "Los tile-grids auto-generados",
+          "References in other projects": "Referencias en otros proyectos",
+          "Upload cancelled": "Carga cancelada",
+          "Replacing…": "Reemplazando…",
+          "Uploading…": "Subiendo…",
+          "Replacing project:": "Reemplazando proyecto:",
+          "Uploading project:": "Subiendo proyecto:",
+          "Project replaced:": "Proyecto reemplazado:",
+          "Project uploaded:": "Proyecto subido:"
         },
         sv: {
           "Dashboard": "Översikt",
@@ -381,7 +372,21 @@
           "Add at least one yearly date.": "Lägg till minst ett årligt datum.",
           "Configure auto cache": "Konfigurera automatisk cache",
           "Auto cache disabled for {name}": "Automatisk cache avstängd för {name}",
-          "Schedule saved for {name}": "Schema sparat för {name}"
+          "Schedule saved for {name}": "Schema sparat för {name}",
+          "Project already exists": "Projektet finns redan",
+          "Do you want to replace it?": "Vill du ersätta det?",
+          "WARNING: This will delete:": "VARNING: Detta kommer att radera:",
+          "The current project and its configuration": "Det nuvarande projektet och dess konfiguration",
+          "All generated tile cache": "All genererad tile-cache",
+          "Auto-generated tile-grids": "Automatiskt genererade tile-grids",
+          "References in other projects": "Referenser i andra projekt",
+          "Upload cancelled": "Uppladdning avbruten",
+          "Replacing…": "Ersätter…",
+          "Uploading…": "Laddar upp…",
+          "Replacing project:": "Ersätter projekt:",
+          "Uploading project:": "Laddar upp projekt:",
+          "Project replaced:": "Projekt ersatt:",
+          "Project uploaded:": "Projekt uppladdat:"
         }
       };
 
@@ -426,6 +431,48 @@
           delete prefs[projectId];
         }
         writeCollapsePrefs();
+      };
+
+      const tileGridOptionsCache = new Map();
+
+      const invalidateTileGridCache = () => {
+        tileGridOptionsCache.clear();
+        console.log('[tile-grids] Cache invalidated');
+      };
+
+      const loadTileGridOptionsForCrs = async (crs, { forceRefresh = false } = {}) => {
+        const key = typeof crs === 'string' && crs.trim() ? crs.trim().toUpperCase() : 'ALL';
+        if (forceRefresh) {
+          tileGridOptionsCache.delete(key);
+        }
+        if (tileGridOptionsCache.has(key)) return tileGridOptionsCache.get(key);
+        const url = key === 'ALL'
+          ? `${window.location.origin}/api/tile-grids`
+          : `${window.location.origin}/api/tile-grids?crs=${encodeURIComponent(key)}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to load tile grids: ${res.status} ${res.statusText}`);
+        const payload = await res.json().catch(() => ({}));
+        const list = Array.isArray(payload.grids) ? payload.grids : [];
+        tileGridOptionsCache.set(key, list);
+        return list;
+      };
+
+      const formatTileGridLabel = (grid) => {
+        if (!grid) return 'Unknown grid';
+        const parts = [];
+        if (grid.projectName) {
+          parts.push(grid.projectName);
+        } else if (grid.projectId) {
+          parts.push(grid.projectId);
+        }
+        if (grid.identifier) parts.push(`(${grid.identifier})`);
+        if (grid.minZoom != null && grid.maxZoom != null) {
+          parts.push(`Z${grid.minZoom}-${grid.maxZoom}`);
+        }
+        if (grid.tileMatrixCount) {
+          parts.push(`${grid.tileMatrixCount} levels`);
+        }
+        return parts.join(' · ') || grid.id || 'Unknown grid';
       };
 
       const removeStoredCollapse = (projectId) => {
@@ -920,7 +967,7 @@
         }
       }
 
-      const openRecacheDialog = ({ layerName, cachedEntry }) => {
+      const openRecacheDialog = ({ layerName, cachedEntry, projectId }) => {
         ensureRecacheDialogElements();
         return new Promise((resolve) => {
           if (recacheDialogResolve) {
@@ -933,12 +980,21 @@
             document.removeEventListener('keydown', recacheDialogKeyHandler);
             recacheDialogKeyHandler = null;
           }
-          const rangeInfo = deriveCachedZoomRange(cachedEntry);
-          const coverageLabel = formatZoomRangeLabel(rangeInfo.coverageMin, rangeInfo.coverageMax);
-          const controlMin = parseZoomNumber(zoomMinInput ? zoomMinInput.value : null);
-          const controlMax = parseZoomNumber(zoomMaxInput ? zoomMaxInput.value : null);
-          const defaultMin = rangeInfo.min != null ? rangeInfo.min : (controlMin != null ? controlMin : 0);
-          let defaultMax = rangeInfo.max != null ? rangeInfo.max : (controlMax != null ? controlMax : defaultMin);
+          // Patch: Use selected grid's settings if tileGridSourceProject is set
+          let rangeInfo, coverageLabel, controlMin, controlMax, defaultMin, defaultMax;
+          const state = projectId ? getProjectState(projectId) : null;
+          let useGridFromProject = projectId;
+          if (state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileGridSourceProject) {
+            useGridFromProject = state.config.cachePreferences.tileGridSourceProject;
+          }
+          let gridState = useGridFromProject ? getProjectState(useGridFromProject) : state;
+          let gridControls = gridState?.controls;
+          rangeInfo = deriveCachedZoomRange(cachedEntry);
+          coverageLabel = formatZoomRangeLabel(rangeInfo.coverageMin, rangeInfo.coverageMax);
+          controlMin = parseZoomNumber(gridControls?.zoomMinInput ? gridControls.zoomMinInput.value : null);
+          controlMax = parseZoomNumber(gridControls?.zoomMaxInput ? gridControls.zoomMaxInput.value : null);
+          defaultMin = rangeInfo.min != null ? rangeInfo.min : (controlMin != null ? controlMin : 0);
+          defaultMax = rangeInfo.max != null ? rangeInfo.max : (controlMax != null ? controlMax : defaultMin);
           if (defaultMax == null) defaultMax = defaultMin;
 
           const heading = document.createElement('h2');
@@ -1146,48 +1202,69 @@
 
       async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin }) {
         if (!projectId || !layerData) return;
-        
+
+        // Force reload of project config and cache from backend before showing modal
+        let latestConfig = null;
+        let latestCacheIndex = null;
+        try {
+          const configRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`);
+          if (configRes.ok) {
+            latestConfig = await configRes.json();
+          }
+        } catch (err) { console.warn('Failed to reload config', err); }
+        try {
+          const cacheRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`);
+          if (cacheRes.ok) {
+            latestCacheIndex = await cacheRes.json();
+          }
+        } catch (err) { console.warn('Failed to reload cache index', err); }
+
+        // Find latest cachedEntry for this layer
+        let latestCachedEntry = null;
+        if (latestCacheIndex && Array.isArray(latestCacheIndex.layers)) {
+          latestCachedEntry = latestCacheIndex.layers.find(e => e.name === layerData.name) || null;
+        }
+
         ensureLayerDetailsModal();
         layerDetailsModal.innerHTML = '';
-        
+
         // Header
         const header = document.createElement('div');
         header.style.padding = '24px';
         header.style.borderBottom = '1px solid rgba(0, 0, 0, 0.1)';
-        
+
         const title = document.createElement('h2');
         title.style.margin = '0 0 8px 0';
         title.style.fontSize = '20px';
         title.textContent = 'Layer Details';
         header.appendChild(title);
-        
+
         const layerNameEl = document.createElement('div');
         layerNameEl.style.fontSize = '14px';
         layerNameEl.style.color = 'rgba(0, 0, 0, 0.6)';
         layerNameEl.textContent = layerData.name || 'Unknown layer';
         header.appendChild(layerNameEl);
-        
+
         layerDetailsModal.appendChild(header);
-        
+
         // Content
         const content = document.createElement('div');
         content.style.padding = '24px';
 
         // Fetch cached layer data to get tile_matrix_set
         let tileMatrixSet = null;
-        
-        // Use tile_matrix_set from cachedEntry if available
-        if (cachedEntry && cachedEntry.tile_matrix_set) {
-          tileMatrixSet = cachedEntry.tile_matrix_set;
-          console.log('Using tile_matrix_set from cachedEntry');
+        // Use tile_matrix_set from latestCachedEntry if available
+        if (latestCachedEntry && latestCachedEntry.tile_matrix_set) {
+          tileMatrixSet = latestCachedEntry.tile_matrix_set;
+          console.log('Using tile_matrix_set from latestCachedEntry');
         }
 
         // Build formatted output
         const output = {};
-        
+
         // Add layer name
         output.layerName = layerData.name;
-        
+
         // CRS
         if (layerData.crs) {
           output.crs = layerData.crs;
@@ -1419,17 +1496,17 @@
             try {
               const editedData = JSON.parse(configTextarea.value);
               console.log('Parsed data to save:', editedData);
-              
+
               const layerName = layerData.name;
               console.log('Saving to layer:', layerName);
-              
+
               // Build the patch request with layers object
               const patchData = {
                 layers: {
                   [layerName]: editedData
                 }
               };
-              
+
               console.log('Patch data:', patchData);
 
               // Save configuration
@@ -1443,17 +1520,21 @@
               });
 
               console.log('Save response status:', saveRes.status);
-              
+
               if (!saveRes.ok) {
                 const errorText = await saveRes.text();
                 console.error('Save error response:', errorText);
                 throw new Error(`Server error (${saveRes.status}): ${errorText}`);
               }
-              
+
               const result = await saveRes.json();
               console.log('Save result:', result);
               console.log('Saved layer config:', result.layers?.[layerName]);
-              
+
+              // Force reload of project config after save
+              await new Promise(r => setTimeout(r, 1200)); // Wait for backend to update cache/index
+              await loadProjectConfig(projectId, { force: true });
+
               showStatus('Configuration saved successfully');
               closeLayerDetailsModal();
               loadLayers({ forceConfigReload: true });
@@ -1983,18 +2064,19 @@
         activeProjectId = projectId;
         const state = getProjectState(projectId);
         const cfg = projectConfigs.get(projectId);
+        const controls = state?.controls;
         suppressControlSync = true;
         try {
-          if (cfg) {
+          if (cfg && controls) {
             if (cfg.zoom) {
-              if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = cfg.zoom.min;
-              if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = cfg.zoom.max;
+              if (controls.zoomMinInput && cfg.zoom.min != null) controls.zoomMinInput.value = cfg.zoom.min;
+              if (controls.zoomMaxInput && cfg.zoom.max != null) controls.zoomMaxInput.value = cfg.zoom.max;
             }
             if (cfg.cachePreferences) {
-              if (modeSelect && typeof cfg.cachePreferences.mode === 'string') modeSelect.value = cfg.cachePreferences.mode;
-              if (tileCrsInput && typeof cfg.cachePreferences.tileCrs === 'string') tileCrsInput.value = cfg.cachePreferences.tileCrs;
-              if (allowRemoteCheckbox && typeof cfg.cachePreferences.allowRemote === 'boolean') allowRemoteCheckbox.checked = cfg.cachePreferences.allowRemote;
-              if (throttleInput && cfg.cachePreferences.throttleMs != null) throttleInput.value = cfg.cachePreferences.throttleMs;
+              if (controls.cacheModeSelect && typeof cfg.cachePreferences.mode === 'string') controls.cacheModeSelect.value = cfg.cachePreferences.mode;
+              if (controls.tileCrsInput && typeof cfg.cachePreferences.tileCrs === 'string') controls.tileCrsInput.value = cfg.cachePreferences.tileCrs;
+              if (controls.allowRemoteCheckbox && typeof cfg.cachePreferences.allowRemote === 'boolean') controls.allowRemoteCheckbox.checked = cfg.cachePreferences.allowRemote;
+              if (controls.throttleMsInput && cfg.cachePreferences.throttleMs != null) controls.throttleMsInput.value = cfg.cachePreferences.throttleMs;
             }
           }
           applyCachedZoomRangeToControls(projectId, { force: true });
@@ -2007,7 +2089,7 @@
         if (!state.defaultMapExtent && state.layerExtentUnion) {
           state.defaultMapExtent = state.layerExtentUnion.slice();
         }
-        syncRemoteButtons();
+        syncRemoteButtons(projectId);
       }
 
       function applyCachedZoomRangeToControls(projectId, { force = false } = {}){
@@ -2023,10 +2105,12 @@
         if (!force && (state.controlsEdited || matchesLast)) {
           return;
         }
+        const controls = state?.controls;
+        if (!controls) return;
         suppressControlSync = true;
         try {
-          if (zoomMinInput && range.min != null) zoomMinInput.value = range.min;
-          if (zoomMaxInput && range.max != null) zoomMaxInput.value = range.max;
+          if (controls.zoomMinInput && range.min != null) controls.zoomMinInput.value = range.min;
+          if (controls.zoomMaxInput && range.max != null) controls.zoomMaxInput.value = range.max;
         } finally {
           suppressControlSync = false;
         }
@@ -2193,18 +2277,19 @@
           showStatus('No layers available for this project', true);
           return;
         }
-        const allowRemote = allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false;
-        let zoomMin = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
-        let zoomMax = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
+        const state = getProjectState(project.id);
+        const controls = state?.controls;
+        const allowRemote = controls?.allowRemoteCheckbox ? !!controls.allowRemoteCheckbox.checked : false;
+        let zoomMin = parseInt(controls?.zoomMinInput ? controls.zoomMinInput.value : '0') || 0;
+        let zoomMax = parseInt(controls?.zoomMaxInput ? controls.zoomMaxInput.value : '0') || 0;
         if (zoomMin < 0) zoomMin = 0;
         if (zoomMax < 0) zoomMax = 0;
         if (zoomMin > zoomMax && !(zoomMin === 0 && zoomMax === 0)) {
           const tmp = zoomMin; zoomMin = zoomMax; zoomMax = tmp;
         }
-  const mode = modeSelect ? modeSelect.value : 'xyz';
-        const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
-        const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
-        const state = getProjectState(project.id);
+  const mode = controls?.cacheModeSelect ? controls.cacheModeSelect.value : 'xyz';
+        const rawTileCrs = controls?.tileCrsInput ? controls.tileCrsInput.value.trim() : '';
+        const throttleVal = parseInt(controls?.throttleMsInput ? controls.throttleMsInput.value : '0') || 0;
         const extent = state?.extent && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
         const extentPayload = getProjectedExtentPayload(project.id);
         const payloadLayers = [];
@@ -2499,9 +2584,12 @@
 
       const parseProj4PresetsDataset = () => {
         const encoded = document.body?.dataset?.proj4Presets;
+        console.log('[Qtiler] Raw proj4 presets payload:', encoded);
         if (!encoded) return {};
         try {
-          return JSON.parse(decodeURIComponent(encoded));
+          const parsed = JSON.parse(decodeURIComponent(encoded));
+          console.log('[Qtiler] Parsed proj4 presets:', parsed);
+          return parsed;
         } catch (err) {
           console.warn('Failed to parse proj4 presets payload', err);
           return {};
@@ -3019,17 +3107,21 @@
         btnMin.type = 'button';
         btnMin.textContent = 'Set current zoom as Min';
         btnMin.onclick = () => {
-          document.getElementById('zoom_min').value = map.getZoom();
-          showStatus('zoom_min set to ' + map.getZoom());
-          const currentMaxRaw = document.getElementById('zoom_max').value;
-          const parsedMax = Number(currentMaxRaw);
-          queueProjectConfigSave(project.id, {
-            zoom: {
-              min: Number(map.getZoom()),
-              max: Number.isFinite(parsedMax) ? parsedMax : null,
-              updatedAt: new Date().toISOString()
-            }
-          });
+          const state = getProjectState(project.id);
+          const controls = state?.controls;
+          if (controls?.zoomMinInput) {
+            controls.zoomMinInput.value = map.getZoom();
+            showStatus('zoom_min set to ' + map.getZoom());
+            const currentMaxRaw = controls.zoomMaxInput?.value;
+            const parsedMax = Number(currentMaxRaw);
+            queueProjectConfigSave(project.id, {
+              zoom: {
+                min: Number(map.getZoom()),
+                max: Number.isFinite(parsedMax) ? parsedMax : null,
+                updatedAt: new Date().toISOString()
+              }
+            });
+          }
         };
         buttons.appendChild(btnMin);
 
@@ -3038,17 +3130,21 @@
         btnMax.type = 'button';
         btnMax.textContent = 'Set current zoom as Max';
         btnMax.onclick = () => {
-          document.getElementById('zoom_max').value = map.getZoom();
-          showStatus('zoom_max set to ' + map.getZoom());
-          const currentMinRaw = document.getElementById('zoom_min').value;
-          const parsedMin = Number(currentMinRaw);
-          queueProjectConfigSave(project.id, {
-            zoom: {
-              min: Number.isFinite(parsedMin) ? parsedMin : null,
-              max: Number(map.getZoom()),
-              updatedAt: new Date().toISOString()
-            }
-          });
+          const state = getProjectState(project.id);
+          const controls = state?.controls;
+          if (controls?.zoomMaxInput) {
+            controls.zoomMaxInput.value = map.getZoom();
+            showStatus('zoom_max set to ' + map.getZoom());
+            const currentMinRaw = controls.zoomMinInput?.value;
+            const parsedMin = Number(currentMinRaw);
+            queueProjectConfigSave(project.id, {
+              zoom: {
+                min: Number.isFinite(parsedMin) ? parsedMin : null,
+                max: Number(map.getZoom()),
+                updatedAt: new Date().toISOString()
+              }
+            });
+          }
         };
         buttons.appendChild(btnMax);
 
@@ -3092,12 +3188,6 @@
       }
     });
   }
-  const zoomMinInput = document.getElementById('zoom_min');
-  const zoomMaxInput = document.getElementById('zoom_max');
-  const modeSelect = document.getElementById('cache_mode');
-  const tileCrsInput = document.getElementById('tile_crs');
-  const allowRemoteCheckbox = document.getElementById('allow_remote');
-  const throttleInput = document.getElementById('throttle_ms');
   const jobsWrap = document.getElementById('jobs');
   const jobsList = document.getElementById('jobsList');
   let loadLayersRunning = false;
@@ -3121,60 +3211,15 @@
         });
       }
 
-      function emitControlConfigChange(extraPatch = {}){
-        if (!activeProjectId || suppressControlSync) return;
-        const state = getProjectState(activeProjectId);
-        if (state) {
-          state.controlsEdited = true;
-        }
-        const zoomMinVal = Number(zoomMinInput?.value);
-        const zoomMaxVal = Number(zoomMaxInput?.value);
-        const prefsPatch = {
-          cachePreferences: {
-            mode: modeSelect ? modeSelect.value : 'xyz',
-            tileCrs: tileCrsInput ? tileCrsInput.value.trim() : 'EPSG:3857',
-            allowRemote: allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false,
-            throttleMs: throttleInput && throttleInput.value !== '' ? Number(throttleInput.value) : 0,
-            updatedAt: new Date().toISOString()
-          }
-        };
-        const zoomPatch = {
-          zoom: {
-            min: Number.isFinite(zoomMinVal) ? zoomMinVal : null,
-            max: Number.isFinite(zoomMaxVal) ? zoomMaxVal : null,
-            updatedAt: new Date().toISOString()
-          }
-        };
-        queueProjectConfigSave(activeProjectId, deepMergeObjects(zoomPatch, deepMergeObjects(prefsPatch, extraPatch))); // merge extras afterwards
-      }
-
-      if (zoomMinInput) {
-        zoomMinInput.addEventListener('change', () => emitControlConfigChange());
-        zoomMinInput.addEventListener('blur', () => emitControlConfigChange());
-      }
-      if (zoomMaxInput) {
-        zoomMaxInput.addEventListener('change', () => emitControlConfigChange());
-        zoomMaxInput.addEventListener('blur', () => emitControlConfigChange());
-      }
-      if (modeSelect) {
-        modeSelect.addEventListener('change', () => emitControlConfigChange());
-      }
-      if (tileCrsInput) {
-        tileCrsInput.addEventListener('change', () => emitControlConfigChange());
-        tileCrsInput.addEventListener('blur', () => emitControlConfigChange());
-      }
-      if (allowRemoteCheckbox) {
-        allowRemoteCheckbox.addEventListener('change', () => emitControlConfigChange());
-      }
-      if (throttleInput) {
-        throttleInput.addEventListener('change', () => emitControlConfigChange());
-        throttleInput.addEventListener('blur', () => emitControlConfigChange());
-      }
-
-      function syncRemoteButtons(){
-        if (!allowRemoteCheckbox) return;
-        const active = allowRemoteCheckbox.checked;
-        document.querySelectorAll('button[data-remote="1"]').forEach(btn => {
+      function syncRemoteButtons(projectId){
+        if (!projectId) return;
+        const state = getProjectState(projectId);
+        const controls = state?.controls;
+        if (!controls?.allowRemoteCheckbox) return;
+        const active = controls.allowRemoteCheckbox.checked;
+        const projectCard = document.querySelector(`[data-project-id="${projectId}"]`);
+        if (!projectCard) return;
+        projectCard.querySelectorAll('button[data-remote="1"]').forEach(btn => {
           btn.disabled = !active;
           if (active) {
             btn.title = 'Generate cache';
@@ -3198,26 +3243,45 @@
         loadLayersQueuedOptions = null;
         layersEl.textContent = tr('Loading projects…');
         try {
+          // --- NUEVO: obtener proyectos y grids ---
           const r = await fetch('/projects');
           if (r.status === 401) {
             window.location.href = '/login?reason=session_expired';
             return;
           }
           const data = await r.json();
-          const projects = Array.isArray(data) ? data : (Array.isArray(data.projects) ? data.projects : []);
-          
+          let projects = Array.isArray(data) ? data : (Array.isArray(data.projects) ? data.projects : []);
+
+          // Obtener todos los grids
+          let grids = [];
+          try {
+            const gridsRes = await fetch('/api/tile-grids');
+            const gridsData = await gridsRes.json();
+            grids = Array.isArray(gridsData.grids) ? gridsData.grids : [];
+          } catch {}
+
+          // Unir proyectos con los que tienen grids
+          const gridProjectIds = new Set(grids.map(g => g.projectId).filter(Boolean));
+          const allProjectIds = new Set([...projects.map(p => p.id), ...gridProjectIds]);
+          // Si falta algún proyecto, agregarlo como stub
+          for (const pid of gridProjectIds) {
+            if (!projects.find(p => p.id === pid)) {
+              projects.push({ id: pid, name: pid });
+            }
+          }
+
           console.log('Projects loaded:', { 
             count: projects.length, 
             authEnabled: data.authEnabled, 
             user: data.user,
             projects: projects.map(p => ({ id: p.id, isPublic: p.isPublic, access: p.access }))
           });
-          
+
           window.appState = {
             authEnabled: data.authEnabled === true,
             user: data.user || null
           };
-          
+
           // Fallback for legacy response
           if (Array.isArray(data)) {
              window.appState.authEnabled = false;
@@ -3456,23 +3520,60 @@
         if (!projectId) return;
         const timeout = Math.max(0, Number(delayMs) || 0);
         setTimeout(() => {
+          invalidateTileGridCache();
           ensureProjectBlock(projectId, { forceConfigReload }).catch((err) => {
-            console.warn('scheduleProjectRefresh fallback reload', err);
-            loadLayers({ forceConfigReload: true });
+            console.warn('scheduleProjectRefresh failed for project', projectId, err);
+            // Don't reload all projects as fallback - this causes other projects to disappear
+            // Just log the error and let the user manually reload if needed
           });
         }, timeout);
       }
 
       async function uploadProjectFile(btn, file) {
         if (!file) return;
+        
+        // Check if project already exists
+        let shouldReplace = false;
+        try {
+          const checkRes = await fetch('/projects/check-exists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name })
+          });
+          const checkData = await checkRes.json();
+          
+          if (checkData.exists) {
+            const projectName = checkData.name || checkData.id;
+            const confirmed = confirm(
+              `${tr('Project already exists')}: "${projectName}"\n\n${tr('Do you want to replace it?')}\n\n` +
+              `${tr('WARNING: This will delete:')}\n` +
+              `• ${tr('The current project and its configuration')}\n` +
+              `• ${tr('All generated tile cache')}\n` +
+              `• ${tr('Auto-generated tile-grids')}\n` +
+              `• ${tr('References in other projects')}`
+            );
+            if (!confirmed) {
+              showStatus(tr('Upload cancelled'));
+              return;
+            }
+            shouldReplace = true;
+          }
+        } catch (checkErr) {
+          console.warn('Failed to check project existence:', checkErr);
+          // Continue with upload anyway
+        }
+        
         const originalDisabled = btn.disabled;
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Uploading…';
-        showStatus('Uploading project: ' + file.name);
+        btn.textContent = shouldReplace ? tr('Replacing…') : tr('Uploading…');
+        showStatus(tr(shouldReplace ? 'Replacing project:' : 'Uploading project:') + ' ' + file.name);
         try {
           const form = new FormData();
           form.append('project', file, file.name);
+          if (shouldReplace) {
+            form.append('replace', 'true');
+          }
           const res = await fetch('/projects', { method: 'POST', body: form });
           const data = await res.json().catch(() => null);
           if (!res.ok) {
@@ -3484,7 +3585,8 @@
           if (projectId) {
             extentStates.delete(projectId);
           }
-          showStatus('Project uploaded: ' + (projectId || file.name));
+          showStatus(tr(shouldReplace ? 'Project replaced:' : 'Project uploaded:') + ' ' + (projectId || file.name));
+          invalidateTileGridCache();
           try {
             const currProjects = await fetch('/projects').then((r) => r.json()).catch(() => []);
             const matching = projectId && Array.isArray(currProjects)
@@ -3624,8 +3726,22 @@
                   try { row.remove(); } catch {}
                   if (!jobsList.children.length) jobsWrap.style.display = 'none';
                 }, 2000);
+                // Invalidar cache de tile-grids globalmente cuando termina cualquier job
+                invalidateTileGridCache();
+                
                 if (j.project) {
+                  // Refrescar el proyecto que terminó
                   scheduleProjectRefresh(j.project, { forceConfigReload: true });
+                  
+                  // Si el job fue exitoso (completed), refrescar todos los proyectos
+                  // para actualizar los dropdowns de tile-grids con el nuevo grid disponible
+                  if (status === 'completed') {
+                    setTimeout(() => {
+                      try { loadLayers({ forceConfigReload: true }); } catch (err) {
+                        console.warn('Failed to refresh all projects after cache completion:', err);
+                      }
+                    }, 1500);
+                  }
                 } else {
                   try { loadLayers({ forceConfigReload: true }); } catch {}
                 }
@@ -3735,6 +3851,136 @@
           controlsBox.style.display = 'flex';
           controlsBox.style.gap = '8px';
 
+          if (isAdmin) {
+            const gridWrap = document.createElement('div');
+            gridWrap.style.display = 'flex';
+            gridWrap.style.alignItems = 'center';
+            gridWrap.style.gap = '6px';
+
+            const gridLabel = document.createElement('span');
+            gridLabel.className = 'meta';
+            gridLabel.textContent = 'Tile grid:';
+            gridWrap.appendChild(gridLabel);
+
+            const gridSelect = document.createElement('select');
+            gridSelect.className = 'input-select';
+            gridSelect.style.minWidth = '240px';
+            gridSelect.innerHTML = '<option value="">Auto (match project CRS)</option>';
+
+            const applySelection = () => {
+              const selected = gridSelect.options[gridSelect.selectedIndex];
+              const value = gridSelect.value || null;
+              const sourceProject = selected && selected.dataset.projectId ? selected.dataset.projectId : null;
+              
+              // Si se selecciona un grid, sincronizar Cache Settings
+              if (value && state.controls) {
+                const gridMinZoom = selected.dataset.minZoom ? parseInt(selected.dataset.minZoom) : null;
+                const gridMaxZoom = selected.dataset.maxZoom ? parseInt(selected.dataset.maxZoom) : null;
+                const gridCrs = selected.dataset.crs || null;
+                
+                // Actualizar controles del proyecto
+                if (gridMinZoom != null && state.controls.zoomMinInput) {
+                  state.controls.zoomMinInput.value = gridMinZoom;
+                }
+                if (gridMaxZoom != null && state.controls.zoomMaxInput) {
+                  state.controls.zoomMaxInput.value = gridMaxZoom;
+                }
+                if (gridCrs && state.controls.tileCrsInput) {
+                  state.controls.tileCrsInput.value = gridCrs;
+                }
+                // Forzar modo WMTS cuando se usa un grid externo
+                if (state.controls.cacheModeSelect) {
+                  state.controls.cacheModeSelect.value = 'wmts';
+                }
+                
+                showStatus(`Tile grid "${value}" applied. Cache settings synchronized (Mode: WMTS, CRS: ${gridCrs || 'auto'}, Zoom: ${gridMinZoom}-${gridMaxZoom})`);
+              } else {
+                // Volver a Auto: limpiar controles y resetear a valores por defecto del proyecto
+                if (state.controls) {
+                  const originalMode = state.config?.cachePreferences?.mode || 'xyz';
+                  const originalCrs = state.config?.cachePreferences?.tileCrs || '';
+                  const originalZoomMin = state.config?.zoom?.min ?? '';
+                  const originalZoomMax = state.config?.zoom?.max ?? '';
+                  
+                  if (state.controls.cacheModeSelect) state.controls.cacheModeSelect.value = originalMode;
+                  if (state.controls.tileCrsInput) state.controls.tileCrsInput.value = originalCrs;
+                  if (state.controls.zoomMinInput) state.controls.zoomMinInput.value = originalZoomMin;
+                  if (state.controls.zoomMaxInput) state.controls.zoomMaxInput.value = originalZoomMax;
+                }
+                showStatus('Tile grid reset to auto (using project CRS)');
+              }
+              
+              const configPatch = {
+                cachePreferences: {
+                  ...state.config?.cachePreferences,
+                  updatedAt: new Date().toISOString()
+                }
+              };
+              
+              if (value) {
+                // Grid seleccionado: establecer referencias y forzar WMTS
+                configPatch.cachePreferences.tileMatrixPreset = value;
+                configPatch.cachePreferences.tileGridSourceProject = sourceProject;
+                configPatch.cachePreferences.mode = 'wmts';
+                configPatch.cachePreferences.tileCrs = selected.dataset.crs || '';
+                configPatch.zoom = {
+                  min: selected.dataset.minZoom ? parseInt(selected.dataset.minZoom) : null,
+                  max: selected.dataset.maxZoom ? parseInt(selected.dataset.maxZoom) : null,
+                  updatedAt: new Date().toISOString()
+                };
+              } else {
+                // Auto: eliminar referencias al grid
+                delete configPatch.cachePreferences.tileMatrixPreset;
+                delete configPatch.cachePreferences.tileGridSourceProject;
+              }
+              
+              queueProjectConfigSave(project.id, configPatch, { immediate: true });
+              
+              scheduleProjectRefresh(project.id, { delayMs: 400, forceConfigReload: true });
+            };
+
+            gridSelect.addEventListener('change', applySelection);
+            gridWrap.appendChild(gridSelect);
+
+            const gridHint = document.createElement('span');
+            gridHint.className = 'meta';
+            gridHint.style.color = '#666';
+            gridHint.textContent = 'Use grids with the same CRS. Changing grid requires regenerating cache.';
+            gridWrap.appendChild(gridHint);
+
+            controlsBox.appendChild(gridWrap);
+
+            const populateGridOptions = async () => {
+              const preferredCrs = (state.config?.cachePreferences?.tileCrs
+                || state.projectMeta?.crs
+                || projectMeta?.crs
+                || '').trim();
+              const desiredValue = state.config?.cachePreferences?.tileMatrixPreset || '';
+              try {
+                const grids = await loadTileGridOptionsForCrs(preferredCrs);
+                while (gridSelect.options.length > 1) {
+                  gridSelect.remove(1);
+                }
+                grids.forEach((grid) => {
+                  const opt = document.createElement('option');
+                  opt.value = grid.id || grid.fileName || '';
+                  opt.dataset.projectId = grid.projectId || '';
+                  opt.dataset.crs = grid.crs || '';
+                  opt.dataset.minZoom = grid.minZoom != null ? String(grid.minZoom) : '';
+                  opt.dataset.maxZoom = grid.maxZoom != null ? String(grid.maxZoom) : '';
+                  opt.textContent = formatTileGridLabel(grid);
+                  gridSelect.appendChild(opt);
+                });
+                gridSelect.value = desiredValue || '';
+              } catch (err) {
+                console.warn('Failed to load tile grids', err);
+                gridHint.textContent = 'Failed to load tile grids';
+              }
+            };
+
+            populateGridOptions();
+          }
+
           // isAdmin and canView already defined at top of function - no need to redefine
 
           if (canView) {
@@ -3797,6 +4043,220 @@
             state.batchInfoEl = batchInfo;
             state.batchButton = runAllBtn;
             refreshProjectBatchStatus(project.id);
+
+            // Cache Settings Panel (collapsible)
+            const settingsPanel = document.createElement('div');
+            settingsPanel.className = 'cache-settings-panel';
+            settingsPanel.style.margin = '0 0 16px 0';
+
+            const settingsHeader = document.createElement('div');
+            settingsHeader.className = 'cache-settings-header';
+            settingsHeader.style.display = 'flex';
+            settingsHeader.style.alignItems = 'center';
+            settingsHeader.style.justifyContent = 'space-between';
+            settingsHeader.style.padding = '12px 16px';
+            settingsHeader.style.background = 'var(--card)';
+            settingsHeader.style.border = '1px solid var(--border)';
+            settingsHeader.style.borderRadius = '8px';
+            settingsHeader.style.cursor = 'pointer';
+            settingsHeader.style.userSelect = 'none';
+
+            const settingsTitle = document.createElement('span');
+            settingsTitle.className = 'meta';
+            settingsTitle.style.fontWeight = '500';
+            settingsTitle.textContent = 'Cache Settings';
+
+            const settingsToggleIcon = document.createElement('span');
+            settingsToggleIcon.textContent = '▼';
+            settingsToggleIcon.style.fontSize = '12px';
+            settingsToggleIcon.style.transition = 'transform 0.2s';
+
+            settingsHeader.appendChild(settingsTitle);
+            settingsHeader.appendChild(settingsToggleIcon);
+
+            const settingsContent = document.createElement('div');
+            settingsContent.className = 'cache-settings-content';
+            settingsContent.style.display = 'none';
+            settingsContent.style.padding = '16px';
+            settingsContent.style.background = 'var(--card)';
+            settingsContent.style.border = '1px solid var(--border)';
+            settingsContent.style.borderTop = 'none';
+            settingsContent.style.borderRadius = '0 0 8px 8px';
+            settingsContent.style.marginTop = '-1px';
+
+            const settingsGrid = document.createElement('div');
+            settingsGrid.style.display = 'grid';
+            settingsGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+            settingsGrid.style.gap = '16px';
+
+            // Zoom Min
+            const zoomMinField = document.createElement('div');
+            const zoomMinLabel = document.createElement('label');
+            zoomMinLabel.className = 'meta';
+            zoomMinLabel.textContent = 'Zoom Min';
+            zoomMinLabel.style.display = 'block';
+            zoomMinLabel.style.marginBottom = '6px';
+            const zoomMinInput = document.createElement('input');
+            zoomMinInput.type = 'number';
+            zoomMinInput.className = 'input-text';
+            zoomMinInput.placeholder = '0';
+            zoomMinInput.min = '0';
+            zoomMinInput.max = '22';
+            zoomMinInput.value = state.config?.zoom?.min ?? '';
+            zoomMinField.appendChild(zoomMinLabel);
+            zoomMinField.appendChild(zoomMinInput);
+
+            // Zoom Max
+            const zoomMaxField = document.createElement('div');
+            const zoomMaxLabel = document.createElement('label');
+            zoomMaxLabel.className = 'meta';
+            zoomMaxLabel.textContent = 'Zoom Max';
+            zoomMaxLabel.style.display = 'block';
+            zoomMaxLabel.style.marginBottom = '6px';
+            const zoomMaxInput = document.createElement('input');
+            zoomMaxInput.type = 'number';
+            zoomMaxInput.className = 'input-text';
+            zoomMaxInput.placeholder = '18';
+            zoomMaxInput.min = '0';
+            zoomMaxInput.max = '22';
+            zoomMaxInput.value = state.config?.zoom?.max ?? '';
+            zoomMaxField.appendChild(zoomMaxLabel);
+            zoomMaxField.appendChild(zoomMaxInput);
+
+            // Cache Mode
+            const cacheModeField = document.createElement('div');
+            const cacheModeLabel = document.createElement('label');
+            cacheModeLabel.className = 'meta';
+            cacheModeLabel.textContent = 'Cache Mode';
+            cacheModeLabel.style.display = 'block';
+            cacheModeLabel.style.marginBottom = '6px';
+            const cacheModeSelect = document.createElement('select');
+            cacheModeSelect.className = 'input-select';
+            cacheModeSelect.innerHTML = `
+              <option value="xyz">XYZ (EPSG:3857)</option>
+              <option value="wmts">WMTS</option>
+              <option value="auto">Auto</option>
+            `;
+            cacheModeSelect.value = state.config?.cachePreferences?.mode ?? 'xyz';
+            cacheModeField.appendChild(cacheModeLabel);
+            cacheModeField.appendChild(cacheModeSelect);
+
+            // Tile CRS
+            const tileCrsField = document.createElement('div');
+            const tileCrsLabel = document.createElement('label');
+            tileCrsLabel.className = 'meta';
+            tileCrsLabel.textContent = 'Tile CRS';
+            tileCrsLabel.style.display = 'block';
+            tileCrsLabel.style.marginBottom = '6px';
+            const tileCrsInput = document.createElement('input');
+            tileCrsInput.type = 'text';
+            tileCrsInput.className = 'input-text';
+            tileCrsInput.placeholder = 'auto';
+            tileCrsInput.value = state.config?.cachePreferences?.tileCrs ?? '';
+            tileCrsField.appendChild(tileCrsLabel);
+            tileCrsField.appendChild(tileCrsInput);
+
+            // Allow Remote
+            const allowRemoteField = document.createElement('div');
+            allowRemoteField.style.display = 'flex';
+            allowRemoteField.style.alignItems = 'center';
+            allowRemoteField.style.gap = '8px';
+            const allowRemoteCheckbox = document.createElement('input');
+            allowRemoteCheckbox.type = 'checkbox';
+            allowRemoteCheckbox.id = `allow_remote_${project.id}`;
+            allowRemoteCheckbox.checked = state.config?.cachePreferences?.allowRemote ?? false;
+            const allowRemoteLabel = document.createElement('label');
+            allowRemoteLabel.className = 'meta';
+            allowRemoteLabel.textContent = 'Allow remote layers';
+            allowRemoteLabel.htmlFor = `allow_remote_${project.id}`;
+            allowRemoteLabel.style.marginBottom = '0';
+            allowRemoteField.appendChild(allowRemoteCheckbox);
+            allowRemoteField.appendChild(allowRemoteLabel);
+
+            // Throttle MS
+            const throttleMsField = document.createElement('div');
+            const throttleMsLabel = document.createElement('label');
+            throttleMsLabel.className = 'meta';
+            throttleMsLabel.textContent = 'Throttle (ms)';
+            throttleMsLabel.style.display = 'block';
+            throttleMsLabel.style.marginBottom = '6px';
+            const throttleMsInput = document.createElement('input');
+            throttleMsInput.type = 'number';
+            throttleMsInput.className = 'input-text';
+            throttleMsInput.placeholder = '0';
+            throttleMsInput.min = '0';
+            throttleMsInput.value = state.config?.cachePreferences?.throttleMs ?? '';
+            throttleMsField.appendChild(throttleMsLabel);
+            throttleMsField.appendChild(throttleMsInput);
+
+            settingsGrid.appendChild(zoomMinField);
+            settingsGrid.appendChild(zoomMaxField);
+            settingsGrid.appendChild(cacheModeField);
+            settingsGrid.appendChild(tileCrsField);
+            settingsGrid.appendChild(allowRemoteField);
+            settingsGrid.appendChild(throttleMsField);
+
+            settingsContent.appendChild(settingsGrid);
+            settingsPanel.appendChild(settingsHeader);
+            settingsPanel.appendChild(settingsContent);
+
+            // Toggle functionality
+            let isExpanded = false;
+            settingsHeader.addEventListener('click', () => {
+              isExpanded = !isExpanded;
+              settingsContent.style.display = isExpanded ? 'block' : 'none';
+              settingsToggleIcon.style.transform = isExpanded ? 'rotate(-180deg)' : 'rotate(0deg)';
+              settingsHeader.style.borderRadius = isExpanded ? '8px 8px 0 0' : '8px';
+            });
+
+            // Store references in project state
+            state.controls = {
+              zoomMinInput,
+              zoomMaxInput,
+              cacheModeSelect,
+              tileCrsInput,
+              allowRemoteCheckbox,
+              throttleMsInput
+            };
+
+            // Emit config changes
+            const emitProjectControlChange = () => {
+              const zoomMinVal = Number(zoomMinInput.value);
+              const zoomMaxVal = Number(zoomMaxInput.value);
+              const prefsPatch = {
+                cachePreferences: {
+                  mode: cacheModeSelect.value,
+                  tileCrs: tileCrsInput.value.trim(),
+                  allowRemote: allowRemoteCheckbox.checked,
+                  throttleMs: throttleMsInput.value !== '' ? Number(throttleMsInput.value) : 0,
+                  updatedAt: new Date().toISOString()
+                }
+              };
+              const zoomPatch = {
+                zoom: {
+                  min: Number.isFinite(zoomMinVal) ? zoomMinVal : null,
+                  max: Number.isFinite(zoomMaxVal) ? zoomMaxVal : null,
+                  updatedAt: new Date().toISOString()
+                }
+              };
+              queueProjectConfigSave(project.id, deepMergeObjects(zoomPatch, prefsPatch));
+            };
+
+            zoomMinInput.addEventListener('change', emitProjectControlChange);
+            zoomMinInput.addEventListener('blur', emitProjectControlChange);
+            zoomMaxInput.addEventListener('change', emitProjectControlChange);
+            zoomMaxInput.addEventListener('blur', emitProjectControlChange);
+            cacheModeSelect.addEventListener('change', emitProjectControlChange);
+            tileCrsInput.addEventListener('change', emitProjectControlChange);
+            tileCrsInput.addEventListener('blur', emitProjectControlChange);
+            allowRemoteCheckbox.addEventListener('change', () => {
+              emitProjectControlChange();
+              syncRemoteButtons(project.id);
+            });
+            throttleMsInput.addEventListener('change', emitProjectControlChange);
+            throttleMsInput.addEventListener('blur', emitProjectControlChange);
+
+            parent.insertBefore(settingsPanel, targetEl);
           }
 
           if (state.open) {
@@ -3948,7 +4408,7 @@
             if (hasCache) {
               genBtn.title = 'Recache layer (rebuild tiles)';
               genBtn.addEventListener('click', async () => {
-                const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
+                const selection = await openRecacheDialog({ layerName: l.name, cachedEntry, projectId: project.id });
                 if (!selection) return;
                 try {
                   await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
@@ -4142,7 +4602,8 @@
             }
           });
         }
-        syncRemoteButtons();
+        // Sync remote buttons for this project
+        syncRemoteButtons(project.id);
       }
 
       function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -4178,8 +4639,10 @@
             }
           }
           if (zoom_min == null || zoom_max == null) {
-            const controlMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
-            const controlMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
+            const state = getProjectState(projectId);
+            const controls = state?.controls;
+            const controlMin = Number.parseInt(controls?.zoomMinInput ? controls.zoomMinInput.value : '0', 10);
+            const controlMax = Number.parseInt(controls?.zoomMaxInput ? controls.zoomMaxInput.value : '0', 10);
             zoom_min = Number.isFinite(controlMin) ? controlMin : 0;
             zoom_max = Number.isFinite(controlMax) ? controlMax : 0;
           }
@@ -4190,8 +4653,10 @@
             // intercambiar para ser amigables
             const tmp = zoom_min; zoom_min = zoom_max; zoom_max = tmp;
           }
-          const mode = modeSelect ? modeSelect.value : 'xyz';
-          const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
+          const state = getProjectState(projectId);
+          const controls = state?.controls;
+          const mode = controls?.cacheModeSelect ? controls.cacheModeSelect.value : 'xyz';
+          const rawTileCrs = controls?.tileCrsInput ? controls.tileCrsInput.value.trim() : '';
           const body = { project: projectId, zoom_min, zoom_max };
           if (isTheme) {
             body.theme = layerName;
@@ -4247,16 +4712,15 @@
             if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') body.tile_crs = rawTileCrs;
           }
           // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
-          const state = extentStates.get(projectId);
           const extentPayload = getProjectedExtentPayload(projectId);
           if (extentPayload) {
             body.project_extent = extentPayload.extentString;
             body.extent_crs = extentPayload.crs;
           }
           // remote opt-in
-          if (allowRemoteCheckbox && allowRemoteCheckbox.checked) {
+          if (controls?.allowRemoteCheckbox && controls.allowRemoteCheckbox.checked) {
             body.allow_remote = true;
-            const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
+            const throttleVal = parseInt(controls?.throttleMsInput ? controls.throttleMsInput.value : '0') || 0;
             if (throttleVal > 0) body.throttle_ms = throttleVal;
           } else if (!isTheme && layerObj && layerObj.cacheable === false) {
             showStatus('Remote layer requires "Allow remote" toggle.', true);
@@ -4473,8 +4937,25 @@
 
       async function deleteProject(btn, project) {
         if (!project || !project.id) return;
-        const message = `Delete project "${project.name || project.id}"? This also removes cached tiles.`;
+        
+        // Verificar dependencias de grid antes de eliminar
+        let dependencyWarning = '';
+        try {
+          const depRes = await fetch('/projects/' + encodeURIComponent(project.id) + '/grid-dependencies');
+          if (depRes.ok) {
+            const depData = await depRes.json();
+            if (depData.hasDependencies && depData.dependencies.length > 0) {
+              const projectNames = depData.dependencies.map(d => d.name || d.id).join(', ');
+              dependencyWarning = `\n\n⚠️ WARNING: This project's tile grid is being used by:\n${projectNames}\n\nThese projects will be reset to "Auto" grid.`;
+            }
+          }
+        } catch (depErr) {
+          console.warn('Failed to check grid dependencies:', depErr);
+        }
+        
+        const message = `Delete project "${project.name || project.id}"? This also removes cached tiles.${dependencyWarning}`;
         if (!window.confirm(message)) return;
+        
         const initialDisabled = btn.disabled;
         const originalHtml = btn.innerHTML;
         const originalTitle = btn.title;
@@ -4500,6 +4981,7 @@
           extentStates.delete(project.id);
           projectConfigs.delete(project.id);
           removeStoredCollapse(project.id);
+          invalidateTileGridCache();
           showStatus('Project deleted: ' + (project.name || project.id));
           const wrap = findProjectWrap(project.id);
           if (wrap) {
@@ -4528,40 +5010,5 @@
       refreshJobs();
       const jobsTicker = setInterval(refreshJobs, 2000);
       window.addEventListener('beforeunload', ()=>{ try{ clearInterval(jobsTicker);}catch{} });
-      // dynamic remote enable toggle
-      if (allowRemoteCheckbox) {
-        allowRemoteCheckbox.addEventListener('change', () => {
-          syncRemoteButtons();
-          emitControlConfigChange();
-        });
-        syncRemoteButtons();
-      }
-
-  // dynamic mode/CRS UI
-      function applyModeUI(){
-        if (!modeSelect || !tileCrsInput) return;
-        const m = modeSelect.value;
-        if (m === 'xyz') {
-          tileCrsInput.value = 'EPSG:3857';
-          tileCrsInput.disabled = true;
-          tileCrsInput.title = 'Fixed to EPSG:3857 for standard XYZ scheme';
-        } else if (m === 'wmts') {
-          tileCrsInput.disabled = false;
-          if (!tileCrsInput.value || tileCrsInput.value === 'EPSG:3857') tileCrsInput.value = '';
-          tileCrsInput.placeholder = 'auto (layer CRS)';
-          tileCrsInput.title = 'Empty = use layer native CRS';
-        } else {
-          tileCrsInput.disabled = false;
-          if (!tileCrsInput.value) tileCrsInput.placeholder = 'auto';
-          tileCrsInput.title = 'Empty = use layer CRS';
-        }
-      }
-      if (modeSelect) {
-        modeSelect.addEventListener('change', () => {
-          applyModeUI();
-          emitControlConfigChange();
-        });
-        applyModeUI();
-      }
     </script>
 <%- include('partials/html-close') %>

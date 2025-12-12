@@ -1,204 +1,85 @@
-import cluster from "cluster";
-import os from "os";
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 import express from "express";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { execFile, spawn } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+// Verificación automática de entorno QGIS/Python
+function verifyQGISEnv() {
+  const qgisBin = process.env.OSGEO4W_BIN || "C:\\QGIS\\bin";
+  const pythonExe = process.env.PYTHON_EXE || "C:\\QGIS\\bin\\python.exe";
+  const qgisPrefix = process.env.QGIS_PREFIX || "C:\\QGIS\\apps\\qgis";
+  let missing = [];
+  if (!fs.existsSync(qgisBin)) missing.push("OSGEO4W_BIN");
+  if (!fs.existsSync(pythonExe)) missing.push("PYTHON_EXE");
+  if (!fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
+  if (missing.length) {
+    console.warn("[Qtiler] Entorno QGIS/Python incompleto. Faltan:", missing.join(", "));
+    console.warn("Configura manualmente las rutas en .env (OSGEO4W_BIN, PYTHON_EXE, QGIS_PREFIX) antes de generar cachés.");
+  } else {
+    console.log("[Qtiler] Entorno QGIS/Python verificado.");
+  }
+}
+verifyQGISEnv();
 import crypto from "crypto";
 import multer from "multer";
 import AdmZip from "adm-zip";
 import cookieParser from "cookie-parser";
 import { PluginManager } from "./lib/pluginManager.js";
-import { createClient } from 'redis';
-
 dotenv.config();
 
-if (cluster.isPrimary || cluster.isMaster) {
-  const numCPUs = os.cpus().length;
-  const totalMem = os.totalmem();
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
-  setInterval(() => {
-    for (const id in cluster.workers) {
-      cluster.workers[id].process.send({ cmd: "checkMemory", maxMem: totalMem * 0.8 });
-    }
-  }, 10000); // cada 10 segundos
-  cluster.on("exit", (worker, code, signal) => {
-    console.log(`[Qtiler] Worker ${worker.process.pid} died (${signal || code}), restarting...`);
-    cluster.fork();
-  });
-  // No app logic in master process
-} else {
-  // Solo ejecuta la app en los workers
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const app = express();
-  app.set("trust proxy", true);
-  // Configurar vistas (EJS) para renderizado de páginas
-  const dataDir = path.resolve(__dirname, "data");
-  const pluginsDir = path.resolve(__dirname, "plugins");
-  const viewsDir = path.resolve(__dirname, "views");
-  const proj4PresetsPath = path.resolve(__dirname, "config", "proj4-presets.json");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.set("trust proxy", true);
+const dataDir = path.resolve(__dirname, "data");
+const pluginsDir = path.resolve(__dirname, "plugins");
+const viewsDir = path.resolve(__dirname, "views");
+const proj4PresetsPath = path.resolve(__dirname, "config", "proj4-presets.json");
 
-  // Declarar variable pluginManager; se inicializará después de la configuración de security
-  let pluginManager;
+const defaultProj4Presets = {
+  "EPSG:3006": "+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+};
 
-  const defaultProj4Presets = {
-    "EPSG:3006": "+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-  };
-
-  const loadProj4Presets = () => {
-    try {
-      const raw = fs.readFileSync(proj4PresetsPath, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object") return { ...defaultProj4Presets };
-      const normalized = { ...defaultProj4Presets };
-      for (const [key, value] of Object.entries(parsed)) {
-        if (!key || typeof value !== "string" || !value.trim()) continue;
-        normalized[key.trim().toUpperCase()] = value.trim();
-      }
-      return normalized;
-    } catch (err) {
-      if (err && err.code !== "ENOENT") {
-        console.warn("Failed to load proj4 presets", { error: String(err?.message || err) });
-      }
-      return { ...defaultProj4Presets };
-    }
-  };
-
-  // Asegura que el directorio data exista
-  // --- Locks simple por fichero para evitar jobs duplicados entre workers ---
-  const locksDir = path.join(dataDir, "locks");
-  const ensureLocksDir = () => {
-    try {
-      fs.mkdirSync(locksDir, { recursive: true });
-    } catch (e) {
-      // ignore
-    }
-  };
-  const lockFileForKey = (key) => {
-    const hash = crypto.createHash("sha1").update(String(key)).digest("hex");
-    return path.join(locksDir, `${hash}.lock`);
-  };
-  const tryAcquireLock = (key) => {
-    ensureLocksDir();
-    const lockPath = lockFileForKey(key);
-    try {
-      const fd = fs.openSync(lockPath, "wx");
-      fs.closeSync(fd);
-      return lockPath;
-    } catch (err) {
-      return null;
-    }
-  };
-  const releaseLock = (lockPath) => {
-    try {
-      if (lockPath && fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  // Cargar presets proj4 una vez
-  const proj4Presets = loadProj4Presets();
-
-  // Redis-based global concurrency control (optional)
-  const GLOBAL_JOB_MAX = parseInt(process.env.GLOBAL_JOB_MAX || "0", 10); // 0 = disabled (no global cap)
-  let redisClient = null;
-  let redisAvailable = false;
-  if (!isNaN(GLOBAL_JOB_MAX) && GLOBAL_JOB_MAX > 0) {
-    try {
-      redisClient = createClient({ url: process.env.REDIS_URL || 'redis://127.0.0.1:6379' });
-      redisClient.on('error', (e) => console.warn('[redis] error', e));
-      // top-level await allowed in ESM worker scope
-      await redisClient.connect();
-      redisAvailable = true;
-      console.log('[redis] connected for global concurrency (GLOBAL_JOB_MAX=%d)', GLOBAL_JOB_MAX);
-    } catch (err) {
-      console.warn('[redis] connection failed, global concurrency disabled', err?.message || err);
-      redisClient = null;
-      redisAvailable = false;
-    }
-  }
-
-  const acquireGlobalSlot = async () => {
-    if (!redisAvailable || !redisClient) return true; // fail-open
-    const key = 'qtiler:global_running';
-    try {
-      const n = await redisClient.incr(key);
-      if (n === 1) {
-        // set a long TTL in case of crashes (1 hour)
-        await redisClient.expire(key, 60 * 60);
-      }
-      if (n > GLOBAL_JOB_MAX) {
-        await redisClient.decr(key);
-        return false;
-      }
-      return true;
-    } catch (err) {
-      console.warn('[redis] acquire slot failed, allowing job (fail-open)', err?.message || err);
-      return true;
-    }
-  };
-
-  const releaseGlobalSlot = async () => {
-    if (!redisAvailable || !redisClient) return;
-    const key = 'qtiler:global_running';
-    try {
-      const n = await redisClient.decr(key);
-      if (n <= 0) {
-        try { await redisClient.del(key); } catch { }
-      }
-    } catch (err) {
-      console.warn('[redis] release slot failed', err?.message || err);
-    }
-  };
-
-  // Configurar vistas (EJS) para renderizado de páginas (después de que viewsDir esté inicializado)
-  app.set('views', viewsDir);
-  app.set('view engine', 'ejs');
-
-  // Middlewares
-  app.use(express.json({ limit: process.env.REQUEST_JSON_LIMIT || '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: process.env.REQUEST_URLENCODED_LIMIT || '10mb' }));
-  app.use(cookieParser());
-  
-
+const loadProj4Presets = () => {
   try {
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    const raw = fs.readFileSync(proj4PresetsPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { ...defaultProj4Presets };
+    const normalized = { ...defaultProj4Presets };
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!key || typeof value !== "string" || !value.trim()) continue;
+      normalized[key.trim().toUpperCase()] = value.trim();
     }
+    return normalized;
   } catch (err) {
-    console.error("Failed to ensure data directory", dataDir, err);
+    if (err && err.code !== "ENOENT") {
+      console.warn("Failed to load proj4 presets", { error: String(err?.message || err) });
+    }
+    return { ...defaultProj4Presets };
   }
-  // Health and simple metrics endpoints
-  app.get('/health', (req, res) => {
-    const runningCountNow = Array.from(runningJobs.values()).filter((j) => j.status === 'running').length;
-    res.json({ ok: true, pid: process.pid, worker: (cluster && cluster.worker && cluster.worker.id) ? cluster.worker.id : null, running: runningCountNow, queued: queuedJobs.length });
-  });
+};
 
-  app.get('/metrics', (req, res) => {
-    const runningCountNow = Array.from(runningJobs.values()).filter((j) => j.status === 'running').length;
-    const queuedLen = queuedJobs.length;
-    const workerCount = os.cpus().length;
-    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
-    const lines = [];
-    lines.push(`# HELP qtiler_active_jobs Number of currently running cache jobs (per process)
-`);
-    lines.push(`qtiler_active_jobs ${runningCountNow}`);
-    lines.push(`qtiler_queued_jobs ${queuedLen}`);
-    lines.push(`qtiler_total_started ${metrics.totalStarted}`);
-    lines.push(`qtiler_total_completed ${metrics.totalCompleted}`);
-    lines.push(`qtiler_total_failed ${metrics.totalFailed}`);
-    lines.push(`qtiler_worker_count ${workerCount}`);
-    lines.push(`qtiler_process_pid ${process.pid}`);
-    res.send(lines.join('\n'));
-  });
-  // ...el resto de la lógica de tu app Express...
+const proj4Presets = Object.freeze(loadProj4Presets());
+console.log('[Qtiler] Loaded proj4 presets:', Object.keys(proj4Presets));
 
+app.set("views", viewsDir);
+app.set("view engine", "ejs");
+
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (err) {
+  console.error("Failed to ensure data directory", dataDir, err);
+}
 
 const security = {};
 
@@ -225,195 +106,200 @@ const requireRoles = (...roles) => (req, res, next) => {
   }
 };
 
-  // Inicializar pluginManager ahora que `security` está definido
-  pluginManager = new PluginManager({ app, baseDir: pluginsDir, dataDir, security });
-  app.locals.pluginManager = pluginManager;
+const requireAdmin = requireRoles("admin");
 
-  // ...existing code...
-  const requireAdmin = requireRoles("admin");
+// Middleware that requires admin only if auth is enabled
+const requireAdminIfEnabled = (req, res, next) => {
+  if (security.isEnabled && security.isEnabled()) {
+    return requireAdmin(req, res, next);
+  }
+  return next();
+};
 
-  // Middleware that requires admin only if auth is enabled
-  const requireAdminIfEnabled = (req, res, next) => {
-    if (security.isEnabled && security.isEnabled()) {
-      return requireAdmin(req, res, next);
+// Middleware specifically for admin page access (redirects instead of JSON)
+const requireAdminPage = (req, res, next) => {
+  if (security.isEnabled && security.isEnabled()) {
+    if (!req.user) {
+      return res.redirect('/login');
     }
-    return next();
+    if (req.user.role !== 'admin') {
+      return res.status(403).send(`
+        <html>
+          <head><title>Access Denied</title><link rel="stylesheet" href="/style.css"></head>
+          <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h1>Access Denied</h1>
+            <p>You do not have permission to view this page.</p>
+            <p>Current user: ${req.user.username || req.user.id} (Role: ${req.user.role})</p>
+            <p><a href="/">Return to Home</a></p>
+          </body>
+        </html>
+      `);
+    }
+  }
+  next();
+};
+
+const ensureProjectAccess = (selector) => (req, res, next) => {
+  try {
+    const projectId = selector(req);
+    const output = security.ensureProjectAccess(req, res, next, projectId);
+    if (output && typeof output.then === "function") {
+      output.catch(next);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess((req) => {
+  const value = req.query ? req.query[param] : null;
+  if (Array.isArray(value)) return value[0];
+  return value || null;
+});
+
+const supportedLanguages = ["en", "es", "sv"];
+const defaultLanguage = "en";
+
+const normalizeLanguageCode = (value) => {
+  if (!value) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (supportedLanguages.includes(raw)) return raw;
+  const base = raw.split(/[-_]/)[0];
+  return supportedLanguages.includes(base) ? base : null;
+};
+
+const resolveLanguageOverride = (req) => {
+  if (!req) return null;
+  const candidates = [];
+  if (req.cookies) {
+    candidates.push(req.cookies.qtiler_lang, req.cookies["qtiler.lang"]);
+  }
+  if (req.query && Object.prototype.hasOwnProperty.call(req.query, "lang")) {
+    const queryValue = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
+    if (typeof queryValue === "string") {
+      candidates.push(queryValue);
+    }
+  }
+  const headerLang = typeof req.get === "function" ? req.get("x-qtiler-lang") : null;
+  if (headerLang) {
+    candidates.push(headerLang);
+  }
+  for (const candidate of candidates) {
+    const normalized = normalizeLanguageCode(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
+};
+
+const detectPreferredLanguage = (req) => {
+  const overrideLang = resolveLanguageOverride(req);
+  if (overrideLang) {
+    return overrideLang;
+  }
+  if (!req || typeof req.acceptsLanguages !== "function") return defaultLanguage;
+  try {
+    const match = req.acceptsLanguages(...supportedLanguages);
+    if (!match || typeof match !== "string") return defaultLanguage;
+    const normalized = match.split(/[-_]/)[0];
+    return supportedLanguages.includes(normalized) ? normalized : defaultLanguage;
+  } catch (err) {
+    console.warn("Language negotiation failed", { error: String(err?.message || err) });
+    return defaultLanguage;
+  }
+};
+
+const renderPage = (req, res, viewName, locals = {}, options = {}) => {
+  const { status = 200 } = options;
+  const payload = {
+    pageLang: detectPreferredLanguage(req),
+    user: req?.user || null,
+    authPluginInstallUrl: '/admin',
+    proj4Presets,
+    ...locals
   };
 
-  // Middleware specifically for admin page access (redirects instead of JSON)
-  const requireAdminPage = (req, res, next) => {
-    if (security.isEnabled && security.isEnabled()) {
-      if (!req.user) {
-        return res.redirect('/login');
+  res.status(status);
+  res.render(viewName, payload, (err, html) => {
+    if (err) {
+      const errorStatus = status >= 400 ? status : 500;
+      console.warn("Failed to render view", { viewName, error: String(err?.message || err) });
+      if (!res.headersSent) {
+        res.status(errorStatus).send("Failed to render page");
       }
-      if (req.user.role !== 'admin') {
-        return res.status(403).send(`
-          <html>
-            <head><title>Access Denied</title><link rel="stylesheet" href="/style.css"></head>
-            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-              <h1>Access Denied</h1>
-              <p>You do not have permission to view this page.</p>
-              <p>Current user: ${req.user.username || req.user.id} (Role: ${req.user.role})</p>
-              <p><a href="/">Return to Home</a></p>
-            </body>
-          </html>
-        `);
-      }
+      return;
     }
-    next();
-  };
-
-  const ensureProjectAccess = (selector) => (req, res, next) => {
-    try {
-      const projectId = selector(req);
-      const output = security.ensureProjectAccess(req, res, next, projectId);
-      if (output && typeof output.then === "function") {
-        output.catch(next);
-      }
-    } catch (err) {
-      next(err);
-    }
-  };
-
-  const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess((req) => {
-    const value = req.query ? req.query[param] : null;
-    if (Array.isArray(value)) return value[0];
-    return value || null;
+    return res.send(html);
   });
+};
 
-  const supportedLanguages = ["en", "es", "sv"];
-  const defaultLanguage = "en";
+const pluginManager = new PluginManager({ app, baseDir: pluginsDir, dataDir, security });
+app.locals.pluginManager = pluginManager;
 
-  const normalizeLanguageCode = (value) => {
-    if (!value) return null;
-    const raw = String(value).trim().toLowerCase();
-    if (supportedLanguages.includes(raw)) return raw;
-    const base = raw.split(/[-_]/)[0];
-    return supportedLanguages.includes(base) ? base : null;
-  };
+app.use(cors());
+app.use(express.json());
+app.use(cookieParser());
+app.use((req, res, next) => {
+  if (req.path.includes('tile-grids') || req.path.includes('api')) {
+    console.log(`[Qtiler] Request: ${req.method} ${req.path} (user: ${req.user ? req.user.username : 'none'})`);
+  }
+  return next();
+});
+app.use((req, res, next) => security.attachUser(req, res, next));
 
-  const resolveLanguageOverride = (req) => {
-    if (!req) return null;
-    const candidates = [];
-    if (req.cookies) {
-      candidates.push(req.cookies.qtiler_lang, req.cookies["qtiler.lang"]);
-    }
-    if (req.query && Object.prototype.hasOwnProperty.call(req.query, "lang")) {
-      const queryValue = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
-      if (typeof queryValue === "string") {
-        candidates.push(queryValue);
-      }
-    }
-    const headerLang = typeof req.get === "function" ? req.get("x-qtiler-lang") : null;
-    if (headerLang) {
-      candidates.push(headerLang);
-    }
-    for (const candidate of candidates) {
-      const normalized = normalizeLanguageCode(candidate);
-      if (normalized) return normalized;
-    }
-    return null;
-  };
+// add: servir carpeta pública (sin index automático)
+const publicDir = path.join(__dirname, "public");
+const serviceMetadataPath = path.join(__dirname, "config", "service-metadata.json");
+const tileGridDir = path.join(__dirname, "config", "tile-grids");
+const projectAccessPath = path.join(dataDir, "QtilerAuth", "project-access.json");
+const legacyProjectAccessPaths = [
+  path.join(dataDir, "project-access.json"),
+  path.join(dataDir, "auth", "project-access.json")
+];
+const authUserSnapshotPaths = [
+  path.join(dataDir, "auth-users.json"),
+  path.join(dataDir, "auth", "auth-users.json"),
+  path.join(dataDir, "QtilerAuth", "auth-users.json")
+];
+const authPluginInstallUrl = "/admin";
+const authPluginRequiredResponse = {
+  error: "auth_plugin_disabled",
+  message: "Authentication requires the QtilerAuth plugin to be installed.",
+  installUrl: authPluginInstallUrl
+};
 
-  const detectPreferredLanguage = (req) => {
-    const overrideLang = resolveLanguageOverride(req);
-    if (overrideLang) {
-      return overrideLang;
-    }
-    if (!req || typeof req.acceptsLanguages !== "function") return defaultLanguage;
+const authAdminUiCandidates = [
+  path.join(pluginsDir, "QtilerAuth", "admin-ui"),
+  path.join(pluginsDir, "qtilerauth", "admin-ui"),
+  path.join(pluginsDir, "auth", "admin-ui"),
+  path.join(publicDir, "auth-admin")
+];
+
+const resolveAuthAdminUiDir = () => {
+  for (const candidate of authAdminUiCandidates) {
     try {
-      const match = req.acceptsLanguages(...supportedLanguages);
-      if (!match || typeof match !== "string") return defaultLanguage;
-      const normalized = match.split(/[-_]/)[0];
-      return supportedLanguages.includes(normalized) ? normalized : defaultLanguage;
+      const indexPath = path.join(candidate, "index.html");
+      if (fs.existsSync(indexPath)) {
+        return candidate;
+      }
     } catch (err) {
-      console.warn("Language negotiation failed", { error: String(err?.message || err) });
-      return defaultLanguage;
+      console.warn("Auth admin UI path check failed", { candidate, error: String(err) });
     }
-  };
+  }
+  return null;
+};
 
-  const renderPage = (req, res, viewName, locals = {}, options = {}) => {
-    const { status = 200 } = options;
-    const payload = {
-      pageLang: detectPreferredLanguage(req),
-      user: req?.user || null,
-      authPluginInstallUrl: '/admin',
-      proj4Presets,
-      ...locals
-    };
-
-    res.status(status);
-    res.render(viewName, payload, (err, html) => {
-      if (err) {
-        const errorStatus = status >= 400 ? status : 500;
-        console.warn("Failed to render view", { viewName, error: String(err?.message || err) });
-        if (!res.headersSent) {
-          res.status(errorStatus).send("Failed to render page");
-        }
-        return;
-      }
-      return res.send(html);
-    });
-  };
-
-  // ... Express y pluginManager solo en workers ...
-
-  // ...el resto de la lógica de tu app Express...
-  // Definir dataDir (usar __dirname ya definido anteriormente)
-  // add: servir carpeta pública (sin index automático)
-  const publicDir = path.join(__dirname, "public");
-  const serviceMetadataPath = path.join(__dirname, "config", "service-metadata.json");
-  const tileGridDir = path.join(__dirname, "config", "tile-grids");
-  const projectAccessPath = path.join(dataDir, "QtilerAuth", "project-access.json");
-  const legacyProjectAccessPaths = [
-    path.join(dataDir, "project-access.json"),
-    path.join(dataDir, "auth", "project-access.json")
-  ];
-  const authUserSnapshotPaths = [
-    path.join(dataDir, "auth-users.json"),
-    path.join(dataDir, "auth", "auth-users.json"),
-    path.join(dataDir, "QtilerAuth", "auth-users.json")
-  ];
-  const authPluginInstallUrl = "/admin";
-  const authPluginRequiredResponse = {
-    error: "auth_plugin_disabled",
-    message: "Authentication requires the QtilerAuth plugin to be installed.",
-    installUrl: authPluginInstallUrl
-  };
-
-  const authAdminUiCandidates = [
-    path.join(pluginsDir, "QtilerAuth", "admin-ui"),
-    path.join(pluginsDir, "qtilerauth", "admin-ui"),
-    path.join(pluginsDir, "auth", "admin-ui"),
-    path.join(publicDir, "auth-admin")
-  ];
-
-  const resolveAuthAdminUiDir = () => {
-    for (const candidate of authAdminUiCandidates) {
-      try {
-        const indexPath = path.join(candidate, "index.html");
-        if (fs.existsSync(indexPath)) {
-          return candidate;
-        }
-      } catch (err) {
-        console.warn("Auth admin UI path check failed", { candidate, error: String(err) });
-      }
-    }
+const normalizeZoomInput = (value) => {
+  if (value === null || value === undefined || value === "") {
     return null;
-  };
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed));
+};
 
-  const normalizeZoomInput = (value) => {
-    if (value === null || value === undefined || value === "") {
-      return null;
-    }
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
-      return null;
-    }
-    return Math.max(0, Math.floor(parsed));
-  };
-
-  const DEFAULT_PUBLISH_ZOOM_MIN = (() => {
+const DEFAULT_PUBLISH_ZOOM_MIN = (() => {
   const parsed = normalizeZoomInput(process.env.WMTS_DEFAULT_PUBLISH_ZOOM_MIN);
   if (parsed === null || parsed < 0) {
     return 0;
@@ -977,21 +863,6 @@ const pythonDir = path.resolve(__dirname, "python");
 const projectsDir = path.resolve(__dirname, "qgisprojects");
 const logsDir = path.resolve(__dirname, "logs");
 const uploadTempDir = path.resolve(__dirname, "temp_uploads");
-
-// Servir caché de tiles directamente con cabeceras largas para clientes/CDN
-try {
-  const staticMaxAge = parseInt(process.env.CACHE_TILES_MAXAGE_SEC || String(60 * 60 * 24 * 30), 10); // 30d por defecto
-  app.use('/cache', express.static(cacheDir, {
-    maxAge: staticMaxAge * 1000,
-    etag: true,
-    lastModified: true,
-    setHeaders: (res, pathInner) => {
-      res.setHeader('Cache-Control', `public, max-age=${staticMaxAge}, immutable`);
-    }
-  }));
-} catch (e) {
-  console.warn('Failed to mount static cache directory', e);
-}
 
 const ensureUploadSubdir = (name) => {
   const dir = path.join(uploadTempDir, name);
@@ -3132,7 +3003,6 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
       job.status = "aborted";
       job.endedAt = Date.now();
       try { activeKeys.delete(`${projectId}:${layerName}`); } catch { }
-        try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; await releaseGlobalSlot(); } } catch (e) { }
       clearTimeout(job.cleanupTimer);
       job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
     } catch (e) {
@@ -3221,7 +3091,6 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
       job.status = "aborted";
       job.endedAt = Date.now();
       try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch { }
-        try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; await releaseGlobalSlot(); } } catch (e) { }
       clearTimeout(job.cleanupTimer);
       job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
     } catch (e) {
@@ -3452,104 +3321,6 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   ];
   const cmd = cmdParts.join(" ");
   return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
-};
-
-// Simple persistent Python worker pool (workers run `python/python worker_loop.py`)
-const PY_WORKER_POOL_SIZE = parseInt(process.env.PY_WORKER_POOL_SIZE || "0", 10);
-const pyWorkers = [];
-
-const startPythonWorkerPool = () => {
-  if (!PY_WORKER_POOL_SIZE || PY_WORKER_POOL_SIZE <= 0) return;
-  for (let i = 0; i < PY_WORKER_POOL_SIZE; i++) {
-    const workerScript = path.join(pythonDir, 'worker_loop.py');
-    const proc = runPythonViaOSGeo4W(workerScript, []);
-    const w = { id: i, proc, busy: false, buf: '' };
-    proc.stdin.setDefaultEncoding && proc.stdin.setDefaultEncoding('utf8');
-    proc.stdout.on('data', (d) => {
-      const s = d.toString();
-      w.buf += s;
-      const lines = w.buf.split(/\r?\n/);
-      w.buf = lines.pop() || '';
-      for (const line of lines) {
-        if (!line) continue;
-        try {
-          const payload = JSON.parse(line);
-          // payload: { jobId, event, ... }
-          const jobId = payload.jobId;
-          if (payload.event === 'started') {
-            // worker acknowledged starting a sub-process
-            w.busy = true;
-          } else if (payload.event === 'exit') {
-            w.busy = false;
-            // finalize job if tracked
-            if (jobId && runningJobs.has(jobId)) {
-              const job = runningJobs.get(jobId);
-              job.exitCode = payload.code;
-              job.status = (payload.code === 0) ? 'completed' : 'error';
-              job.endedAt = Date.now();
-              if (job.status === 'completed') metrics.totalCompleted += 1; else metrics.totalFailed += 1;
-              persistJobProgress(job, { status: job.status }, { forceIndex: true, forceConfig: true });
-              try { activeKeys.delete(job.key); } catch {}
-              try { releaseLock(job.lockPath); } catch {}
-              try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; releaseGlobalSlot().catch(()=>{}); } } catch (e) {}
-              const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10);
-              job.cleanupTimer = setTimeout(() => { runningJobs.delete(job.id); }, isNaN(ttlMs) ? 300000 : ttlMs);
-              tryStartNextQueuedJob();
-            }
-          } else if (payload.event === 'stdout' || payload.event === 'stderr') {
-            if (jobId && runningJobs.has(jobId)) {
-              const job = runningJobs.get(jobId);
-              const field = payload.event === 'stdout' ? 'stdout' : 'stderr';
-              job[field] = (job[field] || '') + (payload.data || '') + "\n";
-              // try parse JSON lines emitted by generate_cache
-              try {
-                const candidate = payload.data && payload.data.trim();
-                if (candidate && (candidate.startsWith('{') || candidate.startsWith('['))) {
-                  const parsedInner = JSON.parse(candidate);
-                  handleJobJsonEvent(job, parsedInner);
-                }
-              } catch (e) {
-                // ignore
-              }
-            }
-          }
-        } catch (e) {
-          // ignore non-json lines
-        }
-      }
-    });
-    proc.on('exit', (code) => {
-      console.log(`[py-pool] worker ${i} exited ${code}, restarting`);
-      // try to restart
-      setTimeout(() => {
-        try {
-          startPythonWorkerPool();
-        } catch (e) {}
-      }, 1000);
-    });
-    pyWorkers.push(w);
-  }
-  console.log(`[py-pool] started ${pyWorkers.length} python workers`);
-};
-
-const assignJobToPyWorker = (job, argsArray) => {
-  if (!pyWorkers || !pyWorkers.length) return false;
-  const idle = pyWorkers.find(w => !w.busy && w.proc && !w.proc.killed);
-  if (!idle) return false;
-  try {
-    const payload = { cmd: 'run', jobId: job.id, args: argsArray };
-    idle.proc.stdin.write(JSON.stringify(payload) + '\n');
-    idle.busy = true;
-    job.status = 'running';
-    job.startedAt = Date.now();
-    metrics.totalStarted += 1;
-    job.execScript = '[py-pool]';
-    job.execArgs = argsArray.slice();
-    return true;
-  } catch (e) {
-    console.warn('Failed to send job to py worker', e);
-    return false;
-  }
 };
 
 // pequeño helper para extraer JSON de una respuesta con ruido (fall back)
@@ -4984,128 +4755,9 @@ const runningJobs = new Map();
 // control sencillo de concurrencia y duplicados
 const activeKeys = new Set(); // key = `${project||''}:${layer}`
 const JOB_MAX = parseInt(process.env.JOB_MAX || "4", 10); // máximo de procesos concurrentes
-// cola simple por worker para suavizar picos cuando se alcanza JOB_MAX
-const queuedJobs = [];
-// métricas simples
-let metrics = {
-  totalStarted: 0,
-  totalCompleted: 0,
-  totalFailed: 0
-};
-
-// helper para lanzar el proceso python para un job (usable desde la cola)
-const launchJobProcess = (job, scriptPath, argsArray) => {
-  // If a persistent python worker pool is available, try to assign the job there first
-  try {
-    if (PY_WORKER_POOL_SIZE && PY_WORKER_POOL_SIZE > 0) {
-      const assigned = assignJobToPyWorker(job, argsArray);
-      if (assigned) {
-        // we rely on pool stdout events to finalize job
-        job.execScript = scriptPath;
-        job.execArgs = argsArray.slice();
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn('Error while assigning to python pool, falling back to spawn', e);
-  }
-  const procLocal = runPythonViaOSGeo4W(scriptPath, argsArray, {});
-  job.proc = procLocal;
-  job.status = 'running';
-  job.startedAt = Date.now();
-  metrics.totalStarted += 1;
-  console.log(`Launching python generate_cache.py for job ${job.id} (pid will be available after spawn)`);
-
-  procLocal.stdout.on("data", d => {
-    const s = d.toString();
-    job.stdout += s;
-    job.stdoutJsonBuffer = (job.stdoutJsonBuffer || "") + s;
-    console.log(`[job ${job.id} stdout]`, s.trim());
-    const lines = job.stdoutJsonBuffer.split(/\r?\n/);
-    job.stdoutJsonBuffer = lines.pop() || "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const payload = JSON.parse(trimmed);
-        handleJobJsonEvent(job, payload);
-      } catch (err) {
-        // ignore parse errors but keep buffer for debugging
-      }
-    }
-  });
-  procLocal.stderr.on("data", d => {
-    const s = d.toString();
-    job.stderr += s;
-    console.error(`[job ${job.id} stderr]`, s.trim());
-  });
-
-  procLocal.on("error", err => {
-    console.error(`[job ${job.id} spawn error]`, err);
-  });
-
-  procLocal.on("close", code => {
-    console.log(`python job ${job.id} exited ${code}`);
-    job.exitCode = code;
-    job.status = code === 0 ? "completed" : "error";
-    job.endedAt = Date.now();
-    if (job.status === 'completed') metrics.totalCompleted += 1; else metrics.totalFailed += 1;
-    const finalProgressPayload = {
-      status: job.status,
-      total_generated: job.lastProgress?.totalGenerated ?? null,
-      expected_total: job.lastProgress?.expectedTotal ?? null,
-      percent: job.lastProgress?.percent ?? (job.status === "completed" ? 100 : null)
-    };
-    persistJobProgress(job, finalProgressPayload, { forceIndex: true, forceConfig: true });
-    try {
-      if (job.project) {
-        const lastMessage = job.status === "completed" ? "Cache generation completed" : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
-        const update = job.targetMode === "theme"
-          ? { themes: { [job.targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } }
-          : { layers: { [job.layer]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
-        updateProjectConfig(job.project, update);
-      }
-    } catch (cfgErr) {
-      console.warn("Failed to update project config with job result", cfgErr);
-    }
-    // liberar clave activa
-    try { activeKeys.delete(job.key); } catch { }
-    // liberar lock fichero
-    try { releaseLock(job.lockPath); } catch {}
-    // release global slot if taken
-    try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; releaseGlobalSlot().catch(() => {}); } } catch (e) {}
-    // limpiar mapa después de un TTL para permitir polling de UI
-    const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
-    job.cleanupTimer = setTimeout(() => {
-      runningJobs.delete(job.id);
-    }, isNaN(ttlMs) ? 300000 : ttlMs);
-
-    // intentar arrancar siguiente job en cola si existe
-    tryStartNextQueuedJob();
-  });
-};
-
-// Intentar arrancar el siguiente job en cola (si hay capacidad)
-const tryStartNextQueuedJob = () => {
-  try {
-    const runningCountNow = Array.from(runningJobs.values()).filter((j) => j.status === "running").length;
-    if (!queuedJobs.length) return;
-    if (!isNaN(JOB_MAX) && JOB_MAX > 0 && runningCountNow >= JOB_MAX) return;
-    // sacar el primer job de la cola
-    const nextId = queuedJobs.shift();
-    if (!nextId) return;
-    const nextJob = runningJobs.get(nextId);
-    if (!nextJob) return;
-    // start it
-    console.log(`Dequeueing job ${nextId} and starting it (running ${runningCountNow}/${JOB_MAX})`);
-    launchJobProcess(nextJob, nextJob.execScript, nextJob.execArgs);
-  } catch (e) {
-    console.warn('Failed to start next queued job', e);
-  }
-};
 
 // generate-cache -> spawn para proceso largo (pasar args)
-app.post("/generate-cache", requireAdmin, async (req, res) => {
+app.post("/generate-cache", requireAdmin, (req, res) => {
   const {
     project: projectId,
     layer,
@@ -5314,163 +4966,20 @@ app.post("/generate-cache", requireAdmin, async (req, res) => {
   }
 
   const runningCount = Array.from(runningJobs.values()).filter((j) => j.status === "running").length;
+  if (!isNaN(JOB_MAX) && JOB_MAX > 0 && runningCount >= JOB_MAX) {
+    return res.status(429).json({ error: "server_busy", details: `Máximo de jobs concurrentes (${JOB_MAX}) alcanzado` });
+  }
 
   const key = `${projectKey || ""}:${targetMode}:${targetName}`;
-  // Intentar lock global por fichero para evitar duplicados entre workers
-  const lockPath = tryAcquireLock(key);
-  if (!lockPath) {
+  if (activeKeys.has(key)) {
     return res.status(409).json({ error: "job_already_running", project: projectKey, target: targetName, targetMode });
   }
   activeKeys.add(key);
 
-  // Try to acquire a global concurrency slot (Redis-backed) when configured
-  let globalSlotAcquired = false;
-  if (!isNaN(GLOBAL_JOB_MAX) && GLOBAL_JOB_MAX > 0) {
-    try {
-      const ok = await acquireGlobalSlot();
-      if (!ok) {
-        // release file lock and active key
-        try { releaseLock(lockPath); } catch {}
-        try { activeKeys.delete(key); } catch {}
-        return res.status(429).json({ error: "global_limit_reached", details: `Global concurrent cache job limit (${GLOBAL_JOB_MAX}) reached` });
-      }
-      globalSlotAcquired = true;
-    } catch (err) {
-      console.warn('Global slot acquire check failed; proceeding (fail-open)', err);
-      globalSlotAcquired = false;
-    }
-  }
-
   const jobLabel = targetMode === "theme" ? `theme:${targetName}` : targetName;
   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  // helper para iniciar el proceso Python para un job (extraído para poder usar en queued jobs)
-  const launchJobProcess = (job) => {
-    const procLocal = runPythonViaOSGeo4W(script, args, {});
-    job.proc = procLocal;
-    job.status = 'running';
-    job.startedAt = Date.now();
-    metrics.totalStarted += 1;
-    console.log(`Launching python generate_cache.py for job ${job.id} (pid will be available after spawn)`);
-
-    procLocal.stdout.on("data", d => {
-      const s = d.toString();
-      job.stdout += s;
-      job.stdoutJsonBuffer = (job.stdoutJsonBuffer || "") + s;
-      console.log(`[job ${job.id} stdout]`, s.trim());
-      const lines = job.stdoutJsonBuffer.split(/\r?\n/);
-      job.stdoutJsonBuffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const payload = JSON.parse(trimmed);
-          handleJobJsonEvent(job, payload);
-        } catch (err) {
-          // ignore parse errors but keep buffer for debugging
-        }
-      }
-    });
-    procLocal.stderr.on("data", d => {
-      const s = d.toString();
-      job.stderr += s;
-      console.error(`[job ${job.id} stderr]`, s.trim());
-    });
-
-    procLocal.on("error", err => {
-      console.error(`[job ${job.id} spawn error]`, err);
-    });
-
-    procLocal.on("close", code => {
-      console.log(`python job ${job.id} exited ${code}`);
-      job.exitCode = code;
-      job.status = code === 0 ? "completed" : "error";
-      job.endedAt = Date.now();
-      if (job.status === 'completed') metrics.totalCompleted += 1; else metrics.totalFailed += 1;
-      const finalProgressPayload = {
-        status: job.status,
-        total_generated: job.lastProgress?.totalGenerated ?? null,
-        expected_total: job.lastProgress?.expectedTotal ?? null,
-        percent: job.lastProgress?.percent ?? (job.status === "completed" ? 100 : null)
-      };
-      persistJobProgress(job, finalProgressPayload, { forceIndex: true, forceConfig: true });
-      if (job.project) {
-        try {
-          const lastMessage = job.status === "completed" ? "Cache generation completed" : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
-          const update = job.targetMode === "theme"
-            ? { themes: { [job.targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } }
-            : { layers: { [job.layer]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
-          updateProjectConfig(job.project, update);
-        } catch (cfgErr) {
-          console.warn("Failed to update project config with job result", cfgErr);
-        }
-      }
-      // liberar clave activa
-      try { activeKeys.delete(job.key); } catch { }
-      // liberar lock fichero
-      try { releaseLock(job.lockPath); } catch {}
-      // release global slot if taken
-      try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; releaseGlobalSlot().catch(() => {}); } } catch (e) {}
-      // limpiar mapa después de un TTL para permitir polling de UI
-      const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
-      job.cleanupTimer = setTimeout(() => {
-        runningJobs.delete(job.id);
-      }, isNaN(ttlMs) ? 300000 : ttlMs);
-
-      // intentar arrancar siguiente job en cola si existe
-      tryStartNextQueuedJob();
-    });
-  };
-
-  // si el número de jobs corriendo ya alcanzó JOB_MAX, ponemos en cola en vez de rechazar
-  if (!isNaN(JOB_MAX) && JOB_MAX > 0 && runningCount >= JOB_MAX) {
-    const queuedJob = {
-      id,
-      proc: null,
-      execScript: script,
-      execArgs: args,
-      layer: jobLabel,
-      targetName,
-      targetMode,
-      project: projectKey,
-      key,
-      startedAt: null,
-      stdout: "",
-      stderr: "",
-      stdoutJsonBuffer: "",
-      status: "queued",
-      exitCode: null,
-      endedAt: null,
-      cleanupTimer: null,
-      lockPath,
-      globalSlotAcquired: globalSlotAcquired,
-      recachePlan,
-      tileBaseDir: explicitTileBaseDir,
-      existingIndexEntry: existingEntry,
-      zoomMin,
-      zoomMax,
-      requestedScheme: scheme,
-      requestedTileCrs: tile_crs,
-      xyzMode: xyz_mode,
-      metadata: null,
-      tileMatrixPreset: effectiveTileMatrixPreset || null,
-      publishZoomMin,
-      publishZoomMax,
-      lastProgressWriteAt: 0,
-      lastIndexWriteAt: 0,
-      lastProgress: null,
-      runReason,
-      trigger,
-      runId: typeof req.body.run_id === "string" && req.body.run_id.trim() ? req.body.run_id.trim() : null,
-      batchIndex: Number.isFinite(batchIndexVal) ? batchIndexVal : null,
-      batchTotal: Number.isFinite(batchTotalVal) ? batchTotalVal : null,
-      queuedAt: Date.now()
-    };
-    runningJobs.set(id, queuedJob);
-    queuedJobs.push(id);
-    console.log(`Job ${id} queued (running ${runningCount}/${JOB_MAX})`);
-    return res.json({ status: "queued", id, position: queuedJobs.length });
-  }
+  const proc = runPythonViaOSGeo4W(script, args, {});
+  console.log("Launching python generate_cache.py with args:", args);
 
   const runReason = typeof req.body.run_reason === "string" && req.body.run_reason.trim() ? req.body.run_reason.trim() : null;
   const trigger = typeof req.body.trigger === "string" && req.body.trigger.trim() ? req.body.trigger.trim() : (runReason === "scheduled" ? "timer" : null);
@@ -5513,22 +5022,67 @@ app.post("/generate-cache", requireAdmin, async (req, res) => {
     batchIndex: Number.isFinite(batchIndexVal) ? batchIndexVal : null,
     batchTotal: Number.isFinite(batchTotalVal) ? batchTotalVal : null
   };
-  // store lock path to release on finish/abort
-  job.lockPath = lockPath;
-  job.globalSlotAcquired = !!globalSlotAcquired;
   runningJobs.set(id, job);
 
-  // arrancar inmediatamente el proceso python para este job
-  try {
-    launchJobProcess(job, script, args);
-  } catch (e) {
-    console.error(`Failed to launch job process for ${id}`, e);
-    // cleanup lock and active key
-    try { releaseLock(job.lockPath); } catch {}
-    try { activeKeys.delete(key); } catch {}
-    runningJobs.delete(id);
-    return res.status(500).json({ error: 'launch_failed', details: String(e) });
-  }
+  proc.stdout.on("data", d => {
+    const s = d.toString();
+    job.stdout += s;
+    job.stdoutJsonBuffer = (job.stdoutJsonBuffer || "") + s;
+    console.log(`[job ${id} stdout]`, s.trim());
+    const lines = job.stdoutJsonBuffer.split(/\r?\n/);
+    job.stdoutJsonBuffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const payload = JSON.parse(trimmed);
+        handleJobJsonEvent(job, payload);
+      } catch (err) {
+        // ignore parse errors but keep buffer for debugging
+      }
+    }
+  });
+  proc.stderr.on("data", d => {
+    const s = d.toString();
+    job.stderr += s;
+    console.error(`[job ${id} stderr]`, s.trim());
+  });
+
+  proc.on("error", err => {
+    console.error(`[job ${id} spawn error]`, err);
+  });
+
+  proc.on("close", code => {
+    console.log(`python job ${id} exited ${code}`);
+    job.exitCode = code;
+    job.status = code === 0 ? "completed" : "error";
+    job.endedAt = Date.now();
+    const finalProgressPayload = {
+      status: job.status,
+      total_generated: job.lastProgress?.totalGenerated ?? null,
+      expected_total: job.lastProgress?.expectedTotal ?? null,
+      percent: job.lastProgress?.percent ?? (job.status === "completed" ? 100 : null)
+    };
+    persistJobProgress(job, finalProgressPayload, { forceIndex: true, forceConfig: true });
+    if (projectKey) {
+      try {
+        const lastMessage = job.status === "completed" ? "Cache generation completed" : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
+        const update = targetMode === "theme"
+          ? { themes: { [targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } }
+          : { layers: { [layer]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
+        updateProjectConfig(projectKey, update);
+      } catch (cfgErr) {
+        console.warn("Failed to update project config with job result", cfgErr);
+      }
+    }
+    // liberar clave activa
+    try { activeKeys.delete(key); } catch { }
+    // limpiar mapa después de un TTL para permitir polling de UI
+    const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
+    job.cleanupTimer = setTimeout(() => {
+      runningJobs.delete(id);
+    }, isNaN(ttlMs) ? 300000 : ttlMs);
+  });
 
   if (projectKey) {
     try {
@@ -5574,34 +5128,14 @@ app.post("/generate-cache", requireAdmin, async (req, res) => {
 });
 
 // Abort / stop job
-app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
+app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "id required" });
   const job = runningJobs.get(id);
   if (!job) return res.status(404).json({ error: "job not found or already finished" });
 
   try {
-    // si está en cola, quitar de la cola y limpiar locks
-    if (job.status === 'queued') {
-      // quitar de la cola
-      const idx = queuedJobs.indexOf(id);
-      if (idx !== -1) queuedJobs.splice(idx, 1);
-      job.status = 'aborted';
-      job.endedAt = Date.now();
-      persistJobProgress(job, { status: 'aborted' }, { forceIndex: true, forceConfig: true });
-      try {
-        const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
-        activeKeys.delete(activeKey);
-      } catch { }
-      try { releaseLock(job.lockPath); } catch {}
-      try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; await releaseGlobalSlot(); } } catch (e) { console.warn('Failed to release global slot on abort', e); }
-      // borrar del mapa de jobs inmediatamente
-      runningJobs.delete(id);
-      return res.json({ status: 'aborted', id, queued: true });
-    }
-
-    // 1) intento suave para jobs en ejecución
-    if (!job.proc) throw new Error('no_process_attached');
+    // 1) intento suave
     const killed = job.proc.kill();
     console.log(`Job ${id} kill() called -> ${killed}`);
     job.status = "aborted";
@@ -5612,10 +5146,6 @@ app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
       const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
       activeKeys.delete(activeKey);
     } catch { }
-    // liberar lock fichero si existe
-    try { releaseLock(job.lockPath); } catch {}
-    // release global slot if held
-    try { if (job.globalSlotAcquired) { job.globalSlotAcquired = false; await releaseGlobalSlot(); } } catch (e) { console.warn('Failed to release global slot on abort', e); }
     // 2) escalado forzado en Windows si persiste: taskkill /T /F /PID <pid>
     const graceMs = parseInt(process.env.ABORT_GRACE_MS || "1000", 10);
     setTimeout(() => {
@@ -6261,7 +5791,7 @@ function getTileBBox(z, x, y, tileSize = 256) {
   return [minx, miny, maxx, maxy];
 }
 
-// getTileBBox helper (internal)
+export { getTileBBox };
 // --- Control de concurrencia y cola FIFO para generación de tiles ---
 const MAX_CONCURRENT_TILE_JOBS = 2; // Ajusta según capacidad del servidor
 let activeTileJobs = 0;
@@ -7552,25 +7082,16 @@ const startServer = async () => {
   } catch (err) {
     console.error('Plugin initialization failed', err);
   }
-  // start persistent python worker pool if configured
-  try { startPythonWorkerPool(); } catch (e) { console.warn('Failed to start python worker pool', e); }
   initializeProjectSchedules();
   startScheduleHeartbeat();
-  const server = app.listen(3000, () => {
-    const wid = (cluster && cluster.worker && cluster.worker.id) ? cluster.worker.id : null;
-    console.log(`🚀 Servidor Node.js en http://localhost:3000 (pid=${process.pid}${wid ? `, worker=${wid}` : ''})`);
-  });
+  const server = app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
   // Increase timeout for tile rendering requests (default is 2 minutes)
   server.timeout = 300000; // 5 minutes
   server.keepAliveTimeout = 310000; // Slightly longer than timeout
   server.headersTimeout = 320000; // Slightly longer than keepAliveTimeout
 };
 
-
 startServer().catch((err) => {
   console.error('Failed to start server', err);
   process.exitCode = 1;
 });
-
-}
-
