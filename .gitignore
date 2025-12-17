@@ -16,6 +16,7 @@ temp_zip/
 # Build and extras
 dist/
 extras/
+OLD/
 
 # Data files (sensitive information)
 data/auth-config.json

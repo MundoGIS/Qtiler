@@ -1,0 +1,26 @@
+html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--app-bg,#0f172a)}
+.viewer-shell{display:flex;flex-direction:column;min-height:100vh;background:var(--app-bg,#0f172a);color:var(--text,#e2e8f0)}
+.viewer-main{flex:1;display:flex;flex-direction:column;padding:16px}
+.viewer-map-wrap{flex:1;position:relative;border:1px solid var(--border,#1e293b);border-radius:16px;overflow:hidden;background:#0b1220}
+#map{position:absolute;inset:0}
+.info{position:absolute;top:12px;left:12px;background:rgba(15,23,42,0.6);color:#f8fafc;padding:10px 14px;border-radius:10px;font-size:12px;backdrop-filter:blur(6px);max-width:320px}
+.info code{font-size:11px;word-break:break-all}
+.viewer-controls{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:8px}
+.viewer-control-btn{border:1px solid rgba(15,23,42,0.4);background:#1d4ed8;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;cursor:pointer;box-shadow:0 6px 14px rgba(15,23,42,0.4);transition:transform .12s ease,box-shadow .12s ease,background .12s ease,color .12s ease}
+.viewer-control-btn:hover{background:#2563eb;transform:translateY(-1px);box-shadow:0 10px 20px rgba(15,23,42,0.45)}
+.viewer-control-btn.is-active{background:#fb923c;color:#0f172a;border-color:#c2410c;box-shadow:0 10px 20px rgba(249,115,22,0.35)}
+.viewer-control-btn[disabled]{opacity:0.6;cursor:not-allowed}
+.viewer-cache-status{font-size:11px;color:#f8fafc;text-align:right;padding:2px 4px}
+.zoom-display{position:absolute;bottom:24px;left:12px;background:rgba(15,23,42,0.8);color:#fff;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:600;pointer-events:none;z-index:1000;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.1)}
+@media (max-width:768px){
+  .viewer-main{padding:12px}
+  .viewer-map-wrap{border-radius:12px}
+  .info{max-width:260px}
+}
+
+.portal-footer{margin-top:auto;background:rgba(4,7,17,0.9);border-top:1px solid rgba(30,41,59,0.65)}
+.portal-footer-inner{max-width:1100px;margin:0 auto;padding:20px 32px 24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:rgba(226,232,240,0.8)}
+.portal-footer-links{display:inline-flex;gap:16px}
+.portal-footer a{color:rgba(148,163,184,0.95);text-decoration:none}
+.portal-footer a:hover,
+.portal-footer a:focus{color:var(--primary);text-decoration:underline}

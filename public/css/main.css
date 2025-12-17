@@ -363,8 +363,8 @@ a:focus {
 
 .main-layout {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  gap: 28px;
+  align-items: flex-start;
 }
 
 .control-panel {
@@ -389,27 +389,6 @@ a:focus {
   flex-direction: column;
   gap: 28px;
   min-width: 0;
-}
-
-.content-panel-full {
-  width: 100%;
-  max-width: 100%;
-}
-
-.content-toolbar {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  padding: 20px 24px;
-  margin-bottom: 24px;
-}
-
-.toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
 }
 
 .control-toolbar {

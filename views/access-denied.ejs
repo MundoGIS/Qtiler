@@ -1,55 +1,12 @@
 <%
-  const deniedHeadStyles = String.raw`
-    <style>
-      body {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg, #f8fafc);
-        color: var(--fg, #0f172a);
-      }
-      .denied-card {
-        max-width: 540px;
-        padding: 40px 34px;
-        border-radius: 18px;
-        background: var(--card, #ffffff);
-        border: 1px solid var(--border, rgba(15, 23, 42, 0.08));
-        box-shadow: var(--shadow, 0 20px 40px rgba(15, 23, 42, 0.1));
-        text-align: center;
-      }
-      .denied-card h1 {
-        margin: 0 0 12px 0;
-        font-size: 26px;
-      }
-      .denied-card p {
-        margin: 0 0 18px 0;
-        color: var(--muted, #475569);
-        line-height: 1.6;
-      }
-      .denied-actions {
-        margin-top: 24px;
-      }
-      .denied-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 12px 20px;
-        border-radius: 999px;
-        background: var(--primary, #2563eb);
-        color: #fff;
-        text-decoration: none;
-        font-weight: 600;
-      }
-    </style>
-  `;
+  // Inline access-denied styles moved to /public/css/access-denied.css
+  const deniedStyles = [ { href: '/css/access-denied.css' } ];
 %>
 <%- include('partials/html-open', {
   pageLang,
   pageTitle: 'Qtiler · Access denied',
   pageTitleI18nKey: 'access.title',
-  inlineHeadContent: deniedHeadStyles
+  extraStyles: deniedStyles
 }) %>
     <%- include('partials/header', {
       headerMode: 'access',
@@ -80,64 +37,26 @@
         });
         let currentLang = window.qtilerLang?.get?.() || normalizeLang(localStorage.getItem("qtiler.lang") || navigator.language || "en");
 
-        const TRANSLATIONS = {
-          en: {
-            "Dashboard": "Dashboard",
-            "User guide": "User guide",
-            "Language": "Language",
-            "Tile caching console for QGIS projects.": "Tile caching console for QGIS projects.",
-            "access.title": "Qtiler · Access denied",
-            "access.heading": "Access denied",
-            "access.detail": "Your account is not authorized to view the Qtiler dashboard. If you need access, please contact an administrator.",
-            "access.tip": "You can still use any WMTS endpoints that have been shared with you directly.",
-            "access.cta": "Return to sign in"
-          },
-          es: {
-            "Dashboard": "Panel principal",
-            "User guide": "Guía de uso",
-            "Language": "Idioma",
-            "Tile caching console for QGIS projects.": "Consola de teselado para proyectos QGIS.",
-            "access.title": "Qtiler · Acceso denegado",
-            "access.heading": "Acceso denegado",
-            "access.detail": "Tu cuenta no está autorizada para ver el panel de Qtiler. Si necesitas acceso, contacta con un administrador.",
-            "access.tip": "Puedes seguir usando los endpoints WMTS que se hayan compartido contigo.",
-            "access.cta": "Volver a iniciar sesión"
-          },
-          sv: {
-            "Dashboard": "Översikt",
-            "User guide": "Användarguide",
-            "Language": "Språk",
-            "Tile caching console for QGIS projects.": "Cachekonsol för QGIS-projekt.",
-            "access.title": "Qtiler · Åtkomst nekad",
-            "access.heading": "Åtkomst nekad",
-            "access.detail": "Ditt konto har inte behörighet till Qtilers instrumentpanel. Kontakta en administratör om du behöver åtkomst.",
-            "access.tip": "Du kan fortfarande använda WMTS-endpoints som delats med dig.",
-            "access.cta": "Tillbaka till inloggning"
-          }
-        };
-
         const languageSelect = document.getElementById('language_selector');
 
         const tr = (key) => {
           if (!key) return '';
-          const table = TRANSLATIONS[currentLang] || {};
-          return table[key] ?? (TRANSLATIONS.en && TRANSLATIONS.en[key]) ?? key;
+          try {
+            if (window.qtilerI18n && typeof window.qtilerI18n.t === 'function') return window.qtilerI18n.t(key);
+          } catch (e) {}
+          return key;
         };
 
         const applyTranslations = () => {
-          if (document?.documentElement) {
-            document.documentElement.setAttribute('lang', currentLang);
-          }
-          const pageTitle = document.querySelector('title[data-i18n="access.title"]');
-          if (pageTitle) pageTitle.textContent = tr('access.title');
-          document.querySelectorAll('[data-i18n]').forEach((el) => {
-            const key = el.getAttribute('data-i18n');
-            if (!key) return;
-            el.textContent = tr(key);
-          });
-          if (languageSelect) {
-            languageSelect.value = currentLang;
-          }
+          try {
+            if (document?.documentElement) document.documentElement.setAttribute('lang', window.qtilerLang?.get?.() || currentLang);
+            const pageTitle = document.querySelector('title[data-i18n="access.title"]');
+            if (pageTitle) pageTitle.textContent = tr('access.title');
+            if (window.qtilerI18n && typeof window.qtilerI18n.apply === 'function') {
+              try { window.qtilerI18n.apply(); } catch (e) {}
+            }
+            if (languageSelect) languageSelect.value = window.qtilerLang?.get?.() || currentLang;
+          } catch (e) {}
         };
 
         const setLanguage = (lang) => {

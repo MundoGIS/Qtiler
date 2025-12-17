@@ -1,0 +1,52 @@
+.card-mini {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.card-mini h3 {
+  margin: 0 0 10px 0;
+  font-size: 17px;
+  color: var(--primary);
+}
+
+.guide-note {
+  text-align: center;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.portal-footer {
+  margin-top: auto;
+  background: rgba(4, 7, 17, 0.9);
+  border-top: 1px solid rgba(30, 41, 59, 0.65);
+}
+
+.portal-footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 32px 24px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.portal-footer-links {
+  display: inline-flex;
+  gap: 16px;
+}
+
+.portal-footer a {
+  color: rgba(148, 163, 184, 0.95);
+  text-decoration: none;
+}
+
+.portal-footer a:hover,
+.portal-footer a:focus {
+  color: var(--primary);
+  text-decoration: underline;
+}
