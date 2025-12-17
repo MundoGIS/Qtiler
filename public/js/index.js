@@ -754,31 +754,24 @@
         if (layerDetailsOverlay) return;
         
         layerDetailsOverlay = document.createElement('div');
-        layerDetailsOverlay.style.position = 'fixed';
-        layerDetailsOverlay.style.top = '0';
-        layerDetailsOverlay.style.left = '0';
-        layerDetailsOverlay.style.right = '0';
-        layerDetailsOverlay.style.bottom = '0';
-        layerDetailsOverlay.style.background = 'rgba(0, 0, 0, 0.5)';
-        layerDetailsOverlay.style.display = 'none';
-        layerDetailsOverlay.style.zIndex = '9999';
-        layerDetailsOverlay.style.alignItems = 'center';
-        layerDetailsOverlay.style.justifyContent = 'center';
-        layerDetailsOverlay.style.padding = '20px';
-        layerDetailsOverlay.style.overflow = 'auto';
-        
+        layerDetailsOverlay.className = 'qtiler-layer-overlay';
+
         layerDetailsModal = document.createElement('div');
-        layerDetailsModal.style.background = 'white';
-        layerDetailsModal.style.borderRadius = '8px';
-        layerDetailsModal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
-        layerDetailsModal.style.maxWidth = '900px';
-        layerDetailsModal.style.width = '100%';
-        layerDetailsModal.style.maxHeight = '90vh';
-        layerDetailsModal.style.overflow = 'auto';
-        layerDetailsModal.style.position = 'relative';
-        
+        layerDetailsModal.className = 'qtiler-layer-modal';
+
         layerDetailsOverlay.appendChild(layerDetailsModal);
         document.body.appendChild(layerDetailsOverlay);
+
+        // ensure CSS is loaded for modal
+        (function ensureCss(){
+          if (document.querySelector('link[href="/css/layer-details.css"]')) return;
+          try {
+            const l = document.createElement('link');
+            l.rel = 'stylesheet';
+            l.href = '/css/layer-details.css';
+            document.head.appendChild(l);
+          } catch (e) { /* ignore */ }
+        }());
         
         layerDetailsOverlay.addEventListener('click', (e) => {
           if (e.target === layerDetailsOverlay) {
@@ -804,21 +797,18 @@
         
         // Header
         const header = document.createElement('div');
-        header.style.padding = '24px';
-        header.style.borderBottom = '1px solid rgba(0, 0, 0, 0.1)';
-        
+        header.className = 'qtiler-layer-modal__header';
+
         const title = document.createElement('h2');
-        title.style.margin = '0 0 8px 0';
-        title.style.fontSize = '20px';
+        title.className = 'qtiler-layer-modal__title';
         title.textContent = 'Layer Details';
         header.appendChild(title);
-        
+
         const layerNameEl = document.createElement('div');
-        layerNameEl.style.fontSize = '14px';
-        layerNameEl.style.color = 'rgba(0, 0, 0, 0.6)';
+        layerNameEl.className = 'qtiler-layer-modal__subtitle';
         layerNameEl.textContent = layerData.name || 'Unknown layer';
         header.appendChild(layerNameEl);
-        
+
         layerDetailsModal.appendChild(header);
         
         // Content
@@ -900,20 +890,26 @@
         // Create output text
         const outputText = JSON.stringify(output, null, 2);
 
-        // Create pre element for output
+        // Show project configuration above layer config (if available)
+        let projectConfigForDisplay = null;
+        try {
+          const pcRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`, { credentials: 'include' });
+          if (pcRes.ok) projectConfigForDisplay = await pcRes.json();
+        } catch (e) { projectConfigForDisplay = null; }
+        if (projectConfigForDisplay) {
+          const projLabel = document.createElement('div');
+          projLabel.className = 'meta';
+          projLabel.textContent = 'Project configuration';
+          content.appendChild(projLabel);
+          const preProj = document.createElement('pre');
+          preProj.className = 'qtiler-layer-modal__pre';
+          try { preProj.textContent = JSON.stringify(projectConfigForDisplay, null, 2); } catch (e) { preProj.textContent = String(projectConfigForDisplay); }
+          content.appendChild(preProj);
+        }
+
+        // Create pre element for layer output
         const pre = document.createElement('pre');
-        pre.style.margin = '0';
-        pre.style.fontSize = '13px';
-        pre.style.lineHeight = '1.5';
-        pre.style.whiteSpace = 'pre';
-        pre.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
-        pre.style.padding = '16px';
-        pre.style.background = '#f8f9fa';
-        pre.style.borderRadius = '4px';
-        pre.style.maxHeight = '400px';
-        pre.style.overflowX = 'auto';
-        pre.style.overflowY = 'auto';
-        pre.style.border = '1px solid #e0e0e0';
+        pre.className = 'qtiler-layer-modal__pre';
         pre.textContent = outputText;
         content.appendChild(pre);
 
@@ -1029,91 +1025,285 @@
         // If admin, add editable fields section
         if (isAdmin) {
           const editSection = document.createElement('div');
-          editSection.style.marginTop = '24px';
-          editSection.style.paddingTop = '24px';
-          editSection.style.borderTop = '1px solid rgba(0, 0, 0, 0.1)';
+          editSection.className = 'qtiler-layer-modal__edit';
 
           const editLabel = document.createElement('div');
-          editLabel.style.fontSize = '14px';
-          editLabel.style.fontWeight = '600';
-          editLabel.style.marginBottom = '12px';
-          editLabel.style.color = '#333';
+          editLabel.className = 'meta';
           editLabel.textContent = 'Edit Configuration (Admin only)';
           editSection.appendChild(editLabel);
 
           const editDescription = document.createElement('div');
-          editDescription.style.fontSize = '12px';
-          editDescription.style.marginBottom = '12px';
-          editDescription.style.color = '#666';
-          editDescription.innerHTML = 'Edit all fields including resolutions. <strong>Note:</strong> Changing resolutions affects the project tile grid (<code>' + (output.tileGridId || 'auto-generated') + '</code>).';
+          editDescription.className = 'meta';
+          editDescription.textContent = 'You may only edit extent and resolutions for this layer.';
           editSection.appendChild(editDescription);
 
-          const configTextarea = document.createElement('textarea');
-          configTextarea.style.width = '100%';
-          configTextarea.style.minHeight = '300px';
-          configTextarea.style.fontFamily = 'Consolas, Monaco, "Courier New", monospace';
-          configTextarea.style.fontSize = '12px';
-          configTextarea.style.lineHeight = '1.5';
-          configTextarea.style.padding = '12px';
-          configTextarea.style.borderRadius = '4px';
-          configTextarea.style.border = '1px solid #ccc';
-          configTextarea.style.background = '#f8f9fa';
-          configTextarea.style.resize = 'vertical';
-          configTextarea.value = outputText;
-          editSection.appendChild(configTextarea);
+          // try to load layer entry from cache index.json so edits apply to index.json
+          let layerIndexEntry = null;
+          try {
+            const idxRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`, { credentials: 'include' });
+            if (idxRes.ok) {
+              const idxJson = await idxRes.json();
+              if (idxJson && Array.isArray(idxJson.layers)) {
+                layerIndexEntry = idxJson.layers.find(l => l && (l.name === (layerData.name || layerData.layer)) );
+              }
+            }
+          } catch (e) { layerIndexEntry = null; }
+
+          // Extent inputs (minX,minY,maxX,maxY)
+          const extentLabel = document.createElement('div');
+          extentLabel.className = 'meta';
+          extentLabel.textContent = 'Extent [minX, minY, maxX, maxY]';
+          editSection.appendChild(extentLabel);
+          const extentRow = document.createElement('div');
+          extentRow.style.display = 'flex';
+          extentRow.style.gap = '8px';
+          extentRow.style.marginTop = '8px';
+          const extentInputs = [];
+          for (let i = 0; i < 4; i++) {
+            const inp = document.createElement('input');
+            inp.type = 'number';
+            inp.className = 'input-number';
+            inp.style.flex = '1';
+            extentInputs.push(inp);
+            extentRow.appendChild(inp);
+          }
+          // prefill from index entry if available, otherwise from output.extent
+          try {
+            const earr = layerIndexEntry && Array.isArray(layerIndexEntry.extent) ? layerIndexEntry.extent : (Array.isArray(output.extent) ? output.extent : null);
+            if (earr && earr.length === 4) {
+              extentInputs[0].value = Number(earr[0]);
+              extentInputs[1].value = Number(earr[1]);
+              extentInputs[2].value = Number(earr[2]);
+              extentInputs[3].value = Number(earr[3]);
+            }
+          } catch (e) {}
+          editSection.appendChild(extentRow);
+
+          // Resolutions input (JSON array or comma-separated)
+          const resLabel = document.createElement('div');
+          resLabel.className = 'meta';
+          resLabel.style.marginTop = '12px';
+          resLabel.textContent = 'Resolutions (JSON array or comma-separated list)';
+          editSection.appendChild(resLabel);
+          const resTextarea = document.createElement('textarea');
+          resTextarea.className = 'qtiler-layer-modal__textarea';
+          resTextarea.style.minHeight = '80px';
+          let resInit = '';
+          try {
+            if (layerIndexEntry && Array.isArray(layerIndexEntry.resolutions)) resInit = JSON.stringify(layerIndexEntry.resolutions, null, 2);
+            else if (Array.isArray(output.resolutions)) resInit = JSON.stringify(output.resolutions, null, 2);
+          } catch (e) { resInit = ''; }
+          resTextarea.value = resInit;
+          editSection.appendChild(resTextarea);
+
+          const configError = document.createElement('div');
+          configError.className = 'qtiler-layer-modal__error';
+          configError.textContent = '';
+          editSection.appendChild(configError);
 
           const saveBtn = document.createElement('button');
           saveBtn.type = 'button';
           saveBtn.className = 'btn btn-primary';
           saveBtn.textContent = 'Save Configuration';
           saveBtn.style.marginTop = '12px';
+
+          const parseResolutions = (txt) => {
+            if (!txt || !txt.trim()) return null;
+            try {
+              const parsed = JSON.parse(txt);
+              if (Array.isArray(parsed)) return parsed.map(Number);
+            } catch (e) {
+              // try comma-separated
+              const parts = txt.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+              if (!parts.length) return null;
+              return parts.map(Number);
+            }
+            return null;
+          };
+
+          // UI element to require purge confirmation when technical params change
+          const purgeConfirmRow = document.createElement('label');
+          purgeConfirmRow.style.display = 'flex';
+          purgeConfirmRow.style.alignItems = 'center';
+          purgeConfirmRow.style.gap = '8px';
+          purgeConfirmRow.style.marginTop = '12px';
+          const purgeCheckbox = document.createElement('input');
+          purgeCheckbox.type = 'checkbox';
+          purgeCheckbox.checked = false;
+          purgeConfirmRow.appendChild(purgeCheckbox);
+          const purgeText = document.createElement('span');
+          purgeText.style.fontSize = '12px';
+          purgeText.innerHTML = 'I understand changing resolutions or tile grid will purge existing cache for this layer';
+          purgeConfirmRow.appendChild(purgeText);
+          purgeConfirmRow.style.display = 'none';
+          editSection.appendChild(purgeConfirmRow);
+
+          const validateFields = () => {
+            configError.textContent = '';
+            // extent
+            const ex = extentInputs.map(i => i.value === '' ? null : Number(i.value));
+            if (ex.some(v => v == null || !Number.isFinite(v))) {
+              configError.textContent = 'Extent requires four numeric values';
+              saveBtn.disabled = true;
+              return false;
+            }
+            if (!(ex[2] > ex[0] && ex[3] > ex[1])) {
+              configError.textContent = 'Extent max must be greater than min';
+              saveBtn.disabled = true;
+              return false;
+            }
+            // resolutions
+            const res = parseResolutions(resTextarea.value);
+            if (res && (!Array.isArray(res) || res.some(r => !Number.isFinite(r)))) {
+              configError.textContent = 'Resolutions must be an array of numbers';
+              saveBtn.disabled = true;
+              return false;
+            }
+            // enforce descending order (coarse -> fine)
+            if (Array.isArray(res) && res.length > 1) {
+              for (let i = 1; i < res.length; i++) {
+                const prev = Number(res[i - 1]);
+                const cur = Number(res[i]);
+                if (!Number.isFinite(prev) || !Number.isFinite(cur) || !(cur < prev)) {
+                  configError.textContent = 'Resolutions must be ordered from coarse to fine (descending numeric values).';
+                  saveBtn.disabled = true;
+                  return false;
+                }
+              }
+            }
+            // purge confirmation if resolutions changed compared to output
+            const parsedRes = res || [];
+            const outRes = Array.isArray(output.resolutions) ? output.resolutions : [];
+            const resChanged = JSON.stringify(parsedRes) !== JSON.stringify(outRes);
+            const extentChanged = JSON.stringify(ex) !== JSON.stringify(output.extent || []);
+            const wantsPurge = resChanged || extentChanged;
+            purgeConfirmRow.style.display = wantsPurge ? 'flex' : 'none';
+            if (wantsPurge && !purgeCheckbox.checked) {
+              configError.textContent = 'This edit changes technical parameters and will purge cached tiles for this layer — please confirm to proceed.';
+              saveBtn.disabled = true;
+              return false;
+            }
+            saveBtn.disabled = false;
+            return true;
+          };
+
+          extentInputs.forEach(i => i.addEventListener('input', validateFields));
+          resTextarea.addEventListener('input', validateFields);
+          purgeCheckbox.addEventListener('change', validateFields);
+          // initial validation
+          validateFields();
+
+          // fetch project config to validate extent boundaries and warn about purges
+          let projectConfig = null;
+          try {
+            const cfgRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`, { credentials: 'include' });
+            if (cfgRes.ok) projectConfig = await cfgRes.json();
+          } catch (e) { projectConfig = null; }
+
+          const inProjectExtent = (layerBbox) => {
+            try {
+              if (!projectConfig || !projectConfig.extent || !Array.isArray(projectConfig.extent.bbox) || projectConfig.extent.bbox.length !== 4) return true;
+              if (!Array.isArray(layerBbox) || layerBbox.length !== 4) return false;
+              const [pMinX, pMinY, pMaxX, pMaxY] = projectConfig.extent.bbox.map(Number);
+              const [lMinX, lMinY, lMaxX, lMaxY] = layerBbox.map(Number);
+              return lMinX >= pMinX && lMinY >= pMinY && lMaxX <= pMaxX && lMaxY <= pMaxY;
+            } catch (e) { return false; }
+          };
+
+          
+
+          
+
           saveBtn.addEventListener('click', async () => {
             try {
-              const editedData = JSON.parse(configTextarea.value);
-              console.log('Parsed data to save:', editedData);
-              
-              const layerName = layerData.name;
-              console.log('Saving to layer:', layerName);
-              
-              // Build the patch request with layers object
-              const patchData = {
-                layers: {
-                  [layerName]: editedData
-                }
-              };
-              
+              // Defensive check: if auth is enabled require admin on client too
+              if (window.appState && window.appState.authEnabled && !(window.appState.user && window.appState.user.role === 'admin')) {
+                showStatus('Admin role required to save configuration', true);
+                return;
+              }
+
+              if (!validateFields()) {
+                throw new Error('Invalid input');
+              }
+              // assemble edited fields
+              const exVals = extentInputs.map(i => Number(i.value));
+              const resVals = parseResolutions(resTextarea.value) || null;
+              const layerName = layerData.name || layerData.layer;
+              console.log('Saving extent/resolutions to layer:', layerName);
+              const editedData = { extent: exVals };
+              if (resVals) editedData.resolutions = resVals;
+
+              // Build the patch request with only extent and resolutions
+              const patchData = { layers: { [layerName]: editedData } };
+
               console.log('Patch data:', patchData);
 
-              // Save configuration
-              const saveRes = await fetch(`/projects/${encodeURIComponent(projectId)}/config`, {
+              // disable save while request is in-flight
+              saveBtn.disabled = true;
+
+              // Save configuration to cache index (index.json)
+              const saveRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`, {
                 method: 'PATCH',
                 headers: { 
                   'Content-Type': 'application/json',
                   'Accept': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify(patchData)
               });
 
               console.log('Save response status:', saveRes.status);
-              
+
               if (!saveRes.ok) {
                 const errorText = await saveRes.text();
                 console.error('Save error response:', errorText);
                 throw new Error(`Server error (${saveRes.status}): ${errorText}`);
               }
-              
+
               const result = await saveRes.json();
               console.log('Save result:', result);
-              console.log('Saved layer config:', result.layers?.[layerName]);
-              
+              // find saved layer entry in returned index
+              const savedLayer = result && result.index && Array.isArray(result.index.layers)
+                ? result.index.layers.find(l => l && l.name === layerName) || null
+                : null;
+
               showStatus('Configuration saved successfully');
-              closeLayerDetailsModal();
+              try {
+                const src = savedLayer || editedData || {};
+                if (Array.isArray(src.extent) && src.extent.length === 4) {
+                  extentInputs[0].value = Number(src.extent[0]);
+                  extentInputs[1].value = Number(src.extent[1]);
+                  extentInputs[2].value = Number(src.extent[2]);
+                  extentInputs[3].value = Number(src.extent[3]);
+                }
+                if (Array.isArray(src.resolutions)) {
+                  try { resTextarea.value = JSON.stringify(src.resolutions, null, 2); } catch { resTextarea.value = String(src.resolutions); }
+                }
+              } catch (e) { /* ignore */ }
+
+              // re-run validation to reflect updated content and enable save
+              validateFields();
+
+              // reload layers listing in background so UI reflects changes
               loadLayers({ forceConfigReload: true });
+
+              // if server purged cache, show notice
+              if (result && Array.isArray(result.purged) && result.purged.includes(layerName)) {
+                showStatus('Cache purged for this layer due to technical parameter changes', false);
+              }
             } catch (err) {
               console.error('Save failed:', err);
               showStatus('Failed to save: ' + String(err.message || err), true);
+              // keep modal open on failure
+              saveBtn.disabled = false;
             }
           });
+          // add small note about purging
+          const purgeNote = document.createElement('div');
+          purgeNote.className = 'qtiler-layer-modal__meta';
+          purgeNote.style.marginTop = '8px';
+          purgeNote.textContent = 'Note: changing technical parameters may purge existing cache for this layer.';
+          editSection.appendChild(purgeNote);
           editSection.appendChild(saveBtn);
 
           content.appendChild(editSection);

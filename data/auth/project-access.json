@@ -1,3 +1,13 @@
 {
-  "projects": {}
+  "projects": {
+    "nogo": {
+      "public": true
+    },
+    "orto": {
+      "public": true
+    },
+    "topos": {
+      "public": true
+    }
+  }
 }

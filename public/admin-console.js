@@ -505,7 +505,11 @@ function syncLanguageSelector(lang) {
 }
 
 function initLanguage() {
-  updateStaticTexts();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => updateStaticTexts());
+  } else {
+    updateStaticTexts();
+  }
   if (window.qtilerLang) {
     const lang = window.qtilerLang.get();
     document.documentElement.lang = lang;

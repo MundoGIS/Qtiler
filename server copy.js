@@ -5,6 +5,7 @@
  */
 
 import express from "express";
+import cluster from "cluster";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
@@ -12,7 +13,6 @@ import os from "os";
 import { execFile, spawn } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-dotenv.config();
 // Verificación automática de entorno QGIS/Python
 function verifyQGISEnv() {
   const qgisBin = process.env.OSGEO4W_BIN || "C:\\QGIS\\bin";
@@ -35,6 +35,7 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import cookieParser from "cookie-parser";
 import { PluginManager } from "./lib/pluginManager.js";
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1693,11 +1694,6 @@ const writeProjectConfig = (projectId, config, { skipReschedule = false } = {}) 
   applyScheduleFinalization(merged);
   const configPath = getProjectConfigPath(projectId);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  try {
-    console.log(`[writeProjectConfig] writing project config for ${projectId} -> ${configPath} (size=${String(JSON.stringify(merged).length)} bytes)`);
-  } catch (e) {
-    // ignore logging errors
-  }
   fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf8");
   projectConfigCache.set(projectId, merged);
   if (!skipReschedule) {
@@ -2884,40 +2880,8 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   } catch {
     index = { layers: [] };
   }
-  // Update index.json: preserve layer entry but mark cache as removed/cleared
+  index.layers = Array.isArray(index.layers) ? index.layers.filter((l) => l && l.name !== layerName) : [];
   try {
-    if (!Array.isArray(index.layers)) index.layers = [];
-    let found = false;
-    index.layers = index.layers.map((l) => {
-      if (!l || l.name !== layerName) return l;
-      found = true;
-      const updated = Object.assign({}, l);
-      // mark cache fields as cleared
-      updated.cached_zoom_min = null;
-      updated.cached_zoom_max = null;
-      // remove path reference to avoid pointing to removed directory
-      if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
-      // optional metadata about removal
-      updated.cache_removed_at = new Date().toISOString();
-      updated.cache_exists = false;
-      updated.updated = new Date().toISOString();
-      // remove any tile counts/sizes if present
-      if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
-      if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
-      return updated;
-    });
-    // if not present, add a minimal placeholder entry so index retains layer metadata
-    if (!found) {
-      index.layers.push({
-        name: layerName,
-        kind: 'layer',
-        cached_zoom_min: null,
-        cached_zoom_max: null,
-        cache_removed_at: new Date().toISOString(),
-        cache_exists: false,
-        updated: new Date().toISOString()
-      });
-    }
     fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
   } catch (err) {
     if (!silent) console.error("Failed to write project index after delete", err);
@@ -3004,35 +2968,10 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
   } catch {
     index = { layers: [] };
   }
-  // Update index.json: preserve theme entry but mark cache as removed/cleared
+  index.layers = Array.isArray(index.layers)
+    ? index.layers.filter((entry) => !(entry && entry.name === themeName && (entry.kind || "layer") === "theme"))
+    : [];
   try {
-    if (!Array.isArray(index.layers)) index.layers = [];
-    let foundTheme = false;
-    index.layers = index.layers.map((entry) => {
-      if (!(entry && entry.name === themeName && (entry.kind || "layer") === "theme")) return entry;
-      foundTheme = true;
-      const updated = Object.assign({}, entry);
-      updated.cached_zoom_min = null;
-      updated.cached_zoom_max = null;
-      if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
-      updated.cache_removed_at = new Date().toISOString();
-      updated.cache_exists = false;
-      updated.updated = new Date().toISOString();
-      if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
-      if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
-      return updated;
-    });
-    if (!foundTheme) {
-      index.layers.push({
-        name: themeName,
-        kind: 'theme',
-        cached_zoom_min: null,
-        cached_zoom_max: null,
-        cache_removed_at: new Date().toISOString(),
-        cache_exists: false,
-        updated: new Date().toISOString()
-      });
-    }
     fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
   } catch (err) {
     if (!silent) console.error("Failed to write project index after theme delete", err);
@@ -4353,67 +4292,13 @@ app.get("/projects/:id/config", ensureProjectAccess(req => req.params.id), (req,
   return res.json(config);
 });
 
-app.patch("/projects/:id/config", requireAdmin, async (req, res) => {
+app.patch("/projects/:id/config", requireAdmin, (req, res) => {
   const projectId = req.params.id;
   const proj = findProjectById(projectId);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
-  console.log(`[PATCH /projects/${projectId}/config] authEnabled=${!!(security.isEnabled && security.isEnabled())}, user=${req.user ? JSON.stringify({ id: req.user.id, role: req.user.role }) : 'null'}`);
-  console.log('[PATCH] incoming body:', JSON.stringify(req.body || {}));
-
-  // Pre-validate extents: do not allow saving a layer extent outside project extent
-  try {
-    const rawInput = req.body || {};
-    const currentConfig = readProjectConfig(projectId, { useCache: false }) || {};
-    if (rawInput.layers && typeof rawInput.layers === 'object' && currentConfig.extent && Array.isArray(currentConfig.extent.bbox) && currentConfig.extent.bbox.length === 4) {
-      const [pMinX, pMinY, pMaxX, pMaxY] = currentConfig.extent.bbox.map(Number);
-      for (const [layerName, layerValue] of Object.entries(rawInput.layers)) {
-        if (!layerValue || typeof layerValue !== 'object') continue;
-        const ext = Array.isArray(layerValue.extent) ? layerValue.extent.map(Number) : null;
-        if (ext && ext.length === 4) {
-          const [lMinX, lMinY, lMaxX, lMaxY] = ext;
-          if (!(lMinX >= pMinX && lMinY >= pMinY && lMaxX <= pMaxX && lMaxY <= pMaxY)) {
-            return res.status(400).json({ error: 'extent_out_of_range', message: `Layer ${layerName} extent is outside project extent` });
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Pre-validate extent check failed', e);
-  }
-
   const patch = buildProjectConfigPatch(req.body || {});
-  console.log('[PATCH] built patch:', JSON.stringify(patch));
   try {
     const updated = updateProjectConfig(projectId, patch);
-    console.log(`[PATCH /projects/${projectId}/config] wrote config to ${getProjectConfigPath(projectId)}`);
-
-    // If technical layer params changed, purge layer cache for affected layers
-    const purged = [];
-    try {
-      if (patch.layers && typeof patch.layers === 'object') {
-        for (const [layerName, layerPatch] of Object.entries(patch.layers)) {
-          if (!layerPatch || typeof layerPatch !== 'object') continue;
-          const triggers = ['resolutions', 'tileGridId', 'extent'];
-          const needsPurge = triggers.some((t) => Object.prototype.hasOwnProperty.call(layerPatch, t));
-          if (needsPurge) {
-            try {
-              await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
-              purged.push(layerName);
-            } catch (purgeErr) {
-              console.warn(`Failed to purge cache for ${projectId}:${layerName}`, purgeErr);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('Post-update purge check failed', e);
-    }
-
-    if (purged.length) {
-      // attach purge info to response for client notice
-      try { updated._purged = purged; } catch { }
-    }
-
     return res.json(updated);
   } catch (err) {
     console.error("Failed to update project config", projectId, err);
@@ -5610,80 +5495,6 @@ app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
   }
 });
 
-// Patch index.json for a project: update/merge layer entries
-app.patch("/cache/:project/index.json", requireAdmin, async (req, res) => {
-  const p = req.params.project;
-  const proj = findProjectById(p);
-  if (!proj) return res.status(404).json({ error: "project_not_found" });
-  const body = req.body || {};
-  if (!body.layers || typeof body.layers !== 'object') {
-    return res.status(400).json({ error: 'invalid_payload', message: 'Expected { layers: { <name>: { ... } } }' });
-  }
-  const pIndexPath = path.join(cacheDir, p, 'index.json');
-  let index = { project: proj.file || null, id: p, created: new Date().toISOString(), layers: [] };
-  try {
-    if (fs.existsSync(pIndexPath)) {
-      const raw = fs.readFileSync(pIndexPath, 'utf8');
-      if (raw) index = JSON.parse(raw);
-    }
-  } catch (err) {
-    console.warn('Failed to read existing index.json for patch', p, err);
-  }
-  if (!Array.isArray(index.layers)) index.layers = [];
-
-  const updatedLayers = [];
-  const purgedLayers = [];
-  for (const [layerName, layerData] of Object.entries(body.layers)) {
-    if (!layerName || typeof layerName !== 'string') continue;
-    const existingIdx = index.layers.findIndex((e) => e && e.name === layerName);
-    const now = new Date().toISOString();
-    const existing = existingIdx >= 0 ? index.layers[existingIdx] : null;
-    const merged = Object.assign({}, existing || { name: layerName }, layerData);
-
-    // detect technical changes that should purge cache
-    const triggers = ['resolutions', 'tileGridId', 'extent', 'tile_matrix_set', 'tile_matrix_preset'];
-    const needsPurge = triggers.some((t) => JSON.stringify(existing && existing[t] ? existing[t] : null) !== JSON.stringify(merged[t] ? merged[t] : null));
-
-    if (needsPurge) {
-      try {
-        await deleteLayerCacheInternal(p, layerName, { force: true, silent: true });
-        purgedLayers.push(layerName);
-        // reload index from disk to pick up deleteLayerCacheInternal changes
-        try {
-          const raw2 = fs.readFileSync(pIndexPath, 'utf8');
-          if (raw2) index = JSON.parse(raw2);
-        } catch (e) { /* ignore */ }
-      } catch (e) {
-        console.warn(`Failed to purge cache for ${p}:${layerName} during index patch`, e);
-      }
-    }
-
-    // ensure cache metadata is cleared after purge
-    merged.cached_zoom_min = null;
-    merged.cached_zoom_max = null;
-    merged.cache_exists = false;
-    merged.cache_removed_at = now;
-    merged.updated = now;
-
-    const finalIdx = index.layers.findIndex((e) => e && e.name === layerName);
-    if (finalIdx >= 0) {
-      index.layers[finalIdx] = merged;
-    } else {
-      index.layers.push(merged);
-    }
-    updatedLayers.push(layerName);
-  }
-  try {
-    fs.writeFileSync(pIndexPath, JSON.stringify(index, null, 2), 'utf8');
-  } catch (err) {
-    console.error('Failed to write index.json patch for', p, err);
-    return res.status(500).json({ error: 'write_failed', details: String(err) });
-  }
-  try { logProjectEvent(p, `index.json patched for layers: ${updatedLayers.join(', ')}`); } catch {}
-  const resp = { status: 'ok', project: p, updated: updatedLayers, purged: purgedLayers, index };
-  return res.json(resp);
-});
-
 // Delete entire project cache (all layers + index)
 app.delete("/cache/:project", requireAdmin, async (req, res) => {
   const p = req.params.project;
@@ -5794,7 +5605,7 @@ app.get('/cache/:project/list', requireAdmin, (req, res) => {
 
 // --- DEBUG: expose WMTS inventory and tile path diagnostics (local use only) ---
 // Public debug endpoint (temporary): expose WMTS inventory JSON for troubleshooting
-app.get('/wmts/debug/inventory', requireAdmin, (req, res) => {
+app.get('/wmts/debug/inventory', (req, res) => {
   try {
     const filterProject = req.query.project ? String(req.query.project).trim() : null;
     const inventory = buildWmtsInventory(filterProject ? { filterProjectId: filterProject } : {});
@@ -5806,7 +5617,7 @@ app.get('/wmts/debug/inventory', requireAdmin, (req, res) => {
 
 // Compute expected tile file path and existence for a given project/layer/theme/z/x/y
 // Public debug endpoint (temporary): compute expected tile file path and existence
-app.get('/wmts/debug/tilepath', requireAdmin, (req, res) => {
+app.get('/wmts/debug/tilepath', (req, res) => {
   try {
     const project = req.query.project ? String(req.query.project) : null;
     const name = req.query.name ? String(req.query.name) : null; // layer or theme name
