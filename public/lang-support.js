@@ -651,9 +651,14 @@
   const applyTranslationsToDocument = () => {
     try {
       document.documentElement.setAttribute('lang', (window.qtilerLang && window.qtilerLang.get && window.qtilerLang.get()) || 'en');
+      const lang = (window.qtilerLang && window.qtilerLang.get && window.qtilerLang.get()) || 'en';
+      const centralTable = (window.TRANSLATIONS && window.TRANSLATIONS[lang]) || {};
       document.querySelectorAll('[data-i18n]').forEach((el) => {
         const key = el.getAttribute('data-i18n');
         if (!key) return;
+        // Only apply if central translations contain the key to avoid
+        // overwriting page-specific translators (like admin-console.js)
+        if (!(key in centralTable)) return;
         const text = t(key);
         if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
           if (el.hasAttribute('placeholder')) el.placeholder = text;
@@ -664,11 +669,13 @@
       document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
         const key = el.getAttribute('data-i18n-placeholder');
         if (!key) return;
+        if (!(key in centralTable)) return;
         el.placeholder = t(key);
       });
       document.querySelectorAll('[data-i18n-title]').forEach((el) => {
         const key = el.getAttribute('data-i18n-title');
         if (!key) return;
+        if (!(key in centralTable)) return;
         el.title = t(key);
       });
     } catch (err) {
