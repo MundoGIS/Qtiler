@@ -48,10 +48,44 @@ for _ in range(4):
 if env_path:
     load_dotenv_file(env_path)
 
+# --- Force Qt cache directory to repo-local path to avoid using user AppData paths ---
+try:
+    repo_root = Path(__file__).resolve().parent.parent
+    cache_dir = repo_root / 'cache' / 'python'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    from PyQt5.QtCore import QStandardPaths
+    QStandardPaths.setPath(QStandardPaths.CacheLocation, str(cache_dir))
+    sys.stderr.write(json.dumps({"info": "qt_cache_location_set", "path": str(cache_dir)}) + "\n")
+except Exception:
+    pass
+
 # --- Leer variables (permitir override por .env / entorno) ---
-QGIS_PREFIX = os.environ.get("QGIS_PREFIX", r"C:\OSGeo4W\apps\qgis")
-OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN", r"C:\OSGeo4W\bin")
-DEFAULT_PROJECT_PATH = os.environ.get("PROJECT_PATH", r"C:\qgisprojekt\bakgrunder.qgz")
+QGIS_PREFIX = os.environ.get("QGIS_PREFIX")
+OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN")
+DEFAULT_PROJECT_PATH = os.environ.get("PROJECT_PATH")
+if not QGIS_PREFIX:
+    sys.stderr.write(json.dumps({"error": "missing_env", "var": "QGIS_PREFIX", "msg": "Set QGIS_PREFIX in .env to your QGIS installation path"}) + "\n")
+    sys.exit(2)
+if not OSGEO4W_BIN:
+    sys.stderr.write(json.dumps({"error": "missing_env", "var": "OSGEO4W_BIN", "msg": "Set OSGEO4W_BIN in .env to your o4w bin path (or QGIS bin)"}) + "\n")
+    sys.exit(2)
+
+# If PROJECT_PATH not set, auto-detect any project in repo qgisprojects folder
+if not DEFAULT_PROJECT_PATH:
+    candidate_dir = Path(__file__).resolve().parent.parent / 'qgisprojects'
+    picked = None
+    if candidate_dir.exists() and candidate_dir.is_dir():
+        for ext in ('*.qgz', '*.qgs'):
+            found = list(candidate_dir.glob(ext))
+            if found:
+                picked = found[0]
+                break
+    if picked:
+        DEFAULT_PROJECT_PATH = str(picked.resolve())
+        sys.stderr.write(json.dumps({"info": "auto_project_detected", "path": DEFAULT_PROJECT_PATH}) + "\n")
+    else:
+        sys.stderr.write(json.dumps({"error": "missing_env", "var": "PROJECT_PATH", "msg": "Set PROJECT_PATH in .env to the QGIS project file path or place a .qgz/.qgs in qgisprojects/"}) + "\n")
+        sys.exit(2)
 
 # --- Asegurar DLL paths y PYTHONPATH antes de importar qgis ---
 # Añadir rutas de binarios (DLLs) a PATH y registrar con add_dll_directory en Windows
@@ -93,6 +127,28 @@ QgsApplication.setPrefixPath(QGIS_PREFIX, True)
 qgs = QgsApplication([], False)
 qgs.initQgis()
 
+# Attempt to override network disk cache to repo-local directory to avoid AppData access
+try:
+    from qgis.PyQt.QtNetwork import QNetworkDiskCache
+    try:
+        from qgis.core import QgsNetworkAccessManager
+        nam = QgsNetworkAccessManager.instance()
+    except Exception:
+        from qgis.PyQt.QtNetwork import QNetworkAccessManager
+        nam = QNetworkAccessManager()
+    disk = QNetworkDiskCache()
+    repo_root = Path(__file__).resolve().parent.parent
+    disk.setCacheDirectory(str(repo_root / 'cache' / 'python'))
+    # Limit disk cache to 50 MB to improve WMS performance but avoid large disk use
+    disk.setMaximumCacheSize(50 * 1024 * 1024)
+    try:
+        nam.setCache(disk)
+        sys.stderr.write(json.dumps({"info": "network_disk_cache_set", "path": str(repo_root / 'cache' / 'python')}) + "\n")
+    except Exception:
+        pass
+except Exception:
+    pass
+
 # argumentos opcionales
 parser = argparse.ArgumentParser()
 parser.add_argument("--project", default=None)
@@ -114,6 +170,39 @@ project_view_extent_wgs84 = None
 layers = []
 wgs84 = QgsCoordinateReferenceSystem('EPSG:4326')
 themes = []
+
+
+def safe_get_attribution(layer):
+    """Return a attribution string using newer metadata API if available,
+    falling back to the old `attribution()` method. Returns None if not found.
+    """
+    try:
+        # Try metadata() API first (newer QGIS versions)
+        md_func = getattr(layer, 'metadata', None)
+        if callable(md_func):
+            try:
+                md = md_func()
+                attr = getattr(md, 'attribution', None)
+                if callable(attr):
+                    try:
+                        val = attr()
+                        return val or None
+                    except Exception:
+                        pass
+                else:
+                    return attr or None
+            except Exception:
+                pass
+        # Fallback to legacy attribution() if present
+        attr_func = getattr(layer, 'attribution', None)
+        if callable(attr_func):
+            try:
+                return attr_func() or None
+            except Exception:
+                return None
+        return attr_func or None
+    except Exception:
+        return None
 
 try:
     view_settings = project.viewSettings()
@@ -178,7 +267,7 @@ for layer in project.mapLayers().values():
             remote_source = {
                 "type": "xyz",
                 "url_template": source_uri,
-                "attribution": (layer.attribution() if hasattr(layer, "attribution") else "") or None
+                "attribution": safe_get_attribution(layer)
             }
     elif provider_lc == "wms":
         source_uri = layer.source() or ""
@@ -199,7 +288,7 @@ for layer in project.mapLayers().values():
                     "format": format_param or None,
                     "version": version_param or None,
                     "crs": crs_param or None,
-                    "attribution": (layer.attribution() if hasattr(layer, "attribution") else "") or None
+                    "attribution": safe_get_attribution(layer)
                 }
 
     layer_payload = {

@@ -17,6 +17,7 @@ temp_zip/
 dist/
 extras/
 OLD/
+daemon/
 
 # Data files (sensitive information)
 data/auth-config.json
@@ -43,3 +44,6 @@ tools/generate-qtilerauth-license.js
 tools/package-plugin.ps1
 plugins/QtilerAuth/LICENSE_QtilerAuth.txt
 package-qtilerauth.bat
+tools/generate-qtilerauth-license.js
+tools/inspect_png_q.py
+tools/inspect_png_raw.py

@@ -1,13 +1,16 @@
-import sys
-import os
-import json
-import datetime
-import time
+
 """
 This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
 If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
 Copyright (C) 2025 MundoGIS.
 """
+
+import sys
+import os
+import json
+import datetime
+import time
+
 
 import argparse
 import math
@@ -53,6 +56,16 @@ if env_path:
     load_dotenv_file(env_path)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# --- Force Qt cache directory to repo-local path to avoid using user AppData paths ---
+try:
+    cache_dir = REPO_ROOT / 'cache' / 'python'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    from PyQt5.QtCore import QStandardPaths
+    QStandardPaths.setPath(QStandardPaths.CacheLocation, str(cache_dir))
+    sys.stderr.write(json.dumps({"info": "qt_cache_location_set", "path": str(cache_dir)}) + "\n")
+except Exception:
+    pass
 
 def _ensure_float(value, fallback=0.0):
     try:
@@ -318,9 +331,32 @@ def _matrix_source_level(entry, fallback=0):
     return fallback
 
 # --- Leer variables (permitir override por .env / entorno) ---
-QGIS_PREFIX = os.environ.get("QGIS_PREFIX", r"C:\OSGeo4W\apps\qgis")
-OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN", r"C:\OSGeo4W\bin")
-PROJECT_PATH = os.environ.get("PROJECT_PATH", r"C:\qgisprojekt\bakgrunder.qgz")
+QGIS_PREFIX = os.environ.get("QGIS_PREFIX")
+OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN")
+PROJECT_PATH = os.environ.get("PROJECT_PATH")
+if not QGIS_PREFIX:
+    sys.stderr.write(json.dumps({"error": "missing_env", "var": "QGIS_PREFIX", "msg": "Set QGIS_PREFIX in .env to your QGIS installation path"}) + "\n")
+    sys.exit(2)
+if not OSGEO4W_BIN:
+    sys.stderr.write(json.dumps({"error": "missing_env", "var": "OSGEO4W_BIN", "msg": "Set OSGEO4W_BIN in .env to your o4w bin path (or QGIS bin)"}) + "\n")
+    sys.exit(2)
+
+# If PROJECT_PATH not set, auto-detect any project in repo qgisprojects folder
+if not PROJECT_PATH:
+    candidate_dir = REPO_ROOT / 'qgisprojects'
+    picked = None
+    if candidate_dir.exists() and candidate_dir.is_dir():
+        for ext in ('*.qgz', '*.qgs'):
+            found = list(candidate_dir.glob(ext))
+            if found:
+                picked = found[0]
+                break
+    if picked:
+        PROJECT_PATH = str(picked.resolve())
+        sys.stderr.write(json.dumps({"info": "auto_project_detected", "path": PROJECT_PATH}) + "\n")
+    else:
+        sys.stderr.write(json.dumps({"error": "missing_env", "var": "PROJECT_PATH", "msg": "Set PROJECT_PATH in .env to the QGIS project file path or place a .qgz/.qgs in qgisprojects/"}) + "\n")
+        sys.exit(2)
 PROJECT_EXTENT_ENV = os.environ.get("PROJECT_EXTENT")  # formato: "minx,miny,maxx,maxy"
 
 # --- Asegurar DLL paths y PYTHONPATH antes de importar qgis ---
@@ -368,6 +404,29 @@ except Exception as e:
 QgsApplication.setPrefixPath(QGIS_PREFIX, True)
 qgs = QgsApplication([], False)
 qgs.initQgis()
+
+# Attempt to override network disk cache to repo-local directory to avoid AppData access
+try:
+    from qgis.PyQt.QtNetwork import QNetworkDiskCache
+    try:
+        # Prefer QGIS network manager if available
+        from qgis.core import QgsNetworkAccessManager
+        nam = QgsNetworkAccessManager.instance()
+    except Exception:
+        from qgis.PyQt.QtNetwork import QNetworkAccessManager
+        nam = QNetworkAccessManager()
+    disk = QNetworkDiskCache()
+    disk.setCacheDirectory(str(REPO_ROOT / 'cache' / 'python'))
+    # Limit disk cache to 50 MB to improve WMS performance but avoid large disk use
+    disk.setMaximumCacheSize(50 * 1024 * 1024)
+    try:
+        nam.setCache(disk)
+        sys.stderr.write(json.dumps({"info": "network_disk_cache_set", "path": str(REPO_ROOT / 'cache' / 'python')}) + "\n")
+    except Exception:
+        # Some managers may not expose setCache; ignore safely
+        pass
+except Exception:
+    pass
 
 # manejo de señales para terminar limpiamente
 _terminate = {"flag": False}

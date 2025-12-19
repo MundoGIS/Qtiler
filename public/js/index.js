@@ -3015,12 +3015,13 @@
 
       function syncRemoteButtons(){
         if (!allowRemoteCheckbox) return;
-        const active = allowRemoteCheckbox.checked;
+        const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+        const active = allowRemoteCheckbox.checked || isAdminUser;
         document.querySelectorAll('button[data-remote="1"]').forEach(btn => {
           btn.disabled = !active;
           if (active) {
-            btn.title = 'Generate cache';
-            btn.setAttribute('aria-label', 'Generate cache');
+            btn.title = isAdminUser && !allowRemoteCheckbox.checked ? 'Generate cache (admin override)' : 'Generate cache';
+            btn.setAttribute('aria-label', btn.title);
           } else {
             btn.title = 'Remote layer. Enable "Allow remote" to cache.';
             btn.setAttribute('aria-label', 'Remote layer. Enable "Allow remote" to cache.');
@@ -3784,36 +3785,60 @@
           controls.addEventListener('click', (event) => event.stopPropagation());
 
           const hasCache = !!cachedEntry;
-          
+
+          // Always show the manual cache button so operators can trigger caching.
+          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
+          // prepare an admin-only direct-start play button (declared in outer scope so it can be appended later)
+          let playNowBtn = makeIconButton(tr('Start now'), 'play', null, 'btn-primary');
+          playNowBtn.addEventListener('click', () => {
+            // build zoomOverride from controls (prefer explicit inputs)
+            const zoomOverride = {};
+            const rawMin = zoomMinInput ? zoomMinInput.value : '';
+            const rawMax = zoomMaxInput ? zoomMaxInput.value : '';
+            const parsedMin = Number.isFinite(Number.parseInt(rawMin, 10)) ? Number.parseInt(rawMin, 10) : null;
+            const parsedMax = Number.isFinite(Number.parseInt(rawMax, 10)) ? Number.parseInt(rawMax, 10) : null;
+            if (parsedMin != null) zoomOverride.min = parsedMin;
+            if (parsedMax != null) zoomOverride.max = parsedMax;
+            // if no explicit zooms, fall back to project state cachedZoomRange if present
+            if (zoomOverride.min == null && zoomOverride.max == null) {
+              const st = getProjectState(project.id);
+              if (st && st.cachedZoomRange) {
+                if (st.cachedZoomRange.min != null) zoomOverride.min = st.cachedZoomRange.min;
+                if (st.cachedZoomRange.max != null) zoomOverride.max = st.cachedZoomRange.max;
+              }
+            }
+            const useOverride = (zoomOverride.min != null || zoomOverride.max != null) ? zoomOverride : null;
+            generateCache(playNowBtn, project.id, l.name, l, { recache: false, cachedEntry, zoomOverride: useOverride });
+          });
+          if (hasCache) {
+            genBtn.title = 'Recache layer (rebuild tiles)';
+            genBtn.addEventListener('click', async () => {
+              const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
+              if (!selection) return;
+              try {
+                await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
+              } catch (err) {
+                console.error('Recache request failed', err);
+              }
+            });
+            // mark as remote if layer is remote so syncRemoteButtons can manage it
+            if (l.cacheable === false) playNowBtn.dataset.remote = '1';
+          } else {
+            genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
+          }
+          if (l.cacheable === false) {
+            genBtn.disabled = true;
+            genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
+            // if user toggles allow_remote later, we re-enable dynamically
+            genBtn.dataset.remote = '1';
+          }
+
           if (isAdmin) {
-            const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
-            if (hasCache) {
-              genBtn.title = 'Recache layer (rebuild tiles)';
-              genBtn.addEventListener('click', async () => {
-                const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
-                if (!selection) return;
-                try {
-                  await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
-                } catch (err) {
-                  console.error('Recache request failed', err);
-                }
-              });
-            } else {
-              genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
-            }
-            if (l.cacheable === false) {
-              genBtn.disabled = true;
-              genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
-              // if user toggles allow_remote later, we re-enable dynamically
-              genBtn.dataset.remote = '1';
-            }
-
             const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
-
             const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
-            
             controls.appendChild(scheduleBtn);
             controls.appendChild(genBtn);
+            if (playNowBtn) controls.appendChild(playNowBtn);
             if (cachedEntry) {
               controls.appendChild(delBtn);
             }
@@ -4095,8 +4120,10 @@
             body.project_extent = extentPayload.extentString;
             body.extent_crs = extentPayload.crs;
           }
-          // remote opt-in
-          if (allowRemoteCheckbox && allowRemoteCheckbox.checked) {
+          // remote opt-in (admins may override the allow_remote toggle)
+          const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+          const allowRemoteEffective = (allowRemoteCheckbox && allowRemoteCheckbox.checked) || isAdminUser;
+          if (allowRemoteEffective) {
             body.allow_remote = true;
             const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
             if (throttleVal > 0) body.throttle_ms = throttleVal;
@@ -4157,6 +4184,12 @@
             }
           }
 
+          // Debug: log request body for admin users to help diagnose unexpected tile generation
+          try {
+            if (!window.appState || !window.appState.authEnabled || (window.appState.user && window.appState.user.role === 'admin')) {
+              console.debug('generate-cache request body:', JSON.parse(JSON.stringify(body)));
+            }
+          } catch (e) {}
           const res = await fetch('/generate-cache', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

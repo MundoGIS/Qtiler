@@ -9,19 +9,20 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import cluster from "cluster";
 import { execFile, spawn } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 dotenv.config();
 // Verificación automática de entorno QGIS/Python
 function verifyQGISEnv() {
-  const qgisBin = process.env.OSGEO4W_BIN || "C:\\QGIS\\bin";
-  const pythonExe = process.env.PYTHON_EXE || "C:\\QGIS\\bin\\python.exe";
-  const qgisPrefix = process.env.QGIS_PREFIX || "C:\\QGIS\\apps\\qgis";
+  const qgisBin = process.env.OSGEO4W_BIN || null;
+  const pythonExe = process.env.PYTHON_EXE || null;
+  const qgisPrefix = process.env.QGIS_PREFIX || null;
   let missing = [];
-  if (!fs.existsSync(qgisBin)) missing.push("OSGEO4W_BIN");
-  if (!fs.existsSync(pythonExe)) missing.push("PYTHON_EXE");
-  if (!fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
+  if (!qgisBin || !fs.existsSync(qgisBin)) missing.push("OSGEO4W_BIN");
+  if (!pythonExe || !fs.existsSync(pythonExe)) missing.push("PYTHON_EXE");
+  if (!qgisPrefix || !fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
   if (missing.length) {
     console.warn("[Qtiler] Entorno QGIS/Python incompleto. Faltan:", missing.join(", "));
     console.warn("Configura manualmente las rutas en .env (OSGEO4W_BIN, PYTHON_EXE, QGIS_PREFIX) antes de generar cachés.");
@@ -3175,8 +3176,8 @@ const pluginUpload = multer({
   }
 });
 
-// Detectar ejecutable python (permite override por .env)
-const pythonExe = process.env.PYTHON_EXE || path.join(process.env.OSGEO4W_BIN || "C:\\OSGeo4W\\bin", "python.exe");
+// Detectar ejecutable python (permite override por .env). No usar hardcoded C:\ fallbacks — exigir .env
+const pythonExe = process.env.PYTHON_EXE || (process.env.OSGEO4W_BIN ? path.join(process.env.OSGEO4W_BIN, "python.exe") : null);
 
 // crear env para procesos hijos incluyendo OSGeo4W paths si están en .env
 const makeChildEnv = () => {
@@ -3204,7 +3205,8 @@ const makeChildEnv = () => {
 };
 
 // helper: ejecutar comando dentro de la shell de OSGeo4W (o4w_env.bat)
-const o4wBatch = process.env.O4W_BATCH || path.join(process.env.OSGEO4W_BIN || "C:\\OSGeo4W\\bin", "o4w_env.bat");
+// No usar hardcoded fallbacks. Si no hay O4W_BATCH y tampoco OSGEO4W_BIN, será null.
+const o4wBatch = process.env.O4W_BATCH || (process.env.OSGEO4W_BIN ? path.join(process.env.OSGEO4W_BIN, "o4w_env.bat") : null);
 
 const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   // Ejecutar el batch (o4w_env) y luego python en la misma cmd para heredar el entorno.
@@ -3212,14 +3214,16 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   // El batch siempre se ejecuta en modo silencioso (>nul 2>&1) para evitar ruido
   // en los registros del servidor. Si necesitas depuración explícita, establece
   // manualmente la variable en el entorno antes de arrancar el servidor.
-  const o4wPart = `"${o4wBatch}" >nul 2>&1`;
-  const cmdParts = [
-    o4wPart,
-    "&&",
-    `"${pythonExe}"`,
-    `"${script}"`,
-    ...args.map(a => `"${String(a)}"`)
-  ];
+  if (!pythonExe && !o4wBatch) {
+    throw new Error('OSGeo4W/Python no configurado: define PYTHON_EXE o OSGEO4W_BIN (o O4W_BATCH) en .env');
+  }
+  const o4wPart = o4wBatch ? `"${o4wBatch}" >nul 2>&1` : null;
+  const cmdParts = [];
+  if (o4wPart) cmdParts.push(o4wPart, "&&");
+  if (!pythonExe) {
+    throw new Error('PYTHON_EXE no definido y no se pudo resolver desde OSGEO4W_BIN; revisa .env');
+  }
+  cmdParts.push(`"${pythonExe}"`, `"${script}"`, ...args.map(a => `"${String(a)}"`));
   const cmd = cmdParts.join(" ");
   return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
 };
@@ -5954,8 +5958,8 @@ function processRenderQueue() {
     }
     childEnv.PATH = parts.join(';');
   }
-  // Use wrapper batch file for Python invocation
-  const wrapperBatch = path.join(__dirname, 'daemon', 'run_qgis_python.bat');
+  // Use wrapper batch file for Python invocation (moved to tools/)
+  const wrapperBatch = path.join(__dirname, 'tools', 'run_qgis_python.bat');
   // Pasar todos los argumentos al batch (no truncar)
   const spawnArgs = [scriptPath, ...args];
   logProjectEvent(next.params.project, `SPAWN: cmd.exe ${JSON.stringify(['/c', wrapperBatch, ...spawnArgs])}`);
@@ -6000,13 +6004,29 @@ function processRenderQueue() {
     const spawnArgsFinal = [scriptPath, ...augmentedArgs];
     appendRenderLog(`Spawn wrapper: ${wrapperBatch} ${spawnArgsFinal.map(a => typeof a === 'string' && a.includes(' ') ? `"${a}"` : a).join(' ')}`);
 
-    // Spawn the process via wrapper batch (use ComSpec so Windows cmd is located)
-    const comspec = process.env.ComSpec || 'cmd.exe';
-    const proc = spawn(comspec, ['/c', wrapperBatch, ...spawnArgsFinal], {
-      env: childEnv,
-      cwd: __dirname,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    // Spawn the process via wrapper batch if present. If the wrapper is missing,
+    // fall back to `PYTHON_EXE` (if defined and exists) or `python` on PATH.
+    let proc;
+    if (fs.existsSync(wrapperBatch)) {
+      const comspec = process.env.ComSpec || 'cmd.exe';
+      proc = spawn(comspec, ['/c', wrapperBatch, ...spawnArgsFinal], {
+        env: childEnv,
+        cwd: __dirname,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } else {
+      // wrapper batch not found - try PYTHON_EXE env var
+      const pythonExe = process.env.PYTHON_EXE && fs.existsSync(process.env.PYTHON_EXE) ? process.env.PYTHON_EXE : 'python';
+      // If pythonExe is an absolute path we still use it directly; otherwise rely on PATH
+      proc = spawn(pythonExe, spawnArgsFinal, {
+        env: childEnv,
+        cwd: __dirname,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      logProjectEvent(next.params.project, `[WARN] wrapper batch missing, using python runner: ${pythonExe}`);
+      appendRenderLog && appendRenderLog && appendRenderLog(`[WARN] wrapper batch missing, using python runner: ${pythonExe}`);
+      console.warn('[RUN_QGIS_PY] wrapper batch not found, falling back to', pythonExe);
+    }
 
     try {
       if (proc && Array.isArray(proc.spawnargs)) {
@@ -6916,7 +6936,50 @@ const startServer = async () => {
   server.headersTimeout = 320000; // Slightly longer than keepAliveTimeout
 };
 
-startServer().catch((err) => {
-  console.error('Failed to start server', err);
-  process.exitCode = 1;
-});
+if (cluster.isPrimary || cluster.isMaster) {
+  const cpuCount = os.cpus().length;
+  const configuredWorkers = parseInt(process.env.WORKER_COUNT || "0", 10) || 0;
+  const numCPUs = (configuredWorkers > 0) ? configuredWorkers : cpuCount;
+  const totalMem = os.totalmem();
+  console.log(`[Qtiler] starting master: cpuCount=${cpuCount}, configuredWorkers=${configuredWorkers}, forking=${numCPUs}`);
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+
+  setInterval(() => {
+    for (const id in cluster.workers) {
+      try {
+        cluster.workers[id].process.send({ cmd: "checkMemory", maxMem: totalMem * 0.8 });
+      } catch (e) {
+        // ignore send errors
+      }
+    }
+  }, 10000);
+
+  cluster.on("exit", (worker, code, signal) => {
+    console.log(`[Qtiler] Worker ${worker.process.pid} died (${signal || code}), restarting...`);
+    try { cluster.fork(); } catch (e) { console.warn('[Qtiler] failed to fork worker', e); }
+  });
+
+} else {
+  // Worker process: start server and handle master messages
+  process.on('message', (msg) => {
+    try {
+      if (msg && msg.cmd === 'checkMemory') {
+        const used = process.memoryUsage().rss || 0;
+        if (msg.maxMem && used > msg.maxMem) {
+          console.warn(`[Qtiler] worker ${process.pid} exceeds memory limit ${used} > ${msg.maxMem}, exiting to allow restart`);
+          // allow master to detect exit and fork new worker
+          process.exit(1);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  startServer().catch((err) => {
+    console.error('Failed to start server', err);
+    process.exitCode = 1;
+  });
+}
