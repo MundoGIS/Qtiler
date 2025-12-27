@@ -1,10 +1,39 @@
+/* Ensure DOM is ready before querying header elements (language selector etc) */
 (async () => {
+  if (document.readyState === 'loading') {
+    await new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve));
+  }
 
   const footerYearEl = document.getElementById('viewer_footer_year');
   if (footerYearEl) footerYearEl.textContent = String(new Date().getFullYear());
 
     const params = new URLSearchParams(location.search);
     const infoEl = document.getElementById('info');
+    // Add toggle button for info panel
+    let infoToggleBtn = document.createElement('button');
+    infoToggleBtn.className = 'info-toggle-btn';
+    infoToggleBtn.type = 'button';
+    infoToggleBtn.title = 'Mostrar/ocultar información';
+    infoToggleBtn.innerHTML = '<span style="font-size:18px;">&#9776;</span>';
+    let infoCollapsed = false;
+    function setInfoCollapsed(collapsed) {
+      infoCollapsed = collapsed;
+      if (collapsed) {
+        infoEl.classList.add('info-collapsed');
+        infoToggleBtn.setAttribute('aria-label', 'Mostrar información');
+        infoToggleBtn.innerHTML = '<span style="font-size:18px;">&#9776;</span>';
+      } else {
+        infoEl.classList.remove('info-collapsed');
+        infoToggleBtn.setAttribute('aria-label', 'Ocultar información');
+        infoToggleBtn.innerHTML = '<span style="font-size:18px;">&times;</span>';
+      }
+    }
+    infoToggleBtn.addEventListener('click', () => setInfoCollapsed(!infoCollapsed));
+    if (infoEl && !document.getElementById('info-toggle-btn')) {
+      infoToggleBtn.id = 'info-toggle-btn';
+      infoEl.parentNode.insertBefore(infoToggleBtn, infoEl);
+      setInfoCollapsed(false);
+    }
     const languageSelect = document.getElementById('language_selector');
 
     const viewerState = {
@@ -122,10 +151,11 @@
     const renderInfo = () => {
       if (!infoEl) return;
       if (viewerData.loading) {
-        infoEl.textContent = tr('viewer.loading');
+        infoEl.innerHTML = `<span>${tr('viewer.loading')}</span>`;
         return;
       }
       const parts = [];
+      parts.push('<div style="width:100%">');
       const projectLabel = escapeHtml(viewerData.project || tr('viewer.value.unknown'));
       parts.push(`<div style="font-weight:600">${tr('viewer.info.project', { value: projectLabel })}</div>`);
       if (viewerData.theme) {
@@ -163,7 +193,7 @@
         const color = tone === 'error' ? '#f66' : tone === 'warn' ? '#fbbf24' : '#dff';
         parts.push(`<div style="margin-top:6px;color:${color}">${tr(msg.key, msg.params || {})}</div>`);
       });
-
+      parts.push('</div>');
       infoEl.innerHTML = parts.join('');
     };
 

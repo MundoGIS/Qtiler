@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import cluster from "cluster";
-import { execFile, spawn } from "child_process";
+import { execFile, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 dotenv.config();
@@ -19,7 +19,9 @@ function verifyQGISEnv() {
   const qgisBin = process.env.OSGEO4W_BIN || null;
   const pythonExe = process.env.PYTHON_EXE || null;
   const qgisPrefix = process.env.QGIS_PREFIX || null;
-  let missing = [];
+    let missing = [];
+    let projExtent = null;
+    let projExtentCrs = null;
   if (!qgisBin || !fs.existsSync(qgisBin)) missing.push("OSGEO4W_BIN");
   if (!pythonExe || !fs.existsSync(pythonExe)) missing.push("PYTHON_EXE");
   if (!qgisPrefix || !fs.existsSync(qgisPrefix)) missing.push("QGIS_PREFIX");
@@ -34,7 +36,9 @@ verifyQGISEnv();
 import crypto from "crypto";
 import multer from "multer";
 import AdmZip from "adm-zip";
+
 import cookieParser from "cookie-parser";
+ //ort { spawnSync } from 'child_process';
 import { PluginManager } from "./lib/pluginManager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +50,8 @@ const viewsDir = path.resolve(__dirname, "views");
 const proj4PresetsPath = path.resolve(__dirname, "config", "proj4-presets.json");
 
 const defaultProj4Presets = {
-  // "EPSG:3006": "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0 +units=m +no_defs"
+  // Ensure common Swedish tile CRS is available by default so client transforms work
+  "EPSG:3006": "+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 };
 
 const loadProj4Presets = () => {
@@ -68,7 +73,63 @@ const loadProj4Presets = () => {
   }
 };
 
-const proj4Presets = Object.freeze(loadProj4Presets());
+let proj4Presets = loadProj4Presets();
+
+const normalizeEpsgKey = (code) => {
+  if (!code) return null;
+  const s = String(code).trim();
+  if (!s) return null;
+  const m = s.match(/(\d+)$/);
+  const n = m ? m[1] : s;
+  return `EPSG:${n}`.toUpperCase();
+};
+
+const fetchProj4FromEpsgIo = async (code) => {
+  try {
+    const num = String(code).replace(/[^0-9]/g, '');
+    if (!num) return null;
+    const url = `https://epsg.io/${encodeURIComponent(num)}.proj4`;
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) return null;
+    const text = await res.text();
+    const cleaned = String(text).trim();
+    if (!cleaned) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn('Failed to fetch proj4 from epsg.io', code, err?.message || err);
+    return null;
+  }
+};
+
+const ensureServerProj4Def = async (code) => {
+  const key = normalizeEpsgKey(code);
+  if (!key) return null;
+  if (proj4Presets && proj4Presets[key]) return proj4Presets[key];
+  // try fetching from epsg.io
+  const def = await fetchProj4FromEpsgIo(key);
+  if (!def) return null;
+  try {
+    // persist to config/proj4-presets.json (merge)
+    let existing = {};
+    try {
+      const raw = fs.readFileSync(proj4PresetsPath, 'utf-8');
+      existing = JSON.parse(raw) || {};
+    } catch (err) {
+      existing = {};
+    }
+    existing[key] = def;
+    try {
+      fs.writeFileSync(proj4PresetsPath, JSON.stringify(existing, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('Failed to write proj4 presets file', err?.message || err);
+    }
+    // update runtime cache
+    proj4Presets = { ...(proj4Presets || {}), [key]: def };
+  } catch (err) {
+    console.warn('Failed to persist proj4 def', key, err?.message || err);
+  }
+  return def;
+};
 
 app.set("views", viewsDir);
 app.set("view engine", "ejs");
@@ -499,6 +560,26 @@ app.get(["/admin", "/admin.html"], requireAdminPage, (req, res) => {
 
 app.get(["/viewer", "/viewer.html"], (req, res) => {
   return renderPage(req, res, "viewer", { activeNav: "viewer" });
+});
+
+app.get('/api/proj4/:code', async (req, res) => {
+  try {
+    const code = req.params && req.params.code ? String(req.params.code) : null;
+    if (!code) return res.status(400).json({ error: 'missing_code' });
+    const key = normalizeEpsgKey(code);
+    if (!key) return res.status(400).json({ error: 'invalid_code' });
+    // return existing if present
+    if (proj4Presets && proj4Presets[key]) {
+      return res.json({ code: key, def: proj4Presets[key], source: 'cache' });
+    }
+    // attempt to fetch and persist
+    const def = await ensureServerProj4Def(key);
+    if (!def) return res.status(404).json({ error: 'not_found' });
+    return res.json({ code: key, def, source: 'epsg.io' });
+  } catch (err) {
+    console.warn('proj4 ensure failed', err?.message || err);
+    return res.status(500).json({ error: 'server_error' });
+  }
 });
 
 app.get(["/access-denied", "/access-denied.html"], (req, res) => {
@@ -2736,8 +2817,8 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
     };
     if (!payload.layer) payload.layer = layerName;
     if (!payload.project) payload.project = projectId;
-    if (!payload.zoom_min && config.zoom && config.zoom.min != null) payload.zoom_min = config.zoom.min;
-    if (!payload.zoom_max && config.zoom && config.zoom.max != null) payload.zoom_max = config.zoom.max;
+    if ((payload.zoom_min === undefined || payload.zoom_min === null) && config.zoom && config.zoom.min != null) payload.zoom_min = config.zoom.min;
+    if ((payload.zoom_max === undefined || payload.zoom_max === null) && config.zoom && config.zoom.max != null) payload.zoom_max = config.zoom.max;
     if (!payload.project_extent && config.extent && Array.isArray(config.extent.bbox) && config.extent.bbox.length === 4) {
       payload.project_extent = config.extent.bbox.join(",");
       if (config.extent.crs) payload.extent_crs = config.extent.crs;
@@ -2849,9 +2930,66 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
       job.endedAt = Date.now();
       try { activeKeys.delete(`${projectId}:${layerName}`); } catch { }
       clearTimeout(job.cleanupTimer);
-      job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
+      job.cleanupTimer = setTimeout(() => {
+        runningJobs.delete(rid);
+        try { deleteJobPidFile(rid); } catch (e) { }
+      }, parseInt(process.env.JOB_TTL_MS || "300000", 10));
+      // Esperar a que el job desaparezca de runningJobs antes de continuar
+      let waited = 0;
+      const maxWait = 10000; // 10 segundos
+      while (runningJobs.has(rid) && waited < maxWait) {
+        await new Promise(res => setTimeout(res, 200));
+        waited += 200;
+      }
+      // si sigue vivo, intentar matarlo por matching de commandline
+      if (runningJobs.has(rid)) {
+        try {
+          let extraPids = findProcessPidsByCommandLine('generate_cache.py') || [];
+          try {
+            const descendants = findDescendantPids(job.proc && job.proc.pid ? job.proc.pid : rid) || [];
+            if (descendants && descendants.length) {
+              extraPids = Array.from(new Set([...(extraPids || []), ...descendants]));
+            }
+          } catch (e) {
+            /* ignore descendant lookup failures */
+          }
+          if (extraPids && extraPids.length) {
+            console.log(`deleteLayerCacheInternal: killing processes ${JSON.stringify(extraPids)}`);
+            const reskill = forceKillPids(extraPids);
+            console.log(`deleteLayerCacheInternal kill results: ${JSON.stringify(reskill)}`);
+          }
+          // also search by output directory and qgis binaries
+          try {
+            const searchPath = path.join(cacheDir, projectId, layerName);
+            const byOut = findProcessPidsByCommandLine(searchPath) || [];
+            if (byOut.length) {
+              console.log(`deleteLayerCacheInternal: killing processes by outputdir ${JSON.stringify(byOut)}`);
+              const r2 = forceKillPids(byOut);
+              console.log(`deleteLayerCacheInternal kill results (outdir): ${JSON.stringify(r2)}`);
+            }
+            const qgisPids = findProcessPidsByCommandLine('qgis-bin.exe') || [];
+            if (qgisPids.length) {
+              console.log(`deleteLayerCacheInternal: killing qgis pids ${JSON.stringify(qgisPids)}`);
+              const r3 = forceKillPids(qgisPids);
+              console.log(`deleteLayerCacheInternal kill results (qgis): ${JSON.stringify(r3)}`);
+            }
+          } catch (e) { console.warn('deleteLayerCacheInternal extra kill by outdir/qgis failed', e?.message || e); }
+        } catch (e) {
+          console.warn('deleteLayerCacheInternal extra kill failed', e?.message || e);
+        }
+        // esperar un par de iteraciones más
+        let extraWait = 0;
+        while (runningJobs.has(rid) && extraWait < 2000) {
+          await new Promise(res => setTimeout(res, 200));
+          extraWait += 200;
+        }
+      }
+      if (runningJobs.has(rid)) {
+        throw new Error("No se pudo abortar el proceso de cache tras 10s");
+      }
     } catch (e) {
       if (!silent) console.warn("Failed to abort running job before delete", e);
+      throw e;
     }
   }
 
@@ -2969,9 +3107,53 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
       job.endedAt = Date.now();
       try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch { }
       clearTimeout(job.cleanupTimer);
-      job.cleanupTimer = setTimeout(() => runningJobs.delete(rid), parseInt(process.env.JOB_TTL_MS || "300000", 10));
+      job.cleanupTimer = setTimeout(() => {
+        runningJobs.delete(rid);
+        try { deleteJobPidFile(rid); } catch (e) { }
+      }, parseInt(process.env.JOB_TTL_MS || "300000", 10));
+      // Esperar a que el job desaparezca de runningJobs antes de continuar
+      let waited = 0;
+      const maxWait = 10000; // 10 segundos
+      while (runningJobs.has(rid) && waited < maxWait) {
+        await new Promise(res => setTimeout(res, 200));
+        waited += 200;
+      }
+      if (runningJobs.has(rid)) {
+        try {
+          let extraPids = findProcessPidsByCommandLine('generate_cache.py') || [];
+          try {
+            const descendants = findDescendantPids(job.proc && job.proc.pid ? job.proc.pid : rid) || [];
+            if (descendants && descendants.length) {
+              extraPids = Array.from(new Set([...(extraPids || []), ...descendants]));
+            }
+          } catch (e) { /* ignore */ }
+          // also try match by outputdir
+          try {
+            const searchPath = path.join(cacheDir, projectId, "_themes", themeName);
+            const byOut = findProcessPidsByCommandLine(searchPath) || [];
+            if (byOut.length) extraPids = Array.from(new Set([...extraPids, ...byOut]));
+          } catch (e) { /* ignore */ }
+          if (extraPids && extraPids.length) {
+            console.log(`deleteThemeCacheInternal: killing processes ${JSON.stringify(extraPids)}`);
+            const reskill = forceKillPids(extraPids);
+            console.log(`deleteThemeCacheInternal kill results: ${JSON.stringify(reskill)}`);
+          }
+        } catch (e) {
+          console.warn('deleteThemeCacheInternal extra kill failed', e?.message || e);
+        }
+        // esperar un par de iteraciones más
+        let extraWait = 0;
+        while (runningJobs.has(rid) && extraWait < 2000) {
+          await new Promise(res => setTimeout(res, 200));
+          extraWait += 200;
+        }
+        if (runningJobs.has(rid)) {
+          throw new Error("No se pudo abortar el proceso de cache (theme) tras 10s");
+        }
+      }
     } catch (e) {
-      if (!silent) console.warn("Failed to abort theme job before delete", e);
+      if (!silent) console.warn("Failed to abort running job before delete", e);
+      throw e;
     }
   }
 
@@ -3217,15 +3399,107 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   if (!pythonExe && !o4wBatch) {
     throw new Error('OSGeo4W/Python no configurado: define PYTHON_EXE o OSGEO4W_BIN (o O4W_BATCH) en .env');
   }
-  const o4wPart = o4wBatch ? `"${o4wBatch}" >nul 2>&1` : null;
-  const cmdParts = [];
-  if (o4wPart) cmdParts.push(o4wPart, "&&");
+  // By default prefer running inside the OSGeo4W batch environment when
+  // available because it sets up PYTHONHOME, PATH and other variables that
+  // QGIS's Python runtime expects. If you intentionally want to spawn the
+  // python executable directly, set `FORCE_DIRECT=1` in your environment.
   if (!pythonExe) {
     throw new Error('PYTHON_EXE no definido y no se pudo resolver desde OSGEO4W_BIN; revisa .env');
   }
-  cmdParts.push(`"${pythonExe}"`, `"${script}"`, ...args.map(a => `"${String(a)}"`));
-  const cmd = cmdParts.join(" ");
-  return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
+
+  const spawnOpts = { env: makeChildEnv(), cwd: __dirname, stdio: 'pipe', ...options };
+
+  // If an OSGeo4W batch wrapper exists and the user didn't force direct spawn,
+  // run the batch and python in a shell so the QGIS python environment is valid.
+  const wantBatch = !!o4wBatch && !process.env.FORCE_DIRECT;
+  if (wantBatch) {
+    const o4wPart = `"${o4wBatch}" >nul 2>&1`;
+    const cmdParts = [o4wPart, '&&', `"${pythonExe}"`, `"${script}"`, ...args.map(a => `"${String(a)}"`)];
+    const cmd = cmdParts.join(' ');
+    return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
+  }
+
+  // Otherwise spawn python directly (useful for pure-Python setups / venvs).
+  const procArgs = [script, ...args.map(a => String(a))];
+  return spawn(pythonExe, procArgs, spawnOpts);
+};
+
+// Helper: on Windows, find processes whose command line contains `needle`
+// and return their PIDs. Uses PowerShell to enumerate Win32_Process entries
+// because `tasklist` doesn't expose full command lines reliably.
+const findProcessPidsByCommandLine = (needle) => {
+  if (!needle) return [];
+  try {
+    const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*${needle.replace(/'/g, "''" )}*' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Depth 3`;
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { shell: true, timeout: 5000, encoding: 'utf8' });
+    const out = (res.stdout || '').trim();
+    if (!out) return [];
+    let parsed = null;
+    try {
+      parsed = JSON.parse(out);
+    } catch (e) {
+      // if single object, PowerShell may not wrap as array
+      try { parsed = JSON.parse(out.replace(/\r?\n/g, '')); } catch (e2) { parsed = null; }
+    }
+    if (!parsed) return [];
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const pids = rows.map(r => Number(r.ProcessId)).filter(Number.isFinite);
+    return pids;
+  } catch (e) {
+    console.warn('findProcessPidsByCommandLine failed', e?.message || e);
+    return [];
+  }
+};
+
+// Helper: find descendant PIDs of a given root PID (recursive) using PowerShell.
+// Returns array of numeric PIDs or [] on error.
+const findDescendantPids = (rootPid) => {
+  try {
+    const safePid = Number(rootPid) || 0;
+    if (!safePid) return [];
+    // PowerShell: collect all processes and recursively find children
+    const psScript = `
+      $root = ${safePid};
+      $all = Get-CimInstance Win32_Process;
+      $children = @();
+      function Get-Kids($p) {
+        $kids = $all | Where-Object { $_.ParentProcessId -eq $p };
+        foreach ($k in $kids) { $children += $k.ProcessId; Get-Kids $k.ProcessId }
+      }
+      Get-Kids $root; $children | ConvertTo-Json -Depth 5
+    `;
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { shell: true, timeout: 7000, encoding: 'utf8' });
+    const out = (res.stdout || '').trim();
+    if (!out) return [];
+    let parsed = null;
+    try { parsed = JSON.parse(out); } catch (e) { parsed = null; }
+    if (!parsed) return [];
+    if (Array.isArray(parsed)) return parsed.map((p) => Number(p)).filter(Number.isFinite);
+    // single value
+    const single = Number(parsed);
+    return Number.isFinite(single) ? [single] : [];
+  } catch (e) {
+    console.warn('findDescendantPids failed', e?.message || e);
+    return [];
+  }
+};
+
+// Helper: force-kill PIDs using taskkill; returns array of results { pid, code }
+const forceKillPids = (pids = []) => {
+  const results = [];
+  try {
+    for (const pid of pids) {
+      try {
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+        results.push({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
+      } catch (e) {
+        results.push({ pid, code: null, error: String(e) });
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return results;
 };
 
 // pequeño helper para extraer JSON de una respuesta con ruido (fall back)
@@ -4533,6 +4807,116 @@ app.get("/layers", requireAdmin, (req, res) => {
 
 // mapa de jobs en ejecución
 const runningJobs = new Map();
+// mapa de jobs huérfanos detectados al arrancar (id -> { id, pid, infoFile, data, detectedAt })
+const orphanJobs = new Map();
+// directorio para persistir metadatos de jobs (pid, args) para poder detectar huérfanos
+const jobPidDir = path.resolve(__dirname, 'data', 'job-pids');
+try { fs.mkdirSync(jobPidDir, { recursive: true }); } catch (e) { /* ignore */ }
+// Helpers para persistir metadatos de job -> pid
+const jobPidPathFor = (id) => path.join(jobPidDir, `${id}.json`);
+const writeJobPidFile = (job) => {
+  try {
+    const p = jobPidPathFor(job.id);
+    const data = {
+      id: job.id,
+      pid: job.proc && job.proc.pid ? job.proc.pid : null,
+      project: job.project || null,
+      layer: job.layer || null,
+      targetMode: job.targetMode || null,
+      targetName: job.targetName || null,
+      args: job.proc && job.proc.spawnargs ? job.proc.spawnargs : null,
+      startedAt: job.startedAt || Date.now()
+    };
+    fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (e) {
+    console.warn('Failed to write job pid file', e?.message || e);
+    return false;
+  }
+};
+const deleteJobPidFile = (id) => {
+  try {
+    const p = jobPidPathFor(id);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (e) {
+    // ignore
+  }
+};
+
+// util: check if pid is alive
+const pidAlive = (p) => {
+  if (!p) return false;
+  try {
+    process.kill(p, 0);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Try to extract the output_dir value from a child process spawnargs array
+const extractOutputDirFromSpawnArgs = (spawnargs) => {
+  try {
+    if (!Array.isArray(spawnargs)) return null;
+    for (let i = 0; i < spawnargs.length; i++) {
+      const a = String(spawnargs[i] || '');
+      if (a === '--output_dir' || a === '--output-dir' || a === '--output') {
+        return String(spawnargs[i+1] || null) || null;
+      }
+      // also support --output_dir=... form
+      if (a.startsWith('--output_dir=') || a.startsWith('--output-dir=') || a.startsWith('--output=')) {
+        const parts = a.split('=');
+        return parts.slice(1).join('=') || null;
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
+// Scan persisted job-pid files and current processes to find orphaned generate_cache.py jobs
+const scanForOrphanJobsOnStartup = () => {
+  try {
+    const files = fs.readdirSync(jobPidDir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      try {
+        const full = path.join(jobPidDir, f);
+        const raw = fs.readFileSync(full, 'utf-8');
+        const parsed = JSON.parse(raw);
+        const existing = runningJobs.get(parsed.id);
+        if (existing) {
+          // job is active in memory, remove pid file
+          try { fs.unlinkSync(full); } catch {};
+          continue;
+        }
+        // if pid alive, mark as orphan
+        if (parsed.pid && pidAlive(parsed.pid)) {
+          orphanJobs.set(parsed.id, { id: parsed.id, pid: parsed.pid, infoFile: full, data: parsed, detectedAt: Date.now() });
+          console.warn(`[cache-orphan] Detected orphaned job ${parsed.id} pid=${parsed.pid} (from ${full})`);
+        } else {
+          // maybe process died, but leave info file for manual inspection
+        }
+      } catch (e) {
+        // ignore per-file errors
+      }
+    }
+    // also try detecting any generate_cache.py processes not recorded
+    const pids = findProcessPidsByCommandLine('generate_cache.py') || [];
+    for (const pid of pids) {
+      // if not already in runningJobs or orphanJobs, register a synthetic orphan id
+      const already = Array.from(runningJobs.values()).some(j => j.proc && j.proc.pid === pid) || Array.from(orphanJobs.values()).some(o => o.pid === pid);
+      if (!already) {
+        const syntheticId = `orphan-${pid}`;
+        orphanJobs.set(syntheticId, { id: syntheticId, pid, infoFile: null, data: { synthetic: true }, detectedAt: Date.now() });
+        console.warn(`[cache-orphan] Detected unrecorded generate_cache.py process pid=${pid}`);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to scan for orphan jobs on startup', e?.message || e);
+  }
+};
+
+// run scan now
+scanForOrphanJobsOnStartup();
 // control sencillo de concurrencia y duplicados
 const activeKeys = new Set(); // key = `${project||''}:${layer}`
 const JOB_MAX = parseInt(process.env.JOB_MAX || "4", 10); // máximo de procesos concurrentes
@@ -4779,6 +5163,8 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     batchTotal: Number.isFinite(batchTotalVal) ? batchTotalVal : null
   };
   runningJobs.set(id, job);
+  // persist pid/metadata so we can detect orphans if the server restarts
+  try { writeJobPidFile(job); } catch (e) { /* ignore */ }
 
   proc.stdout.on("data", d => {
     const s = d.toString();
@@ -4837,6 +5223,8 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
     job.cleanupTimer = setTimeout(() => {
       runningJobs.delete(id);
+      // remove persisted pid file
+      try { deleteJobPidFile(id); } catch (e) { }
     }, isNaN(ttlMs) ? 300000 : ttlMs);
   });
 
@@ -4883,7 +5271,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
 });
 
 // Abort / stop job
-app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
+app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "id required" });
   const job = runningJobs.get(id);
@@ -4891,7 +5279,12 @@ app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
 
   try {
     // 1) intento suave
-    const killed = job.proc.kill();
+    let killed = false;
+    try {
+      killed = job.proc.kill();
+    } catch (errKill) {
+      console.warn(`kill() threw for job ${id}:`, errKill?.message || errKill);
+    }
     console.log(`Job ${id} kill() called -> ${killed}`);
     job.status = "aborted";
     job.endedAt = Date.now();
@@ -4901,27 +5294,102 @@ app.delete("/generate-cache/:id", requireAdmin, (req, res) => {
       const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
       activeKeys.delete(activeKey);
     } catch { }
-    // 2) escalado forzado en Windows si persiste: taskkill /T /F /PID <pid>
-    const graceMs = parseInt(process.env.ABORT_GRACE_MS || "1000", 10);
-    setTimeout(() => {
+
+    // esperar un breve periodo para ver si el proceso muere por sí mismo
+    const graceMs = parseInt(process.env.ABORT_GRACE_MS || "1000", 10) || 1000;
+    const pollInterval = 250;
+    const maxWait = Math.max(2000, graceMs + 2000);
+    let waited = 0;
+    const pid = job.proc && job.proc.pid ? job.proc.pid : null;
+    const procAlive = (p) => {
+      if (!p) return false;
       try {
-        if (job.proc && job.proc.pid) {
-          // si el proceso sigue vivo, intentar taskkill
-          const tk = spawn('taskkill', ['/PID', String(job.proc.pid), '/T', '/F'], { shell: true });
-          tk.on('close', (code) => {
-            console.log(`taskkill for job ${id} exited with code ${code}`);
-          });
+        process.kill(p, 0);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+    while (procAlive(pid) && waited < maxWait) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      waited += pollInterval;
+    }
+
+    // Si sigue vivo, intentar taskkill de forma sincrónica y comprobar resultado
+    if (procAlive(pid)) {
+      try {
+        console.log(`Escalando abort para job ${id} pid=${pid} con taskkill`);
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+        console.log(`taskkill stdout: ${tk.stdout?.toString?.() || ''}`);
+        console.log(`taskkill stderr: ${tk.stderr?.toString?.() || ''}`);
+      } catch (e) {
+        console.warn(`taskkill escalation failed for job ${id}`, e?.message || e);
+      }
+      // esperar un momentito más
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    // Si sigue vivo, intentar detectar procesos por linea de comando y matarlos
+    if (procAlive(pid)) {
+      try {
+        console.log(`Abort escalado adicional: buscando procesos que contengan 'generate_cache.py'`);
+        const pids = findProcessPidsByCommandLine('generate_cache.py');
+        console.log(`Procesos encontrados: ${JSON.stringify(pids)}`);
+        if (pids && pids.length) {
+          const results = forceKillPids(pids);
+          console.log(`forceKillPids results: ${JSON.stringify(results)}`);
         }
       } catch (e) {
-        console.warn(`taskkill escalation failed for job ${id}`, e);
+        console.warn('Error during additional abort escalation', e?.message || e);
       }
-    }, isNaN(graceMs) ? 1000 : graceMs);
+      // esperar un momentito más
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    // Additional escalation: try to kill processes touching the job's output dir and qgis binaries
+    try {
+      const killedDetails = [];
+      const spawnargs = job.proc && job.proc.spawnargs ? job.proc.spawnargs : (job.proc && job.proc.argv ? job.proc.argv : null);
+      const outputDir = job.tileBaseDir || extractOutputDirFromSpawnArgs(spawnargs) || null;
+      const candidates = new Set();
+      // generate_cache.py
+      (findProcessPidsByCommandLine('generate_cache.py') || []).forEach(p => candidates.add(p));
+      // output dir
+      if (outputDir) {
+        try { (findProcessPidsByCommandLine(outputDir) || []).forEach(p => candidates.add(p)); } catch {}
+      }
+      // qgis binaries
+      (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach(p => candidates.add(p));
+      (findProcessPidsByCommandLine('qgis') || []).forEach(p => candidates.add(p));
+
+      const candidateList = Array.from(candidates).filter(Number.isFinite);
+      if (candidateList.length) {
+        console.log(`Abort extra escalation: killing candidate PIDs ${JSON.stringify(candidateList)}`);
+        const fk = forceKillPids(candidateList);
+        console.log(`Abort extra kill results: ${JSON.stringify(fk)}`);
+        killedDetails.push({ byCandidates: fk });
+      }
+      if (killedDetails.length) {
+        console.log(`Abort escalation killed: ${JSON.stringify(killedDetails)}`);
+      }
+    } catch (e) {
+      console.warn('Final abort escalation failed', e?.message || e);
+    }
+
     // programar cleanup para dejar que la UI lea los logs finales
     const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10);
     clearTimeout(job.cleanupTimer);
     job.cleanupTimer = setTimeout(() => {
       runningJobs.delete(id);
+      // remove persisted pid file
+      try { deleteJobPidFile(id); } catch (e) { }
     }, isNaN(ttlMs) ? 300000 : ttlMs);
+
+    // validar si el proceso sigue vivo; si sigue, devolver error
+    if (procAlive(pid)) {
+      console.error(`Failed to abort job ${id}: process pid ${pid} still alive`);
+      return res.status(500).json({ error: 'abort_failed', id, pid });
+    }
     return res.json({ status: "aborted", id });
   } catch (err) {
     console.error(`Failed to kill job ${id}`, err);
@@ -4973,6 +5441,100 @@ app.get("/generate-cache/:id", requireAdmin, (req, res) => {
     stdout: clip(job.stdout),
     stderr: clip(job.stderr)
   });
+});
+
+// Diagnostics: inspect processes related to a job and optionally force-kill them
+app.post('/generate-cache/admin/:id/diagnose', requireAdmin, async (req, res) => {
+  const id = req.params.id;
+  const job = runningJobs.get(id);
+  if (!job) return res.status(404).json({ error: 'job_not_found' });
+  const pid = job.proc && job.proc.pid ? job.proc.pid : null;
+  const found = findProcessPidsByCommandLine('generate_cache.py');
+  // attempt to discover descendant PIDs of the recorded proc PID
+  let descendants = [];
+  try {
+    if (pid) descendants = findDescendantPids(pid) || [];
+  } catch (e) { descendants = []; }
+  const response = { id, jobStatus: job.status || 'running', procPid: pid, foundCommandLinePids: found, foundDescendantPids: descendants };
+  if (req.query.kill === '1' || req.body && req.body.kill) {
+    try {
+      // attempt to kill parent pid first
+      const results = [];
+      const toKill = new Set();
+      if (pid) toKill.add(Number(pid));
+      if (Array.isArray(found)) for (const p of found) toKill.add(Number(p));
+      if (Array.isArray(descendants)) for (const p of descendants) toKill.add(Number(p));
+      // also try finding by output_dir matching (best-effort)
+      try {
+        const outMatches = findProcessPidsByCommandLine((job.metadata && job.metadata.output_dir) ? job.metadata.output_dir : '');
+        if (outMatches && outMatches.length) for (const p of outMatches) toKill.add(Number(p));
+      } catch (e) { }
+
+      const killResults = [];
+      for (const p of Array.from(toKill).filter(Number.isFinite)) {
+        try {
+          const tk = spawnSync('taskkill', ['/PID', String(p), '/T', '/F'], { shell: true, timeout: 5000 });
+          killResults.push({ pid: p, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
+        } catch (e) {
+          killResults.push({ pid: p, error: String(e) });
+        }
+      }
+      results.push({ killed: killResults });
+      response.killResults = results;
+    } catch (e) {
+      response.killError = String(e);
+    }
+  }
+  return res.json(response);
+});
+
+// List orphaned jobs detected on startup
+app.get('/generate-cache/admin/orphans', requireAdmin, (req, res) => {
+  const list = Array.from(orphanJobs.values()).map(o => ({ id: o.id, pid: o.pid, infoFile: o.infoFile, data: o.data, detectedAt: o.detectedAt }));
+  res.json(list);
+});
+
+// Kill an orphaned job by id (recorded or synthetic)
+app.post('/generate-cache/admin/orphans/:id/kill', requireAdmin, async (req, res) => {
+  const id = req.params.id;
+  const entry = orphanJobs.get(id);
+  if (!entry) return res.status(404).json({ error: 'orphan_not_found' });
+  const pid = entry.pid;
+  const results = [];
+  try {
+    if (pid) {
+      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+      results.push({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
+    }
+    // also attempt additional kills by commandline match
+    const extra = findProcessPidsByCommandLine('generate_cache.py');
+    if (extra && extra.length) {
+      const fk = forceKillPids(extra);
+      results.push({ byCommandLine: fk });
+    }
+  } catch (e) {
+    return res.status(500).json({ error: String(e) });
+  }
+  try { if (entry.infoFile) fs.unlinkSync(entry.infoFile); } catch (e) {}
+  orphanJobs.delete(id);
+  return res.json({ id, results });
+});
+
+// Admin helper: kill arbitrary PID (requires admin). Body: { pid: <number> }
+app.post('/admin/kill-pid', requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const pid = Number.isFinite(Number(body.pid)) ? Number(body.pid) : null;
+    if (!pid) return res.status(400).json({ error: 'invalid_pid' });
+    try {
+      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+      return res.json({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
+    } catch (e) {
+      return res.status(500).json({ error: String(e) });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
 });
 
 // --- WMTS helpers -------------------------------------------------------
@@ -5692,14 +6254,89 @@ app.patch("/cache/:project/index.json", requireAdmin, async (req, res) => {
 app.delete("/cache/:project", requireAdmin, async (req, res) => {
   const p = req.params.project;
   const pDir = path.join(cacheDir, p);
-  // abort running jobs for this project
-  for (const [id, job] of runningJobs.entries()) {
-    if (job.project === p && job.status === 'running') {
-      try { job.proc.kill(); job.status = 'aborted'; job.endedAt = Date.now(); } catch { }
+  // abort running jobs for this project and wait confirmation; perform multi-stage escalation
+  for (const [id, job] of Array.from(runningJobs.entries())) {
+    if (job.project !== p || (job.status && job.status !== 'running')) continue;
+    try {
+      const jobPid = job.proc && job.proc.pid ? job.proc.pid : null;
+      // mark aborted in-memory and release active key
+      try { job.status = 'aborted'; job.endedAt = Date.now(); } catch {}
       try {
         const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
         activeKeys.delete(activeKey);
       } catch { }
+
+      // 1) gentle kill()
+      try { if (job.proc && typeof job.proc.kill === 'function') job.proc.kill(); } catch (e) { }
+
+      // wait a short grace for natural exit
+      const graceMs = parseInt(process.env.ABORT_GRACE_MS || '1000', 10) || 1000;
+      const pollInterval = 250;
+      const maxWait = Math.max(2000, graceMs + 2000);
+      let waited = 0;
+      const procAlive = (pid) => {
+        if (!pid) return false;
+        try { process.kill(pid, 0); return true; } catch (e) { return false; }
+      };
+      while (procAlive(jobPid) && waited < maxWait) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        waited += pollInterval;
+      }
+
+      // 2) taskkill escalation
+      if (procAlive(jobPid)) {
+        try {
+          const tk = spawnSync('taskkill', ['/PID', String(jobPid), '/T', '/F'], { shell: true, timeout: 5000 });
+          console.log(`project delete: taskkill for job ${id} pid=${jobPid} -> ${tk.status}`);
+        } catch (e) { console.warn(`project delete: taskkill failed for job ${id}`, e?.message || e); }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // 3) find by commandline / descendants / output dir / qgis and force kill
+      if (procAlive(jobPid)) {
+        try {
+          const candidates = new Set();
+          // commandline matches
+          (findProcessPidsByCommandLine('generate_cache.py') || []).forEach(p => candidates.add(p));
+          // descendants of recorded pid
+          try {
+            const desc = findDescendantPids(jobPid) || [];
+            desc.forEach(p => candidates.add(p));
+          } catch (e) { }
+          // output dir
+          try {
+            const spawnargs = job.proc && job.proc.spawnargs ? job.proc.spawnargs : (job.proc && job.proc.argv ? job.proc.argv : null);
+            const outputDir = job.tileBaseDir || extractOutputDirFromSpawnArgs(spawnargs) || null;
+            if (outputDir) (findProcessPidsByCommandLine(outputDir) || []).forEach(p => candidates.add(p));
+          } catch (e) { }
+          // qgis binaries
+          (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach(p => candidates.add(p));
+          (findProcessPidsByCommandLine('qgis') || []).forEach(p => candidates.add(p));
+
+          const candidateList = Array.from(candidates).filter(Number.isFinite);
+          if (candidateList.length) {
+            console.log(`project delete: killing candidate PIDs for job ${id}: ${JSON.stringify(candidateList)}`);
+            const fk = forceKillPids(candidateList);
+            console.log(`project delete kill results: ${JSON.stringify(fk)}`);
+          }
+        } catch (e) { console.warn('project delete: extra kill failed', e?.message || e); }
+        // short wait
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // final wait loop for job removal
+      let finalWait = 0;
+      const finalMax = 10000;
+      while (runningJobs.has(id) && finalWait < finalMax) {
+        await new Promise(r => setTimeout(r, 200));
+        finalWait += 200;
+      }
+      if (runningJobs.has(id)) {
+        return res.status(500).json({ error: 'job_abort_failed', jobId: id, message: 'No se pudo abortar el proceso de cache tras 10s' });
+      }
+    } catch (e) {
+      console.warn('project delete: error aborting job', id, e?.message || e);
+      return res.status(500).json({ error: 'job_abort_failed', jobId: id, details: String(e) });
     }
   }
   try {

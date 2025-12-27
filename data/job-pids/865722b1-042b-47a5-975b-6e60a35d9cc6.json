@@ -1,0 +1,16 @@
+{
+  "id": "865722b1-042b-47a5-975b-6e60a35d9cc6",
+  "pid": 28928,
+  "project": "orto",
+  "layer": "orto016",
+  "targetMode": "layer",
+  "targetName": "orto016",
+  "args": [
+    "C:\\WINDOWS\\system32\\cmd.exe",
+    "/d",
+    "/s",
+    "/c",
+    "\"\"C:\\QGIS_344\\bin\\o4w_env.bat\" >nul 2>&1 && \"C:\\QGIS_344\\bin\\python.exe\" \"C:\\Qtiler\\python\\generate_cache.py\" \"--layer\" \"orto016\" \"--zoom_min\" \"0\" \"--zoom_max\" \"20\" \"--publish_zoom_min\" \"0\" \"--publish_zoom_max\" \"20\" \"--output_dir\" \"C:\\Qtiler\\cache\\orto\" \"--index_path\" \"C:\\Qtiler\\cache\\orto\\index.json\" \"--scheme\" \"auto\" \"--xyz_mode\" \"partial\" \"--tile_crs\" \"EPSG:3006\" \"--tile_matrix_preset\" \"EPSG_3006_orto\" \"--wmts\" \"--allow_remote\" \"--throttle_ms\" \"300\" \"--project_extent4\" \"668790.1150739392\" \"6571478.484887069\" \"697751.472478183\" \"6586029.988187591\" \"--extent_crs\" \"EPSG:3006\" \"--project\" \"C:\\Qtiler\\qgisprojects\\orto.qgz\"\""
+  ],
+  "startedAt": 1766416799949
+}

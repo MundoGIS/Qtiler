@@ -16,7 +16,7 @@
 
       function initInactivityMonitor() {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-        events.forEach(event => {
+          events.forEach(event => {
           document.addEventListener(event, resetInactivityTimer, true);
         });
         resetInactivityTimer();
@@ -1829,8 +1829,8 @@
         try {
           if (cfg) {
             if (cfg.zoom) {
-              if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = cfg.zoom.min;
-              if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = cfg.zoom.max;
+              if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = Math.round(cfg.zoom.min);
+              if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = Math.round(cfg.zoom.max);
             }
             if (cfg.cachePreferences) {
               if (modeSelect && typeof cfg.cachePreferences.mode === 'string') modeSelect.value = cfg.cachePreferences.mode;
@@ -1867,8 +1867,8 @@
         }
         suppressControlSync = true;
         try {
-          if (zoomMinInput && range.min != null) zoomMinInput.value = range.min;
-          if (zoomMaxInput && range.max != null) zoomMaxInput.value = range.max;
+          if (zoomMinInput && range.min != null) zoomMinInput.value = Math.round(range.min);
+          if (zoomMaxInput && range.max != null) zoomMaxInput.value = Math.round(range.max);
         } finally {
           suppressControlSync = false;
         }
@@ -2366,12 +2366,74 @@
           return true;
         }
         const preset = PROJ4_PRESETS[upper];
-        if (!preset) return false;
-        proj4.defs(upper, preset);
-        if (upper !== key) {
-          proj4.defs(key, proj4.defs(upper));
+        if (preset) {
+          proj4.defs(upper, preset);
+          if (upper !== key) proj4.defs(key, proj4.defs(upper));
+          return true;
         }
-        return true;
+        // no client-side preset - we can try asking server to provide it (fire-and-forget)
+        try {
+          (async () => {
+            try {
+              const resp = await fetch('/api/proj4/' + encodeURIComponent(upper));
+              if (!resp.ok) return;
+              const data = await resp.json().catch(() => null);
+              if (!data || !data.def) return;
+              if (typeof proj4 === 'function' && typeof proj4.defs === 'function') {
+                proj4.defs(upper, data.def);
+                if (upper !== key) proj4.defs(key, data.def);
+              }
+            } catch (err) {}
+          })();
+        } catch (err) {}
+        return false;
+      };
+
+      const normalizeEpsgKey = (code) => {
+        if (!code) return null;
+        const s = String(code).trim();
+        if (!s) return null;
+        const m = s.match(/(\d+)$/);
+        const n = m ? m[1] : s;
+        return `EPSG:${n}`.toUpperCase();
+      };
+
+      const ensureProj4CodesAvailable = async (codes = [], timeoutMs = 700) => {
+        if (!Array.isArray(codes) || codes.length === 0) return;
+        const missing = codes.map(normalizeEpsgKey).filter(Boolean).filter((c) => !proj4.defs || !proj4.defs(c));
+        if (missing.length === 0) return;
+        // request server to fetch defs
+        const promises = missing.map((c) => fetch('/api/proj4/' + encodeURIComponent(c)).catch(() => null));
+        // wait for first responses but keep overall timeout
+        const results = await Promise.all(promises.map(p => Promise.race([p, new Promise(r => setTimeout(() => r(null), timeoutMs))])));
+        for (const r of results) {
+          try {
+            if (!r || !r.ok) continue;
+            const data = await r.json().catch(() => null);
+            if (!data || !data.def) continue;
+            if (typeof proj4 === 'function' && typeof proj4.defs === 'function') {
+              const key = normalizeEpsgKey(data.code || '');
+              if (key) proj4.defs(key, data.def);
+            }
+          } catch (err) {}
+        }
+        // small wait until defs are registered (or timeout)
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          const stillMissing = codes.map(normalizeEpsgKey).filter(Boolean).filter((c) => !proj4.defs || !proj4.defs(c));
+          if (stillMissing.length === 0) return;
+          // sleep a bit
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 80));
+        }
+      };
+
+      const getProjectTargetCrs = (projectId) => {
+        const state = getProjectState(projectId);
+        if (!state) return null;
+        const projectMetaCrs = state?.projectMeta?.crs || null;
+        const cfgTile = state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileCrs ? state.config.cachePreferences.tileCrs : null;
+        return projectMetaCrs || cfgTile || null;
       };
 
       const transformExtentBetweenCrs = (extentList, sourceCrs, targetCrs) => {
@@ -2439,7 +2501,7 @@
             if (normalizedNative) {
               nativeExtent = normalizedNative.slice();
               nativeCrs = typeof projectConfig.extent.crs === 'string' ? projectConfig.extent.crs : null;
-              const transformed = transformExtentFromProjectCrs(normalizedNative, nativeCrs || state.projectMeta?.crs);
+              const transformed = transformExtentFromProjectCrs(normalizedNative, nativeCrs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
               if (transformed && Array.isArray(transformed.bbox)) {
                 wgsExtent = transformed.bbox.slice();
               }
@@ -2454,20 +2516,20 @@
           }
         }
         state.extentNative = nativeExtent ? nativeExtent.slice() : null;
-        state.extentNativeCrs = nativeCrs || state.projectMeta?.crs || null;
+        state.extentNativeCrs = nativeCrs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
         if (!state.extentNative && wgsExtent) {
-          const fallbackNative = transformExtentToProjectCrs(wgsExtent, state.projectMeta?.crs || null);
+          const fallbackNative = transformExtentToProjectCrs(wgsExtent, state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
           if (fallbackNative && Array.isArray(fallbackNative.bbox)) {
             state.extentNative = fallbackNative.bbox.slice();
-            state.extentNativeCrs = fallbackNative.crs || state.projectMeta?.crs || null;
+            state.extentNativeCrs = fallbackNative.crs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
           }
         }
         state.extent = wgsExtent ? wgsExtent.slice() : null;
         if (state.extent && !state.extentNative) {
-          const derivedNative = transformExtentToProjectCrs(state.extent, state.projectMeta?.crs || null);
+          const derivedNative = transformExtentToProjectCrs(state.extent, state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
           if (derivedNative && Array.isArray(derivedNative.bbox)) {
             state.extentNative = derivedNative.bbox.slice();
-            state.extentNativeCrs = derivedNative.crs || state.projectMeta?.crs || null;
+            state.extentNativeCrs = derivedNative.crs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
           }
         }
         return { wgsExtent: state.extent ? state.extent.slice() : null };
@@ -2476,7 +2538,7 @@
       const buildExtentPatch = (projectId, extentList) => {
         const nowIso = new Date().toISOString();
         const state = getProjectState(projectId);
-        const projectCrs = state?.extentNativeCrs || state?.projectMeta?.crs || null;
+        const projectCrs = state?.extentNativeCrs || state?.projectMeta?.crs || (state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileCrs) || null;
         if (!Array.isArray(extentList) || extentList.length !== 4) {
           state.extent = null;
           state.extentNative = null;
@@ -2527,7 +2589,7 @@
           };
         }
         if (!Array.isArray(state.extent) || state.extent.length !== 4) return null;
-        const projectCrs = state?.projectMeta?.crs || null;
+        const projectCrs = state?.projectMeta?.crs || (state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileCrs) || null;
         const converted = transformExtentToProjectCrs(state.extent, projectCrs);
         if (!converted || !Array.isArray(converted.bbox)) return null;
         const bbox = converted.bbox.map((value) => Number.isFinite(value) ? value : 0);
@@ -2778,7 +2840,14 @@
             const b = e.layer.getBounds();
             state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
             updateInfo();
-            queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+            try {
+              const rounded = Math.round(map.getZoom());
+              const patch = buildExtentPatch(project.id, state.extent) || {};
+              patch.zoom = { min: rounded, max: rounded, updatedAt: new Date().toISOString() };
+              queueProjectConfigSave(project.id, patch);
+            } catch (err) {
+              queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+            }
           });
           map.on('draw:edited', () => {
             const layer = drawnItems.getLayers()[0];
@@ -2786,7 +2855,14 @@
             const b = layer.getBounds();
             state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
             updateInfo();
-            queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+            try {
+              const rounded = Math.round(map.getZoom());
+              const patch = buildExtentPatch(project.id, state.extent) || {};
+              patch.zoom = { min: rounded, max: rounded, updatedAt: new Date().toISOString() };
+              queueProjectConfigSave(project.id, patch);
+            } catch (err) {
+              queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+            }
           });
           map.on('draw:deleted', () => {
             state.extent = null;
@@ -2836,7 +2912,14 @@
           state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
           applyExtentRectangle(state.extent);
           updateInfo();
-          queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+          try {
+            const rounded = Math.round(map.getZoom());
+            const patch = buildExtentPatch(project.id, state.extent) || {};
+            patch.zoom = { min: rounded, max: rounded, updatedAt: new Date().toISOString() };
+            queueProjectConfigSave(project.id, patch);
+          } catch (err) {
+            queueProjectConfigSave(project.id, buildExtentPatch(project.id, state.extent));
+          }
         };
         const btnCenterProject = document.createElement('button');
         btnCenterProject.className = 'btn btn-secondary';
@@ -2861,13 +2944,14 @@
         btnMin.type = 'button';
         btnMin.textContent = 'Set current zoom as Min';
         btnMin.onclick = () => {
-          document.getElementById('zoom_min').value = map.getZoom();
-          showStatus('zoom_min set to ' + map.getZoom());
+          const rounded = Math.round(map.getZoom());
+          document.getElementById('zoom_min').value = rounded;
+          showStatus('zoom_min set to ' + rounded);
           const currentMaxRaw = document.getElementById('zoom_max').value;
           const parsedMax = Number(currentMaxRaw);
           queueProjectConfigSave(project.id, {
             zoom: {
-              min: Number(map.getZoom()),
+              min: rounded,
               max: Number.isFinite(parsedMax) ? parsedMax : null,
               updatedAt: new Date().toISOString()
             }
@@ -2880,14 +2964,15 @@
         btnMax.type = 'button';
         btnMax.textContent = 'Set current zoom as Max';
         btnMax.onclick = () => {
-          document.getElementById('zoom_max').value = map.getZoom();
-          showStatus('zoom_max set to ' + map.getZoom());
+          const rounded = Math.round(map.getZoom());
+          document.getElementById('zoom_max').value = rounded;
+          showStatus('zoom_max set to ' + rounded);
           const currentMinRaw = document.getElementById('zoom_min').value;
           const parsedMin = Number(currentMinRaw);
           queueProjectConfigSave(project.id, {
             zoom: {
               min: Number.isFinite(parsedMin) ? parsedMin : null,
-              max: Number(map.getZoom()),
+              max: rounded,
               updatedAt: new Date().toISOString()
             }
           });

@@ -1569,6 +1569,7 @@ elif scheme == "wmts":
             publish_zoom_max_effective = publish_levels[-1]
         tile_runs = []
         for matrix in selected:
+            # Recortar el rango de tiles a solo los que intersectan el extent deseado
             span = _compute_tile_span(extent_in_tile_crs, matrix)
             if not span:
                 tile_w_mu = matrix.get("tile_width", TILE_SIZE) * (matrix.get("resolution") or 0)
@@ -1583,11 +1584,18 @@ elif scheme == "wmts":
                     "origin_x": matrix.get("origin_x", 0.0),
                     "origin_y": matrix.get("origin_y", 0.0)
                 }
+            # Clamp los índices para no salir del grid
+            span["min_col"] = max(0, min(matrix.get("matrix_width", 1) - 1, span["min_col"]))
+            span["max_col"] = max(0, min(matrix.get("matrix_width", 1) - 1, span["max_col"]))
+            span["min_row"] = max(0, min(matrix.get("matrix_height", 1) - 1, span["min_row"]))
+            span["max_row"] = max(0, min(matrix.get("matrix_height", 1) - 1, span["max_row"]))
+            # Si el extent es muy pequeño y no cubre ningún tile, saltar
+            if span["max_col"] < span["min_col"] or span["max_row"] < span["min_row"]:
+                continue
             span["matrix"] = matrix
-            if span["max_col"] >= span["min_col"] and span["max_row"] >= span["min_row"]:
-                count = (span["max_col"] - span["min_col"] + 1) * (span["max_row"] - span["min_row"] + 1)
-                expected_total += count
-                tile_runs.append(span)
+            count = (span["max_col"] - span["min_col"] + 1) * (span["max_row"] - span["min_row"] + 1)
+            expected_total += count
+            tile_runs.append(span)
         if expected_total <= 0:
             expected_total = sum(max(1, m.get("matrix_width", 1)) * max(1, m.get("matrix_height", 1)) for m in selected) or 1
 
