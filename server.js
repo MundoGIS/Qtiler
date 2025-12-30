@@ -13,6 +13,9 @@ import cluster from "cluster";
 import { execFile, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { PythonPool } from './lib/PythonPool.js';
+
+
 dotenv.config();
 // Verificación automática de entorno QGIS/Python
 function verifyQGISEnv() {
@@ -3360,7 +3363,13 @@ const pluginUpload = multer({
 
 // Detectar ejecutable python (permite override por .env). No usar hardcoded C:\ fallbacks — exigir .env
 const pythonExe = process.env.PYTHON_EXE || (process.env.OSGEO4W_BIN ? path.join(process.env.OSGEO4W_BIN, "python.exe") : null);
+// const tileRendererPool = new PythonPool(pythonScript, poolSize); // moved below
 
+// 1. Inicializar el Pool (usando configuración del .env)
+const poolSize = parseInt(process.env.PY_WORKER_POOL_SIZE || "4");
+const pythonScript = path.resolve(__dirname, 'python', 'worker_wrapper.py');
+// --- create the Python worker pool AFTER poolSize and pythonScript are defined ---
+const tileRendererPool = new PythonPool(pythonScript, poolSize);
 // crear env para procesos hijos incluyendo OSGeo4W paths si están en .env
 const makeChildEnv = () => {
   const env = { ...process.env };
@@ -3523,6 +3532,32 @@ const sanitizeExtentCoordinates = (value) => {
   });
   return parsed.every((num) => num != null) ? parsed : null;
 };
+
+/**
+ * Normalize extent-like objects to [minX, minY, maxX, maxY] numeric array.
+ * Accepts plain arrays, or objects with .bbox, or nested project.extract shapes.
+ * Returns null if invalid.
+ */
+function normalizeExtent(raw) {
+  if (!raw) return null;
+  if (Array.isArray(raw) && raw.length === 4) {
+    const nums = raw.map(n => Number(n));
+    if (nums.some(n => Number.isNaN(n))) return null;
+    return nums;
+  }
+  if (raw && Array.isArray(raw.bbox) && raw.bbox.length === 4) {
+    const nums = raw.bbox.map(n => Number(n));
+    if (nums.some(n => Number.isNaN(n))) return null;
+    return nums;
+  }
+  // support wrapped shape { extent: [...] }
+  if (raw && Array.isArray(raw.extent) && raw.extent.length === 4) {
+    const nums = raw.extent.map(n => Number(n));
+    if (nums.some(n => Number.isNaN(n))) return null;
+    return nums;
+  }
+  return null;
+}
 
 const coalesceExtent = (...candidates) => {
   for (const candidate of candidates) {
@@ -3829,8 +3864,15 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       entry.tile_matrix_preset = tileProfile.tileMatrixPreset;
     }
     if (tileProfile.tileMatrixSet) {
-      entry.tile_matrix_set = tileProfile.tileMatrixSet;
-    }
+  entry.tile_matrix_set = tileProfile.tileMatrixSet;
+  // --- FIX: asegura que topLeftCorner siempre tenga dos valores ---
+  const tlc = entry.tile_matrix_set.topLeftCorner || entry.tile_matrix_set.top_left_corner || entry.tile_matrix_set.top_left;
+  if (Array.isArray(tlc) && tlc.length === 1 && Array.isArray(entry.extent) && entry.extent.length === 4) {
+    entry.tile_matrix_set.topLeftCorner = [entry.extent[0], entry.extent[3]];
+    entry.tile_matrix_set.top_left_corner = [entry.extent[0], entry.extent[3]];
+    entry.tile_matrix_set.top_left = [entry.extent[0], entry.extent[3]];
+  }
+}
     entries.push(entry);
   };
 
@@ -4809,6 +4851,19 @@ app.get("/layers", requireAdmin, (req, res) => {
 const runningJobs = new Map();
 // mapa de jobs huérfanos detectados al arrancar (id -> { id, pid, infoFile, data, detectedAt })
 const orphanJobs = new Map();
+
+// --- Control de abortos recientes para jobs ---
+const abortedTargets = new Set();
+
+function markAborted(project, layer) {
+  abortedTargets.add(`${project}|${layer || ''}`);
+  setTimeout(() => abortedTargets.delete(`${project}|${layer || ''}`), 5 * 60 * 1000); // 5 minutos
+}
+
+// Al crear un nuevo job:
+function canEnqueueJob(project, layer) {
+  return !abortedTargets.has(`${project}|${layer || ''}`);
+}
 // directorio para persistir metadatos de jobs (pid, args) para poder detectar huérfanos
 const jobPidDir = path.resolve(__dirname, 'data', 'job-pids');
 try { fs.mkdirSync(jobPidDir, { recursive: true }); } catch (e) { /* ignore */ }
@@ -5414,6 +5469,98 @@ app.get("/generate-cache/running", requireAdmin, (req, res) => {
       targetName: j.targetName || null
     }));
   res.json(list);
+});
+// Se pasa un array [] con las dos variantes de la ruta en lugar de usar ?
+app.delete(
+  ["/generate-cache/abort-all/:project", "/generate-cache/abort-all/:project/:layer"],
+  requireAdmin,
+  async (req, res) => {
+    const { project, layer } = req.params;
+    if (!project) return res.status(400).json({ error: "project_required" });
+
+    let aborted = 0;
+    let lastAbortedIds = [];
+    let attempts = 0;
+    const maxAttempts = 30;
+    let stillRunning = true;
+
+    while (stillRunning && attempts < maxAttempts) {
+      attempts++;
+      let found = false;
+      lastAbortedIds = [];
+      for (const [id, job] of runningJobs.entries()) {
+        if (job.project === project && (!layer || job.layer === layer || job.targetName === layer)) {
+          found = true;
+          lastAbortedIds.push(id);
+          try {
+            if (job.proc && !job.proc.killed) job.proc.kill();
+            job.status = "aborted";
+            job.endedAt = Date.now();
+            try {
+              activeKeys.delete(job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`);
+            } catch { }
+            clearTimeout(job.cleanupTimer);
+            job.cleanupTimer = setTimeout(() => {
+              runningJobs.delete(id);
+              try { deleteJobPidFile(id); } catch (e) { }
+            }, parseInt(process.env.JOB_TTL_MS || "300000", 10));
+            aborted++;
+          } catch (e) {
+            console.warn(`Failed to abort job ${id}`, e);
+          }
+        }
+      }
+      // Esperar 1 segundo antes de volver a chequear
+      await new Promise(r => setTimeout(r, 1000));
+      // Verificar si quedan jobs activos para este proyecto/capa
+      stillRunning = false;
+      for (const [id, job] of runningJobs.entries()) {
+        if (job.project === project && (!layer || job.layer === layer || job.targetName === layer)) {
+          stillRunning = true;
+          break;
+        }
+      }
+    }
+
+    res.json({
+      status: "aborted",
+      project,
+      layer: layer || null,
+      aborted,
+      attempts,
+      remaining: lastAbortedIds
+    });
+  }
+);
+
+app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
+  const project = req.params.project;
+  const name = req.params.name;
+  const force = (req.query && (req.query.force === '1' || req.query.force === 'true')) || false;
+  const layerPath = path.join(cacheDir, project, name);
+  const themePath = path.join(cacheDir, project, '_themes', name);
+  try {
+    if (fs.existsSync(layerPath)) {
+      await deleteLayerCacheInternal(project, name, { force: Boolean(force), silent: false });
+      return res.json({ status: 'deleted', project, layer: name, path: layerPath, force });
+    }
+    if (fs.existsSync(themePath)) {
+      await deleteThemeCacheInternal(project, name, { force: Boolean(force), silent: false });
+      return res.json({ status: 'deleted', project, theme: name, path: themePath, force });
+    }
+    // Cambia esto:
+    // return res.status(404).json({ error: 'cache_not_found', project, name });
+    // Por esto:
+    return res.json({ status: 'already_deleted', project, name });
+  } catch (err) {
+    const details = String(err?.stack || err);
+    try { logProjectEvent(project, `Failed to delete cache ${name}: ${details}`); } catch {}
+    console.error('[ERROR] delete cache failed', details);
+    if (err && err.code === 'job_running') {
+      return res.status(409).json({ error: 'job_running', jobId: err.jobId, message: 'A render job is running for this layer/theme. Retry with ?force=1 to abort and delete.' });
+    }
+    return res.status(500).json({ error: 'delete_failed', details });
+  }
 });
 
 // Obtener detalles de un job (estado y logs)
@@ -6383,34 +6530,7 @@ app.delete("/cache/:project", requireAdmin, async (req, res) => {
   }
 });
 
-// DELETE cache for a specific layer or theme within a project
-app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
-  const project = req.params.project;
-  const name = req.params.name;
-  const force = (req.query && (req.query.force === '1' || req.query.force === 'true')) || false;
-  const layerPath = path.join(cacheDir, project, name);
-  const themePath = path.join(cacheDir, project, '_themes', name);
-  try {
-    // prefer layer
-    if (fs.existsSync(layerPath)) {
-      await deleteLayerCacheInternal(project, name, { force: Boolean(force), silent: false });
-      return res.json({ status: 'deleted', project, layer: name, path: layerPath, force });
-    }
-    if (fs.existsSync(themePath)) {
-      await deleteThemeCacheInternal(project, name, { force: Boolean(force), silent: false });
-      return res.json({ status: 'deleted', project, theme: name, path: themePath, force });
-    }
-    return res.status(404).json({ error: 'cache_not_found', project, name });
-  } catch (err) {
-    const details = String(err?.stack || err);
-    try { logProjectEvent(project, `Failed to delete cache ${name}: ${details}`); } catch {}
-    console.error('[ERROR] delete cache failed', details);
-    if (err && err.code === 'job_running') {
-      return res.status(409).json({ error: 'job_running', jobId: err.jobId, message: 'A render job is running for this layer/theme. Retry with ?force=1 to abort and delete.' });
-    }
-    return res.status(500).json({ error: 'delete_failed', details });
-  }
-});
+
 
 // Diagnostic: list files/directories under a project's cache directory
 app.get('/cache/:project/list', requireAdmin, (req, res) => {
@@ -6496,8 +6616,15 @@ const ENABLE_RENDER_FILE_LOGS = (() => {
   return raw === "1" || raw === "true" || raw === "yes";
 })();
 
+
+
+// --- FUNCIÓN ACTUALIZADA ---
+
 function queueTileRender(params, filePath, cb) {
+  // Generar clave única para evitar duplicados simultáneos
   const key = `${params.project}|${params.layer || params.theme}|${params.z}|${params.x}|${params.y}`;
+
+  // 1. Registro de métricas (Igual que antes)
   try {
     const targetMode = params.targetMode || (params.theme ? "theme" : "layer");
     const targetName = params.theme || params.layer || params.name || null;
@@ -6507,23 +6634,76 @@ function queueTileRender(params, filePath, cb) {
   } catch (err) {
     console.warn("Failed to record on-demand metadata", { project: params.project, layer: params.layer || params.theme, error: err?.message || err });
   }
+
+  // 2. Control de concurrencia para la misma tesela (Polling)
   if (activeRenders.has(key)) {
-    // Ya en proceso, espera y reintenta
     let tries = 0;
     const interval = setInterval(() => {
+      // Si el archivo aparece, terminamos
       if (fs.existsSync(filePath)) {
         clearInterval(interval);
         cb(null, filePath);
-      } else if (++tries > 150) { // 150 × 1000ms = 150 segundos (2.5 minutos)
+      } else if (++tries > 300) { // Esperar hasta 5 minutos (300 * 1000ms) si la cola está llena
         clearInterval(interval);
-        cb(new Error('Timeout esperando tile'), null);
+        cb(new Error('Timeout esperando tile (deduplicación)'), null);
       }
-    }, 1000); // Check every second instead of 200ms
+    }, 1000); 
     return;
   }
-  const task = { params, filePath, cb, key };
-  renderQueue.push(task);
-  processRenderQueue();
+
+  // 3. Marcar como activa
+  activeRenders.add(key);
+
+  // 4. Preparar la tarea para el Worker Persistente
+  
+  // Resolver ruta absoluta del proyecto.
+  // Nota: projectsDir debe estar definido en tu scope global (normalmente path.resolve(__dirname, "qgisprojects"))
+  // Si no tienes projectsDir a mano, usa: path.resolve(__dirname, 'qgisprojects', ...)
+  const projFile = resolveProjectFilePath(params.project);
+  const projectPath = projFile || path.resolve(projectsDir, `${params.project}.qgz`);
+
+  // Calcular BBOX aquí (Node.js es muy rápido para matemáticas simples)
+  const bbox = getTileBBox(Number(params.z), Number(params.x), Number(params.y));
+
+  const task = {
+    project_path: projectPath,
+    output_file: filePath,
+    z: Number(params.z),
+    x: Number(params.x),
+    y: Number(params.y),
+    bbox: bbox,
+    layer: params.layer,
+    theme: params.theme,
+    // Pasar preset si existe, para casos WMTS complejos
+    tile_matrix_preset: params.tileMatrixPreset || null
+  };
+
+  // 5. Enviar al Pool
+  // tileRendererPool gestiona internamente la cola si todos los workers están ocupados
+  tileRendererPool.renderTile(task)
+    .then((result) => {
+      // Limpiar estado
+      activeRenders.delete(key);
+      
+      if (result.status === 'error' || result.error) {
+        throw new Error(result.message || result.error || "Worker error");
+      }
+      
+      // Éxito: devolver ruta del archivo
+      cb(null, filePath);
+    })
+    .catch((err) => {
+      // Error
+      activeRenders.delete(key);
+      console.error(`[Pool Error] ${params.project} ${params.z}/${params.x}/${params.y}:`, err.message);
+      
+      // Intentar limpiar archivo corrupto/vacío si se creó
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch(e) {} 
+      }
+      
+      cb(err, null);
+    });
 }
 
 function processRenderQueue() {
@@ -6710,7 +6890,6 @@ function processRenderQueue() {
     try { processRenderQueue(); } catch { }
   }
 }
-// servir tiles on-demand
 // servir tiles on-demand
 app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, theme, z, x, y } = req.params;

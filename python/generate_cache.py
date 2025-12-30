@@ -1,4 +1,3 @@
-
 """
 This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
 If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -16,6 +15,17 @@ import argparse
 import math
 import signal
 from pathlib import Path
+
+_terminate = {"flag": False}
+
+def handle_abort(signum, frame):
+    _terminate["flag"] = True
+    print('{"info": "SIGTERM received, aborting..."}', file=sys.stderr)
+    sys.stderr.flush()
+
+signal.signal(signal.SIGTERM, handle_abort)
+signal.signal(signal.SIGINT, handle_abort)
+
 
 # --- Cargar .env (intenta python-dotenv, fallback manual) ---
 def load_dotenv_file(path: Path):
@@ -1139,7 +1149,6 @@ if args.single:
         except Exception:
             pass
         qgs.exitQgis(); sys.exit(2)
-    # ...existing code...
 target_name = target_name.strip()
 if not target_name:
     sys.stderr.write(json.dumps({"error": "Nombre inválido para el destino"}) + "\n")
@@ -1284,6 +1293,13 @@ if project_extent is None:
 # 4) fallback: usar extent de la capa
 if project_extent is None:
     project_extent = layer.extent()
+
+# --- FIX: preferir extent de la capa cuando se está cacheando una capa (salvo --use_project_extent) ---
+if target_mode == "layer" and not getattr(args, "use_project_extent", False):
+    try:
+        project_extent = layer.extent()
+    except Exception:
+        pass
 
 if project_extent is None:
     sys.stderr.write(json.dumps({"error": "No se pudo determinar project_extent"}) + "\n")
@@ -1452,8 +1468,6 @@ if scheme == "xyz":
         # clamp to grid
         x0 = max(0, min(tiles - 1, x0)); x1 = max(0, min(tiles - 1, x1))
         y0 = max(0, min(tiles - 1, y0)); y1 = max(0, min(tiles - 1, y1))
-        if x1 < x0: x0, x1 = x1, x0
-        if y1 < y0: y0, y1 = y1, y0
         tile_ranges[z] = (x0, x1, y0, y1)
         expected_total += max(0, (x1 - x0 + 1)) * max(0, (y1 - y0 + 1))
     if expected_total <= 0:
@@ -1507,6 +1521,13 @@ if scheme == "xyz":
                                 last_err = "timeout"
                                 continue
                             img = job.renderedImage()
+                            # --- ABORTO RÁPIDO: chequeo antes de guardar ---
+                            if _terminate["flag"]:
+                                sys.stderr.write(json.dumps({"info": "Aborted before saving tile", "tile": out_file}) + "\n")
+                                sys.stderr.flush()
+                                qgs.exitQgis()
+                                sys.exit(1)
+                            # --- FIN ABORTO RÁPIDO ---
                             tile_dir = os.path.join(tile_base_dir, str(z), str(x))
                             os.makedirs(tile_dir, exist_ok=True)
                             out_file = os.path.join(tile_dir, f"{y}.png")
@@ -1569,6 +1590,14 @@ elif scheme == "wmts":
             publish_zoom_max_effective = publish_levels[-1]
         tile_runs = []
         for matrix in selected:
+            # --- FIX: override matrix origin to use actual extent_in_tile_crs (minX, maxY)
+            try:
+                matrix['origin_x'] = float(extent_in_tile_crs.xMinimum())
+                matrix['origin_y'] = float(extent_in_tile_crs.yMaximum())
+            except Exception:
+                # keep preset origin if extent not available
+                pass
+
             # Recortar el rango de tiles a solo los que intersectan el extent deseado
             span = _compute_tile_span(extent_in_tile_crs, matrix)
             if not span:
@@ -1624,48 +1653,48 @@ elif scheme == "wmts":
                     tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
                     settings.setExtent(tile_bbox)
                     settings.setOutputSize(QSize(matrix.get("tile_width", TILE_SIZE), matrix.get("tile_height", TILE_SIZE)))
-                    tile_dir = os.path.join(tile_base_dir, folder_level, str(x))
-                    out_file = os.path.join(tile_dir, f"{y}.png")
-                    if args.skip_existing and os.path.exists(out_file):
-                        total_generated += 1; level_generated += 1
-                        continue
-                    out_file = None
-                    try:
-                        attempts = 0
-                        success = False
-                        last_err = None
-                        while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
-                            attempts += 1
-                            try:
-                                job = QgsMapRendererParallelJob(settings)
-                                job.start()
-                                finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
-                                if not finished:
-                                    try: job.cancel()
-                                    except Exception: pass
-                                    last_err = "timeout"
-                                    continue
-                                img = job.renderedImage()
-                                os.makedirs(tile_dir, exist_ok=True)
-                                out_file = os.path.join(tile_dir, f"{y}.png")
-                                success = _atomic_save_image(img, out_file, compression=args.png_compression)
-                                if not success:
-                                    last_err = "save_failed_or_too_small"
-                            except Exception as e:
-                                last_err = str(e)
-                        if success:
-                            total_generated += 1; level_generated += 1
-                        else:
-                            sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
-                            error_count += 1
-                    except Exception as e:
-                        sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
-                        error_count += 1
-                    if throttle_sec > 0:
+                                                                     tile_dir = os.path.join(tile_base_dir, folder_level, str(x))
+                out_file = os.path.join(tile_dir, f"{y}.png")
+                if args.skip_existing and os.path.exists(out_file):
+                    total_generated += 1; level_generated += 1
+                    continue
+                out_file = None
+                try:
+                    attempts = 0
+                    success = False
+                    last_err = None
+                    while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
+                        attempts += 1
                         try:
-                            time.sleep(throttle_sec)
-                        except Exception:
-                            pass
+                            job = QgsMapRendererParallelJob(settings)
+                            job.start()
+                            finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
+                            if not finished:
+                                try: job.cancel()
+                                except Exception: pass
+                                last_err = "timeout"
+                                continue
+                            img = job.renderedImage()
+                            os.makedirs(tile_dir, exist_ok=True)
+                            out_file = os.path.join(tile_dir, f"{y}.png")
+                            success = _atomic_save_image(img, out_file, compression=args.png_compression)
+                            if not success:
+                                last_err = "save_failed_or_too_small"
+                        except Exception as e:
+                            last_err = str(e)
+                    if success:
+                        total_generated += 1; level_generated += 1
+                    else:
+                        sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
+                        error_count += 1
+                except Exception as e:
+                    sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
+                    error_count += 1
+                if throttle_sec > 0:
+                    try:
+                        time.sleep(throttle_sec)
+                    except Exception:
+                        pass
             percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
             sys.stdout.write(json.dumps({"progress": "level_done", "z": int(matrix.get("source_level", 0)), "generated_level": level_generated, "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
             sys.stdout.flush()
@@ -1683,7 +1712,11 @@ elif scheme == "wmts":
                 "scale_denominator": m.get("scale_denominator"),
                 "matrix_width": m.get("matrix_width"),
                 "matrix_height": m.get("matrix_height"),
-                "top_left": [m.get("origin_x"), m.get("origin_y")]
+                # --- FIX: ensure top_left uses extent_in_tile_crs (fallback to preset origin)
+                "top_left": [
+                    float(extent_in_tile_crs.xMinimum()) if extent_in_tile_crs is not None else (m.get("origin_x") or 0.0),
+                    float(extent_in_tile_crs.yMaximum()) if extent_in_tile_crs is not None else (m.get("origin_y") or 0.0)
+                ]
             }
             for idx, m in enumerate(publish_matrices)
         ]
@@ -1929,13 +1962,8 @@ try:
         "name": target_name,
         "kind": target_mode,
         "crs": tile_crs.authid(),
-        "extent": [
-            float(extent_in_tile_crs.xMinimum()),
-            float(extent_in_tile_crs.yMinimum()),
-            float(extent_in_tile_crs.xMaximum()),
-            float(extent_in_tile_crs.yMaximum())
-        ],
-        "project_crs": project_crs.authid(),
+        "extent": layer_entry_extent,
+        "project_crs": proj_crs_candidate.authid(),
         "project_extent": [project_extent.xMinimum(), project_extent.yMinimum(), project_extent.xMaximum(), project_extent.yMaximum()],
         "zoom_min": publish_zoom_min_effective,
         "zoom_max": publish_zoom_max_effective,
@@ -1964,12 +1992,14 @@ try:
             axis_order_value = "xy"
         tile_width_value = int(tile_matrix_preset.get("tile_width") or 256) if tile_matrix_preset else 256
         tile_height_value = int(tile_matrix_preset.get("tile_height") or 256) if tile_matrix_preset else 256
-        if tile_matrix_preset:
-            top_left_corner_record = [float(tile_matrix_preset.get("origin_x", 0.0)), float(tile_matrix_preset.get("origin_y", 0.0))]
-            supported_crs_value = tile_matrix_preset.get("supported_crs") or tile_crs.authid()
-        else:
-            top_left_corner_record = [float(extent_in_tile_crs.xMinimum()), float(extent_in_tile_crs.yMaximum())]
-            supported_crs_value = tile_crs.authid()
+
+        # --- FIX: siempre derivar top-left del extent re-proyectado (extent_in_tile_crs)
+        top_left_corner_record = [
+            float(extent_in_tile_crs.xMinimum()),
+            float(extent_in_tile_crs.yMaximum())
+        ]
+        supported_crs_value = (tile_matrix_preset.get("supported_crs") if tile_matrix_preset else None) or tile_crs.authid()
+
         layer_entry["tile_matrix_set"] = {
             "id": preset_id_value,
             "supported_crs": supported_crs_value,
@@ -1987,16 +2017,12 @@ try:
                     "matrix_width": int(m.get("matrix_width", 1)),
                     "matrix_height": int(m.get("matrix_height", 1)),
                     "top_left": [
-                        float(m.get("top_left", top_left_corner_record)[0] if isinstance(m.get("top_left"), (list, tuple)) else top_left_corner_record[0]),
-                        float(m.get("top_left", top_left_corner_record)[1] if isinstance(m.get("top_left"), (list, tuple)) else top_left_corner_record[1])
+                        float(m.get("top_left", top_left_corner_record)[0]) if isinstance(m.get("top_left", top_left_corner_record), (list, tuple)) else float(top_left_corner_record[0]),
+                        float(m.get("top_left", top_left_corner_record)[1]) if isinstance(m.get("top_left", top_left_corner_record), (list, tuple)) else float(top_left_corner_record[1])
                     ]
                 } for idx, m in enumerate(wmts_matrices)
             ]
         }
-        if tile_matrix_preset:
-            layer_entry["tile_matrix_preset"] = tile_matrix_preset.get("id") or tile_matrix_preset_name
-        elif active_scale_profile:
-            layer_entry["tile_matrix_profile"] = active_scale_profile.get("id") or active_scale_profile.get("name") or tile_crs.authid()
     layers_snapshot = list(index.get("layers", []))
 
     def _safe_int(value):

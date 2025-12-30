@@ -367,17 +367,35 @@ if project_extent_wgs84 is None and project_extent is None and layers:
 def rect_to_list(rect):
     if not rect:
         return None
-    return [rect.xMinimum(), rect.yMinimum(), rect.xMaximum(), rect.yMaximum()]
+    return [float(rect.xMinimum()), float(rect.yMinimum()), float(rect.xMaximum()), float(rect.yMaximum())]
+
+# normalize extents into {bbox: [...], crs: "EPSG:xxxx"} shape
+proj_extent_list = rect_to_list(project_extent)
+proj_extent_wgs84_list = rect_to_list(project_extent_wgs84)
+view_extent_list = rect_to_list(project_view_extent)
+view_extent_wgs84_list = rect_to_list(project_view_extent_wgs84)
 
 result = {
     "project": {
         "id": Path(PROJECT_PATH).stem,
         "path": PROJECT_PATH,
         "crs": project_crs.authid() if project_crs.isValid() else None,
-        "extent": rect_to_list(project_extent),
-        "extent_wgs84": rect_to_list(project_extent_wgs84),
-        "view_extent": rect_to_list(project_view_extent),
-        "view_extent_wgs84": rect_to_list(project_view_extent_wgs84)
+        "extent": {
+            "bbox": proj_extent_list,
+            "crs": project_crs.authid() if project_crs.isValid() else None
+        } if proj_extent_list else {"bbox": None, "crs": project_crs.authid() if project_crs.isValid() else None},
+        "extent_wgs84": {
+            "bbox": proj_extent_wgs84_list,
+            "crs": "EPSG:4326"
+        } if proj_extent_wgs84_list else {"bbox": None, "crs": "EPSG:4326"},
+        "view_extent": {
+            "bbox": view_extent_list,
+            "crs": project_crs.authid() if project_crs.isValid() else None
+        } if view_extent_list else {"bbox": None, "crs": project_crs.authid() if project_crs.isValid() else None},
+        "view_extent_wgs84": {
+            "bbox": view_extent_wgs84_list,
+            "crs": "EPSG:4326"
+        } if view_extent_wgs84_list else {"bbox": None, "crs": "EPSG:4326"}
     },
     "layers": layers,
     "themes": themes
