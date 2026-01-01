@@ -14,14 +14,6 @@ import { execFile, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { PythonPool } from './lib/PythonPool.js';
-import { sanitizeProjectId, sanitizePluginName } from "./lib/sanitize.js";
-import { resolvePluginRoot, detectPluginName } from "./lib/pluginArchiveUtils.js";
-import { copyRecursive, removeRecursive } from "./lib/fsRecursive.js";
-import { allowedProjectExtensions, createProjectUpload, createPluginUpload } from "./lib/uploads.js";
-import { registerUiRoutes } from "./routes/ui.js";
-import { registerProj4Routes } from "./routes/proj4.js";
-import { registerPluginRoutes } from "./routes/plugins.js";
-import { registerProjectRoutes } from "./routes/projects.js";
 
 
 dotenv.config();
@@ -45,6 +37,7 @@ function verifyQGISEnv() {
 }
 verifyQGISEnv();
 import crypto from "crypto";
+import multer from "multer";
 import AdmZip from "adm-zip";
 
 import cookieParser from "cookie-parser";
@@ -332,6 +325,27 @@ const authPluginRequiredResponse = {
   installUrl: authPluginInstallUrl
 };
 
+const authAdminUiCandidates = [
+  path.join(pluginsDir, "QtilerAuth", "admin-ui"),
+  path.join(pluginsDir, "qtilerauth", "admin-ui"),
+  path.join(pluginsDir, "auth", "admin-ui"),
+  path.join(publicDir, "auth-admin")
+];
+
+const resolveAuthAdminUiDir = () => {
+  for (const candidate of authAdminUiCandidates) {
+    try {
+      const indexPath = path.join(candidate, "index.html");
+      if (fs.existsSync(indexPath)) {
+        return candidate;
+      }
+    } catch (err) {
+      console.warn("Auth admin UI path check failed", { candidate, error: String(err) });
+    }
+  }
+  return null;
+};
+
 const normalizeZoomInput = (value) => {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -443,28 +457,360 @@ const sendLoginPage = (req, res) => {
   renderPage(req, res, "login", { activeNav: "login" }, { status: 401 });
 };
 
-registerUiRoutes({
-  app,
-  security,
-  renderPage,
-  sendLoginPage,
-  sendAccessDenied,
-  requireAdminPage,
-  authPluginInstallUrl,
-  publicDir,
-  pluginsDir
+const ensureAdminForUi = (req, res, next) => {
+  if (!security.isEnabled()) {
+    const availableDir = resolveAuthAdminUiDir();
+    const normalizedPublic = path.resolve(publicDir).toLowerCase();
+    const normalizedAvailable = availableDir ? path.resolve(availableDir).toLowerCase() : null;
+    if (normalizedAvailable && normalizedAvailable.startsWith(normalizedPublic)) {
+      return next();
+    }
+    return res.status(501).send("Auth plugin is not enabled");
+  }
+  if (!req.user) {
+    return sendLoginPage(req, res);
+  }
+  if (req.user.role !== "admin") {
+    return sendAccessDenied(req, res);
+  }
+  return next();
+};
+
+const sendAuthAdminPage = (res) => {
+  const dir = resolveAuthAdminUiDir();
+  if (!dir) {
+    // Redirect to the new admin panel instead of showing 501
+    return res.redirect('/admin');
+  }
+  const filePath = path.join(dir, "index.html");
+  res.sendFile(filePath, (err) => {
+    if (!err) return;
+    console.warn("Auth admin UI load failed", { filePath, code: err?.code, message: err?.message });
+    if (err.code === "ENOENT") {
+      return res.redirect('/admin');
+    } else {
+      res.status(500).send("Failed to load auth admin UI");
+    }
+  });
+};
+
+const serveAuthAdminStatic = (req, res, next) => {
+  const dir = resolveAuthAdminUiDir();
+  if (!dir) {
+    return res.status(501).send("Auth admin UI not installed");
+  }
+  const staticMiddleware = express.static(dir);
+  staticMiddleware(req, res, (err) => {
+    if (err && err.code === "ENOENT") {
+      return res.status(404).end();
+    }
+    return next(err);
+  });
+};
+
+app.get("/plugins/auth-admin", ensureAdminForUi, (_req, res) => {
+  sendAuthAdminPage(res);
 });
 
-registerProj4Routes({
-  app,
-  normalizeEpsgKey,
-  ensureServerProj4Def,
-  getProj4Presets: () => proj4Presets
+app.use("/plugins/auth-admin/assets", ensureAdminForUi, serveAuthAdminStatic);
+
+app.use("/plugins/auth-admin", ensureAdminForUi, (req, res, next) => {
+  if (!req.path || req.path === "/" || req.path === "") {
+    return next();
+  }
+  return serveAuthAdminStatic(req, res, next);
+});
+
+const sendPortalPage = (req, res) => {
+  renderPage(req, res, "portal", { activeNav: "portal" });
+};
+
+app.get("/", (req, res) => {
+  if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
+    return renderPage(req, res, "index", { activeNav: "dashboard" });
+  }
+  return sendPortalPage(req, res);
+});
+
+app.get("/index.html", (req, res) => {
+  if (!security.isEnabled() || (req.user && req.user.role === "admin")) {
+    return renderPage(req, res, "index", { activeNav: "dashboard" });
+  }
+  return res.redirect(302, "/");
+});
+
+app.get(["/portal", "/portal.html"], (req, res) => {
+  return sendPortalPage(req, res);
+});
+
+app.get(["/login", "/login.html"], (req, res) => {
+  if (!security.isEnabled()) {
+    return res.redirect(authPluginInstallUrl);
+  }
+  if (req.user && req.user.role === "admin") {
+    return res.redirect("/index.html");
+  }
+  return sendLoginPage(req, res);
+});
+
+app.get(["/guide", "/guide.html"], (req, res) => {
+  return renderPage(req, res, "guide", { activeNav: "guide" });
+});
+
+app.get(["/admin", "/admin.html"], requireAdminPage, (req, res) => {
+  return renderPage(req, res, "admin", { activeNav: "admin" });
+});
+
+app.get(["/viewer", "/viewer.html"], (req, res) => {
+  return renderPage(req, res, "viewer", { activeNav: "viewer" });
+});
+
+app.get('/api/proj4/:code', async (req, res) => {
+  try {
+    const code = req.params && req.params.code ? String(req.params.code) : null;
+    if (!code) return res.status(400).json({ error: 'missing_code' });
+    const key = normalizeEpsgKey(code);
+    if (!key) return res.status(400).json({ error: 'invalid_code' });
+    // return existing if present
+    if (proj4Presets && proj4Presets[key]) {
+      return res.json({ code: key, def: proj4Presets[key], source: 'cache' });
+    }
+    // attempt to fetch and persist
+    const def = await ensureServerProj4Def(key);
+    if (!def) return res.status(404).json({ error: 'not_found' });
+    return res.json({ code: key, def, source: 'epsg.io' });
+  } catch (err) {
+    console.warn('proj4 ensure failed', err?.message || err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get(["/access-denied", "/access-denied.html"], (req, res) => {
+  return renderPage(req, res, "access-denied", { activeNav: "dashboard" }, { status: 403 });
 });
 
 app.use(express.static(publicDir, { index: false }));
 
-// Plugin routes are registered after upload middleware initialization.
+// Allow non-admin access to plugins list if no auth plugin is enabled (to install first plugin)
+app.get("/plugins", async (req, res) => {
+  // If auth is enabled, require admin
+  if (security.isEnabled && security.isEnabled()) {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+  }
+  
+  try {
+    let installed = [];
+    try {
+      const entries = await fs.promises.readdir(pluginsDir, { withFileTypes: true });
+      installed = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    } catch (dirErr) {
+      if (dirErr.code !== "ENOENT") throw dirErr;
+    }
+    const installedSet = new Set(installed);
+    const enabled = pluginManager.listEnabled();
+
+    // Auto-disable plugins whose directories were removed manually
+    for (const name of enabled) {
+      if (!installedSet.has(name)) {
+        try {
+          await pluginManager.disablePlugin(name);
+          console.warn(`[Qtiler] Disabled missing plugin '${name}' (directory not found).`);
+        } catch (disableErr) {
+          console.warn(`[Qtiler] Failed to disable missing plugin '${name}':`, disableErr);
+        }
+      }
+    }
+
+    if (pluginManager.listEnabled().length === 0) {
+      applySecurityDefaults();
+    }
+
+    res.json({ installed, enabled: pluginManager.listEnabled() });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_list_failed", details: String(err) });
+  }
+});
+
+app.post("/plugins/:name/enable", requireAdminIfEnabled, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  
+  try {
+    await pluginManager.enablePlugin(pluginName);
+    res.json({ status: "enabled", plugin: { name: pluginName } });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_enable_failed", details: String(err?.message || err) });
+  }
+});
+
+app.post("/plugins/:name/disable", requireAdmin, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  
+  try {
+    await pluginManager.disablePlugin(pluginName);
+    
+    // Apply security defaults if no plugins are enabled
+    if (pluginManager.listEnabled().length === 0) {
+      applySecurityDefaults();
+    }
+    
+    res.json({ status: "disabled", plugin: { name: pluginName } });
+  } catch (err) {
+    res.status(500).json({ error: "plugin_disable_failed", details: String(err?.message || err) });
+  }
+});
+
+app.delete("/plugins/:name", requireAdmin, async (req, res) => {
+  const raw = req.params.name;
+  const pluginName = sanitizePluginName(raw);
+  if (!pluginName) {
+    return res.status(400).json({ error: "plugin_name_required" });
+  }
+  const pluginPath = path.join(pluginsDir, pluginName);
+  const pluginDataPath = path.join(dataDir, pluginName);
+  const exists = fs.existsSync(pluginPath);
+  const wasEnabled = pluginManager.listEnabled().includes(pluginName);
+  try {
+    if (wasEnabled) {
+      await pluginManager.disablePlugin(pluginName);
+    }
+  } catch (disableErr) {
+    return res.status(500).json({ error: "plugin_disable_failed", details: String(disableErr?.message || disableErr) });
+  }
+
+  let removedFiles = false;
+  if (exists) {
+    try {
+      await removeRecursive(pluginPath);
+      removedFiles = true;
+    } catch (rmErr) {
+      return res.status(500).json({ error: "plugin_remove_failed", details: String(rmErr?.message || rmErr) });
+    }
+  }
+
+  let removedData = false;
+  if (req.query.keepData !== "1") {
+    try {
+      await removeRecursive(pluginDataPath);
+      removedData = true;
+    } catch (rmDataErr) {
+      if (rmDataErr?.code !== "ENOENT") {
+        return res.status(500).json({ error: "plugin_data_remove_failed", details: String(rmDataErr?.message || rmDataErr) });
+      }
+    }
+  }
+
+  if (!wasEnabled && !exists) {
+    return res.status(404).json({ error: "plugin_not_found" });
+  }
+
+  if (pluginManager.listEnabled().length === 0) {
+    applySecurityDefaults();
+  }
+
+  res.json({
+    status: "uninstalled",
+    plugin: {
+      name: pluginName,
+      wasEnabled,
+      removedFiles,
+      removedData
+    }
+  });
+});
+
+app.post("/plugins/upload", requireAdminIfEnabled, (req, res) => {
+  pluginUpload.single("plugin")(req, res, async (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "plugin_archive_too_large" });
+      }
+      if (err.code === "UNSUPPORTED_PLUGIN_ARCHIVE") {
+        return res.status(400).json({ error: "unsupported_plugin_archive" });
+      }
+      return res.status(500).json({ error: "plugin_upload_failed", details: String(err) });
+    }
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "plugin_archive_required" });
+    }
+
+    let tempDir = null;
+    try {
+      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-plugin-"));
+      const extractDir = path.join(tempDir, "extract");
+      await fs.promises.mkdir(extractDir, { recursive: true });
+
+      try {
+        if (!file.path) {
+          throw Object.assign(new Error("plugin_upload_missing"), { statusCode: 500, code: "PLUGIN_UPLOAD_MISSING" });
+        }
+        const zip = new AdmZip(file.path);
+        zip.extractAllTo(extractDir, true);
+      } catch (zipErr) {
+        throw Object.assign(new Error("plugin_archive_invalid"), { statusCode: 400, code: "PLUGIN_ARCHIVE_INVALID", details: zipErr.message });
+      }
+
+      const pluginRoot = await resolvePluginRoot(extractDir);
+
+      try {
+        await fs.promises.access(path.join(pluginRoot, "index.js"), fs.constants.R_OK);
+      } catch {
+        throw Object.assign(new Error("plugin_entry_missing"), { statusCode: 400, code: "PLUGIN_ENTRY_MISSING" });
+      }
+
+      const provided = sanitizePluginName(req.body?.pluginName || req.body?.name || "");
+      const inferredName = await detectPluginName(pluginRoot, provided || path.basename(pluginRoot));
+      const pluginName = sanitizePluginName(inferredName || provided || path.basename(pluginRoot) || "");
+      if (!pluginName) {
+        throw Object.assign(new Error("plugin_name_required"), { statusCode: 400, code: "PLUGIN_NAME_REQUIRED" });
+      }
+
+      if (pluginManager.listEnabled().includes(pluginName)) {
+        throw Object.assign(new Error("plugin_already_enabled"), { statusCode: 409, code: "PLUGIN_ALREADY_ENABLED" });
+      }
+
+      const destination = path.join(pluginsDir, pluginName);
+      await removeRecursive(destination);
+      await copyRecursive(pluginRoot, destination);
+
+      try {
+        await pluginManager.enablePlugin(pluginName);
+      } catch (loadErr) {
+        await removeRecursive(destination).catch(() => { });
+        throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
+      }
+
+      return res.status(201).json({ status: "enabled", plugin: { name: pluginName } });
+    } catch (uploadErr) {
+      const statusCode = uploadErr.statusCode && Number.isInteger(uploadErr.statusCode) ? uploadErr.statusCode : 500;
+      const code = uploadErr.code || "PLUGIN_UPLOAD_FAILED";
+      const details = uploadErr.details || uploadErr.message || String(uploadErr);
+      return res.status(statusCode).json({ error: code, details });
+    } finally {
+      if (file?.path) {
+        try {
+          await fs.promises.unlink(file.path);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      if (tempDir) {
+        await removeRecursive(tempDir).catch(() => { });
+      }
+    }
+  });
+});
 
 const cacheDir = path.resolve(__dirname, "cache");
 const pythonDir = path.resolve(__dirname, "python");
@@ -472,27 +818,26 @@ const projectsDir = path.resolve(__dirname, "qgisprojects");
 const logsDir = path.resolve(__dirname, "logs");
 const uploadTempDir = path.resolve(__dirname, "temp_uploads");
 
-const defaultUploadLimit = parseInt(process.env.PROJECT_UPLOAD_MAX_BYTES || "209715200", 10); // 200 MB por defecto
-const projectUpload = createProjectUpload({ uploadTempDir, maxBytes: defaultUploadLimit });
+const ensureUploadSubdir = (name) => {
+  const dir = path.join(uploadTempDir, name);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+};
 
-const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
-const pluginUpload = createPluginUpload({ uploadTempDir, maxBytes: defaultPluginUploadLimit });
-
-registerPluginRoutes({
-  app,
-  pluginManager,
-  security,
-  pluginsDir,
-  dataDir,
-  requireAdmin,
-  requireAdminIfEnabled,
-  applySecurityDefaults,
-  pluginUpload,
-  sanitizePluginName,
-  resolvePluginRoot,
-  detectPluginName,
-  copyRecursive,
-  removeRecursive
+const createDiskStorage = (subDir) => multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    try {
+      const dir = ensureUploadSubdir(subDir);
+      cb(null, dir);
+    } catch (err) {
+      cb(err);
+    }
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "");
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}` || `upload-${Date.now()}`;
+    cb(null, unique);
+  }
 });
 
 const PROJECT_CONFIG_FILENAME = "project-config.json";
@@ -2896,6 +3241,126 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
   return { project: projectId, theme: themeName };
 };
 
+const allowedProjectExtensions = new Set([".qgz", ".qgs"]);
+const defaultUploadLimit = parseInt(process.env.PROJECT_UPLOAD_MAX_BYTES || "209715200", 10); // 200 MB por defecto
+const projectUpload = multer({
+  storage: createDiskStorage("projects"),
+  limits: { fileSize: Number.isFinite(defaultUploadLimit) && defaultUploadLimit > 0 ? defaultUploadLimit : 209715200 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (!allowedProjectExtensions.has(ext)) {
+      const err = new Error("unsupported_filetype");
+      err.code = "UNSUPPORTED_FILETYPE";
+      return cb(err);
+    }
+    cb(null, true);
+  }
+});
+
+const sanitizeProjectId = (value) => {
+  if (value == null) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  return str
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+};
+
+const sanitizePluginName = (value) => {
+  if (!value) return "";
+  return String(value)
+    .trim()
+    .replace(/[^A-Za-z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+};
+
+const resolvePluginRoot = async (dir) => {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const candidateDirs = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith("__MACOSX"));
+  const meaningfulFiles = entries.filter((entry) => entry.isFile() && !entry.name.startsWith("._"));
+  for (const entry of candidateDirs) {
+    const maybeRoot = path.join(dir, entry.name);
+    try {
+      await fs.promises.access(path.join(maybeRoot, "index.js"), fs.constants.R_OK);
+      return maybeRoot;
+    } catch {
+      // continue exploring other directories
+    }
+  }
+  if (candidateDirs.length === 1 && meaningfulFiles.length === 0) {
+    return path.join(dir, candidateDirs[0].name);
+  }
+  return dir;
+};
+
+const readJsonIfExists = async (filePath) => {
+  try {
+    const raw = await fs.promises.readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const detectPluginName = async (rootDir, fallbackName = "") => {
+  const candidates = [];
+  const pluginManifest = await readJsonIfExists(path.join(rootDir, "plugin.json"));
+  if (pluginManifest?.name) candidates.push(pluginManifest.name);
+  const packageJson = await readJsonIfExists(path.join(rootDir, "package.json"));
+  if (packageJson?.name) candidates.push(packageJson.name);
+  if (fallbackName) candidates.push(fallbackName);
+  for (const candidate of candidates) {
+    const sanitized = sanitizePluginName(candidate);
+    if (sanitized) return sanitized;
+  }
+  return null;
+};
+
+const copyRecursive = async (source, destination) => {
+  const stats = await fs.promises.stat(source);
+  if (stats.isDirectory()) {
+    await fs.promises.mkdir(destination, { recursive: true });
+    const entries = await fs.promises.readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      await copyRecursive(path.join(source, entry.name), path.join(destination, entry.name));
+    }
+    return;
+  }
+  if (stats.isFile()) {
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+    await fs.promises.copyFile(source, destination);
+  }
+};
+
+const removeRecursive = async (targetPath) => {
+  await fs.promises.rm(targetPath, { recursive: true, force: true });
+};
+
+const allowedPluginExtensions = new Set([".zip"]);
+const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
+const pluginUpload = multer({
+  storage: createDiskStorage("plugins"),
+  limits: {
+    fileSize: Number.isFinite(defaultPluginUploadLimit) && defaultPluginUploadLimit > 0
+      ? defaultPluginUploadLimit
+      : 52428800
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (!allowedPluginExtensions.has(ext)) {
+      const err = new Error("unsupported_plugin_archive");
+      err.code = "UNSUPPORTED_PLUGIN_ARCHIVE";
+      return cb(err);
+    }
+    cb(null, true);
+  }
+});
+
 // Detectar ejecutable python (permite override por .env). No usar hardcoded C:\ fallbacks — exigir .env
 const pythonExe = process.env.PYTHON_EXE || (process.env.OSGEO4W_BIN ? path.join(process.env.OSGEO4W_BIN, "python.exe") : null);
 // const tileRendererPool = new PythonPool(pythonScript, poolSize); // moved below
@@ -3864,6 +4329,57 @@ const resolvePublicProject = (projectId) => {
   return buildProjectDescriptor(project, { snapshot, access: accessInfo });
 };
 
+app.get("/public/projects", (_req, res) => {
+  try {
+    const listing = buildPublicProjectsListing();
+    res.json(listing);
+  } catch (err) {
+    console.error("Failed to build public project listing", err);
+    res.status(500).json({ error: "public_projects_failed", details: String(err?.message || err) });
+  }
+});
+
+app.get("/public/projects/:id", (req, res) => {
+  try {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) {
+      return res.status(400).json({ error: "project_id_required" });
+    }
+    const descriptor = resolvePublicProject(projectId);
+    if (!descriptor) {
+      return res.status(404).json({ error: "project_not_found_or_private" });
+    }
+    res.json({ project: descriptor });
+  } catch (err) {
+    console.error("Failed to resolve public project", err);
+    res.status(500).json({ error: "public_project_failed", details: String(err?.message || err) });
+  }
+});
+
+app.get("/public/my-projects", (req, res) => {
+  if (!security.isEnabled()) {
+    return res.status(404).json({ error: "auth_plugin_disabled" });
+  }
+  if (!req.user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+  try {
+    const snapshot = readProjectAccessSnapshot();
+    const projects = listProjects();
+    const visible = [];
+    for (const project of projects) {
+      const accessInfo = deriveProjectAccess(snapshot, req.user, project.id);
+      if (!accessInfo.allowed && req.user.role !== "admin") continue;
+      const descriptor = buildProjectDescriptor(project, { snapshot, access: accessInfo });
+      if (descriptor) visible.push(descriptor);
+    }
+    res.json({ projects: visible, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("Failed to build user project listing", err);
+    res.status(500).json({ error: "my_projects_failed", details: String(err?.message || err) });
+  }
+});
+
 const initializeProjectSchedules = () => {
   const projects = listProjects();
   for (const proj of projects) {
@@ -3918,6 +4434,418 @@ const startScheduleHeartbeat = () => {
 };
 
 // listar proyectos
+app.get("/projects", (req, res) => {
+  const allProjects = listProjects();
+  const authEnabled = security.isEnabled && security.isEnabled();
+  
+  if (!authEnabled) {
+    return res.json({
+      projects: allProjects.map(p => ({ ...p, access: 'public' })),
+      authEnabled: false,
+      user: { role: 'admin' }
+    });
+  }
+
+  const user = req.user;
+  const isAdmin = user && user.role === 'admin';
+  const accessSnapshot = readProjectAccessSnapshot();
+  
+  console.log('[/projects] Debug:', {
+    totalProjects: allProjects.length,
+    projectIds: allProjects.map(p => p.id),
+    accessSnapshot: accessSnapshot.projects,
+    user: user ? { id: user.id, role: user.role } : null
+  });
+  
+  const visibleProjects = allProjects.map(p => {
+    const accessConfig = resolveProjectAccessEntry(accessSnapshot, p.id) || {};
+    const isPublic = accessConfig.public === true;
+    const allowedRoles = Array.isArray(accessConfig.allowedRoles) ? accessConfig.allowedRoles : [];
+    const allowedUsers = Array.isArray(accessConfig.allowedUsers) ? accessConfig.allowedUsers : [];
+    
+    let accessLevel = 'private';
+    if (isPublic) accessLevel = 'public';
+    else if (allowedRoles.includes('authenticated')) accessLevel = 'authenticated';
+    
+    return { 
+      ...p, 
+      access: accessLevel,
+      isPublic,
+      allowedRoles,
+      allowedUsers
+    };
+  }).filter(p => {
+    if (isAdmin) return true;
+    if (p.isPublic) return true;
+    if (!user) return false;
+    if (p.allowedRoles.includes('authenticated')) return true;
+    if (p.allowedRoles.includes(user.role)) return true;
+    if (p.allowedUsers.includes(user.id)) return true;
+    return false;
+  });
+
+  res.json({
+    projects: visibleProjects,
+    authEnabled: true,
+    user: user ? { id: user.id, role: user.role } : null
+  });
+});
+
+app.post("/projects", requireAdmin, (req, res) => {
+  projectUpload.single("project")(req, res, async (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: "file_too_large" });
+      }
+      if (err.code === "UNSUPPORTED_FILETYPE") {
+        return res.status(400).json({ error: "unsupported_filetype", allowed: Array.from(allowedProjectExtensions) });
+      }
+      return res.status(500).json({ error: "upload_failed", details: String(err) });
+    }
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "project_file_required" });
+    }
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const preferredIdRaw = req.body?.projectId || req.body?.name || path.basename(file.originalname || "project", ext);
+    let projectId = sanitizeProjectId(preferredIdRaw);
+    if (!projectId) {
+      projectId = `project_${Date.now()}`;
+    }
+    let targetName = `${projectId}${ext}`;
+    let suffix = 1;
+    while (fs.existsSync(path.join(projectsDir, targetName))) {
+      targetName = `${projectId}_${suffix}${ext}`;
+      suffix += 1;
+    }
+    const targetPath = path.join(projectsDir, targetName);
+    try {
+      if (!file.path) {
+        throw new Error("temporary_upload_missing");
+      }
+      await fs.promises.copyFile(file.path, targetPath);
+    } catch (writeErr) {
+      return res.status(500).json({ error: "write_failed", details: String(writeErr) });
+    } finally {
+      if (file.path) {
+        try {
+          await fs.promises.unlink(file.path);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+    const finalId = targetName.replace(/\.(qgz|qgs)$/i, "");
+    try {
+      await bootstrapProjectCacheIndex(finalId, targetPath);
+    } catch (bootstrapErr) {
+      console.warn(`[bootstrap] Initialization failed for ${finalId}:`, bootstrapErr?.message || bootstrapErr);
+    }
+    return res.status(201).json({ status: "uploaded", id: finalId, filename: targetName });
+  });
+});
+
+app.delete("/projects/:id", requireAdmin, (req, res) => {
+  const projectId = req.params.id;
+  if (!projectId) {
+    return res.status(400).json({ error: "project_id_required" });
+  }
+  const proj = findProjectById(projectId);
+  if (!proj) {
+    return res.status(404).json({ error: "project_not_found" });
+  }
+
+  for (const [jobId, job] of runningJobs.entries()) {
+    if (job.project === proj.id && job.status === "running") {
+      try { job.proc.kill(); job.status = "aborted"; job.endedAt = Date.now(); } catch { }
+      try { activeKeys.delete(`${job.project || ""}:${job.layer}`); } catch { }
+    }
+  }
+
+  try {
+    fs.unlinkSync(proj.file);
+  } catch (err) {
+    return res.status(500).json({ error: "delete_failed", details: String(err) });
+  }
+
+  cancelProjectTimer(proj.id);
+  projectConfigCache.delete(proj.id);
+  projectLogLastMessage.delete(proj.id);
+  const batchTimer = projectBatchCleanupTimers.get(proj.id);
+  if (batchTimer) {
+    try { clearTimeout(batchTimer); } catch { }
+    projectBatchCleanupTimers.delete(proj.id);
+  }
+  projectBatchRuns.delete(proj.id);
+
+  const projectCacheDir = path.join(cacheDir, proj.id);
+  let cacheRemoved = false;
+  if (fs.existsSync(projectCacheDir)) {
+    try {
+      // Read index.json to find auto-generated preset
+      const indexPath = path.join(projectCacheDir, 'index.json');
+      if (fs.existsSync(indexPath)) {
+        try {
+          const indexData = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+          if (Array.isArray(indexData.layers)) {
+            for (const layer of indexData.layers) {
+              if (layer.tile_matrix_preset && typeof layer.tile_matrix_preset === 'string') {
+                const presetPath = path.join(tileGridDir, `${layer.tile_matrix_preset}.json`);
+                if (fs.existsSync(presetPath)) {
+                  try {
+                    const presetData = JSON.parse(fs.readFileSync(presetPath, 'utf8'));
+                    if (presetData.auto_generated === true && presetData.project_id === proj.id) {
+                      fs.unlinkSync(presetPath);
+                      console.log(`[cleanup] Removed auto-generated preset: ${layer.tile_matrix_preset}`);
+                      invalidateTileGridCaches();
+                    }
+                  } catch (presetErr) {
+                    console.warn(`[cleanup] Failed to check/delete preset ${layer.tile_matrix_preset}:`, presetErr);
+                  }
+                }
+              }
+            }
+          }
+        } catch (indexErr) {
+          console.warn(`[cleanup] Failed to read index.json for preset cleanup:`, indexErr);
+        }
+      }
+      fs.rmSync(projectCacheDir, { recursive: true, force: true });
+      cacheRemoved = true;
+    } catch (err) {
+      return res.status(500).json({ error: "cache_delete_failed", details: String(err) });
+    }
+  }
+
+  try {
+    removeProjectAccessEntry(proj.id);
+  } catch (err) {
+    console.error("Failed to remove project access entry", proj.id, err);
+    return res.status(500).json({ error: "project_access_cleanup_failed", details: String(err?.message || err) });
+  }
+
+  try {
+    purgeProjectFromAuthUsers(proj.id);
+  } catch (err) {
+    console.error("Failed to purge project assignment", proj.id, err);
+    return res.status(500).json({ error: "project_auth_cleanup_failed", details: String(err?.message || err) });
+  }
+
+  try {
+    removeProjectLogs(proj.id);
+  } catch (err) {
+    console.error("Failed to remove project logs", proj.id, err);
+    return res.status(500).json({ error: "project_log_cleanup_failed", details: String(err?.message || err) });
+  }
+
+  return res.json({ status: "deleted", id: proj.id, cacheRemoved });
+});
+
+// capas por proyecto
+app.get("/projects/:id/layers", ensureProjectAccess(req => req.params.id), (req, res) => {
+  const proj = findProjectById(req.params.id);
+  if (!proj) return res.status(404).json({ error: "project_not_found" });
+  const script = path.join(pythonDir, "extract_info.py");
+  const proc = runPythonViaOSGeo4W(script, ["--project", proj.file]);
+
+  let stdout = "", stderr = "";
+  proc.stdout.on("data", d => { const s = d.toString(); stdout += s; console.log("[py stdout]", s.trim()); });
+  proc.stderr.on("data", d => { const s = d.toString(); stderr += s; console.error("[py stderr]", s.trim()); });
+  proc.on("error", err => { console.error("Failed to spawn python:", err); res.status(500).json({ error: "spawn_error", details: String(err) }); });
+  proc.on("close", code => {
+    let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
+    if (raw) {
+      const candidate = extractJsonLike(raw);
+      if (candidate) {
+        try { const parsed = JSON.parse(candidate); return res.status(code === 0 ? 200 : 500).json(parsed); }
+        catch (e) { return res.status(code === 0 ? 200 : 500).json({ raw, code }); }
+      } else return res.status(code === 0 ? 200 : 500).json({ raw, code });
+    }
+    return res.status(code === 0 ? 200 : 500).json({ code, details: stderr || "no output" });
+  });
+});
+
+app.get("/projects/:id/config", ensureProjectAccess(req => req.params.id), (req, res) => {
+  const projectId = req.params.id;
+  const proj = findProjectById(projectId);
+  if (!proj) return res.status(404).json({ error: "project_not_found" });
+  const config = readProjectConfig(projectId);
+  return res.json(config);
+});
+
+app.patch("/projects/:id/config", requireAdmin, async (req, res) => {
+  const projectId = req.params.id;
+  const proj = findProjectById(projectId);
+  if (!proj) return res.status(404).json({ error: "project_not_found" });
+  console.log(`[PATCH /projects/${projectId}/config] authEnabled=${!!(security.isEnabled && security.isEnabled())}, user=${req.user ? JSON.stringify({ id: req.user.id, role: req.user.role }) : 'null'}`);
+  console.log('[PATCH] incoming body:', JSON.stringify(req.body || {}));
+
+  // Pre-validate extents: do not allow saving a layer extent outside project extent
+  try {
+    const rawInput = req.body || {};
+    const currentConfig = readProjectConfig(projectId, { useCache: false }) || {};
+    if (rawInput.layers && typeof rawInput.layers === 'object' && currentConfig.extent && Array.isArray(currentConfig.extent.bbox) && currentConfig.extent.bbox.length === 4) {
+      const [pMinX, pMinY, pMaxX, pMaxY] = currentConfig.extent.bbox.map(Number);
+      for (const [layerName, layerValue] of Object.entries(rawInput.layers)) {
+        if (!layerValue || typeof layerValue !== 'object') continue;
+        const ext = Array.isArray(layerValue.extent) ? layerValue.extent.map(Number) : null;
+        if (ext && ext.length === 4) {
+          const [lMinX, lMinY, lMaxX, lMaxY] = ext;
+          if (!(lMinX >= pMinX && lMinY >= pMinY && lMaxX <= pMaxX && lMaxY <= pMaxY)) {
+            return res.status(400).json({ error: 'extent_out_of_range', message: `Layer ${layerName} extent is outside project extent` });
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Pre-validate extent check failed', e);
+  }
+
+  const patch = buildProjectConfigPatch(req.body || {});
+  console.log('[PATCH] built patch:', JSON.stringify(patch));
+  try {
+    const updated = updateProjectConfig(projectId, patch);
+    console.log(`[PATCH /projects/${projectId}/config] wrote config to ${getProjectConfigPath(projectId)}`);
+
+    // If technical layer params changed, purge layer cache for affected layers
+    const purged = [];
+    try {
+      if (patch.layers && typeof patch.layers === 'object') {
+        for (const [layerName, layerPatch] of Object.entries(patch.layers)) {
+          if (!layerPatch || typeof layerPatch !== 'object') continue;
+          const triggers = ['resolutions', 'tileGridId', 'extent'];
+          const needsPurge = triggers.some((t) => Object.prototype.hasOwnProperty.call(layerPatch, t));
+          if (needsPurge) {
+            try {
+              await deleteLayerCacheInternal(projectId, layerName, { force: true, silent: true });
+              purged.push(layerName);
+            } catch (purgeErr) {
+              console.warn(`Failed to purge cache for ${projectId}:${layerName}`, purgeErr);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Post-update purge check failed', e);
+    }
+
+    if (purged.length) {
+      // attach purge info to response for client notice
+      try { updated._purged = purged; } catch { }
+    }
+
+    return res.json(updated);
+  } catch (err) {
+    console.error("Failed to update project config", projectId, err);
+    return res.status(500).json({ error: "config_update_failed", details: String(err?.message || err) });
+  }
+});
+
+app.get("/projects/:id/cache/project", ensureProjectAccess(req => req.params.id), (req, res) => {
+  const projectId = req.params.id;
+  const proj = findProjectById(projectId);
+  if (!proj) return res.status(404).json({ error: "project_not_found" });
+  const current = projectBatchRuns.get(projectId) || null;
+  const config = readProjectConfig(projectId);
+  const last = config.projectCache || null;
+  return res.json({ current, last });
+});
+
+app.post("/projects/:id/cache/project", requireAdmin, (req, res) => {
+  const projectId = req.params.id;
+  const proj = findProjectById(projectId);
+  if (!proj) return res.status(404).json({ error: "project_not_found" });
+  const existing = projectBatchRuns.get(projectId);
+  if (existing && (existing.status === "running" || existing.status === "queued")) {
+    return res.status(409).json({ error: "batch_running", runId: existing.id, message: "Project cache already in progress" });
+  }
+  const body = req.body || {};
+  const layersInput = Array.isArray(body.layers) ? body.layers : [];
+  const overrideLayers = [];
+  for (const entry of layersInput) {
+    if (!entry || typeof entry !== "object") continue;
+    const layerName = typeof entry.layer === "string" ? entry.layer : typeof entry.name === "string" ? entry.name : null;
+    if (!layerName) continue;
+    const paramsSource = entry.params && typeof entry.params === "object" ? entry.params : entry.body && typeof entry.body === "object" ? entry.body : null;
+    if (!paramsSource) continue;
+    const params = { ...paramsSource, layer: layerName, project: projectId };
+    overrideLayers.push({ layer: layerName, params });
+  }
+  if (!overrideLayers.length) {
+    return res.status(400).json({ error: "no_layers", message: "No layers provided for project cache" });
+  }
+  const runId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const layerNames = overrideLayers.map((l) => l.layer);
+  const runTrigger = body.reason === "scheduled" ? "timer" : "manual";
+  updateProjectBatchRun(projectId, {
+    id: runId,
+    project: projectId,
+    status: "queued",
+    reason: body.reason || "manual-project",
+    trigger: runTrigger,
+    createdAt: Date.now(),
+    layers: layerNames
+  });
+  res.json({ status: "queued", runId, project: projectId, layers: layerNames.length });
+  setImmediate(async () => {
+    try {
+      updateProjectBatchRun(projectId, { status: "running", startedAt: Date.now(), trigger: runTrigger });
+      await runRecacheForProject(projectId, "manual-project", { overrideLayers, runId, requireEnabled: false });
+      updateProjectBatchRun(projectId, { status: "completed", endedAt: Date.now(), result: "success", trigger: runTrigger });
+      logProjectEvent(projectId, `Project cache run ${runId} completed (${layerNames.length} layers).`);
+    } catch (err) {
+      const message = err?.message || String(err);
+      updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
+      logProjectEvent(projectId, `Project cache run ${runId} failed: ${message}`, "error");
+    }
+  });
+});
+
+// /layers -> ejecutar script extract_info.py usando o4w_env.bat
+app.get("/layers", requireAdmin, (req, res) => {
+  const script = path.join(pythonDir, "extract_info.py");
+  console.log("GET /layers -> launching python:", pythonExe, script);
+  const proc = runPythonViaOSGeo4W(script, []);
+
+  let stdout = "", stderr = "";
+  proc.stdout.on("data", d => {
+    const s = d.toString();
+    stdout += s;
+    console.log("[py stdout]", s.trim());
+  });
+  proc.stderr.on("data", d => {
+    const s = d.toString();
+    stderr += s;
+    console.error("[py stderr]", s.trim());
+  });
+  proc.on("error", err => {
+    console.error("Failed to spawn python:", err);
+    res.status(500).json({ error: "spawn_error", details: String(err) });
+  });
+
+  proc.on("close", code => {
+    console.log(`python process exited ${code}`);
+    // primar stdout, fallback stderr
+    let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
+    // intentar extraer JSON si hay ruido
+    if (raw) {
+      const candidate = extractJsonLike(raw);
+      if (candidate) {
+        try {
+          const parsed = JSON.parse(candidate);
+          return res.status(code === 0 ? 200 : 500).json(parsed);
+        } catch (e) {
+          // sigue sin parsear: devolver raw para depuración
+          return res.status(code === 0 ? 200 : 500).json({ raw, code });
+        }
+      } else {
+        return res.status(code === 0 ? 200 : 500).json({ raw, code });
+      }
+    }
+    // nada producido
+    return res.status(code === 0 ? 200 : 500).json({ code, details: stderr || "no output" });
+  });
+});
 
 // mapa de jobs en ejecución
 const runningJobs = new Map();
@@ -4047,52 +4975,6 @@ scanForOrphanJobsOnStartup();
 // control sencillo de concurrencia y duplicados
 const activeKeys = new Set(); // key = `${project||''}:${layer}`
 const JOB_MAX = parseInt(process.env.JOB_MAX || "4", 10); // máximo de procesos concurrentes
-
-registerProjectRoutes({
-  app,
-  crypto,
-  security,
-  requireAdmin,
-  ensureProjectAccess,
-  sanitizeProjectId,
-  resolveProjectAccessEntry,
-  readProjectAccessSnapshot,
-  listProjects,
-  findProjectById,
-  projectsDir,
-  path,
-  fs,
-  projectUpload,
-  allowedProjectExtensions,
-  bootstrapProjectCacheIndex,
-  runningJobs,
-  activeKeys,
-  cancelProjectTimer,
-  projectConfigCache,
-  projectLogLastMessage,
-  projectBatchCleanupTimers,
-  projectBatchRuns,
-  removeProjectAccessEntry,
-  purgeProjectFromAuthUsers,
-  removeProjectLogs,
-  cacheDir,
-  tileGridDir,
-  invalidateTileGridCaches,
-  pythonDir,
-  pythonExe,
-  runPythonViaOSGeo4W,
-  extractJsonLike,
-  readProjectConfig,
-  buildProjectConfigPatch,
-  updateProjectConfig,
-  getProjectConfigPath,
-  deleteLayerCacheInternal,
-  updateProjectBatchRun,
-  runRecacheForProject,
-  logProjectEvent,
-  buildPublicProjectsListing,
-  resolvePublicProject
-});
 
 // generate-cache -> spawn para proceso largo (pasar args)
 app.post("/generate-cache", requireAdmin, (req, res) => {
