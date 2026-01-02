@@ -512,9 +512,9 @@ a:focus {
 
 .layer:hover,
 .layer:focus-within {
-  transform: translateY(-2px);
-  border-color: var(--primary-600);
-  box-shadow: 0 20px 50px rgba(37, 99, 235, 0.12);
+  transform: none;
+  border-color: var(--border);
+  box-shadow: var(--shadow);
 }
 
 .layer .meta,
@@ -683,6 +683,19 @@ a:focus {
   width: 18px;
   height: 18px;
   fill: currentColor;
+}
+
+.delete-cache-container {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.delete-cache-container.has-cache {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
 }
 
 .btn-spinner {

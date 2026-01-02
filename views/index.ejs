@@ -44,20 +44,18 @@
             <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" class="input-number" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
             <div class="field"><span data-i18n="Mode:">Mode:</span>
               <select id="cache_mode" class="input-select">
-                <option value="xyz" selected data-i18n="XYZ (EPSG:3857)">XYZ (EPSG:3857)</option>
-                <option value="wmts" data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
-                <option value="custom" data-i18n="Custom subdivision (bbox)">Custom subdivision (bbox)</option>
+                <option value="wmts" selected data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
               </select>
             </div>
             <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
-              <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="EPSG:3857" data-i18n-placeholder="Tile CRS" />
+              <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="AUTO" disabled data-i18n-placeholder="Tile CRS" />
             </div>
             <div class="field field-remote">
               <label class="checkbox">
-                <input id="allow_remote" type="checkbox" checked>
+                <input id="allow_remote" type="checkbox" checked disabled>
                 <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span>
               </label>
-              <input id="throttle_ms" class="input-number" type="number" min="0" value="200" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
+              <input id="throttle_ms" class="input-number" type="number" min="300" value="300" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
             </div>
           </div>
           </aside>

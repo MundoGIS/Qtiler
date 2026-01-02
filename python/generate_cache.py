@@ -889,6 +889,7 @@ def _resolve_theme_layers(project: QgsProject, theme_name: str):
     return deduped
 # --- Argumentos ---
 parser = argparse.ArgumentParser()
+parser.add_argument("--job_id", default=None, help="ID opcional del job (para poder localizar/abortar el proceso desde el backend)")
 parser.add_argument("--layer", default=None)
 parser.add_argument("--theme", default=None, help="Nombre de tema de mapa a renderizar como composite")
 parser.add_argument("--output_dir", default=None)
@@ -1643,6 +1644,7 @@ elif scheme == "wmts":
             for x in range(int(span["min_col"]), int(span["max_col"]) + 1):
                 if _terminate["flag"]:
                     break
+                tile_dir = os.path.join(tile_base_dir, folder_level, str(x))
                 for y in range(int(span["min_row"]), int(span["max_row"]) + 1):
                     if _terminate["flag"]:
                         break
@@ -1653,48 +1655,48 @@ elif scheme == "wmts":
                     tile_bbox = QgsRectangle(minx_tile, miny_tile, maxx_tile, maxy_tile)
                     settings.setExtent(tile_bbox)
                     settings.setOutputSize(QSize(matrix.get("tile_width", TILE_SIZE), matrix.get("tile_height", TILE_SIZE)))
-                                                                     tile_dir = os.path.join(tile_base_dir, folder_level, str(x))
-                out_file = os.path.join(tile_dir, f"{y}.png")
-                if args.skip_existing and os.path.exists(out_file):
-                    total_generated += 1; level_generated += 1
-                    continue
-                out_file = None
-                try:
-                    attempts = 0
-                    success = False
-                    last_err = None
-                    while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
-                        attempts += 1
-                        try:
-                            job = QgsMapRendererParallelJob(settings)
-                            job.start()
-                            finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
-                            if not finished:
-                                try: job.cancel()
-                                except Exception: pass
-                                last_err = "timeout"
-                                continue
-                            img = job.renderedImage()
-                            os.makedirs(tile_dir, exist_ok=True)
-                            out_file = os.path.join(tile_dir, f"{y}.png")
-                            success = _atomic_save_image(img, out_file, compression=args.png_compression)
-                            if not success:
-                                last_err = "save_failed_or_too_small"
-                        except Exception as e:
-                            last_err = str(e)
-                    if success:
+                    out_file = os.path.join(tile_dir, f"{y}.png")
+                    if args.skip_existing and os.path.exists(out_file):
                         total_generated += 1; level_generated += 1
-                    else:
-                        sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
-                        error_count += 1
-                except Exception as e:
-                    sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
-                    error_count += 1
-                if throttle_sec > 0:
+                        continue
+                    out_file = None
                     try:
-                        time.sleep(throttle_sec)
-                    except Exception:
-                        pass
+                        attempts = 0
+                        success = False
+                        last_err = None
+                        while attempts <= max(0, int(args.tile_retries)) and not success and not _terminate["flag"]:
+                            attempts += 1
+                            try:
+                                job = QgsMapRendererParallelJob(settings)
+                                job.start()
+                                finished = _wait_for_job(job, timeout_sec = max(1.0, args.render_timeout_ms/1000.0))
+                                if not finished:
+                                    try: job.cancel()
+                                    except Exception: pass
+                                    last_err = "timeout"
+                                    continue
+                                img = job.renderedImage()
+                                os.makedirs(tile_dir, exist_ok=True)
+                                out_file = os.path.join(tile_dir, f"{y}.png")
+                                success = _atomic_save_image(img, out_file, compression=args.png_compression)
+                                if not success:
+                                    last_err = "save_failed_or_too_small"
+                            except Exception as e:
+                                last_err = str(e)
+                        if success:
+                            total_generated += 1; level_generated += 1
+                        else:
+                            sys.stderr.write(json.dumps({"warning": "tile_skipped", "tile": out_file, "reason": last_err, "attempts": attempts}) + "\n")
+                            error_count += 1
+                    except Exception as e:
+                        sys.stderr.write(json.dumps({"error": "excepción en generación de tile", "tile": out_file, "details": str(e)}) + "\n")
+                        error_count += 1
+
+                    if throttle_sec > 0:
+                        try:
+                            time.sleep(throttle_sec)
+                        except Exception:
+                            pass
             percent = (total_generated / expected_total) * 100.0 if expected_total else 0.0
             sys.stdout.write(json.dumps({"progress": "level_done", "z": int(matrix.get("source_level", 0)), "generated_level": level_generated, "total_generated": total_generated, "expected_total": expected_total, "percent": round(percent, 2)}) + "\n")
             sys.stdout.flush()

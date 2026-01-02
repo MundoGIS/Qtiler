@@ -1,0 +1,16 @@
+{
+  "id": "3a6a945e-5edc-4e36-9d3b-8fbb7d29c540",
+  "pid": 34788,
+  "project": "topos",
+  "layer": "Topografiska Webbkartan Nedtonad",
+  "targetMode": "layer",
+  "targetName": "Topografiska Webbkartan Nedtonad",
+  "args": [
+    "C:\\WINDOWS\\system32\\cmd.exe",
+    "/d",
+    "/s",
+    "/c",
+    "\"\"C:\\QGIS_344\\bin\\o4w_env.bat\" >nul 2>&1 && \"C:\\QGIS_344\\bin\\python.exe\" \"C:\\Qtiler\\python\\generate_cache.py\" \"--layer\" \"Topografiska Webbkartan Nedtonad\" \"--zoom_min\" \"7\" \"--zoom_max\" \"8\" \"--publish_zoom_min\" \"0\" \"--publish_zoom_max\" \"20\" \"--output_dir\" \"C:\\Qtiler\\cache\\topos\" \"--index_path\" \"C:\\Qtiler\\cache\\topos\\index.json\" \"--scheme\" \"auto\" \"--xyz_mode\" \"partial\" \"--wmts\" \"--allow_remote\" \"--throttle_ms\" \"300\" \"--project_extent4\" \"355438.1045292114\" \"6528776.386789584\" \"815736.919607511\" \"6744651.263116\" \"--extent_crs\" \"EPSG:3006\" \"--project\" \"C:\\Qtiler\\qgisprojects\\topos.qgz\"\""
+  ],
+  "startedAt": 1767308937483
+}

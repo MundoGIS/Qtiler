@@ -1,6 +1,6 @@
 {
-  "id": "EPSG_3006_bakgrunder",
-  "title": "Auto-generated for EPSG:3006 (bakgrunder)",
+  "id": "EPSG_3006_demo3006",
+  "title": "Auto-generated for EPSG:3006 (demo3006)",
   "supported_crs": [
     "EPSG:3006"
   ],
@@ -941,5 +941,5 @@
     }
   ],
   "auto_generated": true,
-  "project_id": "bakgrunder"
+  "project_id": "demo3006"
 }

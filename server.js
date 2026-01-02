@@ -2489,7 +2489,18 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       payload.batch_index = idx;
       const result = await runCacheJobViaHttp(payload, {});
       if (!result || (result.status && result.status !== "completed")) {
-        const msg = `Recache job for ${layerName} ended with status ${(result && result.status) || "unknown"}`;
+        const status = (result && result.status) ? String(result.status) : "unknown";
+        const exitCode = (result && (result.exitCode ?? result.exit_code)) != null ? (result.exitCode ?? result.exit_code) : null;
+        const stderrTail = typeof result?.stderr === "string" ? result.stderr.trim() : "";
+        const stdoutTail = typeof result?.stdout === "string" ? result.stdout.trim() : "";
+        const tailLines = (text) => {
+          if (!text) return "";
+          return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-8).join(" | ");
+        };
+        const detail = tailLines(stderrTail) || tailLines(stdoutTail) || "";
+        const msg = `Recache job for ${layerName} ended with status ${status}`
+          + (exitCode != null ? ` (exit ${exitCode})` : "")
+          + (detail ? `: ${detail}` : "");
         failures.push(msg);
         logProjectEvent(projectId, msg, "error");
       } else {
@@ -2563,92 +2574,204 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
 const deleteLayerCacheInternal = async (projectId, layerName, { force = false, silent = false } = {}) => {
   if (!projectId) throw new Error("project required");
   if (!layerName) throw new Error("layer required");
-  const runningEntry = Array.from(runningJobs.entries()).find(([id, job]) => job && job.status === "running" && job.project === projectId && job.layer === layerName);
-  if (runningEntry) {
-    if (!force) {
-      const err = new Error("job_running");
-      err.code = "job_running";
-      err.jobId = runningEntry[0];
+  const sleepLocal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const listJobPidFiles = () => {
+    try {
+      return fs.readdirSync(jobPidDir).filter((f) => f.endsWith('.json'));
+    } catch {
+      return [];
+    }
+  };
+
+  const readJobPidMeta = (jobId) => {
+    try {
+      const p = jobPidPathFor(jobId);
+      if (!fs.existsSync(p)) return null;
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch {
+      return null;
+    }
+  };
+
+  const findJobIdsForLayerTarget = (projectParam, layerParam) => {
+    const ids = new Set();
+    for (const [jid, job] of runningJobs.entries()) {
+      if (!job || job.status !== 'running') continue;
+      if (job.project === projectParam && job.layer === layerParam) ids.add(jid);
+    }
+    for (const f of listJobPidFiles()) {
+      try {
+        const raw = fs.readFileSync(path.join(jobPidDir, f), 'utf8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.id) continue;
+        if (parsed.project === projectParam && parsed.layer === layerParam) ids.add(String(parsed.id));
+      } catch {
+        // ignore per-file errors
+      }
+    }
+    return Array.from(ids);
+  };
+
+  const forceAbortGenerateCacheJob = async (jobId, { silent: silentAbort = false } = {}) => {
+    const jobSpecificPids = () => {
+      try { return findProcessPidsByCommandLineAll(['generate_cache.py', String(jobId)]) || []; } catch { return []; }
+    };
+
+    const killPidTreeWin32 = (pid) => {
+      if (!pid || process.platform !== 'win32') return;
+      try {
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+        if (!silentAbort) {
+          if (tk?.stdout) console.log(`taskkill stdout: ${tk.stdout.toString()}`);
+          if (tk?.stderr) console.log(`taskkill stderr: ${tk.stderr.toString()}`);
+        }
+      } catch (e) {
+        if (!silentAbort) console.warn('taskkill tree failed', e?.message || e);
+      }
+    };
+
+    const killCandidates = (candidates) => {
+      const list = Array.from(new Set((candidates || []).map((p) => Number(p)).filter(Number.isFinite)));
+      if (!list.length) return [];
+      const res = forceKillPids(list);
+      if (!silentAbort) console.log(`forceKillPids(${jobId}) -> ${JSON.stringify(res)}`);
+      return list;
+    };
+
+    const inMem = runningJobs.get(jobId);
+    if (inMem) {
+      try {
+        inMem.status = 'aborting';
+        try { persistJobProgress(inMem, { status: 'aborting' }, { forceIndex: false, forceConfig: false }); } catch {}
+      } catch {}
+
+      const pid = inMem.proc && inMem.proc.pid ? inMem.proc.pid : null;
+      // Kill tree first on Windows to avoid orphaning.
+      if (pid) killPidTreeWin32(pid);
+
+      try { inMem.proc && typeof inMem.proc.kill === 'function' && inMem.proc.kill(); } catch {}
+      // Always also target the real python process by job_id.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const pids = jobSpecificPids();
+        if (!pids.length) break;
+        killCandidates(pids);
+        await sleepLocal(250);
+      }
+
+      // Hardening: kill descendants for recorded pid and job-specific pids.
+      try {
+        const extra = new Set();
+        if (pid) {
+          extra.add(Number(pid));
+          try { (findDescendantPids(pid) || []).forEach((d) => extra.add(Number(d))); } catch {}
+        }
+        const js = jobSpecificPids();
+        for (const p of js) {
+          extra.add(Number(p));
+          try { (findDescendantPids(p) || []).forEach((d) => extra.add(Number(d))); } catch {}
+        }
+        const extraList = Array.from(extra).filter(Number.isFinite);
+        if (extraList.length) killCandidates(extraList);
+      } catch {}
+
+      await sleepLocal(400);
+      const remaining = jobSpecificPids();
+      if (remaining.length) {
+        const err = new Error('abort_failed');
+        err.code = 'abort_failed';
+        err.jobId = jobId;
+        err.remainingPids = remaining;
+        throw err;
+      }
+
+      try { inMem.status = 'aborted'; } catch {}
+      try { inMem.endedAt = Date.now(); } catch {}
+      try {
+        const activeKey = inMem.key || `${inMem.project || ''}:${inMem.targetMode || 'layer'}:${inMem.targetName || inMem.layer}`;
+        activeKeys.delete(activeKey);
+      } catch {}
+      clearTimeout(inMem.cleanupTimer);
+      inMem.cleanupTimer = setTimeout(() => {
+        runningJobs.delete(jobId);
+        try { deleteJobPidFile(jobId); } catch (e) { }
+      }, parseInt(process.env.JOB_TTL_MS || '300000', 10));
+      try { deleteJobPidFile(jobId); } catch {}
+      return { status: 'aborted', id: jobId, inMemory: true };
+    }
+
+    // Cross-worker/orphan case: use pid file + commandline matching
+    const meta = readJobPidMeta(jobId);
+    const outputDir = extractOutputDirFromSpawnArgs(meta && meta.args ? meta.args : null);
+    const pids = jobSpecificPids();
+    if (!pids.length && !(meta && meta.pid)) {
+      return { status: 'not_found', id: jobId };
+    }
+
+    const candidates = new Set();
+    if (meta && meta.pid) candidates.add(Number(meta.pid));
+    pids.forEach((p) => candidates.add(Number(p)));
+    for (const p of pids) {
+      try { (findDescendantPids(p) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+    }
+    if (meta && meta.pid) {
+      killPidTreeWin32(meta.pid);
+      try { (findDescendantPids(meta.pid) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+    }
+    if (outputDir) {
+      try { (findProcessPidsByCommandLine(outputDir) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    }
+    try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    try { (findProcessPidsByCommandLine('qgis') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+
+    killCandidates(Array.from(candidates));
+    await sleepLocal(500);
+    const remaining = jobSpecificPids();
+    if (remaining.length) {
+      const err = new Error('abort_failed');
+      err.code = 'abort_failed';
+      err.jobId = jobId;
+      err.remainingPids = remaining;
       throw err;
     }
-    try {
-      const [rid, job] = runningEntry;
-      job.proc.kill();
-      setTimeout(() => {
-        try {
-          if (job.proc && job.proc.pid) {
-            const tk = spawn("taskkill", ["/PID", String(job.proc.pid), "/T", "/F"], { shell: true });
-            tk.on("close", (code) => console.log(`taskkill (deleteLayerCacheInternal) job ${rid} -> code ${code}`));
-          }
-        } catch (e) {
-          if (!silent) console.warn("taskkill escalation failed (deleteLayerCacheInternal)", e);
-        }
-      }, parseInt(process.env.ABORT_GRACE_MS || "1000", 10));
-      job.status = "aborted";
-      job.endedAt = Date.now();
-      try { activeKeys.delete(`${projectId}:${layerName}`); } catch { }
-      clearTimeout(job.cleanupTimer);
-      job.cleanupTimer = setTimeout(() => {
-        runningJobs.delete(rid);
-        try { deleteJobPidFile(rid); } catch (e) { }
-      }, parseInt(process.env.JOB_TTL_MS || "300000", 10));
-      // Esperar a que el job desaparezca de runningJobs antes de continuar
-      let waited = 0;
-      const maxWait = 10000; // 10 segundos
-      while (runningJobs.has(rid) && waited < maxWait) {
-        await new Promise(res => setTimeout(res, 200));
-        waited += 200;
-      }
-      // si sigue vivo, intentar matarlo por matching de commandline
-      if (runningJobs.has(rid)) {
-        try {
-          let extraPids = findProcessPidsByCommandLine('generate_cache.py') || [];
-          try {
-            const descendants = findDescendantPids(job.proc && job.proc.pid ? job.proc.pid : rid) || [];
-            if (descendants && descendants.length) {
-              extraPids = Array.from(new Set([...(extraPids || []), ...descendants]));
-            }
-          } catch (e) {
-            /* ignore descendant lookup failures */
-          }
-          if (extraPids && extraPids.length) {
-            console.log(`deleteLayerCacheInternal: killing processes ${JSON.stringify(extraPids)}`);
-            const reskill = forceKillPids(extraPids);
-            console.log(`deleteLayerCacheInternal kill results: ${JSON.stringify(reskill)}`);
-          }
-          // also search by output directory and qgis binaries
-          try {
-            const searchPath = path.join(cacheDir, projectId, layerName);
-            const byOut = findProcessPidsByCommandLine(searchPath) || [];
-            if (byOut.length) {
-              console.log(`deleteLayerCacheInternal: killing processes by outputdir ${JSON.stringify(byOut)}`);
-              const r2 = forceKillPids(byOut);
-              console.log(`deleteLayerCacheInternal kill results (outdir): ${JSON.stringify(r2)}`);
-            }
-            const qgisPids = findProcessPidsByCommandLine('qgis-bin.exe') || [];
-            if (qgisPids.length) {
-              console.log(`deleteLayerCacheInternal: killing qgis pids ${JSON.stringify(qgisPids)}`);
-              const r3 = forceKillPids(qgisPids);
-              console.log(`deleteLayerCacheInternal kill results (qgis): ${JSON.stringify(r3)}`);
-            }
-          } catch (e) { console.warn('deleteLayerCacheInternal extra kill by outdir/qgis failed', e?.message || e); }
-        } catch (e) {
-          console.warn('deleteLayerCacheInternal extra kill failed', e?.message || e);
-        }
-        // esperar un par de iteraciones más
-        let extraWait = 0;
-        while (runningJobs.has(rid) && extraWait < 2000) {
-          await new Promise(res => setTimeout(res, 200));
-          extraWait += 200;
-        }
-      }
-      if (runningJobs.has(rid)) {
-        throw new Error("No se pudo abortar el proceso de cache tras 10s");
-      }
-    } catch (e) {
-      if (!silent) console.warn("Failed to abort running job before delete", e);
-      throw e;
+    try { deleteJobPidFile(jobId); } catch {}
+    return { status: 'aborted', id: jobId, orphan: true };
+  };
+
+  const targetJobIds = findJobIdsForLayerTarget(projectId, layerName);
+  if (targetJobIds.length) {
+    if (!force) {
+      const err = new Error('job_running');
+      err.code = 'job_running';
+      err.jobId = targetJobIds[0];
+      throw err;
     }
+    for (const jid of targetJobIds) {
+      try {
+        await forceAbortGenerateCacheJob(jid, { silent });
+      } catch (e) {
+        if (!silent) console.warn('Failed to abort running job before delete', { jobId: jid, error: e?.message || e });
+        throw e;
+      }
+    }
+  }
+
+  // Best-effort: even if we didn't find a jobId, kill any processes touching this layer's cache dir
+  try {
+    const candidates = new Set();
+    const layerDirAbs = path.resolve(cacheDir, projectId, layerName);
+    try { (findProcessPidsByCommandLine(layerDirAbs) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    try { (findProcessPidsByCommandLineAll(['generate_cache.py', layerName]) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    try { (findProcessPidsByCommandLineAll(['generate_cache.py', projectId]) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    const list = Array.from(candidates).filter(Number.isFinite);
+    if (list.length) {
+      if (!silent) console.log(`deleteLayerCacheInternal: killing extra processes for ${projectId}/${layerName}: ${JSON.stringify(list)}`);
+      try { forceKillPids(list); } catch (e) { if (!silent) console.warn('deleteLayerCacheInternal extra kill failed', e?.message || e); }
+      await sleepLocal(300);
+    }
+  } catch (e) {
+    if (!silent) console.warn('deleteLayerCacheInternal extra kill wrapper failed', e?.message || e);
   }
 
   const layerDir = path.join(cacheDir, projectId, layerName);
@@ -2700,6 +2823,8 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
       updated.updated = new Date().toISOString();
       // remove any tile counts/sizes if present
       if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
+      if (Object.prototype.hasOwnProperty.call(updated, 'tile_count')) updated.tile_count = 0;
+      if (Object.prototype.hasOwnProperty.call(updated, 'tileCount')) updated.tileCount = 0;
       if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
       return updated;
     });
@@ -2740,78 +2865,185 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
 const deleteThemeCacheInternal = async (projectId, themeName, { force = false, silent = false } = {}) => {
   if (!projectId) throw new Error("project required");
   if (!themeName) throw new Error("theme required");
-  const runningEntry = Array.from(runningJobs.entries()).find(([id, job]) => job && job.status === "running" && job.project === projectId && job.targetMode === "theme" && job.targetName === themeName);
-  if (runningEntry) {
-    if (!force) {
-      const err = new Error("job_running");
-      err.code = "job_running";
-      err.jobId = runningEntry[0];
+  const listJobPidFiles = () => {
+    try {
+      return fs.readdirSync(jobPidDir).filter((f) => f.endsWith('.json'));
+    } catch {
+      return [];
+    }
+  };
+
+  const findJobIdsForThemeTarget = (projectParam, themeParam) => {
+    const ids = new Set();
+    for (const [jid, job] of runningJobs.entries()) {
+      if (!job || job.status !== 'running') continue;
+      if (job.project === projectParam && job.targetMode === 'theme' && job.targetName === themeParam) ids.add(jid);
+    }
+    for (const f of listJobPidFiles()) {
+      try {
+        const raw = fs.readFileSync(path.join(jobPidDir, f), 'utf8');
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.id) continue;
+        if (parsed.project === projectParam && parsed.targetMode === 'theme' && parsed.targetName === themeParam) ids.add(String(parsed.id));
+      } catch {
+        // ignore per-file errors
+      }
+    }
+    return Array.from(ids);
+  };
+
+  const sleepLocal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const readJobPidMeta = (jobId) => {
+    try {
+      const p = jobPidPathFor(jobId);
+      if (!fs.existsSync(p)) return null;
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch {
+      return null;
+    }
+  };
+
+  const forceAbortGenerateCacheJob = async (jobId, { silent: silentAbort = false } = {}) => {
+    const jobSpecificPids = () => {
+      try { return findProcessPidsByCommandLineAll(['generate_cache.py', String(jobId)]) || []; } catch { return []; }
+    };
+
+    const killPidTreeWin32 = (pid) => {
+      if (!pid || process.platform !== 'win32') return;
+      try {
+        spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+      } catch (e) {
+        if (!silentAbort) console.warn('taskkill tree failed', e?.message || e);
+      }
+    };
+
+    const killCandidates = (candidates) => {
+      const list = Array.from(new Set((candidates || []).map((p) => Number(p)).filter(Number.isFinite)));
+      if (!list.length) return [];
+      const res = forceKillPids(list);
+      if (!silentAbort) console.log(`forceKillPids(${jobId}) -> ${JSON.stringify(res)}`);
+      return list;
+    };
+
+    const inMem = runningJobs.get(jobId);
+    if (inMem) {
+      try {
+        inMem.status = 'aborting';
+        try { persistJobProgress(inMem, { status: 'aborting' }, { forceIndex: false, forceConfig: false }); } catch {}
+      } catch {}
+
+      const pid = inMem.proc && inMem.proc.pid ? inMem.proc.pid : null;
+      if (pid) killPidTreeWin32(pid);
+      try { inMem.proc && typeof inMem.proc.kill === 'function' && inMem.proc.kill(); } catch {}
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const pids = jobSpecificPids();
+        if (!pids.length) break;
+        killCandidates(pids);
+        await sleepLocal(250);
+      }
+
+      try {
+        const spawnargs = inMem.proc && inMem.proc.spawnargs ? inMem.proc.spawnargs : null;
+        const outputDir = inMem.tileBaseDir || extractOutputDirFromSpawnArgs(spawnargs) || null;
+        const extra = new Set();
+        if (pid) {
+          extra.add(Number(pid));
+          try { (findDescendantPids(pid) || []).forEach((d) => extra.add(Number(d))); } catch {}
+        }
+        const js = jobSpecificPids();
+        for (const p of js) {
+          extra.add(Number(p));
+          try { (findDescendantPids(p) || []).forEach((d) => extra.add(Number(d))); } catch {}
+        }
+        if (outputDir) {
+          try { (findProcessPidsByCommandLine(outputDir) || []).forEach((p) => extra.add(Number(p))); } catch {}
+        }
+        try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => extra.add(Number(p))); } catch {}
+        try { (findProcessPidsByCommandLine('qgis') || []).forEach((p) => extra.add(Number(p))); } catch {}
+        const extraList = Array.from(extra).filter(Number.isFinite);
+        if (extraList.length) killCandidates(extraList);
+      } catch {}
+
+      await sleepLocal(500);
+      const remaining = jobSpecificPids();
+      if (remaining.length) {
+        const err = new Error('abort_failed');
+        err.code = 'abort_failed';
+        err.jobId = jobId;
+        err.remainingPids = remaining;
+        throw err;
+      }
+
+      try { inMem.status = 'aborted'; } catch {}
+      try { inMem.endedAt = Date.now(); } catch {}
+      try {
+        const activeKey = inMem.key || `${inMem.project || ''}:${inMem.targetMode || 'layer'}:${inMem.targetName || inMem.layer}`;
+        activeKeys.delete(activeKey);
+      } catch {}
+      clearTimeout(inMem.cleanupTimer);
+      inMem.cleanupTimer = setTimeout(() => {
+        runningJobs.delete(jobId);
+        try { deleteJobPidFile(jobId); } catch (e) { }
+      }, parseInt(process.env.JOB_TTL_MS || '300000', 10));
+      try { deleteJobPidFile(jobId); } catch {}
+      return { status: 'aborted', id: jobId, inMemory: true };
+    }
+
+    const meta = readJobPidMeta(jobId);
+    const outputDir = extractOutputDirFromSpawnArgs(meta && meta.args ? meta.args : null);
+    const pids = jobSpecificPids();
+    if (!pids.length && !(meta && meta.pid)) {
+      try { deleteJobPidFile(jobId); } catch {}
+      return { status: 'not_found', id: jobId };
+    }
+
+    const candidates = new Set();
+    if (meta && meta.pid) {
+      candidates.add(Number(meta.pid));
+      killPidTreeWin32(meta.pid);
+      try { (findDescendantPids(meta.pid) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+    }
+    pids.forEach((p) => candidates.add(Number(p)));
+    for (const p of pids) {
+      try { (findDescendantPids(p) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+    }
+    if (outputDir) {
+      try { (findProcessPidsByCommandLine(outputDir) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    }
+    try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+    try { (findProcessPidsByCommandLine('qgis') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+
+    killCandidates(Array.from(candidates));
+    await sleepLocal(500);
+    const remaining = jobSpecificPids();
+    if (remaining.length) {
+      const err = new Error('abort_failed');
+      err.code = 'abort_failed';
+      err.jobId = jobId;
+      err.remainingPids = remaining;
       throw err;
     }
-    try {
-      const [rid, job] = runningEntry;
-      job.proc.kill();
-      setTimeout(() => {
-        try {
-          if (job.proc && job.proc.pid) {
-            const tk = spawn("taskkill", ["/PID", String(job.proc.pid), "/T", "/F"], { shell: true });
-            tk.on("close", (code) => console.log(`taskkill (deleteThemeCacheInternal) job ${rid} -> code ${code}`));
-          }
-        } catch (e) {
-          if (!silent) console.warn("taskkill escalation failed (deleteThemeCacheInternal)", e);
-        }
-      }, parseInt(process.env.ABORT_GRACE_MS || "1000", 10));
-      job.status = "aborted";
-      job.endedAt = Date.now();
-      try { activeKeys.delete(`${projectId}:theme:${themeName}`); } catch { }
-      clearTimeout(job.cleanupTimer);
-      job.cleanupTimer = setTimeout(() => {
-        runningJobs.delete(rid);
-        try { deleteJobPidFile(rid); } catch (e) { }
-      }, parseInt(process.env.JOB_TTL_MS || "300000", 10));
-      // Esperar a que el job desaparezca de runningJobs antes de continuar
-      let waited = 0;
-      const maxWait = 10000; // 10 segundos
-      while (runningJobs.has(rid) && waited < maxWait) {
-        await new Promise(res => setTimeout(res, 200));
-        waited += 200;
+    try { deleteJobPidFile(jobId); } catch {}
+    return { status: 'aborted', id: jobId, orphan: true };
+  };
+
+  const targetJobIds = findJobIdsForThemeTarget(projectId, themeName);
+  if (targetJobIds.length) {
+    if (!force) {
+      const err = new Error('job_running');
+      err.code = 'job_running';
+      err.jobId = targetJobIds[0];
+      throw err;
+    }
+    for (const jid of targetJobIds) {
+      try {
+        await forceAbortGenerateCacheJob(jid, { silent });
+      } catch (e) {
+        if (!silent) console.warn('Failed to abort running theme job before delete', { jobId: jid, error: e?.message || e });
+        throw e;
       }
-      if (runningJobs.has(rid)) {
-        try {
-          let extraPids = findProcessPidsByCommandLine('generate_cache.py') || [];
-          try {
-            const descendants = findDescendantPids(job.proc && job.proc.pid ? job.proc.pid : rid) || [];
-            if (descendants && descendants.length) {
-              extraPids = Array.from(new Set([...(extraPids || []), ...descendants]));
-            }
-          } catch (e) { /* ignore */ }
-          // also try match by outputdir
-          try {
-            const searchPath = path.join(cacheDir, projectId, "_themes", themeName);
-            const byOut = findProcessPidsByCommandLine(searchPath) || [];
-            if (byOut.length) extraPids = Array.from(new Set([...extraPids, ...byOut]));
-          } catch (e) { /* ignore */ }
-          if (extraPids && extraPids.length) {
-            console.log(`deleteThemeCacheInternal: killing processes ${JSON.stringify(extraPids)}`);
-            const reskill = forceKillPids(extraPids);
-            console.log(`deleteThemeCacheInternal kill results: ${JSON.stringify(reskill)}`);
-          }
-        } catch (e) {
-          console.warn('deleteThemeCacheInternal extra kill failed', e?.message || e);
-        }
-        // esperar un par de iteraciones más
-        let extraWait = 0;
-        while (runningJobs.has(rid) && extraWait < 2000) {
-          await new Promise(res => setTimeout(res, 200));
-          extraWait += 200;
-        }
-        if (runningJobs.has(rid)) {
-          throw new Error("No se pudo abortar el proceso de cache (theme) tras 10s");
-        }
-      }
-    } catch (e) {
-      if (!silent) console.warn("Failed to abort running job before delete", e);
-      throw e;
     }
   }
 
@@ -2860,6 +3092,8 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
       updated.cache_exists = false;
       updated.updated = new Date().toISOString();
       if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
+      if (Object.prototype.hasOwnProperty.call(updated, 'tile_count')) updated.tile_count = 0;
+      if (Object.prototype.hasOwnProperty.call(updated, 'tileCount')) updated.tileCount = 0;
       if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
       return updated;
     });
@@ -2968,6 +3202,39 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
   return spawn(pythonExe, procArgs, spawnOpts);
 };
 
+// Hard kill helper: best-effort terminate processes associated with a cache job/layer
+const killProcessesByHints = async ({ jobId = null, projectId = null, targetName = null, outputDir = null, silent = false } = {}) => {
+  const candidates = new Set();
+  const addList = (list) => {
+    if (!Array.isArray(list)) return;
+    list.forEach((p) => { const n = Number(p); if (Number.isFinite(n)) candidates.add(n); });
+  };
+  try { addList(findProcessPidsByCommandLine('generate_cache.py')); } catch {}
+  if (jobId) {
+    try { addList(findProcessPidsByCommandLineAll(['generate_cache.py', String(jobId)])); } catch {}
+  }
+  if (projectId) {
+    try { addList(findProcessPidsByCommandLineAll(['generate_cache.py', String(projectId)])); } catch {}
+    try { addList(findProcessPidsByCommandLine(projectId)); } catch {}
+  }
+  if (targetName) {
+    try { addList(findProcessPidsByCommandLineAll(['generate_cache.py', String(targetName)])); } catch {}
+    try { addList(findProcessPidsByCommandLine(targetName)); } catch {}
+  }
+  if (outputDir) {
+    try { addList(findProcessPidsByCommandLine(outputDir)); } catch {}
+  }
+  try { addList(findProcessPidsByCommandLine('qgis-bin.exe')); } catch {}
+  try { addList(findProcessPidsByCommandLine('qgis')); } catch {}
+
+  const list = Array.from(candidates).filter(Number.isFinite);
+  if (!list.length) return [];
+  if (!silent) console.log(`killProcessesByHints -> killing ${JSON.stringify(list)}`);
+  try { forceKillPids(list); } catch (e) { if (!silent) console.warn('killProcessesByHints forceKill failed', e?.message || e); }
+  await new Promise((r) => setTimeout(r, 400));
+  return list;
+};
+
 // Helper: on Windows, find processes whose command line contains `needle`
 // and return their PIDs. Uses PowerShell to enumerate Win32_Process entries
 // because `tasklist` doesn't expose full command lines reliably.
@@ -2991,6 +3258,32 @@ const findProcessPidsByCommandLine = (needle) => {
     return pids;
   } catch (e) {
     console.warn('findProcessPidsByCommandLine failed', e?.message || e);
+    return [];
+  }
+};
+
+// Helper: like findProcessPidsByCommandLine, but requires ALL needles to match.
+// Useful when multiple cache jobs run concurrently and we need to target a specific one.
+const findProcessPidsByCommandLineAll = (needles = []) => {
+  try {
+    const terms = (Array.isArray(needles) ? needles : [needles])
+      .map((n) => (n == null ? '' : String(n)))
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (!terms.length) return [];
+    const esc = (s) => s.replace(/'/g, "''");
+    const conds = terms.map((t) => `$_.CommandLine -like '*${esc(t)}*'`).join(' -and ');
+    const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ${conds} } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Depth 3`;
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { shell: true, timeout: 7000, encoding: 'utf8' });
+    const out = (res.stdout || '').trim();
+    if (!out) return [];
+    let parsed = null;
+    try { parsed = JSON.parse(out); } catch { parsed = null; }
+    if (!parsed) return [];
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.map((r) => Number(r.ProcessId)).filter(Number.isFinite);
+  } catch (e) {
+    console.warn('findProcessPidsByCommandLineAll failed', e?.message || e);
     return [];
   }
 };
@@ -3951,6 +4244,7 @@ const writeJobPidFile = (job) => {
       layer: job.layer || null,
       targetMode: job.targetMode || null,
       targetName: job.targetName || null,
+      viewerSessionId: job.viewerSessionId || null,
       args: job.proc && job.proc.spawnargs ? job.proc.spawnargs : null,
       startedAt: job.startedAt || Date.now()
     };
@@ -3959,6 +4253,127 @@ const writeJobPidFile = (job) => {
   } catch (e) {
     console.warn('Failed to write job pid file', e?.message || e);
     return false;
+  }
+};
+
+// Internal helper: abort a generate-cache job by id (supports cross-worker/orphan best-effort).
+const abortGenerateCacheJobInternal = async (id, { silentAbort = false } = {}) => {
+  if (!id) return { ok: false, status: 400, payload: { error: 'id required' } };
+  const job = runningJobs.get(id);
+  if (!job) {
+    try {
+      const jobIdToken = String(id);
+      let meta = null;
+      let outputDir = null;
+      try {
+        const metaPath = jobPidPathFor(id);
+        if (fs.existsSync(metaPath)) {
+          meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+          outputDir = extractOutputDirFromSpawnArgs(meta && meta.args ? meta.args : null);
+        }
+      } catch { meta = null; outputDir = null; }
+
+      const jobPids = findProcessPidsByCommandLineAll(['generate_cache.py', jobIdToken]) || [];
+      if (!jobPids.length) return { ok: false, status: 404, payload: { error: 'job not found or already finished' } };
+
+      const candidates = new Set();
+      if (meta && meta.pid) candidates.add(Number(meta.pid));
+      jobPids.forEach((p) => candidates.add(Number(p)));
+      for (const p of jobPids) {
+        try { (findDescendantPids(p) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+      }
+      if (meta && meta.pid) {
+        try { (findDescendantPids(meta.pid) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+      }
+      try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+      try { (findProcessPidsByCommandLine('qgis') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+      if (outputDir) {
+        try { (findProcessPidsByCommandLine(outputDir) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+      }
+
+      const candidateList = Array.from(candidates).filter(Number.isFinite);
+      if (!silentAbort) console.log(`Abort (orphan/cross-worker): killing candidate PIDs for job ${id}: ${JSON.stringify(candidateList)}`);
+      const fk = forceKillPids(candidateList);
+      if (!silentAbort) console.log(`Abort (orphan/cross-worker) kill results: ${JSON.stringify(fk)}`);
+
+      await new Promise((r) => setTimeout(r, 500));
+      const remaining = findProcessPidsByCommandLineAll(['generate_cache.py', jobIdToken]) || [];
+      if (remaining.length) {
+        if (!silentAbort) console.warn(`Abort (orphan/cross-worker) did not terminate job ${id}. Remaining PIDs: ${JSON.stringify(remaining)}`);
+        return { ok: false, status: 500, payload: { error: 'abort_failed', id, killedPids: candidateList, remainingPids: remaining } };
+      }
+      await killProcessesByHints({ jobId: id, projectId: meta?.project, targetName: meta?.layer || meta?.targetName, outputDir, silent: !!silentAbort });
+      try { deleteJobPidFile(id); } catch {}
+      return { ok: true, status: 200, payload: { status: 'aborted', id, orphan: true, killedPids: candidateList } };
+    } catch (e) {
+      if (!silentAbort) console.warn(`Abort (orphan/cross-worker) failed for job ${id}`, e?.message || e);
+      return { ok: false, status: 500, payload: { error: 'abort_failed', id, details: String(e) } };
+    }
+  }
+
+  try {
+    try {
+      job.status = 'aborting';
+      persistJobProgress(job, { status: 'aborting' }, { forceIndex: false, forceConfig: false });
+    } catch {}
+
+    const pid = job.proc && job.proc.pid ? job.proc.pid : null;
+    const procAlive = (p) => {
+      if (!p) return false;
+      try { process.kill(p, 0); return true; } catch { return false; }
+    };
+
+    if (process.platform === 'win32' && pid) {
+      try {
+        if (!silentAbort) console.log(`Abort: taskkill tree first for job ${id} pid=${pid}`);
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+        if (!silentAbort) {
+          console.log(`Abort: taskkill tree stdout: ${tk.stdout?.toString?.() || ''}`);
+          console.log(`Abort: taskkill tree stderr: ${tk.stderr?.toString?.() || ''}`);
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      } catch (e) {
+        if (!silentAbort) console.warn(`Abort: taskkill tree failed for job ${id}`, e?.message || e);
+      }
+    }
+
+    try { job.proc.kill(); } catch {}
+
+    try {
+      const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
+      activeKeys.delete(activeKey);
+    } catch { }
+
+    const graceMs = parseInt(process.env.ABORT_GRACE_MS || '1000', 10) || 1000;
+    const pollInterval = 250;
+    const maxWait = Math.max(2000, graceMs + 2000);
+    let waited = 0;
+    while (procAlive(pid) && waited < maxWait) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      waited += pollInterval;
+    }
+
+    const jobSpecificPids = () => {
+      try { return findProcessPidsByCommandLineAll(['generate_cache.py', String(id)]) || []; } catch { return []; }
+    };
+    const remainingJobSpecific = jobSpecificPids();
+    if (procAlive(pid) || (remainingJobSpecific && remainingJobSpecific.length)) {
+      if (!silentAbort) console.error(`Failed to abort job ${id}: pidAlive=${procAlive(pid)} jobSpecific=${JSON.stringify(remainingJobSpecific)}`);
+      try {
+        job.status = 'running';
+        persistJobProgress(job, { status: 'running' }, { forceIndex: false, forceConfig: false });
+      } catch {}
+      return { ok: false, status: 500, payload: { error: 'abort_failed', id, pid, jobPids: remainingJobSpecific || [] } };
+    }
+
+    job.status = 'aborted';
+    job.endedAt = Date.now();
+    persistJobProgress(job, { status: 'aborted' }, { forceIndex: true, forceConfig: true });
+    await killProcessesByHints({ jobId: id, projectId: job.project, targetName: job.targetName || job.layer, outputDir: job.tileBaseDir, silent: !!silentAbort });
+    return { ok: true, status: 200, payload: { status: 'aborted', id } };
+  } catch (err) {
+    if (!silentAbort) console.error(`Failed to kill job ${id}`, err);
+    return { ok: false, status: 500, payload: { error: String(err) } };
   }
 };
 const deleteJobPidFile = (id) => {
@@ -4117,6 +4532,10 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     tile_matrix_preset: tileMatrixPresetSnake = null,
     tileMatrixPreset: tileMatrixPresetCamel = null
   } = req.body;
+
+  const normalizedTileCrs = (typeof tile_crs === "string" && tile_crs.trim().toUpperCase() === "AUTO")
+    ? null
+    : tile_crs;
   if (!layer && !theme) return res.status(400).json({ error: "target_required", details: "Debe indicar layer o theme" });
   if (layer && theme) return res.status(400).json({ error: "too_many_targets", details: "Solo se permite layer o theme" });
 
@@ -4168,7 +4587,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
 
   if (!effectiveTileMatrixPreset) {
     const tileCrsCandidates = [
-      tile_crs,
+      normalizedTileCrs,
       req.body?.project_crs,
       req.body?.cache_crs,
       existingEntry?.tile_crs,
@@ -4230,8 +4649,8 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     "--scheme", scheme,
     "--xyz_mode", xyz_mode
   );
-  if (tile_crs) {
-    args.push("--tile_crs", tile_crs);
+  if (normalizedTileCrs) {
+    args.push("--tile_crs", normalizedTileCrs);
   }
   let useWmts = Boolean(wmts);
   if (effectiveTileMatrixPreset) {
@@ -4291,11 +4710,16 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
 
   const jobLabel = targetMode === "theme" ? `theme:${targetName}` : targetName;
   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // Attach job id so we can reliably find/abort the real python process even when spawned via shell/batch on Windows.
+  try { args.push('--job_id', String(id)); } catch {}
   const proc = runPythonViaOSGeo4W(script, args, {});
   console.log("Launching python generate_cache.py with args:", args);
 
   const runReason = typeof req.body.run_reason === "string" && req.body.run_reason.trim() ? req.body.run_reason.trim() : null;
   const trigger = typeof req.body.trigger === "string" && req.body.trigger.trim() ? req.body.trigger.trim() : (runReason === "scheduled" ? "timer" : null);
+  const viewerSessionId = (typeof req.body.viewer_session_id === 'string' && req.body.viewer_session_id.trim())
+    ? req.body.viewer_session_id.trim()
+    : null;
   const batchIndexVal = Number(req.body.batch_index);
   const batchTotalVal = Number(req.body.batch_total);
   const job = {
@@ -4320,7 +4744,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     zoomMin,
     zoomMax,
     requestedScheme: scheme,
-    requestedTileCrs: tile_crs,
+    requestedTileCrs: normalizedTileCrs,
     xyzMode: xyz_mode,
     metadata: null,
     tileMatrixPreset: effectiveTileMatrixPreset || null,
@@ -4331,6 +4755,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     lastProgress: null,
     runReason,
     trigger,
+    viewerSessionId,
     runId: typeof req.body.run_id === "string" && req.body.run_id.trim() ? req.body.run_id.trim() : null,
     batchIndex: Number.isFinite(batchIndexVal) ? batchIndexVal : null,
     batchTotal: Number.isFinite(batchTotalVal) ? batchTotalVal : null
@@ -4357,10 +4782,14 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
       }
     }
   });
+
   proc.stderr.on("data", d => {
     const s = d.toString();
     job.stderr += s;
     console.error(`[job ${id} stderr]`, s.trim());
+    if (projectKey) {
+      try { logProjectEvent(projectKey, `[job ${id} stderr] ${s.trim()}`, "error"); } catch { }
+    }
   });
 
   proc.on("error", err => {
@@ -4370,8 +4799,13 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
   proc.on("close", code => {
     console.log(`python job ${id} exited ${code}`);
     job.exitCode = code;
-    job.status = code === 0 ? "completed" : "error";
+    if (job.status === 'aborted' || job.status === 'aborting') {
+      job.status = 'aborted';
+    } else {
+      job.status = code === 0 ? "completed" : "error";
+    }
     job.endedAt = Date.now();
+
     const finalProgressPayload = {
       status: job.status,
       total_generated: job.lastProgress?.totalGenerated ?? null,
@@ -4379,9 +4813,15 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
       percent: job.lastProgress?.percent ?? (job.status === "completed" ? 100 : null)
     };
     persistJobProgress(job, finalProgressPayload, { forceIndex: true, forceConfig: true });
+
     if (projectKey) {
       try {
-        const lastMessage = job.status === "completed" ? "Cache generation completed" : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
+        const lastMessage = job.status === "completed"
+          ? "Cache generation completed"
+          : (job.stderr ? job.stderr.trim().split(/\r?\n/).slice(-5).join(" | ") : "Cache generation failed");
+        if (job.status !== "completed") {
+          try { logProjectEvent(projectKey, `Cache job ${id} failed (${jobLabel}): ${lastMessage}`, "error"); } catch { }
+        }
         const update = targetMode === "theme"
           ? { themes: { [targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } }
           : { layers: { [layer]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
@@ -4390,13 +4830,12 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
         console.warn("Failed to update project config with job result", cfgErr);
       }
     }
-    // liberar clave activa
+
     try { activeKeys.delete(key); } catch { }
-    // limpiar mapa después de un TTL para permitir polling de UI
-    const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10); // 5 min por defecto
+
+    const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10);
     job.cleanupTimer = setTimeout(() => {
       runningJobs.delete(id);
-      // remove persisted pid file
       try { deleteJobPidFile(id); } catch (e) { }
     }, isNaN(ttlMs) ? 300000 : ttlMs);
   });
@@ -4417,7 +4856,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
         zoom: { min: Number.isFinite(zoomMin) ? zoomMin : null, max: Number.isFinite(zoomMax) ? zoomMax : null, updatedAt: nowIso },
         cachePreferences: {
           mode: req.body.scheme || "auto",
-          tileCrs: req.body.tile_crs || null,
+          tileCrs: normalizedTileCrs || null,
           allowRemote: !!req.body.allow_remote,
           throttleMs: Number(req.body.throttle_ms) || 0,
           updatedAt: nowIso
@@ -4446,128 +4885,17 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
 // Abort / stop job
 app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
-  if (!id) return res.status(400).json({ error: "id required" });
-  const job = runningJobs.get(id);
-  if (!job) return res.status(404).json({ error: "job not found or already finished" });
+  const result = await abortGenerateCacheJobInternal(id, { silentAbort: false });
+  if (!result.ok) return res.status(result.status).json(result.payload);
+  return res.status(result.status).json(result.payload);
+});
 
-  try {
-    // 1) intento suave
-    let killed = false;
-    try {
-      killed = job.proc.kill();
-    } catch (errKill) {
-      console.warn(`kill() threw for job ${id}:`, errKill?.message || errKill);
-    }
-    console.log(`Job ${id} kill() called -> ${killed}`);
-    job.status = "aborted";
-    job.endedAt = Date.now();
-    persistJobProgress(job, { status: "aborted" }, { forceIndex: true, forceConfig: true });
-    // liberar clave activa
-    try {
-      const activeKey = job.key || `${job.project || ''}:${job.targetMode || 'layer'}:${job.targetName || job.layer}`;
-      activeKeys.delete(activeKey);
-    } catch { }
-
-    // esperar un breve periodo para ver si el proceso muere por sí mismo
-    const graceMs = parseInt(process.env.ABORT_GRACE_MS || "1000", 10) || 1000;
-    const pollInterval = 250;
-    const maxWait = Math.max(2000, graceMs + 2000);
-    let waited = 0;
-    const pid = job.proc && job.proc.pid ? job.proc.pid : null;
-    const procAlive = (p) => {
-      if (!p) return false;
-      try {
-        process.kill(p, 0);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    };
-    while (procAlive(pid) && waited < maxWait) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      waited += pollInterval;
-    }
-
-    // Si sigue vivo, intentar taskkill de forma sincrónica y comprobar resultado
-    if (procAlive(pid)) {
-      try {
-        console.log(`Escalando abort para job ${id} pid=${pid} con taskkill`);
-        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
-        console.log(`taskkill stdout: ${tk.stdout?.toString?.() || ''}`);
-        console.log(`taskkill stderr: ${tk.stderr?.toString?.() || ''}`);
-      } catch (e) {
-        console.warn(`taskkill escalation failed for job ${id}`, e?.message || e);
-      }
-      // esperar un momentito más
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    // Si sigue vivo, intentar detectar procesos por linea de comando y matarlos
-    if (procAlive(pid)) {
-      try {
-        console.log(`Abort escalado adicional: buscando procesos que contengan 'generate_cache.py'`);
-        const pids = findProcessPidsByCommandLine('generate_cache.py');
-        console.log(`Procesos encontrados: ${JSON.stringify(pids)}`);
-        if (pids && pids.length) {
-          const results = forceKillPids(pids);
-          console.log(`forceKillPids results: ${JSON.stringify(results)}`);
-        }
-      } catch (e) {
-        console.warn('Error during additional abort escalation', e?.message || e);
-      }
-      // esperar un momentito más
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    // Additional escalation: try to kill processes touching the job's output dir and qgis binaries
-    try {
-      const killedDetails = [];
-      const spawnargs = job.proc && job.proc.spawnargs ? job.proc.spawnargs : (job.proc && job.proc.argv ? job.proc.argv : null);
-      const outputDir = job.tileBaseDir || extractOutputDirFromSpawnArgs(spawnargs) || null;
-      const candidates = new Set();
-      // generate_cache.py
-      (findProcessPidsByCommandLine('generate_cache.py') || []).forEach(p => candidates.add(p));
-      // output dir
-      if (outputDir) {
-        try { (findProcessPidsByCommandLine(outputDir) || []).forEach(p => candidates.add(p)); } catch {}
-      }
-      // qgis binaries
-      (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach(p => candidates.add(p));
-      (findProcessPidsByCommandLine('qgis') || []).forEach(p => candidates.add(p));
-
-      const candidateList = Array.from(candidates).filter(Number.isFinite);
-      if (candidateList.length) {
-        console.log(`Abort extra escalation: killing candidate PIDs ${JSON.stringify(candidateList)}`);
-        const fk = forceKillPids(candidateList);
-        console.log(`Abort extra kill results: ${JSON.stringify(fk)}`);
-        killedDetails.push({ byCandidates: fk });
-      }
-      if (killedDetails.length) {
-        console.log(`Abort escalation killed: ${JSON.stringify(killedDetails)}`);
-      }
-    } catch (e) {
-      console.warn('Final abort escalation failed', e?.message || e);
-    }
-
-    // programar cleanup para dejar que la UI lea los logs finales
-    const ttlMs = parseInt(process.env.JOB_TTL_MS || "300000", 10);
-    clearTimeout(job.cleanupTimer);
-    job.cleanupTimer = setTimeout(() => {
-      runningJobs.delete(id);
-      // remove persisted pid file
-      try { deleteJobPidFile(id); } catch (e) { }
-    }, isNaN(ttlMs) ? 300000 : ttlMs);
-
-    // validar si el proceso sigue vivo; si sigue, devolver error
-    if (procAlive(pid)) {
-      console.error(`Failed to abort job ${id}: process pid ${pid} still alive`);
-      return res.status(500).json({ error: 'abort_failed', id, pid });
-    }
-    return res.json({ status: "aborted", id });
-  } catch (err) {
-    console.error(`Failed to kill job ${id}`, err);
-    return res.status(500).json({ error: String(err) });
-  }
+// POST alias for tab-close (sendBeacon) scenarios.
+app.post('/generate-cache/:id/abort', requireAdmin, async (req, res) => {
+  const id = req.params.id;
+  const result = await abortGenerateCacheJobInternal(id, { silentAbort: true });
+  if (!result.ok) return res.status(result.status).json(result.payload);
+  return res.status(result.status).json(result.payload);
 });
 
 // opcional: endpoint para listar jobs activos
@@ -4685,7 +5013,75 @@ app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
 app.get("/generate-cache/:id", requireAdmin, (req, res) => {
   const id = req.params.id;
   const job = runningJobs.get(id);
-  if (!job) return res.status(404).json({ error: "job not found" });
+  // In cluster mode the request may hit a different worker, so fall back to
+  // persisted pid metadata + project config progress.
+  if (!job) {
+    try {
+      const metaPath = jobPidPathFor(id);
+      if (!fs.existsSync(metaPath)) {
+        return res.status(404).json({ error: "job not found" });
+      }
+      const raw = fs.readFileSync(metaPath, 'utf8');
+      const meta = JSON.parse(raw);
+      const projectId = meta.project || null;
+      const targetMode = meta.targetMode || null;
+      const targetName = meta.targetName || null;
+
+      // Determine liveness: prefer job_id match, fall back to recorded pid.
+      const aliveByJobId = (findProcessPidsByCommandLineAll(['generate_cache.py', String(id)]) || []);
+      const aliveByPid = meta.pid && pidAlive(meta.pid);
+      const isAlive = (aliveByJobId && aliveByJobId.length) || aliveByPid;
+
+      // Pull latest progress from project config (persisted by the worker running the job).
+      let progressInfo = null;
+      if (projectId && targetName) {
+        try {
+          const cfg = readProjectConfig(projectId, { useCache: false });
+          const entry = targetMode === 'theme'
+            ? (cfg && cfg.themes && cfg.themes[targetName])
+            : (cfg && cfg.layers && cfg.layers[targetName]);
+          if (entry && entry.progress) {
+            progressInfo = entry.progress;
+          }
+        } catch (e) {
+          progressInfo = null;
+        }
+      }
+
+      const statusFromProgress = progressInfo && progressInfo.status ? String(progressInfo.status) : null;
+      const status = isAlive ? 'running' : (statusFromProgress || 'unknown');
+      const percent = (progressInfo && typeof progressInfo.percent === 'number') ? progressInfo.percent : null;
+      const totalGenerated = progressInfo && Number.isFinite(Number(progressInfo.totalGenerated)) ? Number(progressInfo.totalGenerated) : null;
+      const expectedTotal = progressInfo && Number.isFinite(Number(progressInfo.expectedTotal)) ? Number(progressInfo.expectedTotal) : null;
+
+      // Provide a synthetic stdout JSON line so the frontend progress parser still works.
+      const syntheticLine = JSON.stringify({ status, percent, total_generated: totalGenerated, expected_total: expectedTotal, source: 'cluster-fallback' });
+
+      const tail = parseInt(req.query.tail || "0", 10);
+      const clip = (s) => {
+        if (!s) return "";
+        if (!tail || isNaN(tail) || tail <= 0) {
+          const MAX = 50000;
+          return s.length > MAX ? s.slice(-MAX) : s;
+        }
+        return s.length > tail ? s.slice(-tail) : s;
+      };
+
+      return res.json({
+        id,
+        layer: meta.layer || null,
+        startedAt: meta.startedAt || null,
+        endedAt: null,
+        status,
+        exitCode: null,
+        stdout: clip(syntheticLine + "\n"),
+        stderr: "",
+        meta: { project: projectId, targetMode, targetName, pid: meta.pid || null, pids: aliveByJobId || [] }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: 'job_status_failed', details: String(e) });
+    }
+  }
   const tail = parseInt(req.query.tail || "0", 10);
   const clip = (s) => {
     if (!s) return "";
@@ -5729,6 +6125,171 @@ const RENDER_TIMEOUT_MS = Number.isFinite(Number(process.env.RENDER_TIMEOUT_MS |
 const RENDER_TILE_RETRIES = Number.isFinite(Number(process.env.RENDER_TILE_RETRIES || 1)) ? Number(process.env.RENDER_TILE_RETRIES || 1) : 1;
 const activeRenders = new Set();
 const renderQueue = [];
+// Track viewer sessions that requested on-demand tile generation.
+// This allows us to stop on-demand rendering when a viewer tab is closed.
+const abortedOnDemandSessions = new Set();
+const abortedOnDemandSessionTimers = new Map();
+const onDemandPollersBySession = new Map(); // sid -> Set(interval)
+
+// Admin emergency pause for on-demand rendering.
+let onDemandPausedUntil = 0;
+const isOnDemandPaused = () => Date.now() < onDemandPausedUntil;
+
+const normalizeViewerSessionId = (value) => {
+  const sid = String(value || '').trim();
+  if (!sid) return null;
+  // Accept UUID-ish / simple tokens only.
+  if (!/^[a-zA-Z0-9-]{8,80}$/.test(sid)) return null;
+  return sid;
+};
+
+const markOnDemandSessionAborted = (sid) => {
+  if (!sid) return;
+  abortedOnDemandSessions.add(sid);
+  const existing = abortedOnDemandSessionTimers.get(sid);
+  if (existing) {
+    try { clearTimeout(existing); } catch {}
+  }
+  // Keep the aborted marker for a while to prevent new work after close.
+  const t = setTimeout(() => {
+    abortedOnDemandSessions.delete(sid);
+    abortedOnDemandSessionTimers.delete(sid);
+  }, 5 * 60 * 1000);
+  abortedOnDemandSessionTimers.set(sid, t);
+};
+
+const abortOnDemandSession = (sid) => {
+  const sessionId = normalizeViewerSessionId(sid);
+  if (!sessionId) return { ok: false, error: 'invalid_sid' };
+  markOnDemandSessionAborted(sessionId);
+
+  // Clear any polling intervals created for this session (dedup waiters).
+  let clearedPollers = 0;
+  const pollers = onDemandPollersBySession.get(sessionId);
+  if (pollers && pollers.size) {
+    for (const handle of Array.from(pollers)) {
+      try { clearInterval(handle); clearedPollers += 1; } catch {}
+    }
+    pollers.clear();
+  }
+  onDemandPollersBySession.delete(sessionId);
+
+  // Cancel queued (not yet started) tasks in the persistent Python pool.
+  let cancelledQueued = 0;
+  try {
+    if (tileRendererPool && typeof tileRendererPool.cancelQueued === 'function') {
+      cancelledQueued = tileRendererPool.cancelQueued((params) => {
+        try { return params && params._sid && String(params._sid) === sessionId; } catch { return false; }
+      });
+    }
+  } catch {}
+
+  return { ok: true, sid: sessionId, cancelledQueued, clearedPollers };
+};
+
+// Public endpoint used by the viewer when closing.
+app.post('/on-demand/abort', (req, res) => {
+  const sid = (req.query && req.query.sid) || (req.body && req.body.sid);
+  const result = abortOnDemandSession(sid);
+  if (!result.ok) return res.status(400).json(result);
+  return res.json(result);
+});
+
+// Admin: status for on-demand queue/active work.
+app.get('/on-demand/status', requireAdmin, (req, res) => {
+  const poolQueued = Number.isFinite(Number(tileRendererPool?.queue?.length)) ? Number(tileRendererPool.queue.length) : null;
+  const pausedMs = isOnDemandPaused() ? Math.max(0, onDemandPausedUntil - Date.now()) : 0;
+  return res.json({ ok: true, active: activeRenders.size, queued: renderQueue.length, poolQueued, pausedMs });
+});
+
+// Admin: abort all on-demand work (best-effort).
+app.post('/on-demand/abort-all', requireAdmin, (req, res) => {
+  const pauseMs = Number.isFinite(Number(req.body?.pauseMs))
+    ? Math.max(0, Math.min(5 * 60 * 1000, Number(req.body.pauseMs)))
+    : 60 * 1000;
+  onDemandPausedUntil = Date.now() + pauseMs;
+
+  let cancelledQueue = 0;
+  try {
+    if (Array.isArray(renderQueue) && renderQueue.length) {
+      const items = renderQueue.splice(0, renderQueue.length);
+      cancelledQueue = items.length;
+      for (const item of items) {
+        try { item?.cb?.(new Error('aborted'), null); } catch {}
+      }
+    }
+  } catch {}
+
+  let clearedPollers = 0;
+  try {
+    for (const set of onDemandPollersBySession.values()) {
+      if (!set || !set.size) continue;
+      for (const handle of Array.from(set)) {
+        try { clearInterval(handle); clearedPollers += 1; } catch {}
+      }
+      try { set.clear(); } catch {}
+    }
+    onDemandPollersBySession.clear();
+  } catch {}
+
+  let poolAbort = null;
+  try {
+    if (tileRendererPool && typeof tileRendererPool.abortAll === 'function') {
+      poolAbort = tileRendererPool.abortAll({ reason: 'aborted' });
+    } else if (tileRendererPool && typeof tileRendererPool.close === 'function') {
+      tileRendererPool.close();
+      poolAbort = { closed: true };
+    }
+  } catch (e) {
+    poolAbort = { error: String(e) };
+  }
+
+  return res.json({ ok: true, pausedMs: pauseMs, cancelledQueue, clearedPollers, pool: poolAbort });
+});
+
+// Public: abort a viewer session (tab close). Best-effort aborts both on-demand tile rendering
+// (by sid) and any generate-cache jobs spawned from that viewer session.
+app.post('/viewer/abort', async (req, res) => {
+  const sid = (req.query && req.query.sid) || (req.body && (req.body.sid || req.body.viewer_session_id));
+  const sessionId = normalizeViewerSessionId(sid);
+  if (!sessionId) return res.status(400).json({ ok: false, error: 'invalid_sid' });
+
+  const onDemand = abortOnDemandSession(sessionId);
+
+  const toAbort = new Set();
+  try {
+    for (const job of Array.from(runningJobs.values())) {
+      if (!job || job.status !== 'running') continue;
+      if (job.viewerSessionId && String(job.viewerSessionId) === sessionId) {
+        toAbort.add(String(job.id));
+      }
+    }
+  } catch {}
+
+  // Cross-worker: also scan persisted pid metadata.
+  try {
+    const files = fs.readdirSync(jobPidDir).filter((f) => f && f.endsWith('.json'));
+    for (const f of files) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(jobPidDir, f), 'utf8'));
+        if (meta && meta.id && meta.viewerSessionId && String(meta.viewerSessionId) === sessionId) {
+          toAbort.add(String(meta.id));
+        }
+      } catch {}
+    }
+  } catch {}
+
+  const abortedJobs = [];
+  for (const jobId of Array.from(toAbort)) {
+    try {
+      const result = await abortGenerateCacheJobInternal(jobId, { silentAbort: true });
+      if (result && result.ok) abortedJobs.push(jobId);
+    } catch {}
+  }
+
+  return res.json({ ok: true, sid: sessionId, onDemand, abortedJobs });
+});
+
 const ENABLE_RENDER_FILE_LOGS = (() => {
   const raw = String(process.env.ENABLE_RENDER_FILE_LOGS || process.env.RENDER_FILE_LOGS || "").trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes";
@@ -5739,6 +6300,15 @@ const ENABLE_RENDER_FILE_LOGS = (() => {
 // --- FUNCIÓN ACTUALIZADA ---
 
 function queueTileRender(params, filePath, cb) {
+  if (isOnDemandPaused()) {
+    try { cb(new Error('on_demand_paused'), null); } catch {}
+    return;
+  }
+  const sessionId = normalizeViewerSessionId(params && (params.sid || params._sid));
+  if (sessionId && abortedOnDemandSessions.has(sessionId)) {
+    try { cb(new Error('session_aborted'), null); } catch {}
+    return;
+  }
   // Generar clave única para evitar duplicados simultáneos
   const key = `${params.project}|${params.layer || params.theme}|${params.z}|${params.x}|${params.y}`;
 
@@ -5766,6 +6336,11 @@ function queueTileRender(params, filePath, cb) {
         cb(new Error('Timeout esperando tile (deduplicación)'), null);
       }
     }, 1000); 
+    if (sessionId) {
+      const set = onDemandPollersBySession.get(sessionId) || new Set();
+      set.add(interval);
+      onDemandPollersBySession.set(sessionId, set);
+    }
     return;
   }
 
@@ -5795,6 +6370,7 @@ function queueTileRender(params, filePath, cb) {
     // Pasar preset si existe, para casos WMTS complejos
     tile_matrix_preset: params.tileMatrixPreset || null
   };
+  if (sessionId) task._sid = sessionId;
 
   // 5. Enviar al Pool
   // tileRendererPool gestiona internamente la cola si todos los workers están ocupados
@@ -6011,6 +6587,7 @@ function processRenderQueue() {
 // servir tiles on-demand
 app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, theme, z, x, y } = req.params;
+  const sid = normalizeViewerSessionId(req.query && req.query.sid);
   
   // Evitar caché agresiva del navegador para tiles dinámicas
   try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
@@ -6051,7 +6628,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     logProjectEvent(project, `Tile miss (fallback): ${fallbackFile}. Generating on-demand...`);
     
     // Generar fallback on-demand Y ESPERAR
-    return queueTileRender({ project, layer: theme, z, x, y }, fallbackFile, (err, outFile) => {
+    return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (err, outFile) => {
       if (err) {
         logProjectEvent(project, `Tile render error (fallback): ${fallbackFile} | ${err?.message || err}`);
         if (!res.headersSent) return res.status(500).send('Tile generation failed');
@@ -6065,7 +6642,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
   // 2. Generación normal de tema on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
   
-  queueTileRender({ project, theme, z, x, y }, file, (err, outFile) => {
+  queueTileRender({ project, theme, z, x, y, sid }, file, (err, outFile) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
       
@@ -6074,7 +6651,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
         const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
         logProjectEvent(project, `Theme render failed; forced fallback to layer '${theme}' -> ${fallbackFile}`);
         
-        return queueTileRender({ project, layer: theme, z, x, y }, fallbackFile, (layerErr, layerOutFile) => {
+        return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (layerErr, layerOutFile) => {
           if (layerErr) {
              logProjectEvent(project, `Tile render error (forced fallback): ${fallbackFile} | ${layerErr?.message || layerErr}`);
              if (!res.headersSent) return res.status(500).send('Tile generation failed');
@@ -6095,6 +6672,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
 
 app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, layer, z, x, y } = req.params;
+  const sid = normalizeViewerSessionId(req.query && req.query.sid);
   
   try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
   
@@ -6109,7 +6687,7 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
   // 2. Si no existe, Generar on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
   
-  queueTileRender({ project, layer, z, x, y }, file, (err, outFile) => {
+  queueTileRender({ project, layer, z, x, y, sid }, file, (err, outFile) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
       if (!res.headersSent) return res.status(500).send('Tile generation failed');

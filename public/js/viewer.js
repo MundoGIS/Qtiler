@@ -42,12 +42,20 @@
       layer: params.get('layer')
     };
 
+    const viewerSessionId = (() => {
+      try {
+        if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+      } catch {}
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    })();
+
     const displayMode = 'cache';
     const showCache = true;
     const showRemote = false;
-    const tileTemplate = viewerState.theme
+    const tileTemplateBase = viewerState.theme
       ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
       : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`;
+    const tileTemplate = `${tileTemplateBase}?sid=${encodeURIComponent(viewerSessionId)}`;
     const tileTemplateLabel = tileTemplate.replace('{z}', '{z}');
     const modeLabelKey = 'viewer.mode.cache';
 
@@ -610,6 +618,7 @@
     const osmBtn = document.getElementById('viewer_osm_btn');
     let autoCacheActive = false;
     let cacheRequestPromise = null;
+    let currentCacheJobId = null;
     let queuedAutoRun = false;
     let autoCacheTimer = null;
     let lastAutoCacheKey = null;
@@ -649,6 +658,58 @@
       else if (state === 'idle' && autoCacheActive) key = 'viewer.control.cacheIdle';
       cacheStatusEl.textContent = key ? tr(key, params) : '';
     };
+
+    const abortCurrentCacheJob = () => {
+      const jobId = currentCacheJobId;
+      if (!jobId) return;
+      currentCacheJobId = null;
+      try {
+        const url = '/generate-cache/' + encodeURIComponent(jobId) + '/abort';
+        try {
+          if (navigator && typeof navigator.sendBeacon === 'function') {
+            const blob = new Blob(['{}'], { type: 'application/json' });
+            navigator.sendBeacon(url, blob);
+            return;
+          }
+        } catch {}
+        fetch(url, {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}' // keepalive can require a body in some browsers
+        }).catch(() => null);
+      } catch {}
+    };
+
+    const abortViewerSession = () => {
+      try {
+        const url = '/viewer/abort?sid=' + encodeURIComponent(viewerSessionId);
+        try {
+          if (navigator && typeof navigator.sendBeacon === 'function') {
+            const blob = new Blob(['{}'], { type: 'application/json' });
+            navigator.sendBeacon(url, blob);
+            return;
+          }
+        } catch {}
+        fetch(url, {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}' // keepalive requires a body for some browsers when POST
+        }).catch(() => null);
+      } catch {}
+    };
+
+    // When the viewer is closed/navigated away, stop any running cache job.
+    let closeAbortSent = false;
+    const handleCloseAbort = () => {
+      if (closeAbortSent) return;
+      closeAbortSent = true;
+      abortViewerSession();
+      abortCurrentCacheJob();
+    };
+    window.addEventListener('pagehide', handleCloseAbort);
+    window.addEventListener('beforeunload', handleCloseAbort);
 
     refreshOsmControlLabel = () => {
       if (!osmBtn) return;
@@ -718,6 +779,7 @@
         project_extent: extentString,
         run_reason: 'viewer-on-demand',
         trigger: 'viewer',
+        viewer_session_id: viewerSessionId,
         allow_remote: true
       };
       if (viewerData.layer) body.layer = viewerData.layer;
@@ -796,7 +858,9 @@
         if (!res.ok || !data?.id) {
           throw new Error(data?.details || res.statusText || 'cache_request_failed');
         }
-        const result = await pollJobUntilDone(data.id);
+        const jobId = data.id;
+        currentCacheJobId = jobId;
+        const result = await pollJobUntilDone(jobId);
         if (result.status !== 'completed') {
           throw new Error(result.status || 'cache_failed');
         }
@@ -811,6 +875,7 @@
         setCacheStatus('error', { message: err?.message || err });
       } finally {
         cacheRequestPromise = null;
+        currentCacheJobId = null;
         setCacheBusy(false);
         if (queuedAutoRun) {
           queuedAutoRun = false;
@@ -829,6 +894,7 @@
           setCacheStatus('idle');
           scheduleAutoCache({ immediate: true });
         } else {
+          abortCurrentCacheJob();
           setCacheStatus('');
         }
       });

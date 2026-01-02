@@ -810,10 +810,48 @@
         header.appendChild(layerNameEl);
 
         layerDetailsModal.appendChild(header);
+
+        // Tabs
+        const tabs = document.createElement('div');
+        tabs.className = 'qtiler-layer-modal__tabs';
+        const tabDetails = document.createElement('button');
+        tabDetails.type = 'button';
+        tabDetails.className = 'qtiler-layer-modal__tab is-active';
+        tabDetails.textContent = 'Layer Details';
+        const tabEdit = document.createElement('button');
+        tabEdit.type = 'button';
+        tabEdit.className = 'qtiler-layer-modal__tab';
+        tabEdit.textContent = 'Edit parameters';
+        if (!isAdmin) {
+          tabEdit.disabled = true;
+          tabEdit.title = 'Admin only';
+        }
+        tabs.appendChild(tabDetails);
+        tabs.appendChild(tabEdit);
+        layerDetailsModal.appendChild(tabs);
         
         // Content
         const content = document.createElement('div');
-        content.style.padding = '24px';
+        content.className = 'qtiler-layer-modal__content';
+
+        const detailsPane = document.createElement('div');
+        detailsPane.className = 'qtiler-layer-modal__pane is-active';
+        const editPane = document.createElement('div');
+        editPane.className = 'qtiler-layer-modal__pane';
+        editPane.style.display = 'none';
+
+        const setActiveTab = (which) => {
+          const isDetails = which === 'details';
+          tabDetails.classList.toggle('is-active', isDetails);
+          tabEdit.classList.toggle('is-active', !isDetails);
+          detailsPane.style.display = isDetails ? '' : 'none';
+          editPane.style.display = isDetails ? 'none' : '';
+        };
+        tabDetails.addEventListener('click', () => setActiveTab('details'));
+        tabEdit.addEventListener('click', () => setActiveTab('edit'));
+
+        content.appendChild(detailsPane);
+        content.appendChild(editPane);
 
         // Fetch cached layer data to get tile_matrix_set
         let tileMatrixSet = null;
@@ -900,18 +938,18 @@
           const projLabel = document.createElement('div');
           projLabel.className = 'meta';
           projLabel.textContent = 'Project configuration';
-          content.appendChild(projLabel);
+          detailsPane.appendChild(projLabel);
           const preProj = document.createElement('pre');
           preProj.className = 'qtiler-layer-modal__pre';
           try { preProj.textContent = JSON.stringify(projectConfigForDisplay, null, 2); } catch (e) { preProj.textContent = String(projectConfigForDisplay); }
-          content.appendChild(preProj);
+          detailsPane.appendChild(preProj);
         }
 
         // Create pre element for layer output
         const pre = document.createElement('pre');
         pre.className = 'qtiler-layer-modal__pre';
         pre.textContent = outputText;
-        content.appendChild(pre);
+        detailsPane.appendChild(pre);
 
         // WMTS URLs section
         const wmtsSection = document.createElement('div');
@@ -1020,7 +1058,7 @@
         capUrlContainer.appendChild(capCopyBtn);
         wmtsSection.appendChild(capUrlContainer);
 
-        content.appendChild(wmtsSection);
+        detailsPane.appendChild(wmtsSection);
 
         // If admin, add editable fields section
         if (isAdmin) {
@@ -1306,7 +1344,19 @@
           editSection.appendChild(purgeNote);
           editSection.appendChild(saveBtn);
 
-          content.appendChild(editSection);
+          editPane.appendChild(editSection);
+        } else {
+          const editSection = document.createElement('div');
+          editSection.className = 'qtiler-layer-modal__edit';
+          const editLabel = document.createElement('div');
+          editLabel.className = 'meta';
+          editLabel.textContent = 'Edit parameters (Admin only)';
+          editSection.appendChild(editLabel);
+          const editDescription = document.createElement('div');
+          editDescription.className = 'meta';
+          editDescription.textContent = 'You need an admin account to edit technical parameters.';
+          editSection.appendChild(editDescription);
+          editPane.appendChild(editSection);
         }
 
         layerDetailsModal.appendChild(content);
@@ -1822,12 +1872,15 @@
 
       function setActiveProject(projectId){
         if (!projectId) return;
+        const wasActive = activeProjectId === projectId;
         activeProjectId = projectId;
         const state = getProjectState(projectId);
         const cfg = projectConfigs.get(projectId);
         suppressControlSync = true;
         try {
-          if (cfg) {
+          // If the project is already active and the user edited controls, keep their inputs.
+          const preserveUserInputs = wasActive && state && state.controlsEdited;
+          if (cfg && !preserveUserInputs) {
             if (cfg.zoom) {
               if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = Math.round(cfg.zoom.min);
               if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = Math.round(cfg.zoom.max);
@@ -1839,12 +1892,15 @@
               if (throttleInput && cfg.cachePreferences.throttleMs != null) throttleInput.value = cfg.cachePreferences.throttleMs;
             }
           }
-          applyCachedZoomRangeToControls(projectId, { force: true });
+          applyCachedZoomRangeToControls(projectId, { force: !preserveUserInputs });
+
+          // Only clear the "user edited" flag when we actually re-hydrated controls from config.
+          // If we preserved user inputs, keep it sticky so background refreshes don't overwrite them.
+          if (state) {
+            state.controlsEdited = !!preserveUserInputs;
+          }
         } finally {
           suppressControlSync = false;
-        }
-        if (state) {
-          state.controlsEdited = false;
         }
         if (!state.defaultMapExtent && state.layerExtentUnion) {
           state.defaultMapExtent = state.layerExtentUnion.slice();
@@ -2035,7 +2091,9 @@
           showStatus('No layers available for this project', true);
           return;
         }
-        const allowRemote = allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false;
+        const skipped = [];
+        enforceCacheControls();
+        const allowRemote = true;
         let zoomMin = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
         let zoomMax = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
         if (zoomMin < 0) zoomMin = 0;
@@ -2043,9 +2101,9 @@
         if (zoomMin > zoomMax && !(zoomMin === 0 && zoomMax === 0)) {
           const tmp = zoomMin; zoomMin = zoomMax; zoomMax = tmp;
         }
-  const mode = modeSelect ? modeSelect.value : 'xyz';
-        const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
-        const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
+    const mode = 'wmts';
+      const rawTileCrs = 'AUTO';
+      const throttleVal = Math.max(300, parseInt(throttleInput ? throttleInput.value : '300') || 300);
         const state = getProjectState(project.id);
         const extent = state?.extent && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
         const extentPayload = getProjectedExtentPayload(project.id);
@@ -2062,27 +2120,15 @@
             zoom_min: zoomMin,
             zoom_max: zoomMax
           };
-          if (mode === 'xyz') {
-            params.scheme = 'xyz';
-            params.tile_crs = 'EPSG:3857';
-            params.xyz_mode = 'partial';
-          } else if (mode === 'wmts') {
-            params.scheme = 'auto';
-            params.wmts = true;
-            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
-          } else if (mode === 'custom') {
-            params.scheme = 'custom';
-            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
-          } else {
-            // auto mode: let backend choose scheme, but honor explicit CRS overrides
-            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') params.tile_crs = rawTileCrs;
-          }
+          // Forced: WMTS automatic (native CRS)
+          params.scheme = 'auto';
+          params.wmts = true;
           if (extentPayload) {
             params.project_extent = extentPayload.extentString;
             params.extent_crs = extentPayload.crs;
           }
-          if (allowRemote) params.allow_remote = true;
-          if (allowRemote && throttleVal > 0) params.throttle_ms = throttleVal;
+          params.allow_remote = true;
+          params.throttle_ms = throttleVal;
           payloadLayers.push({ layer: layer.name, params });
         });
         if (payloadLayers.length === 0) {
@@ -2398,6 +2444,31 @@
         return `EPSG:${n}`.toUpperCase();
       };
 
+      // Some projected CRS (notably EPSG:3006) are commonly stored or exchanged as northing/easting
+      // (minY,minX,maxY,maxX). When that happens, proj4 transforms can yield NaN.
+      const AXIS_SWAP_EPSG = new Set(['EPSG:3006', 'EPSG:3010', 'EPSG:3011']);
+
+      const looksLikeAxisSwappedProjectedBbox = (bbox) => {
+        if (!Array.isArray(bbox) || bbox.length !== 4) return false;
+        const nums = bbox.map((v) => Math.abs(Number(v)));
+        if (nums.some((v) => !Number.isFinite(v))) return false;
+        const [a, b, c, d] = nums;
+        // Heuristic: northing is usually millions; easting is usually < ~2M.
+        return (a > 2000000 && c > 2000000 && b < 2000000 && d < 2000000);
+      };
+
+      const normalizeAxisOrderForCrs = (extentList, crs) => {
+        const norm = normalizeExtentList(extentList);
+        if (!norm) return null;
+        const key = normalizeEpsgKey(crs) || (typeof crs === 'string' ? crs.trim().toUpperCase() : null);
+        if (!key || !AXIS_SWAP_EPSG.has(key)) return norm;
+        // If bbox is likely [minY,minX,maxY,maxX], convert to [minX,minY,maxX,maxY].
+        if (looksLikeAxisSwappedProjectedBbox(norm)) {
+          return [norm[1], norm[0], norm[3], norm[2]];
+        }
+        return norm;
+      };
+
       const ensureProj4CodesAvailable = async (codes = [], timeoutMs = 700) => {
         if (!Array.isArray(codes) || codes.length === 0) return;
         const missing = codes.map(normalizeEpsgKey).filter(Boolean).filter((c) => !proj4.defs || !proj4.defs(c));
@@ -2444,6 +2515,23 @@
         if (source.toUpperCase() === target.toUpperCase()) {
           return { bbox: norm.slice(), crs: target, transformed: false };
         }
+
+        const isLikelyWgs84Bbox = (bbox) => {
+          if (!Array.isArray(bbox) || bbox.length !== 4) return false;
+          const [minX, minY, maxX, maxY] = bbox.map(Number);
+          if (![minX, minY, maxX, maxY].every(Number.isFinite)) return false;
+          return (
+            minX >= -180 && maxX <= 180 &&
+            minY >= -90 && maxY <= 90 &&
+            maxX > minX && maxY > minY
+          );
+        };
+
+        // Defensive: configs sometimes label extents as projected CRS but bbox is actually lon/lat degrees.
+        // If the target is EPSG:4326 and the bbox already looks like lon/lat, don't attempt a proj4 transform.
+        if (target.toUpperCase() === 'EPSG:4326' && isLikelyWgs84Bbox(norm) && source.toUpperCase() !== 'EPSG:4326') {
+          return { bbox: norm.slice(), crs: 'EPSG:4326', transformed: true, assumedSource: 'EPSG:4326' };
+        }
         if (!canUseProj4()) {
           console.warn('proj4 not available; cannot transform extent from', source, 'to', target);
           return null;
@@ -2453,29 +2541,43 @@
           return null;
         }
         try {
-          const corners = [
-            [norm[0], norm[1]],
-            [norm[0], norm[3]],
-            [norm[2], norm[1]],
-            [norm[2], norm[3]]
-          ];
-          let minX = Infinity;
-          let minY = Infinity;
-          let maxX = -Infinity;
-          let maxY = -Infinity;
-          for (const [xVal, yVal] of corners) {
-            const projected = proj4(source, target, [xVal, yVal]);
-            const px = Array.isArray(projected) ? projected[0] : Number.NaN;
-            const py = Array.isArray(projected) ? projected[1] : Number.NaN;
-            if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error('Invalid projection result');
-            minX = Math.min(minX, px);
-            minY = Math.min(minY, py);
-            maxX = Math.max(maxX, px);
-            maxY = Math.max(maxY, py);
-          }
-          return { bbox: [minX, minY, maxX, maxY], crs: target, transformed: true };
+          const fixed = normalizeAxisOrderForCrs(norm, source);
+          if (!fixed) return null;
+          const tryProject = (swapXY) => {
+            const corners = [
+              [fixed[0], fixed[1]],
+              [fixed[0], fixed[3]],
+              [fixed[2], fixed[1]],
+              [fixed[2], fixed[3]]
+            ];
+            let minX = Infinity;
+            let minY = Infinity;
+            let maxX = -Infinity;
+            let maxY = -Infinity;
+            for (const corner of corners) {
+              const inX = swapXY ? corner[1] : corner[0];
+              const inY = swapXY ? corner[0] : corner[1];
+              const projected = proj4(source, target, [inX, inY]);
+              const px = Array.isArray(projected) ? projected[0] : Number.NaN;
+              const py = Array.isArray(projected) ? projected[1] : Number.NaN;
+              if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+              minX = Math.min(minX, px);
+              minY = Math.min(minY, py);
+              maxX = Math.max(maxX, px);
+              maxY = Math.max(maxY, py);
+            }
+            if (![minX, minY, maxX, maxY].every(Number.isFinite)) return null;
+            if (maxX <= minX || maxY <= minY) return null;
+            return { bbox: [minX, minY, maxX, maxY], crs: target, transformed: true, swapXY: !!swapXY };
+          };
+
+          const primary = tryProject(false);
+          if (primary) return primary;
+          const swapped = tryProject(true);
+          if (swapped) return swapped;
+          return null;
         } catch (err) {
-          console.warn('Failed to transform extent from', source, 'to', target, err);
+          console.warn('Failed to transform extent from', source, 'to', target, err?.message || String(err));
           return null;
         }
       };
@@ -2499,9 +2601,13 @@
           if (projectConfig.extent && Array.isArray(projectConfig.extent.bbox)) {
             const normalizedNative = normalizeExtentList(projectConfig.extent.bbox);
             if (normalizedNative) {
-              nativeExtent = normalizedNative.slice();
               nativeCrs = typeof projectConfig.extent.crs === 'string' ? projectConfig.extent.crs : null;
-              const transformed = transformExtentFromProjectCrs(normalizedNative, nativeCrs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
+              const cfgTileCrs = (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+              const cfgTileCrsSafe = (typeof cfgTileCrs === 'string' && cfgTileCrs.trim() && cfgTileCrs.trim().toUpperCase() !== 'AUTO') ? cfgTileCrs.trim() : null;
+              const sourceCrs = nativeCrs || state.projectMeta?.crs || cfgTileCrsSafe || null;
+              const axisFixed = normalizeAxisOrderForCrs(normalizedNative, sourceCrs);
+              nativeExtent = (axisFixed || normalizedNative).slice();
+              const transformed = transformExtentFromProjectCrs(nativeExtent, sourceCrs);
               if (transformed && Array.isArray(transformed.bbox)) {
                 wgsExtent = transformed.bbox.slice();
               }
@@ -2516,20 +2622,28 @@
           }
         }
         state.extentNative = nativeExtent ? nativeExtent.slice() : null;
-        state.extentNativeCrs = nativeCrs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+        {
+          const cfgTileCrs2 = (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+          const cfgTileCrsSafe2 = (typeof cfgTileCrs2 === 'string' && cfgTileCrs2.trim() && cfgTileCrs2.trim().toUpperCase() !== 'AUTO') ? cfgTileCrs2.trim() : null;
+          state.extentNativeCrs = nativeCrs || state.projectMeta?.crs || cfgTileCrsSafe2 || null;
+        }
         if (!state.extentNative && wgsExtent) {
-          const fallbackNative = transformExtentToProjectCrs(wgsExtent, state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
+          const cfgTileCrs3 = (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+          const cfgTileCrsSafe3 = (typeof cfgTileCrs3 === 'string' && cfgTileCrs3.trim() && cfgTileCrs3.trim().toUpperCase() !== 'AUTO') ? cfgTileCrs3.trim() : null;
+          const fallbackNative = transformExtentToProjectCrs(wgsExtent, state.projectMeta?.crs || cfgTileCrsSafe3 || null);
           if (fallbackNative && Array.isArray(fallbackNative.bbox)) {
             state.extentNative = fallbackNative.bbox.slice();
-            state.extentNativeCrs = fallbackNative.crs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+            state.extentNativeCrs = fallbackNative.crs || state.projectMeta?.crs || cfgTileCrsSafe3 || null;
           }
         }
         state.extent = wgsExtent ? wgsExtent.slice() : null;
         if (state.extent && !state.extentNative) {
-          const derivedNative = transformExtentToProjectCrs(state.extent, state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null);
+          const cfgTileCrs4 = (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+          const cfgTileCrsSafe4 = (typeof cfgTileCrs4 === 'string' && cfgTileCrs4.trim() && cfgTileCrs4.trim().toUpperCase() !== 'AUTO') ? cfgTileCrs4.trim() : null;
+          const derivedNative = transformExtentToProjectCrs(state.extent, state.projectMeta?.crs || cfgTileCrsSafe4 || null);
           if (derivedNative && Array.isArray(derivedNative.bbox)) {
             state.extentNative = derivedNative.bbox.slice();
-            state.extentNativeCrs = derivedNative.crs || state.projectMeta?.crs || (projectConfig && projectConfig.cachePreferences && projectConfig.cachePreferences.tileCrs) || null;
+            state.extentNativeCrs = derivedNative.crs || state.projectMeta?.crs || cfgTileCrsSafe4 || null;
           }
         }
         return { wgsExtent: state.extent ? state.extent.slice() : null };
@@ -2580,20 +2694,40 @@
         const state = getProjectState(projectId);
         if (!state) return null;
         if (Array.isArray(state.extentNative) && state.extentNative.length === 4) {
-          const bbox = state.extentNative.map((value) => Number.isFinite(value) ? value : 0);
           const crs = state.extentNativeCrs || state?.projectMeta?.crs || 'EPSG:4326';
+          const fixed = normalizeAxisOrderForCrs(state.extentNative, crs) || state.extentNative;
+          // keep state consistent for downstream cache requests
+          state.extentNative = fixed.slice();
+          state.extentNativeCrs = crs;
+          const bbox = fixed.map((value) => Number.isFinite(value) ? value : 0);
           return {
             bbox,
             extentString: bbox.join(','),
             crs
           };
         }
+        // If no explicit extent captured, but the Leaflet map is open, use its current viewport bounds.
+        if ((!Array.isArray(state.extent) || state.extent.length !== 4) && state.map && typeof state.map.getBounds === 'function') {
+          try {
+            const b = state.map.getBounds();
+            const viewport = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+            const normalizedViewport = normalizeExtentList(viewport);
+            if (normalizedViewport) {
+              state.extent = normalizedViewport.slice();
+            }
+          } catch (e) {}
+        }
         if (!Array.isArray(state.extent) || state.extent.length !== 4) return null;
-        const projectCrs = state?.projectMeta?.crs || (state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileCrs) || null;
+        const configuredTileCrs = (state && state.config && state.config.cachePreferences && state.config.cachePreferences.tileCrs) || null;
+        const configuredCrsSafe = (typeof configuredTileCrs === 'string' && configuredTileCrs.trim() && configuredTileCrs.trim().toUpperCase() !== 'AUTO')
+          ? configuredTileCrs.trim()
+          : null;
+        const projectCrs = state?.projectMeta?.crs || configuredCrsSafe || null;
         const converted = transformExtentToProjectCrs(state.extent, projectCrs);
         if (!converted || !Array.isArray(converted.bbox)) return null;
-        const bbox = converted.bbox.map((value) => Number.isFinite(value) ? value : 0);
-        state.extentNative = converted.bbox.slice();
+        const fixed = normalizeAxisOrderForCrs(converted.bbox, converted.crs || projectCrs) || converted.bbox;
+        const bbox = fixed.map((value) => Number.isFinite(value) ? value : 0);
+        state.extentNative = fixed.slice();
         state.extentNativeCrs = converted.crs || projectCrs || 'EPSG:4326';
         return {
           bbox,
@@ -2842,6 +2976,9 @@
             updateInfo();
             try {
               const rounded = Math.round(map.getZoom());
+              if (zoomMinInput) zoomMinInput.value = rounded;
+              if (zoomMaxInput) zoomMaxInput.value = rounded;
+              const st = getProjectState(project.id); if (st) st.controlsEdited = true;
               const patch = buildExtentPatch(project.id, state.extent) || {};
               patch.zoom = { min: rounded, max: rounded, updatedAt: new Date().toISOString() };
               queueProjectConfigSave(project.id, patch);
@@ -2857,6 +2994,9 @@
             updateInfo();
             try {
               const rounded = Math.round(map.getZoom());
+              if (zoomMinInput) zoomMinInput.value = rounded;
+              if (zoomMaxInput) zoomMaxInput.value = rounded;
+              const st = getProjectState(project.id); if (st) st.controlsEdited = true;
               const patch = buildExtentPatch(project.id, state.extent) || {};
               patch.zoom = { min: rounded, max: rounded, updatedAt: new Date().toISOString() };
               queueProjectConfigSave(project.id, patch);
@@ -3038,6 +3178,32 @@
 
       applyStaticTranslations();
 
+      // Force cache settings: WMTS automatic + allow remote + throttle >= 300ms.
+      function enforceCacheControls(){
+        try {
+          if (modeSelect) {
+            modeSelect.value = 'wmts';
+            modeSelect.disabled = true;
+          }
+          if (tileCrsInput) {
+            tileCrsInput.value = 'AUTO';
+            tileCrsInput.disabled = true;
+          }
+          if (allowRemoteCheckbox) {
+            allowRemoteCheckbox.checked = true;
+            allowRemoteCheckbox.disabled = true;
+          }
+          if (throttleInput) {
+            const parsed = Number.parseInt(String(throttleInput.value || '').trim(), 10);
+            const next = Number.isFinite(parsed) ? Math.max(300, parsed) : 300;
+            throttleInput.min = '300';
+            throttleInput.value = String(next);
+          }
+        } catch (e) {}
+      }
+
+      enforceCacheControls();
+
       if (uploadBtn && uploadInput) {
         uploadBtn.addEventListener('click', () => uploadInput.click());
         uploadInput.addEventListener('change', async (event) => {
@@ -3054,14 +3220,18 @@
         if (state) {
           state.controlsEdited = true;
         }
+        enforceCacheControls();
         const zoomMinVal = Number(zoomMinInput?.value);
         const zoomMaxVal = Number(zoomMaxInput?.value);
+        const parsedThrottle = Number.parseInt(String(throttleInput?.value || '').trim(), 10);
+        const throttleSafe = Number.isFinite(parsedThrottle) ? Math.max(300, parsedThrottle) : 300;
         const prefsPatch = {
           cachePreferences: {
-            mode: modeSelect ? modeSelect.value : 'xyz',
-            tileCrs: tileCrsInput ? tileCrsInput.value.trim() : 'EPSG:3857',
-            allowRemote: allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : false,
-            throttleMs: throttleInput && throttleInput.value !== '' ? Number(throttleInput.value) : 0,
+            mode: 'wmts',
+            // UI shows AUTO, but backend expects a real CRS string or null.
+            tileCrs: null,
+            allowRemote: true,
+            throttleMs: throttleSafe,
             updatedAt: new Date().toISOString()
           }
         };
@@ -3372,7 +3542,9 @@
             listEl.innerHTML = '';
           }
           await renderProjectLayers(project, json, listEl, wrap, { forceConfigReload });
-          setActiveProject(project.id);
+          if (!activeProjectId || activeProjectId === project.id) {
+            setActiveProject(project.id);
+          }
         } catch (err) {
           if (listEl) {
             listEl.innerHTML = `<div class="error">${tr('Network error while loading project layers')}</div>`;
@@ -3437,15 +3609,84 @@
 
       // Gestión de jobs activos (persistencia visual tras recarga)
       const jobMonitors = new Map(); // id -> {timer, inner, txt}
-      function renderJobsList(list){
+      function renderJobsList(list, onDemandStatus = null){
         jobsList.innerHTML = '';
-        if (!Array.isArray(list) || list.length === 0) {
+        const hasGenerateJobs = Array.isArray(list) && list.length > 0;
+        const od = onDemandStatus && typeof onDemandStatus === 'object' ? onDemandStatus : null;
+        const odActive = od && Number.isFinite(Number(od.active)) ? Number(od.active) : 0;
+        const odQueued = od && Number.isFinite(Number(od.queued)) ? Number(od.queued) : 0;
+        const odPoolQueued = od && Number.isFinite(Number(od.poolQueued)) ? Number(od.poolQueued) : 0;
+        const odPausedMs = od && Number.isFinite(Number(od.pausedMs)) ? Number(od.pausedMs) : 0;
+        const hasOnDemandActivity = (odActive + odQueued + odPoolQueued) > 0 || odPausedMs > 0;
+
+        if (!hasGenerateJobs && !hasOnDemandActivity) {
           jobsWrap.style.display = 'none';
           for (const m of jobMonitors.values()) { try { clearInterval(m.timer); } catch{} }
           jobMonitors.clear();
           return;
         }
+
         jobsWrap.style.display = '';
+
+        if (hasOnDemandActivity) {
+          const row = document.createElement('div');
+          row.className = 'job';
+          row.id = 'job-ondemand';
+
+          const info = document.createElement('div');
+          info.className = 'job-info';
+          const bits = [];
+          bits.push('active ' + odActive);
+          bits.push('queued ' + odQueued);
+          if (odPoolQueued) bits.push('pool ' + odPoolQueued);
+          if (odPausedMs > 0) bits.push('paused');
+          info.innerHTML = `<div><strong>On-demand tiles</strong> <span class="info">· ${bits.join(' · ')}</span></div>` +
+                           `<div class="info">(viewer / WMTS on-demand)</div>`;
+
+          const right = document.createElement('div');
+          right.style.display = 'flex';
+          right.style.alignItems = 'center';
+          right.style.gap = '8px';
+          const pill = document.createElement('span');
+          pill.className = 'progress-pill';
+          const bar = document.createElement('span');
+          bar.className = 'progress-bar';
+          const inner = document.createElement('i');
+          bar.appendChild(inner);
+          const txt = document.createElement('span');
+          txt.textContent = `${odActive}/${odQueued}`;
+          pill.appendChild(bar);
+          pill.appendChild(txt);
+          const pct = odActive > 0 ? 100 : (odQueued > 0 ? 40 : 0);
+          inner.style.width = pct + '%';
+
+          const abortBtn = document.createElement('button');
+          abortBtn.className = 'btn btn-danger';
+          abortBtn.textContent = 'Abort';
+          abortBtn.onclick = async () => {
+            abortBtn.disabled = true;
+            showStatus('Aborting on-demand rendering…');
+            try {
+              const r = await fetch('/on-demand/abort-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+              });
+              if (!r.ok) showStatus('No se pudo abortar on-demand', true);
+            } catch (e) {
+              showStatus('Network error while aborting on-demand: ' + e, true);
+            } finally {
+              abortBtn.disabled = true;
+            }
+          };
+
+          right.appendChild(pill);
+          right.appendChild(abortBtn);
+          row.appendChild(info);
+          row.appendChild(right);
+          jobsList.appendChild(row);
+        }
+
         const seen = new Set();
         list.forEach(j => {
           if (!j || !j.id) return;
@@ -3573,10 +3814,13 @@
 
       async function refreshJobs(){
         try{
-          const r = await fetch('/generate-cache/running');
-          if (!r.ok) return;
-          const list = await r.json();
-          renderJobsList(list);
+          const [rJobs, rOnDemand] = await Promise.all([
+            fetch('/generate-cache/running'),
+            fetch('/on-demand/status')
+          ]);
+          const list = rJobs && rJobs.ok ? await rJobs.json() : [];
+          const od = rOnDemand && rOnDemand.ok ? await rOnDemand.json().catch(()=>null) : null;
+          renderJobsList(list, od);
         }catch{}
       }
 
@@ -3784,6 +4028,10 @@
           const badges = [];
           if (!cacheable) badges.push('<span class="layer-badge layer-badge-remote">remote</span>');
           const cachedEntry = cachedByKey.get('layer:' + l.name) || null;
+          const hasCacheEntry = !!cachedEntry;
+          const tileCountRaw = cachedEntry ? (cachedEntry.tile_count ?? cachedEntry.tiles ?? cachedEntry.tileCount) : null;
+          const tileCount = Number.isFinite(Number(tileCountRaw)) ? Number(tileCountRaw) : 0;
+          const hasCachedTiles = hasCacheEntry && tileCount > 0;
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
           const scheduleSummary = describeSchedule(scheduleObj);
@@ -3826,7 +4074,7 @@
             const cachedMin = Number.isFinite(cachedMinVal) ? Math.round(cachedMinVal) : null;
             const cachedMax = Number.isFinite(cachedMaxVal) ? Math.round(cachedMaxVal) : null;
             const coverageLabel = formatZoomRangeLabel(cachedMin, cachedMax);
-            if (coverageLabel) metaSegments.push('Cached ' + coverageLabel);
+            if (coverageLabel && hasCachedTiles) metaSegments.push('Cached ' + coverageLabel);
           }
           info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` +
                            '<div class="meta">' + metaSegments.map(escapeHtml).join(' · ') + '</div>';
@@ -3869,33 +4117,14 @@
           controls.setAttribute('role', 'group');
           controls.addEventListener('click', (event) => event.stopPropagation());
 
-          const hasCache = !!cachedEntry;
+          if (exampleLink && !hasCachedTiles) {
+            // Index can contain bootstrap placeholders; only show sample link when tiles exist.
+            exampleLink = null;
+          }
 
           // Always show the manual cache button so operators can trigger caching.
-          const genBtn = makeIconButton(hasCache ? 'Recache layer' : 'Generate cache', hasCache ? 'refresh' : 'play', null, 'btn-primary');
-          // prepare an admin-only direct-start play button (declared in outer scope so it can be appended later)
-          let playNowBtn = makeIconButton(tr('Start now'), 'play', null, 'btn-primary');
-          playNowBtn.addEventListener('click', () => {
-            // build zoomOverride from controls (prefer explicit inputs)
-            const zoomOverride = {};
-            const rawMin = zoomMinInput ? zoomMinInput.value : '';
-            const rawMax = zoomMaxInput ? zoomMaxInput.value : '';
-            const parsedMin = Number.isFinite(Number.parseInt(rawMin, 10)) ? Number.parseInt(rawMin, 10) : null;
-            const parsedMax = Number.isFinite(Number.parseInt(rawMax, 10)) ? Number.parseInt(rawMax, 10) : null;
-            if (parsedMin != null) zoomOverride.min = parsedMin;
-            if (parsedMax != null) zoomOverride.max = parsedMax;
-            // if no explicit zooms, fall back to project state cachedZoomRange if present
-            if (zoomOverride.min == null && zoomOverride.max == null) {
-              const st = getProjectState(project.id);
-              if (st && st.cachedZoomRange) {
-                if (st.cachedZoomRange.min != null) zoomOverride.min = st.cachedZoomRange.min;
-                if (st.cachedZoomRange.max != null) zoomOverride.max = st.cachedZoomRange.max;
-              }
-            }
-            const useOverride = (zoomOverride.min != null || zoomOverride.max != null) ? zoomOverride : null;
-            generateCache(playNowBtn, project.id, l.name, l, { recache: false, cachedEntry, zoomOverride: useOverride });
-          });
-          if (hasCache) {
+          const genBtn = makeIconButton(hasCachedTiles ? 'Recache layer' : 'Generate cache', hasCachedTiles ? 'refresh' : 'play', null, 'btn-primary');
+          if (hasCachedTiles) {
             genBtn.title = 'Recache layer (rebuild tiles)';
             genBtn.addEventListener('click', async () => {
               const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
@@ -3906,8 +4135,6 @@
                 console.error('Recache request failed', err);
               }
             });
-            // mark as remote if layer is remote so syncRemoteButtons can manage it
-            if (l.cacheable === false) playNowBtn.dataset.remote = '1';
           } else {
             genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
           }
@@ -3920,35 +4147,37 @@
 
           if (isAdmin) {
             const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
-            const delBtn = makeIconButton('Delete cache', 'trash', () => deleteCache(delBtn, project.id, l.name), 'btn-danger');
             controls.appendChild(scheduleBtn);
             controls.appendChild(genBtn);
-            if (playNowBtn) controls.appendChild(playNowBtn);
-            if (cachedEntry) {
-              controls.appendChild(delBtn);
+
+            if (hasCachedTiles) {
+              const delBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
+              delBtn.addEventListener('click', () => deleteCache(delBtn, project.id, l.name));
+              const delWrap = document.createElement('span');
+              delWrap.className = 'delete-cache-container has-cache';
+              delWrap.appendChild(delBtn);
+              controls.appendChild(delWrap);
             }
           }
 
           let viewCacheBtn = null;
-          if (hasCache && canView) {
+          if (canView) {
             const viewerUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
             viewCacheBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
               window.open(viewerUrl, '_blank', 'noopener');
             }, 'btn-secondary');
           }
 
-          // Layer details button (for cached layers)
+          // Layer details button
           let detailsBtn = null;
-          if (hasCache) {
-            detailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
-              toggleLayerDetails(d, { 
-                projectId: project.id, 
-                layerData: l, 
-                cachedEntry, 
-                isAdmin 
-              });
-            }, 'btn-secondary');
-          }
+          detailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
+            toggleLayerDetails(d, { 
+              projectId: project.id, 
+              layerData: l, 
+              cachedEntry, 
+              isAdmin 
+            });
+          }, 'btn-secondary');
 
           controls.appendChild(copyWmtsBtn);
           controls.appendChild(copyXyzBtn);
@@ -3959,16 +4188,6 @@
           d.appendChild(info);
           if (exampleLink) d.appendChild(exampleLink);
           d.appendChild(controls);
-          let focusLayer = null;
-          if (layerExtentWgs) {
-            focusLayer = () => focusMapToExtent(project.id, layerExtentWgs, { sourceKey: 'layer:' + l.name, maxZoom: 22 });
-          }
-          d.addEventListener('click', (event) => {
-            const interactive = event.target.closest('a, button, input, select, textarea');
-            if (interactive) return;
-            setActiveProject(project.id);
-            if (focusLayer) focusLayer();
-          });
           targetEl.appendChild(d);
           } catch (err) { console.error('Error rendering layer', l, err); }
         });
@@ -4064,30 +4283,18 @@
               }, 'btn-secondary');
               actions.appendChild(viewThemeBtn);
 
-              if (cachedTheme) {
-                const themeDetailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
-                  toggleLayerDetails(themeRow, { 
-                    projectId: project.id, 
-                    layerData: themeObj, 
-                    cachedEntry: cachedTheme, 
-                    isAdmin 
-                  });
-                }, 'btn-secondary');
-                actions.appendChild(themeDetailsBtn);
-              }
+              const themeDetailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
+                toggleLayerDetails(themeRow, { 
+                  projectId: project.id, 
+                  layerData: themeObj, 
+                  cachedEntry: cachedTheme || null, 
+                  isAdmin 
+                });
+              }, 'btn-secondary');
+              actions.appendChild(themeDetailsBtn);
             }
 
             themeRow.appendChild(actions);
-            let focusTheme = null;
-            if (themeExtent) {
-              focusTheme = () => focusMapToExtent(project.id, themeExtent, { sourceKey: 'theme:' + theme.name, maxZoom: 22 });
-            }
-            themeRow.addEventListener('click', (event) => {
-              const interactive = event.target.closest('a, button, input, select, textarea');
-              if (interactive) return;
-              setActiveProject(project.id);
-              if (focusTheme) focusTheme();
-            });
             targetEl.appendChild(themeRow);
             } catch (err) {
               console.error('Error rendering theme:', theme, err);
@@ -4103,7 +4310,11 @@
         const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null } = options || {};
         const isTheme = kind === 'theme';
         const targetLabel = isTheme ? `theme "${layerName}"` : layerName;
-        setActiveProject(projectId);
+        // IMPORTANT: don't call setActiveProject() here; it rewrites the left-panel
+        // controls (zoom etc) from config/defaults, which would override Leaflet-picked values.
+        if (projectId && activeProjectId !== projectId) {
+          activeProjectId = projectId;
+        }
         const initialDisabled = btn.disabled;
         const originalHtml = btn.innerHTML;
         const originalTitle = btn.title;
@@ -4142,8 +4353,9 @@
             // intercambiar para ser amigables
             const tmp = zoom_min; zoom_min = zoom_max; zoom_max = tmp;
           }
-          const mode = modeSelect ? modeSelect.value : 'xyz';
-          const rawTileCrs = tileCrsInput ? tileCrsInput.value.trim() : '';
+          enforceCacheControls();
+          const mode = 'wmts';
+          const rawTileCrs = 'AUTO';
           const body = { project: projectId, zoom_min, zoom_max };
           if (isTheme) {
             body.theme = layerName;
@@ -4185,19 +4397,9 @@
               body.recache.previous_tile_crs = cachedEntry.tile_crs;
             }
           }
-          if (mode === 'xyz') {
-            body.scheme = 'xyz';
-            body.tile_crs = 'EPSG:3857'; // forzamos estándar
-            body.xyz_mode = 'partial';
-          } else if (mode === 'wmts') {
-            // usamos auto scheme y flag wmts => python decidirá wmts salvo que sea 3857
-            body.scheme = 'auto';
-            body.wmts = true;
-            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') body.tile_crs = rawTileCrs;
-          } else if (mode === 'custom') {
-            body.scheme = 'custom';
-            if (rawTileCrs && rawTileCrs.toUpperCase() !== 'AUTO') body.tile_crs = rawTileCrs;
-          }
+          // Forced: WMTS automatic (native CRS)
+          body.scheme = 'auto';
+          body.wmts = true;
           // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
           const state = extentStates.get(projectId);
           const extentPayload = getProjectedExtentPayload(projectId);
@@ -4205,18 +4407,8 @@
             body.project_extent = extentPayload.extentString;
             body.extent_crs = extentPayload.crs;
           }
-          // remote opt-in (admins may override the allow_remote toggle)
-          const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
-          const allowRemoteEffective = (allowRemoteCheckbox && allowRemoteCheckbox.checked) || isAdminUser;
-          if (allowRemoteEffective) {
-            body.allow_remote = true;
-            const throttleVal = parseInt(throttleInput ? throttleInput.value : '0') || 0;
-            if (throttleVal > 0) body.throttle_ms = throttleVal;
-          } else if (!isTheme && layerObj && layerObj.cacheable === false) {
-            showStatus('Remote layer requires "Allow remote" toggle.', true);
-            restoreButton();
-            return;
-          }
+          body.allow_remote = true;
+          body.throttle_ms = Math.max(300, parseInt(throttleInput ? throttleInput.value : '300') || 300);
           const runReason = recache ? 'manual-recache' : (isTheme ? 'manual-theme' : 'manual');
           body.run_reason = runReason;
           body.trigger = 'manual';
@@ -4232,9 +4424,9 @@
             zoom: { min: zoom_min, max: zoom_max, updatedAt: nowIso },
             cachePreferences: {
               mode,
-              tileCrs: rawTileCrs || (mode === 'xyz' ? 'EPSG:3857' : ''),
-              allowRemote: !!(allowRemoteCheckbox && allowRemoteCheckbox.checked),
-              throttleMs: throttleInput && throttleInput.value !== '' ? Number(throttleInput.value) : 0,
+              tileCrs: null,
+              allowRemote: true,
+              throttleMs: Math.max(300, parseInt(throttleInput ? throttleInput.value : '300') || 300),
               updatedAt: nowIso
             }
           };
@@ -4414,7 +4606,7 @@
         btn.title = 'Deleting cache…';
         btn.setAttribute('aria-busy', 'true');
         try {
-          const res = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName), { method: 'DELETE' });
+          const res = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
           const data = await res.json().catch(()=>null);
           if (!res.ok) {
             showStatus('Delete failed: ' + (data?.error || data?.details || res.statusText), true);
