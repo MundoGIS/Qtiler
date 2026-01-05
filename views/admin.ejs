@@ -2,7 +2,7 @@
   pageLang,
   pageTitle: 'Qtiler · Admin console',
   pageTitleI18nKey: 'admin.title',
-  extraStyles: ['/css/admin.css'],
+  extraStyles: ['/css/admin.css', '/css/admin-extra.css'],
   bodyClass: 'admin-page'
 }) %>
   <div class="app-shell admin-shell">
@@ -21,17 +21,12 @@
           <p data-i18n="heroSubtitle">Install signed plugins, enable their admin consoles, and keep your deployment tidy.</p>
         </div>
         <div class="admin-hero-actions">
-          <a href="/index.html" class="button button-ghost" data-i18n="backToDashboard">Back to Dashboard</a>
           <button type="button" class="button" id="refresh-plugins" data-i18n="refreshPlugins">Refresh list</button>
         </div>
       </section>
 
-      <section class="admin-card admin-card--notice" aria-labelledby="auth-plugin-heading">
-        <div class="admin-card__body">
-          <p class="eyebrow" data-i18n="authPluginEyebrow">Authentication</p>
-          <h2 id="auth-plugin-heading" data-i18n="authPluginTitle">Secure WMTS with QtilerAuth</h2>
-          <p data-i18n="authPluginBody">Install the commercial QtilerAuth plugin to manage users, roles, and WMTS authentication.</p>
-        </div>
+      <section class="admin-card admin-card--notice" id="auth-plugin-promo" aria-labelledby="auth-plugin-heading">
+        
         <div class="admin-card__cta">
           <a href="https://mundogis.se" target="_blank" rel="noopener" class="button" data-i18n="authPluginCta">Get QtilerAuth at MundoGIS.se</a>
         </div>
@@ -39,20 +34,14 @@
 
       <div id="messages" class="admin-messages" aria-live="polite"></div>
 
-      <section class="admin-card admin-card--upload">
+      <section class="admin-card admin-card--consoles" aria-labelledby="console-heading">
         <div class="admin-card__header">
           <div>
-            <h2 data-i18n="installPlugin">Install plugin</h2>
-            <p data-i18n="installSubtitle">Upload a plugin package from MundoGIS to install it on this server.</p>
+            <h2 id="console-heading" data-i18n="consoleTitle">Active plugin consoles</h2>
+            <p data-i18n="consoleSubtitle">Enabled plugins can render their administration UI without leaving this page.</p>
           </div>
         </div>
-        <form id="plugin-upload-form" class="admin-form">
-          <div class="form-field">
-            <label for="plugin-file" data-i18n="uploadZip">Plugin ZIP file:</label>
-            <input type="file" id="plugin-file" name="plugin" accept=".zip" required>
-          </div>
-          <button type="submit" class="button" data-i18n="installBtn">Install plugin</button>
-        </form>
+        <div id="plugin-sections-container" class="plugin-console-grid"></div>
       </section>
 
       <section class="admin-card" aria-labelledby="plugins-heading">
@@ -63,16 +52,25 @@
           </div>
         </div>
         <div id="plugins-container" class="plugin-list"></div>
-      </section>
 
-      <section class="admin-card" aria-labelledby="console-heading">
-        <div class="admin-card__header">
-          <div>
-            <h2 id="console-heading" data-i18n="consoleTitle">Active plugin consoles</h2>
-            <p data-i18n="consoleSubtitle">Enabled plugins can render their administration UI without leaving this page.</p>
-          </div>
+        <hr class="admin-divider">
+
+        <div class="admin-install-area">
+          <h3 data-i18n="installPlugin">Install plugin</h3>
+          <p data-i18n="installSubtitle">Upload a plugin package from MundoGIS to install it on this server.</p>
+          
+          <form id="plugin-upload-form" class="admin-form inline-form">
+            <div class="form-field">
+              <label for="plugin-file" data-i18n="uploadZip" class="sr-only">Plugin ZIP file:</label>
+              <input type="file" id="plugin-file" name="plugin" accept=".zip" required>
+            </div>
+            <button type="submit" class="button" data-i18n="installBtn">Install plugin</button>
+          </form>
+
+          <p class="admin-hint">
+            Visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a> to browse available plugins.
+          </p>
         </div>
-        <div id="plugin-sections-container" class="plugin-console-grid"></div>
       </section>
     </main>
 

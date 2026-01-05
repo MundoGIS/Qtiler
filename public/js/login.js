@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 (function() {
   const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
     ? window.qtilerLang.SUPPORTED_LANGS
@@ -96,6 +102,17 @@
   const setStatus = ({ key = null, params = {}, text = '', state = '' } = {}) => {
     statusState = { key, params, text, state };
     renderStatus();
+  };
+
+  const flashStatusText = (text, { state = 'info', ttlMs = 10000 } = {}) => {
+    setStatus({ text, state });
+    if (Number.isFinite(ttlMs) && ttlMs > 0) {
+      setTimeout(() => {
+        if (statusState.text === text) {
+          setStatus();
+        }
+      }, ttlMs);
+    }
   };
 
   const applyTranslations = () => {
@@ -249,5 +266,34 @@
 
   syncRememberState();
   applyTranslations();
+
+  // After installing the auth plugin we redirect to /login?justInstalled=1.
+  // Show the default credentials for a short time, then remove the query param.
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const justInstalled = params.get('justInstalled');
+    if (justInstalled && justInstalled !== '0') {
+      const lang = window.qtilerLang?.get?.() || currentLang;
+      const defaultUser = 'admin';
+      const defaultPass = 'adminnuevo321';
+      const messages = {
+        en: `Use this username and password, then change the default password: ${defaultUser} / ${defaultPass}`,
+        es: `Usa este usuario y contraseña y cambia la contraseña por defecto: ${defaultUser} / ${defaultPass}`,
+        sv: `Använd detta användarnamn och lösenord och byt standardlösenordet: ${defaultUser} / ${defaultPass}`
+      };
+      const text = messages[lang] || messages[(lang || '').split('-')[0]] || messages.en;
+      flashStatusText(text, { state: 'info', ttlMs: 10000 });
+
+      params.delete('justInstalled');
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+      if (window.history?.replaceState) {
+        window.history.replaceState({}, document.title, nextUrl);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   checkSession();
 })();

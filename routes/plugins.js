@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -19,6 +25,18 @@ export const registerPluginRoutes = ({
   copyRecursive,
   removeRecursive
 }) => {
+  const requestClusterRestart = () => {
+    try {
+      if (typeof process.send === 'function') {
+        process.send({ cmd: 'restartAllWorkers' });
+      } else {
+        process.exit(0);
+      }
+    } catch (err) {
+      console.warn('[plugins] Failed to request cluster restart', err);
+      try { process.exit(0); } catch (_) { /* noop */ }
+    }
+  };
   // Allow non-admin access to plugins list if no auth plugin is enabled (to install first plugin)
   app.get("/plugins", async (req, res) => {
     if (security.isEnabled && security.isEnabled()) {
@@ -59,40 +77,19 @@ export const registerPluginRoutes = ({
     }
   });
 
+  /* 
+   * Manual enable/disable routes removed to enforce auto-enable on install 
+   * and auto-disable on uninstall workflow.
+   */
+  /*
   app.post("/plugins/:name/enable", requireAdminIfEnabled, async (req, res) => {
-    const raw = req.params.name;
-    const pluginName = sanitizePluginName(raw);
-    if (!pluginName) {
-      return res.status(400).json({ error: "plugin_name_required" });
-    }
-
-    try {
-      await pluginManager.enablePlugin(pluginName);
-      res.json({ status: "enabled", plugin: { name: pluginName } });
-    } catch (err) {
-      res.status(500).json({ error: "plugin_enable_failed", details: String(err?.message || err) });
-    }
+    // ...
   });
 
   app.post("/plugins/:name/disable", requireAdmin, async (req, res) => {
-    const raw = req.params.name;
-    const pluginName = sanitizePluginName(raw);
-    if (!pluginName) {
-      return res.status(400).json({ error: "plugin_name_required" });
-    }
-
-    try {
-      await pluginManager.disablePlugin(pluginName);
-
-      if (pluginManager.listEnabled().length === 0) {
-        applySecurityDefaults();
-      }
-
-      res.json({ status: "disabled", plugin: { name: pluginName } });
-    } catch (err) {
-      res.status(500).json({ error: "plugin_disable_failed", details: String(err?.message || err) });
-    }
+    // ...
   });
+  */
 
   app.delete("/plugins/:name", requireAdmin, async (req, res) => {
     const raw = req.params.name;
@@ -140,6 +137,11 @@ export const registerPluginRoutes = ({
 
     if (pluginManager.listEnabled().length === 0) {
       applySecurityDefaults();
+      // Force reset of security object if it was modified by a plugin but not fully restored
+      if (typeof security.isEnabled === 'function' && security.isEnabled()) {
+         console.warn('[Qtiler] Security still enabled after uninstalling all plugins. Forcing reset.');
+         applySecurityDefaults();
+      }
     }
 
     res.json({
@@ -151,6 +153,11 @@ export const registerPluginRoutes = ({
         removedData
       }
     });
+
+    // Restart all workers so every process sees the updated plugin state
+    requestClusterRestart();
+    // Also restart this worker as a fallback to ensure state is fresh
+    setTimeout(() => process.exit(0), 150);
   });
 
   app.post("/plugins/upload", requireAdminIfEnabled, (req, res) => {
@@ -201,11 +208,17 @@ export const registerPluginRoutes = ({
           throw Object.assign(new Error("plugin_name_required"), { statusCode: 400, code: "PLUGIN_NAME_REQUIRED" });
         }
 
-        if (pluginManager.listEnabled().includes(pluginName)) {
-          throw Object.assign(new Error("plugin_already_enabled"), { statusCode: 409, code: "PLUGIN_ALREADY_ENABLED" });
-        }
-
         const destination = path.join(pluginsDir, pluginName);
+
+        // If plugin is already enabled or installed, disable and remove old files before replacing
+        const wasEnabled = pluginManager.listEnabled().includes(pluginName);
+        if (wasEnabled) {
+          try {
+            await pluginManager.disablePlugin(pluginName);
+          } catch (disableErr) {
+            throw Object.assign(disableErr, { statusCode: 500, code: "PLUGIN_DISABLE_FAILED" });
+          }
+        }
         await removeRecursive(destination);
         await copyRecursive(pluginRoot, destination);
 
@@ -216,7 +229,12 @@ export const registerPluginRoutes = ({
           throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
         }
 
-        return res.status(201).json({ status: "enabled", plugin: { name: pluginName } });
+        const response = { status: "enabled", plugin: { name: pluginName } };
+        // Restart all workers so the newly enabled plugin is picked up cluster-wide
+        requestClusterRestart();
+        // Also restart this worker as a fallback to ensure state is fresh
+        setTimeout(() => process.exit(0), 150);
+        return res.status(201).json(response);
       } catch (uploadErr) {
         const statusCode = uploadErr.statusCode && Number.isInteger(uploadErr.statusCode) ? uploadErr.statusCode : 500;
         const code = uploadErr.code || "PLUGIN_UPLOAD_FAILED";

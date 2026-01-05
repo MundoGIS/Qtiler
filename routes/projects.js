@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 import fs from "fs";
 import path from "path";
 
@@ -125,30 +131,30 @@ export const registerProjectRoutes = ({
     const visibleProjects = allProjects
       .map((p) => {
         const accessConfig = resolveProjectAccessEntry(accessSnapshot, p.id) || {};
-        const isPublic = accessConfig.public === true;
         const allowedRoles = Array.isArray(accessConfig.allowedRoles) ? accessConfig.allowedRoles : [];
         const allowedUsers = Array.isArray(accessConfig.allowedUsers) ? accessConfig.allowedUsers : [];
+        const accessInfo = deriveProjectAccess(accessSnapshot, user, p.id);
 
         let accessLevel = 'private';
-        if (isPublic) accessLevel = 'public';
+        if (accessInfo.public) accessLevel = 'public';
         else if (allowedRoles.includes('authenticated')) accessLevel = 'authenticated';
 
         return {
           ...p,
           access: accessLevel,
-          isPublic,
+          isPublic: accessInfo.public === true,
           allowedRoles,
-          allowedUsers
+          allowedUsers,
+          viaAssignment: accessInfo.viaAssignment === true,
+          viaRole: accessInfo.viaRole === true,
+          viaUser: accessInfo.viaUser === true
         };
       })
       .filter((p) => {
         if (isAdmin) return true;
-        if (p.isPublic) return true;
-        if (!user) return false;
-        if (p.allowedRoles.includes('authenticated')) return true;
-        if (p.allowedRoles.includes(user.role)) return true;
-        if (p.allowedUsers.includes(user.id)) return true;
-        return false;
+        // deriveProjectAccess already knows public/role/user/assignment; keep filtering consistent.
+        const accessInfo = deriveProjectAccess(accessSnapshot, user, p.id);
+        return accessInfo.allowed === true;
       });
 
     res.json({

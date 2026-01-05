@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
  // === Inactivity Timeout Auto-Logout ===
       const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
       let inactivityTimer = null;
@@ -244,122 +250,142 @@
 
       // Check if auth plugin is enabled and update header buttons
       async function checkAuthPlugin() {
+        const installBtn = document.getElementById('admin_install_dashboard');
+        const loginBtn = document.getElementById('auth_button');
+        const adminLink = document.getElementById('admin_console_link');
+        const userBadge = document.getElementById('auth_user_badge');
+
+        // If the server-side API has already told us auth is disabled, don't probe /auth/me.
+        // This avoids showing a stale Login button after plugin uninstall (routes may linger
+        // until restart, but auth is effectively disabled).
+        if (window.appState && window.appState.authEnabled === false) {
+          if (installBtn) {
+            installBtn.hidden = false;
+            installBtn.style.display = 'inline-block';
+          }
+          if (loginBtn) {
+            loginBtn.hidden = true;
+            loginBtn.style.display = 'none';
+          }
+          if (adminLink) {
+            adminLink.hidden = true;
+            adminLink.style.display = 'none';
+          }
+          if (userBadge) {
+            userBadge.hidden = true;
+            userBadge.style.display = 'none';
+          }
+          authUser = null;
+          return;
+        }
+
         try {
-          const res = await fetch('/plugins');
-          if (res.ok) {
-            const data = await res.json();
-            const authEnabled = data.enabled && data.enabled.includes('QtilerAuth');
-            const installBtn = document.getElementById('admin_install_dashboard');
-            const loginBtn = document.getElementById('auth_button');
-            const adminLink = document.getElementById('admin_console_link');
-            const userBadge = document.getElementById('auth_user_badge');
-            
-            if (authEnabled) {
-              // Plugin is installed, hide install button
-              if (installBtn) {
-                installBtn.hidden = true;
-                installBtn.style.display = 'none';
-              }
-              
-              // Check if user is logged in
-              try {
-                const authRes = await fetch('/auth/me', { credentials: 'include' });
-                if (authRes.ok) {
-                  const authData = await authRes.json();
-                  if (authData.user) {
-                    // User is logged in
-                    if (loginBtn) {
-                      loginBtn.textContent = tr('Logout');
-                      loginBtn.setAttribute('data-i18n', 'Logout');
-                      loginBtn.hidden = false;
-                      loginBtn.style.display = 'inline-block';
-                    }
-                    if (userBadge) {
-                        const name = authData.user.username || authData.user.displayName || authData.user.id || 'user';
-                        userBadge.textContent = tr('Signed in as {user}', { user: name });
-                        userBadge.hidden = false;
-                        userBadge.style.display = 'inline-block';
-                    }
-                    if (adminLink && authData.user.role === 'admin') {
-                      adminLink.hidden = false;
-                      adminLink.style.display = 'inline-block'; // Force display
-                    }
-                    // Update global authUser for click handler
-                    authUser = authData.user;
-                    
-                    // Start inactivity monitor when user is authenticated
-                    if (!inactivityMonitorActive) {
-                      initInactivityMonitor();
-                      inactivityMonitorActive = true;
-                    }
-                  } else {
-                    // Not logged in
-                    if (loginBtn) {
-                      loginBtn.textContent = tr('Login');
-                      loginBtn.setAttribute('data-i18n', 'Login');
-                      loginBtn.hidden = false;
-                      loginBtn.style.display = 'inline-block';
-                    }
-                    if (userBadge) {
-                      userBadge.hidden = true;
-                      userBadge.style.display = 'none';
-                    }
-                    if (adminLink) {
-                      adminLink.hidden = true;
-                      adminLink.style.display = 'none';
-                    }
-                    authUser = null;
-                  }
-                } else {
-                  // Not logged in (or error)
-                  if (loginBtn) {
-                    loginBtn.textContent = tr('Login');
-                    loginBtn.setAttribute('data-i18n', 'Login');
-                    loginBtn.hidden = false;
-                    loginBtn.style.display = 'inline-block';
-                  }
-                  if (userBadge) {
-                    userBadge.hidden = true;
-                    userBadge.style.display = 'none';
-                  }
-                  if (adminLink) {
-                    adminLink.hidden = true;
-                    adminLink.style.display = 'none';
-                  }
-                  authUser = null;
-                }
-              } catch (err) {
-                console.error('Failed to check auth status', err);
-                if (loginBtn) {
-                  loginBtn.textContent = tr('Login');
-                  loginBtn.setAttribute('data-i18n', 'Login');
-                  loginBtn.hidden = false;
-                  loginBtn.style.display = 'inline-block';
-                }
-                authUser = null;
-              }
-            } else {
-              // Plugin not installed
-              if (installBtn) {
-                installBtn.hidden = false;
-                installBtn.style.display = 'inline-block';
-              }
+          // Avoid /plugins here: when auth is enabled it is admin-only (403 for regular users).
+          // /auth/me is a reliable probe:
+          // - 200 => logged in
+          // - 401 => auth plugin enabled but not logged in
+          // - 404/501 => auth plugin not installed/enabled
+          const authRes = await fetch('/auth/me', { credentials: 'include' });
+          const authAvailable = authRes.status !== 404 && authRes.status !== 501;
+
+          if (!authAvailable) {
+            if (installBtn) {
+              installBtn.hidden = false;
+              installBtn.style.display = 'inline-block';
+            }
+            if (loginBtn) {
+              loginBtn.hidden = true;
+              loginBtn.style.display = 'none';
+            }
+            if (adminLink) {
+              adminLink.hidden = true;
+              adminLink.style.display = 'none';
+            }
+            if (userBadge) {
+              userBadge.hidden = true;
+              userBadge.style.display = 'none';
+            }
+            authUser = null;
+            return;
+          }
+
+          if (installBtn) {
+            installBtn.hidden = true;
+            installBtn.style.display = 'none';
+          }
+
+          if (authRes.ok) {
+            const authData = await authRes.json().catch(() => null);
+            const user = authData?.user || null;
+            if (user) {
               if (loginBtn) {
-                loginBtn.hidden = true;
-                loginBtn.style.display = 'none';
+                loginBtn.textContent = tr('Logout');
+                loginBtn.setAttribute('data-i18n', 'Logout');
+                loginBtn.hidden = false;
+                loginBtn.style.display = 'inline-block';
               }
-              if (adminLink) {
+              if (userBadge) {
+                const name = user.username || user.displayName || user.id || 'user';
+                userBadge.textContent = tr('Signed in as {user}', { user: name });
+                userBadge.hidden = false;
+                userBadge.style.display = 'inline-block';
+              }
+              if (adminLink && user.role === 'admin') {
+                adminLink.hidden = false;
+                adminLink.style.display = 'inline-block';
+              } else if (adminLink) {
                 adminLink.hidden = true;
                 adminLink.style.display = 'none';
               }
-              if (userBadge) {
-                userBadge.hidden = true;
-                userBadge.style.display = 'none';
+
+              authUser = user;
+
+              if (!inactivityMonitorActive) {
+                initInactivityMonitor();
+                inactivityMonitorActive = true;
               }
+              return;
             }
           }
+
+          // Auth plugin enabled, but user not logged in.
+          if (loginBtn) {
+            loginBtn.textContent = tr('Login');
+            loginBtn.setAttribute('data-i18n', 'Login');
+            loginBtn.hidden = false;
+            loginBtn.style.display = 'inline-block';
+          }
+          if (userBadge) {
+            userBadge.hidden = true;
+            userBadge.style.display = 'none';
+          }
+          if (adminLink) {
+            adminLink.hidden = true;
+            adminLink.style.display = 'none';
+          }
+          authUser = null;
         } catch (err) {
           console.error('Failed to check auth plugin', err);
+          // Fail open to the simplest state (show Login) to avoid UI flicker.
+          if (installBtn) {
+            installBtn.hidden = true;
+            installBtn.style.display = 'none';
+          }
+          if (loginBtn) {
+            loginBtn.textContent = tr('Login');
+            loginBtn.setAttribute('data-i18n', 'Login');
+            loginBtn.hidden = false;
+            loginBtn.style.display = 'inline-block';
+          }
+          if (userBadge) {
+            userBadge.hidden = true;
+            userBadge.style.display = 'none';
+          }
+          if (adminLink) {
+            adminLink.hidden = true;
+            adminLink.style.display = 'none';
+          }
+          authUser = null;
         }
       };
       
@@ -3322,6 +3348,9 @@
              window.appState.user = { role: 'admin' };
           }
 
+           // Now that we have authoritative authEnabled/user from /projects, refresh header state.
+           try { await checkAuthPlugin(); } catch {}
+
           const isAdmin = !window.appState.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
           const uploadBtn = document.getElementById('upload_project_btn');
           const reloadBtn = document.getElementById('reload');
@@ -3814,10 +3843,33 @@
 
       async function refreshJobs(){
         try{
+          // Only admins should poll job endpoints. When auth is enabled and user is not admin,
+          // these endpoints return 401/403 and would spam the console.
+          const authEnabled = window.appState && typeof window.appState.authEnabled === 'boolean'
+            ? window.appState.authEnabled
+            : null;
+          if (authEnabled == null) return; // appState not ready yet
+
+          const isAdmin = !authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+          if (!isAdmin) {
+            if (typeof jobsWrap !== 'undefined' && jobsWrap) jobsWrap.style.display = 'none';
+            return;
+          }
+
           const [rJobs, rOnDemand] = await Promise.all([
             fetch('/generate-cache/running'),
             fetch('/on-demand/status')
           ]);
+
+          if (rJobs && (rJobs.status === 401 || rJobs.status === 403) || (rOnDemand && (rOnDemand.status === 401 || rOnDemand.status === 403))) {
+            // Session expired or no permission; avoid tight 401 loops.
+            if (authEnabled) {
+              window.location.href = '/login?reason=session_expired';
+              return;
+            }
+            if (typeof jobsWrap !== 'undefined' && jobsWrap) jobsWrap.style.display = 'none';
+            return;
+          }
           const list = rJobs && rJobs.ok ? await rJobs.json() : [];
           const od = rOnDemand && rOnDemand.ok ? await rOnDemand.json().catch(()=>null) : null;
           renderJobsList(list, od);

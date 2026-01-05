@@ -34,9 +34,11 @@
         <div class="nav-divider" aria-hidden="true"></div>
         <div class="portal-actions">
           <span id="session_badge" class="portal-badge" hidden></span>
-          <a id="portal_admin_link" class="portal-button" href="/admin" hidden style="display: none;" data-i18n="Admin console">Admin console</a>
-          <a id="portal_login_button" class="portal-button" href="/login" data-portal-login data-i18n="portal.login" style="display: none;">Sign in</a>
-          <button id="portal_logout_button" class="portal-button" type="button" data-i18n="portal.logout" hidden style="display: none;">Sign out</button>
+          <% if (typeof authEnabled !== 'undefined' && authEnabled) { %>
+            <a id="portal_admin_link" class="portal-button" href="/admin" hidden style="display: none;" data-i18n="Admin console">Admin console</a>
+            <a id="portal_login_button" class="portal-button" href="/login" data-portal-login data-i18n="portal.login" style="display: none;">Sign in</a>
+            <button id="portal_logout_button" class="portal-button" type="button" data-i18n="portal.logout" hidden style="display: none;">Sign out</button>
+          <% } %>
         </div>
       </nav>
     <% } else if (isSimple) { %>

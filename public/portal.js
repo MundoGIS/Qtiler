@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 const statusEl = document.getElementById('public_status');
 const emptyEl = document.getElementById('public_empty');
 const listEl = document.getElementById('public_list');
@@ -48,6 +54,10 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Cached layers',
     'portal.section.availableThemes': 'Available themes',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.xyz': 'XYZ (Tiles)',
+    'portal.layer.xyz.copy': 'Copy XYZ URL',
+    'portal.layer.xyz.copied': 'XYZ URL copied to clipboard.',
+    'portal.layer.xyz.copyFailed': 'Unable to copy XYZ URL.',
     'portal.layer.noCached': 'No cached layers for this project yet.',
     'portal.layer.cacheUpdated': 'Cache updated: {timestamp}',
     'portal.meta.zoomRange': 'Zoom {min} – {max}',
@@ -86,6 +96,10 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Capas en caché',
     'portal.section.availableThemes': 'Temas disponibles',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.xyz': 'XYZ (Teselas)',
+    'portal.layer.xyz.copy': 'Copiar URL XYZ',
+    'portal.layer.xyz.copied': 'URL XYZ copiada al portapapeles.',
+    'portal.layer.xyz.copyFailed': 'No se pudo copiar la URL XYZ.',
     'portal.layer.noCached': 'Aún no hay capas cacheadas en este proyecto.',
     'portal.layer.cacheUpdated': 'Última actualización del caché: {timestamp}',
     'portal.meta.zoomRange': 'Zoom {min} – {max}',
@@ -124,6 +138,10 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Cachelagrade lager',
     'portal.section.availableThemes': 'Tillgängliga teman',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.xyz': 'XYZ (Tiles)',
+    'portal.layer.xyz.copy': 'Kopiera XYZ-URL',
+    'portal.layer.xyz.copied': 'XYZ-URL kopierad till urklipp.',
+    'portal.layer.xyz.copyFailed': 'Det gick inte att kopiera XYZ-URL.',
     'portal.layer.noCached': 'Inga cachelagrade lager för detta projekt ännu.',
     'portal.layer.cacheUpdated': 'Cache uppdaterad: {timestamp}',
     'portal.meta.zoomRange': 'Zoom {min} – {max}',
@@ -218,6 +236,45 @@ const showStatusText = (text, { tone = 'info' } = {}) => {
   renderStatus();
 };
 
+const flashStatusText = (text, { tone = 'info', ttlMs = 2500 } = {}) => {
+  showStatusText(text, { tone });
+  if (Number.isFinite(ttlMs) && ttlMs > 0) {
+    setTimeout(() => {
+      if (statusState.text === text) {
+        clearStatus();
+      }
+    }, ttlMs);
+  }
+};
+
+const copyToClipboard = async (text) => {
+  const value = String(text || '');
+  if (!value) return false;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // fallback below
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.left = '-1000px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+};
+
 const clearStatus = () => {
   statusState = { key: null, params: {}, text: '', tone: 'info' };
   renderStatus();
@@ -250,6 +307,13 @@ const renderLayerGroup = (titleKey, items) => {
     const actions = document.createElement('div');
     actions.className = 'portal-layer-actions';
 
+    const projectIdEnc = encodeURIComponent(item.projectId);
+    const nameEnc = encodeURIComponent(item.name);
+    const xyzPath = item.kind === 'theme'
+      ? `/wmts/${projectIdEnc}/themes/${nameEnc}/{z}/{x}/{y}.png`
+      : `/wmts/${projectIdEnc}/${nameEnc}/{z}/{x}/{y}.png`;
+    const xyzUrl = `${window.location.origin}${xyzPath}`;
+
     // Add Viewer link (Eye icon)
     const viewerLink = document.createElement('a');
     viewerLink.href = `/viewer.html?project=${encodeURIComponent(item.projectId)}&${item.kind === 'theme' ? 'theme' : 'layer'}=${encodeURIComponent(item.name)}`;
@@ -267,6 +331,28 @@ const renderLayerGroup = (titleKey, items) => {
     wmtsLink.rel = 'noopener';
     wmtsLink.textContent = tr('portal.layer.wmts');
     actions.appendChild(wmtsLink);
+
+    /* XYZ link removed as requested
+    const xyzLink = document.createElement('a');
+    xyzLink.href = xyzUrl;
+    xyzLink.textContent = tr('portal.layer.xyz');
+    xyzLink.addEventListener('click', async (event) => {
+      event.preventDefault();
+      const ok = await copyToClipboard(xyzUrl);
+      flashStatusText(tr(ok ? 'portal.layer.xyz.copied' : 'portal.layer.xyz.copyFailed'), { tone: ok ? 'info' : 'error' });
+    });
+    actions.appendChild(xyzLink);
+    */
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'portal-action-button';
+    copyBtn.textContent = tr('portal.layer.xyz.copy');
+    copyBtn.addEventListener('click', async () => {
+      const ok = await copyToClipboard(xyzUrl);
+      flashStatusText(tr(ok ? 'portal.layer.xyz.copied' : 'portal.layer.xyz.copyFailed'), { tone: ok ? 'info' : 'error' });
+    });
+    actions.appendChild(copyBtn);
 
     head.appendChild(actions);
     entry.appendChild(head);

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Copyright (C) 2025 MundoGIS.
+ */
+
 'use strict';
 
 const footerYearEl = document.getElementById('portal_year');
@@ -162,6 +168,9 @@ const pluginUploadForm = document.getElementById('plugin-upload-form');
 const pluginSectionsContainer = document.getElementById('plugin-sections-container');
 const refreshPluginsBtn = document.getElementById('refresh-plugins');
 const languageSelector = document.getElementById('language_selector');
+const authPluginPromo = document.getElementById('auth-plugin-promo');
+
+let activeConsolePlugin = null;
 
 function t(key, params = {}) {
   const lang = window.qtilerLang ? window.qtilerLang.get() : 'en';
@@ -276,20 +285,9 @@ function renderPlugins() {
     const actions = document.createElement('div');
     actions.className = 'plugin-card__actions';
 
-    if (!isEnabled) {
-      const enableBtn = document.createElement('button');
-      enableBtn.type = 'button';
-      enableBtn.className = 'button';
-      enableBtn.textContent = t('enable');
-      enableBtn.addEventListener('click', () => enablePlugin(name));
-      actions.appendChild(enableBtn);
-    } else {
-      const note = document.createElement('p');
-      note.className = 'plugin-card__note';
-      note.textContent = t('enabledHint');
-      actions.appendChild(note);
-    }
-
+    // Removed manual Enable/Disable buttons as per requirement.
+    // Plugins are auto-enabled on install and removed on uninstall.
+    
     const uninstallBtn = document.createElement('button');
     uninstallBtn.type = 'button';
     uninstallBtn.className = 'button button-danger';
@@ -311,6 +309,14 @@ function cleanupPluginConsoles() {
   });
 }
 
+function updateAuthPluginPromoVisibility() {
+  if (!authPluginPromo) return;
+  const enabled = Array.isArray(state.plugins.enabled) ? state.plugins.enabled : [];
+  const installed = Array.isArray(state.plugins.installed) ? state.plugins.installed : [];
+  const authInstalled = enabled.includes('QtilerAuth') || installed.includes('QtilerAuth');
+  authPluginPromo.hidden = authInstalled;
+}
+
 function updatePluginSections() {
   cleanupPluginConsoles();
   pluginSectionsContainer.innerHTML = '';
@@ -325,18 +331,58 @@ function updatePluginSections() {
     return;
   }
 
-  enabled.sort().forEach((pluginName) => {
-    const card = document.createElement('article');
-    card.className = 'plugin-console-card';
+  enabled.sort();
+  if (!activeConsolePlugin || !enabled.includes(activeConsolePlugin)) {
+    activeConsolePlugin = enabled[0];
+  }
 
-    const header = document.createElement('div');
-    header.className = 'plugin-console-card__header';
-    const title = document.createElement('h3');
-    title.textContent = pluginName;
-    const badge = document.createElement('span');
-    badge.className = 'chip chip--ok';
-    badge.textContent = t('enabledStatus');
-    header.append(title, badge);
+  const tabs = document.createElement('div');
+  tabs.className = 'plugin-console-tabs';
+  tabs.setAttribute('role', 'tablist');
+
+  const panels = document.createElement('div');
+  panels.className = 'plugin-console-panels';
+
+  const setActive = (name) => {
+    activeConsolePlugin = name;
+    tabs.querySelectorAll('[role="tab"]').forEach((tab) => {
+      const isActive = tab.dataset.plugin === name;
+      tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      tab.tabIndex = isActive ? 0 : -1;
+    });
+    panels.querySelectorAll('[role="tabpanel"]').forEach((panel) => {
+      panel.hidden = panel.dataset.plugin !== name;
+    });
+  };
+
+  enabled.forEach((pluginName, idx) => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'plugin-console-tab';
+    tab.textContent = pluginName;
+    tab.dataset.plugin = pluginName;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', 'false');
+    tab.tabIndex = -1;
+    tab.addEventListener('click', () => setActive(pluginName));
+    tab.addEventListener('keydown', (event) => {
+      const key = event.key;
+      if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+      event.preventDefault();
+      const dir = key === 'ArrowRight' ? 1 : -1;
+      const nextIdx = (idx + dir + enabled.length) % enabled.length;
+      const nextPlugin = enabled[nextIdx];
+      setActive(nextPlugin);
+      const nextTab = tabs.querySelector(`[role="tab"][data-plugin="${CSS.escape(nextPlugin)}"]`);
+      nextTab?.focus();
+    });
+    tabs.appendChild(tab);
+
+    const panel = document.createElement('div');
+    panel.className = 'plugin-console-panel';
+    panel.dataset.plugin = pluginName;
+    panel.setAttribute('role', 'tabpanel');
+    panel.hidden = true;
 
     const iframe = document.createElement('iframe');
     iframe.src = `/plugins/${encodeURIComponent(pluginName)}/admin`;
@@ -344,9 +390,12 @@ function updatePluginSections() {
     iframe.referrerPolicy = 'no-referrer';
     attachIframeAutoHeight(iframe);
 
-    card.append(header, iframe);
-    pluginSectionsContainer.appendChild(card);
+    panel.append(iframe);
+    panels.appendChild(panel);
   });
+
+  pluginSectionsContainer.append(tabs, panels);
+  setActive(activeConsolePlugin);
 }
 
 function attachIframeAutoHeight(frame) {
@@ -418,9 +467,16 @@ async function loadPlugins() {
     const payload = await api('/plugins');
     state.plugins.enabled = Array.isArray(payload?.enabled) ? payload.enabled : [];
     state.plugins.installed = Array.isArray(payload?.installed) ? payload.installed : [];
+    updateAuthPluginPromoVisibility();
     renderPlugins();
     updatePluginSections();
   } catch (err) {
+    // If auth was enabled while this page is open, /plugins becomes admin-only.
+    // Redirect to login instead of getting stuck in "installation mode".
+    if (err?.status === 403) {
+      window.location.href = '/login';
+      return;
+    }
     if (err?.code === 'auth_plugin_disabled') {
       showMessage('info', t('errorLoadPlugins'));
       state.plugins.enabled = [];
@@ -481,7 +537,10 @@ function setupUploadForm() {
       const pluginName = payload?.plugin?.name || payload?.name || 'plugin';
       showMessage('success', t('successInstall', { plugin: pluginName }));
       pluginUploadForm.reset();
-      await loadPlugins();
+      // Installing the auth plugin makes /plugins admin-only.
+      // Send the user to login (and then they can access the admin console again).
+      window.location.href = '/login?justInstalled=1';
+      return;
     } catch (err) {
       showMessage('error', parseError(err, t('errorUpload')));
     } finally {

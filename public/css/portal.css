@@ -156,8 +156,14 @@ body {
 
 .portal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
   gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .portal-grid {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
 }
 
 .portal-card {
@@ -181,6 +187,9 @@ body {
 .portal-card h3 {
   margin: 0;
   font-size: 1.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portal-card h4 {
@@ -236,14 +245,18 @@ body {
 
 .portal-layer-head {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .portal-layer-name {
   font-weight: 600;
   font-size: 1rem;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portal-layer-actions {
@@ -262,8 +275,23 @@ body {
   text-decoration: none;
 }
 
+.portal-layer-actions button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  color: var(--fg);
+  cursor: pointer;
+}
+
 .portal-layer-actions a:hover,
 .portal-layer-actions a:focus {
+  background: rgba(14, 165, 233, 0.2);
+}
+
+.portal-layer-actions button:hover,
+.portal-layer-actions button:focus {
   background: rgba(14, 165, 233, 0.2);
 }
 
@@ -311,5 +339,8 @@ body {
   }
   .portal-main {
     padding: 28px 20px 56px;
+  }
+  .portal-grid {
+    grid-template-columns: 1fr;
   }
 }

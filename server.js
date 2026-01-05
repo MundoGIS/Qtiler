@@ -284,6 +284,7 @@ const renderPage = (req, res, viewName, locals = {}, options = {}) => {
   const payload = {
     pageLang: detectPreferredLanguage(req),
     user: req?.user || null,
+    authEnabled: typeof security.isEnabled === 'function' ? security.isEnabled() : false,
     authPluginInstallUrl: '/admin',
     proj4Presets,
     ...locals
@@ -310,6 +311,26 @@ app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
 app.use((req, res, next) => security.attachUser(req, res, next));
+
+// If the auth plugin is not enabled, proactively clear any lingering auth cookie.
+// This prevents clients from appearing "logged in" after uninstall and avoids
+// reusing stale tokens if the auth plugin is reinstalled later.
+app.use((req, res, next) => {
+  try {
+    if (typeof security.isEnabled === "function" && !security.isEnabled()) {
+      if (req.cookies && req.cookies.qtiler_token) {
+        res.clearCookie("qtiler_token", {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: !!req.secure
+        });
+      }
+    }
+  } catch {
+    // ignore
+  }
+  next();
+});
 
 // add: servir carpeta pública (sin index automático)
 const publicDir = path.join(__dirname, "public");
@@ -4472,6 +4493,9 @@ registerProjectRoutes({
   sanitizeProjectId,
   resolveProjectAccessEntry,
   readProjectAccessSnapshot,
+  deriveProjectAccess,
+  isProjectPublic,
+  buildProjectDescriptor,
   listProjects,
   findProjectById,
   projectsDir,
@@ -7457,6 +7481,20 @@ if (cluster.isPrimary || cluster.isMaster) {
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
   }
+
+  // Listen for worker requests to restart the cluster (e.g., after plugin install/uninstall)
+  cluster.on('message', (worker, msg) => {
+    if (msg && msg.cmd === 'restartAllWorkers') {
+      console.log('[Qtiler] Restarting all workers due to plugin change request');
+      for (const id in cluster.workers) {
+        try {
+          cluster.workers[id].process.kill();
+        } catch (err) {
+          console.warn('[Qtiler] Failed to kill worker', id, err?.message || err);
+        }
+      }
+    }
+  });
 
   setInterval(() => {
     for (const id in cluster.workers) {

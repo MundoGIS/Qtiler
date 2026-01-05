@@ -1,0 +1,69 @@
+
+.admin-divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+.admin-install-area {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(15, 23, 42, 0.3);
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+}
+
+.admin-install-area h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.admin-install-area p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.inline-form {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inline-form .form-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.inline-form .form-field input[type="file"] {
+  width: 100%;
+}
+
+.admin-hint {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.admin-hint a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.admin-hint a:hover {
+  text-decoration: underline;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

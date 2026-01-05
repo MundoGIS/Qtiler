@@ -5,7 +5,7 @@ PLUGINS.md
 # Logs
 logs/
 *.log
-
+info.txt
 # Cache
 cache/
 
@@ -47,3 +47,5 @@ package-qtilerauth.bat
 tools/generate-qtilerauth-license.js
 tools/inspect_png_q.py
 tools/inspect_png_raw.py
+tools/set-admin-password.mjs
+tools/package-auth-plugin.mjs

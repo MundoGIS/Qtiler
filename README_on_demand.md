@@ -11,7 +11,7 @@ It allows the server to generate and serve WMTS/XYZ tiles on demand in addition 
 
 ## Quick test
 ```powershell
-Invoke-WebRequest "http://localhost:3000/wmts/nogo/NoGO_vind_under_65ms/7/0/0.png" -OutFile test_tile.png
+Invoke-WebRequest "http://localhost:3000/wmts/project/layer/7/0/0.png" -OutFile test_tile.png
 ```
 
 ## Requirements
