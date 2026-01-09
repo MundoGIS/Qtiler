@@ -1210,6 +1210,7 @@ if project_crs is None:
 
 # determinar project extent (en project_crs)
 project_extent = None
+extent_override_provided = False
 """ Prioridad de extent override:
 1) --project_extent4 MINX MINY MAXX MAXY (evita problemas de comas/espacios)
 2) --project_extent "minx,miny,maxx,maxy" (cadena separada por comas)
@@ -1223,6 +1224,7 @@ if project_extent is None and args.project_extent4:
         parts = [float(x) for x in args.project_extent4]
         if len(parts) == 4:
             project_extent = QgsRectangle(*parts)
+            extent_override_provided = True
             if args.extent_crs:
                 try:
                     src_crs = QgsCoordinateReferenceSystem(args.extent_crs)
@@ -1240,6 +1242,7 @@ if project_extent is None and args.project_extent:
         parts = [float(x) for x in args.project_extent.split(",")]
         if len(parts) == 4:
             project_extent = QgsRectangle(*parts)
+            extent_override_provided = True
             if args.extent_crs:
                 try:
                     src_crs = QgsCoordinateReferenceSystem(args.extent_crs)
@@ -1257,6 +1260,7 @@ if project_extent is None and PROJECT_EXTENT_ENV:
         parts = [float(x) for x in PROJECT_EXTENT_ENV.split(",")]
         if len(parts) == 4:
             project_extent = QgsRectangle(*parts)
+            extent_override_provided = True
     except Exception as e:
         sys.stderr.write(json.dumps({"warning": "PROJECT_EXTENT parse failed", "details": str(e)}) + "\n")
 
@@ -1295,8 +1299,9 @@ if project_extent is None:
 if project_extent is None:
     project_extent = layer.extent()
 
-# --- FIX: preferir extent de la capa cuando se está cacheando una capa (salvo --use_project_extent) ---
-if target_mode == "layer" and not getattr(args, "use_project_extent", False):
+# --- FIX: preferir extent de la capa cuando se está cacheando una capa (salvo --use_project_extent),
+# pero NO cuando el usuario proporcionó un extent explícito (bbox desde UI/CLI/env). ---
+if target_mode == "layer" and not getattr(args, "use_project_extent", False) and not extent_override_provided:
     try:
         project_extent = layer.extent()
     except Exception:

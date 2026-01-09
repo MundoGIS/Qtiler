@@ -1136,6 +1136,44 @@ const resolveTileBaseDir = (projectId, targetMode, targetName, storageName = nul
     : path.join(cacheDir, projectId, safeName);
 };
 
+const hasAnyTileFiles = (baseDir) => {
+  if (!baseDir || typeof baseDir !== 'string') return false;
+  if (!fs.existsSync(baseDir)) return false;
+  const imageExtRe = /\.(png|jpe?g|webp)$/i;
+  try {
+    const zEntries = fs.readdirSync(baseDir, { withFileTypes: true });
+    for (const zEnt of zEntries) {
+      if (!zEnt.isDirectory()) continue;
+      if (!/^\d+$/.test(zEnt.name)) continue;
+      const zPath = path.join(baseDir, zEnt.name);
+      let xEntries;
+      try {
+        xEntries = fs.readdirSync(zPath, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const xEnt of xEntries) {
+        if (!xEnt.isDirectory()) continue;
+        if (!/^\d+$/.test(xEnt.name)) continue;
+        const xPath = path.join(zPath, xEnt.name);
+        let yEntries;
+        try {
+          yEntries = fs.readdirSync(xPath, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const yEnt of yEntries) {
+          if (!yEnt.isFile()) continue;
+          if (imageExtRe.test(yEnt.name)) return true;
+        }
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
 const pruneZoomDirectories = (baseDir, { minZoom = null, maxZoom = null } = {}) => {
   if (!baseDir || !fs.existsSync(baseDir)) return [];
   const removed = [];
@@ -3614,7 +3652,7 @@ const runExtractInfoForProject = (projectPath) => new Promise((resolve, reject) 
 
 const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload) => {
   if (!extractPayload || typeof extractPayload !== "object") {
-    return { entries: [], projectExtent: null, projectExtentWgs: null, projectCrs: null, defaultTileProfile: null };
+    return { entries: [], projectExtent: null, projectExtentWgs: null, projectCrs: null, defaultTileProfile: null, requiresAllowRemote: false };
   }
   const now = new Date().toISOString();
   const entries = [];
@@ -3726,6 +3764,7 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
   };
 
   const remoteLayerProviders = new Set(["wms", "wmts", "xyz", "tile"]);
+  let requiresAllowRemote = false;
   const layerList = Array.isArray(extractPayload.layers) ? extractPayload.layers : [];
   for (const layer of layerList) {
     if (!layer) continue;
@@ -3733,6 +3772,9 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
     if (!name) continue;
     const provider = typeof layer.provider === "string" ? layer.provider.trim().toLowerCase() : "";
     const preferProjectExtent = remoteLayerProviders.has(provider) || !!layer.remote_source;
+    if (preferProjectExtent) {
+      requiresAllowRemote = true;
+    }
     addEntry(name, "layer", {
       extent: layer.extent,
       extentWgs: layer.extent_wgs84,
@@ -3762,7 +3804,7 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       }
     : null;
 
-  return { entries, projectExtent, projectExtentWgs, projectCrs, defaultTileProfile };
+  return { entries, projectExtent, projectExtentWgs, projectCrs, defaultTileProfile, requiresAllowRemote };
 };
 
 const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false) => {
@@ -3793,7 +3835,8 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
     projectExtent,
     projectExtentWgs,
     projectCrs,
-    defaultTileProfile
+    defaultTileProfile,
+    requiresAllowRemote
   } = buildBootstrapEntriesFromExtract(projectId, projectPath, extractPayload);
   if (!entries.length) {
     return false;
@@ -3818,7 +3861,8 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
       projectCrs,
       zoomMin: BOOTSTRAP_ZOOM_MIN,
       zoomMax: BOOTSTRAP_ZOOM_MAX,
-      tileProfile: defaultTileProfile
+      tileProfile: defaultTileProfile,
+      allowRemote: requiresAllowRemote
     });
     return true;
   } catch (err) {
@@ -3863,11 +3907,13 @@ const seedProjectConfigFromBootstrap = (projectId, info = {}) => {
       const prefs = current.cachePreferences || {};
       const needsTileCrs = !prefs.tileCrs || prefs.tileCrs === BOOTSTRAP_TILE_CRS || prefs.tileCrs === "EPSG:3857";
       const needsMode = !prefs.mode || prefs.mode === "xyz";
-      if (needsTileCrs || needsMode || !prefs.updatedAt) {
+      const shouldEnableRemote = info.allowRemote === true;
+      const needsAllowRemote = shouldEnableRemote && prefs.allowRemote !== true;
+      if (needsTileCrs || needsMode || !prefs.updatedAt || needsAllowRemote) {
         patch.cachePreferences = {
           mode: info.tileProfile.scheme || prefs.mode || "xyz",
           tileCrs: info.tileProfile.tileCrs || prefs.tileCrs || BOOTSTRAP_TILE_CRS,
-          allowRemote: typeof prefs.allowRemote === "boolean" ? prefs.allowRemote : false,
+          allowRemote: shouldEnableRemote ? true : (typeof prefs.allowRemote === "boolean" ? prefs.allowRemote : false),
           throttleMs: Number.isFinite(Number(prefs.throttleMs)) ? Number(prefs.throttleMs) : 0,
           updatedAt: nowIso
         };
@@ -4293,6 +4339,38 @@ const abortGenerateCacheJobInternal = async (id, { silentAbort = false } = {}) =
           outputDir = extractOutputDirFromSpawnArgs(meta && meta.args ? meta.args : null);
         }
       } catch { meta = null; outputDir = null; }
+
+      const procAlive = (p) => {
+        if (!p) return false;
+        try { process.kill(Number(p), 0); return true; } catch { return false; }
+      };
+
+      // If we have a recorded pid (from the pid-file) but process enumeration by
+      // command line fails (common under services / restricted CIM access),
+      // attempt to kill the recorded pid tree directly.
+      if (meta && meta.pid && procAlive(meta.pid)) {
+        const metaPid = Number(meta.pid);
+        if (!silentAbort) console.log(`Abort (pid-file): killing recorded pid tree for job ${id}: pid=${metaPid}`);
+        const candidates = new Set([metaPid]);
+        try { (findDescendantPids(metaPid) || []).forEach((d) => candidates.add(Number(d))); } catch {}
+        try { (findProcessPidsByCommandLine('qgis-bin.exe') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+        try { (findProcessPidsByCommandLine('qgis') || []).forEach((p) => candidates.add(Number(p))); } catch {}
+        if (outputDir) {
+          try { (findProcessPidsByCommandLine(outputDir) || []).forEach((p) => candidates.add(Number(p))); } catch {}
+        }
+
+        const candidateList = Array.from(candidates).filter(Number.isFinite);
+        const fk = forceKillPids(candidateList);
+        if (!silentAbort) console.log(`Abort (pid-file) kill results: ${JSON.stringify(fk)}`);
+        await new Promise((r) => setTimeout(r, 600));
+        if (procAlive(metaPid)) {
+          if (!silentAbort) console.warn(`Abort (pid-file) did not terminate pid=${metaPid} for job ${id}`);
+          return { ok: false, status: 500, payload: { error: 'abort_failed', id, pid: metaPid } };
+        }
+        await killProcessesByHints({ jobId: id, projectId: meta?.project, targetName: meta?.layer || meta?.targetName, outputDir, silent: !!silentAbort });
+        try { deleteJobPidFile(id); } catch {}
+        return { ok: true, status: 200, payload: { status: 'aborted', id, orphan: true, killedPids: candidateList } };
+      }
 
       const jobPids = findProcessPidsByCommandLineAll(['generate_cache.py', jobIdToken]) || [];
       if (!jobPids.length) return { ok: false, status: 404, payload: { error: 'job not found or already finished' } };
@@ -5793,6 +5871,78 @@ function getTileBBox(z, x, y, tileSize = 256) {
   return [minx, miny, maxx, maxy];
 }
 
+const findMatrixForZoom = (tileMatrixSet, zoom) => {
+  if (!tileMatrixSet || !Array.isArray(tileMatrixSet.matrices)) return null;
+  for (const m of tileMatrixSet.matrices) {
+    if (!m) continue;
+    if (typeof m.z === 'number' && m.z === zoom) return m;
+    if (typeof m.source_level === 'number' && m.source_level === zoom) return m;
+    const idNum = Number.parseInt(m.identifier ?? m.id, 10);
+    if (Number.isFinite(idNum) && idNum === zoom) return m;
+  }
+  return null;
+};
+
+const getOriginFromTileMatrixSet = (tileMatrixSet) => {
+  if (!tileMatrixSet || typeof tileMatrixSet !== 'object') return null;
+  const origin = tileMatrixSet.top_left_corner || tileMatrixSet.topLeftCorner || tileMatrixSet.top_left || null;
+  if (!Array.isArray(origin) || origin.length !== 2) return null;
+  const ox = Number(origin[0]);
+  const oy = Number(origin[1]);
+  if (!Number.isFinite(ox) || !Number.isFinite(oy)) return null;
+  return [ox, oy];
+};
+
+const computeTileBBoxFromTileMatrixSet = (tileMatrixSet, z, x, y) => {
+  if (!tileMatrixSet) return null;
+  const origin = getOriginFromTileMatrixSet(tileMatrixSet);
+  if (!origin) return null;
+  const matrix = findMatrixForZoom(tileMatrixSet, z);
+  if (!matrix) return null;
+
+  const tileWidth = Number(tileMatrixSet.tile_width || tileMatrixSet.tileWidth || matrix.tileWidth || 256);
+  const tileHeight = Number(tileMatrixSet.tile_height || tileMatrixSet.tileHeight || matrix.tileHeight || 256);
+  if (!Number.isFinite(tileWidth) || !Number.isFinite(tileHeight) || tileWidth <= 0 || tileHeight <= 0) return null;
+
+  let res = Number(matrix.resolution);
+  if (!Number.isFinite(res) && Number.isFinite(Number(matrix.scale_denominator))) {
+    res = Number(matrix.scale_denominator) * 0.00028;
+  }
+  if (!Number.isFinite(res) || res <= 0) return null;
+
+  const [originX, originY] = origin;
+  const minx = originX + Number(x) * tileWidth * res;
+  const maxx = minx + tileWidth * res;
+  const maxy = originY - Number(y) * tileHeight * res;
+  const miny = maxy - tileHeight * res;
+  if (![minx, miny, maxx, maxy].every(Number.isFinite)) return null;
+  return [minx, miny, maxx, maxy];
+};
+
+const deriveOnDemandTileGrid = (projectId, targetMode, targetName) => {
+  try {
+    const idx = loadProjectIndexData(projectId);
+    const layers = Array.isArray(idx?.layers) ? idx.layers : [];
+    const entry = layers.find((e) => {
+      if (!e || !e.name) return false;
+      const kind = e.kind || 'layer';
+      return kind === targetMode && e.name === targetName;
+    }) || null;
+    if (!entry) return null;
+    const tileCrs = typeof entry.tile_crs === 'string' && entry.tile_crs.trim() ? entry.tile_crs.trim().toUpperCase() : null;
+    let tileMatrixSet = entry.tile_matrix_set || entry.tileMatrixSet || null;
+    if (!tileMatrixSet && typeof entry.tile_matrix_preset === 'string' && entry.tile_matrix_preset.trim()) {
+      const preset = getTileMatrixPresetRaw(entry.tile_matrix_preset.trim());
+      if (preset && typeof preset === 'object') {
+        tileMatrixSet = preset;
+      }
+    }
+    return { tileCrs, tileMatrixSet, entry };
+  } catch {
+    return null;
+  }
+};
+
 export { getTileBBox };
 // --- Control de concurrencia y cola FIFO para generación de tiles ---
 const MAX_CONCURRENT_TILE_JOBS = 2; // Ajusta según capacidad del servidor
@@ -5841,7 +5991,33 @@ app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
   try {
     const p = req.params.project;
     const pIndex = path.join(cacheDir, p, "index.json");
-    if (fs.existsSync(pIndex)) return res.sendFile(pIndex);
+    if (fs.existsSync(pIndex)) {
+      try {
+        const raw = fs.readFileSync(pIndex, 'utf8');
+        const data = raw ? JSON.parse(raw) : null;
+        if (data && typeof data === 'object') {
+          const layers = Array.isArray(data.layers) ? data.layers : [];
+          // Compute a cheap/accurate "has_tiles" boolean for UI.
+          // This avoids relying on tile_count, which may be absent for on-demand caches.
+          data.layers = layers.map((entry) => {
+            if (!entry || typeof entry !== 'object') return entry;
+            const out = { ...entry };
+            const count = Number(out.tile_count ?? out.tiles ?? out.tileCount);
+            if (Number.isFinite(count) && count > 0) {
+              out.has_tiles = true;
+              return out;
+            }
+            out.has_tiles = hasAnyTileFiles(out.path);
+            return out;
+          });
+          return res.json(data);
+        }
+      } catch (err) {
+        console.warn('Failed to read/augment index.json for', p, err);
+        // fall through to sendFile as last resort
+      }
+      return res.sendFile(pIndex);
+    }
     // Auto-create minimal index if directory exists or project found
     const proj = findProjectById(p);
     const pDir = path.join(cacheDir, p);
@@ -6379,8 +6555,22 @@ function queueTileRender(params, filePath, cb) {
   const projFile = resolveProjectFilePath(params.project);
   const projectPath = projFile || path.resolve(projectsDir, `${params.project}.qgz`);
 
-  // Calcular BBOX aquí (Node.js es muy rápido para matemáticas simples)
-  const bbox = getTileBBox(Number(params.z), Number(params.x), Number(params.y));
+  // Calcular BBOX en el CRS del tile grid si existe (WMTS no-3857), si no, fallback EPSG:3857.
+  const targetMode = params.targetMode || (params.theme ? 'theme' : 'layer');
+  const targetName = params.theme || params.layer || params.name || null;
+  let tileCrs = null;
+  let bbox = null;
+  if (params.project && targetName) {
+    const grid = deriveOnDemandTileGrid(params.project, targetMode, targetName);
+    if (grid && grid.tileCrs) tileCrs = grid.tileCrs;
+    if (grid && grid.tileMatrixSet) {
+      bbox = computeTileBBoxFromTileMatrixSet(grid.tileMatrixSet, Number(params.z), Number(params.x), Number(params.y));
+    }
+  }
+  if (!bbox) {
+    bbox = getTileBBox(Number(params.z), Number(params.x), Number(params.y));
+    if (!tileCrs) tileCrs = 'EPSG:3857';
+  }
 
   const task = {
     project_path: projectPath,
@@ -6389,6 +6579,7 @@ function queueTileRender(params, filePath, cb) {
     x: Number(params.x),
     y: Number(params.y),
     bbox: bbox,
+    tile_crs: tileCrs,
     layer: params.layer,
     theme: params.theme,
     // Pasar preset si existe, para casos WMTS complejos

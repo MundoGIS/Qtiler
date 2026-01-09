@@ -3295,13 +3295,22 @@
       }
 
       function syncRemoteButtons(){
-        if (!allowRemoteCheckbox) return;
         const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
-        const active = allowRemoteCheckbox.checked || isAdminUser;
+        const cfgAllowRemote = (() => {
+          try {
+            if (!activeProjectId) return false;
+            const cfg = projectConfigs.get(activeProjectId);
+            return cfg && cfg.cachePreferences && cfg.cachePreferences.allowRemote === true;
+          } catch (e) {
+            return false;
+          }
+        })();
+        const allowChecked = allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : cfgAllowRemote;
+        const active = allowChecked || isAdminUser;
         document.querySelectorAll('button[data-remote="1"]').forEach(btn => {
           btn.disabled = !active;
           if (active) {
-            btn.title = isAdminUser && !allowRemoteCheckbox.checked ? 'Generate cache (admin override)' : 'Generate cache';
+            btn.title = isAdminUser && !allowChecked ? 'Generate cache (admin override)' : 'Generate cache';
             btn.setAttribute('aria-label', btn.title);
           } else {
             btn.title = 'Remote layer. Enable "Allow remote" to cache.';
@@ -4083,7 +4092,8 @@
           const hasCacheEntry = !!cachedEntry;
           const tileCountRaw = cachedEntry ? (cachedEntry.tile_count ?? cachedEntry.tiles ?? cachedEntry.tileCount) : null;
           const tileCount = Number.isFinite(Number(tileCountRaw)) ? Number(tileCountRaw) : 0;
-          const hasCachedTiles = hasCacheEntry && tileCount > 0;
+          const hasTilesFlag = cachedEntry ? (cachedEntry.has_tiles ?? cachedEntry.hasTiles) : null;
+          const hasCachedTiles = hasCacheEntry && (tileCount > 0 || hasTilesFlag === true);
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
           const scheduleSummary = describeSchedule(scheduleObj);
@@ -4191,10 +4201,21 @@
             genBtn.addEventListener('click', () => generateCache(genBtn, project.id, l.name, l, { recache: false, cachedEntry }));
           }
           if (l.cacheable === false) {
-            genBtn.disabled = true;
-            genBtn.title = 'Remote layer. Enable "Allow remote" to cache.';
-            // if user toggles allow_remote later, we re-enable dynamically
             genBtn.dataset.remote = '1';
+            const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+            const cfgAllowRemote = (() => {
+              try {
+                const cfg = projectConfigs.get(project.id);
+                return cfg && cfg.cachePreferences && cfg.cachePreferences.allowRemote === true;
+              } catch (e) {
+                return false;
+              }
+            })();
+            const allowRemoteActive = (allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : cfgAllowRemote) || isAdminUser;
+            genBtn.disabled = !allowRemoteActive;
+            genBtn.title = allowRemoteActive
+              ? (isAdminUser && allowRemoteCheckbox && !allowRemoteCheckbox.checked ? 'Generate cache (admin override)' : 'Generate cache')
+              : 'Remote layer. Enable "Allow remote" to cache.';
           }
 
           if (isAdmin) {

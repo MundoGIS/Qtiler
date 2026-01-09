@@ -175,7 +175,19 @@ def process_task(params):
             # Si no hay layers explicitas, renderizar todo el proyecto (útil para temas globales)
             settings.setLayers(proj.layerTreeRoot().layerOrder())
 
-        settings.setDestinationCrs(proj.crs()) # O params['crs'] si lo pasas
+        # Render in tile CRS when provided (so bbox matches WMTS/XYZ grid).
+        dest_crs = None
+        tile_crs_raw = params.get('tile_crs')
+        if isinstance(tile_crs_raw, str) and tile_crs_raw.strip():
+            try:
+                candidate = QgsCoordinateReferenceSystem(tile_crs_raw.strip())
+                if candidate.isValid():
+                    dest_crs = candidate
+            except Exception:
+                dest_crs = None
+        if dest_crs is None:
+            dest_crs = proj.crs()
+        settings.setDestinationCrs(dest_crs)
         settings.setBackgroundColor(QColor(0, 0, 0, 0))
         settings.setOutputSize(QSize(img_size, img_size))
         
