@@ -707,6 +707,10 @@
     };
 
     // When the viewer is closed/navigated away, stop any running cache job.
+    // IMPORTANT: Avoid aborting when the page is put into the Back/Forward Cache (BFCache).
+    // If we abort on `pagehide` with `event.persisted === true`, then navigating back can
+    // restore the same JS state (same sid) and the server will reject on-demand renders
+    // for that sid for a few minutes.
     let closeAbortSent = false;
     const handleCloseAbort = () => {
       if (closeAbortSent) return;
@@ -714,7 +718,10 @@
       abortViewerSession();
       abortCurrentCacheJob();
     };
-    window.addEventListener('pagehide', handleCloseAbort);
+    window.addEventListener('pagehide', (event) => {
+      if (event && event.persisted) return;
+      handleCloseAbort();
+    });
     window.addEventListener('beforeunload', handleCloseAbort);
 
     refreshOsmControlLabel = () => {

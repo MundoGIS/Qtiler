@@ -916,6 +916,76 @@ const deepMerge = (target, source) => {
   return target;
 };
 
+const readJsonFile = (filePath) => {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  const raw = fs.readFileSync(filePath, "utf8");
+  if (!raw || !raw.trim()) return null;
+  return JSON.parse(raw);
+};
+
+const readJsonFileWithBackup = (filePath) => {
+  const backupPath = `${filePath}.bak`;
+  try {
+    const primary = readJsonFile(filePath);
+    if (primary != null) return primary;
+  } catch (err) {
+    try {
+      const backup = readJsonFile(backupPath);
+      if (backup != null) {
+        console.warn("[json] Primary JSON unreadable; using backup", { filePath, backupPath, error: err?.message || err });
+        return backup;
+      }
+    } catch (backupErr) {
+      console.warn("[json] Primary+backup unreadable", { filePath, backupPath, error: backupErr?.message || backupErr });
+    }
+    throw err;
+  }
+
+  // Primary missing/empty: this can happen during atomic swaps.
+  try {
+    const backup = readJsonFile(backupPath);
+    if (backup != null) {
+      return backup;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
+const writeFileAtomicWithBackup = (filePath, content) => {
+  if (!filePath) throw new Error("writeFileAtomicWithBackup: missing filePath");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  const backupPath = `${filePath}.bak`;
+  fs.writeFileSync(tempPath, content, "utf8");
+  try {
+    if (fs.existsSync(backupPath)) {
+      try { fs.rmSync(backupPath, { force: true }); } catch { }
+    }
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.renameSync(filePath, backupPath);
+      } catch {
+        // If rename fails (file in use), fall back to copy.
+        try { fs.copyFileSync(filePath, backupPath); } catch { }
+      }
+    }
+  } catch {
+    // best-effort backup
+  }
+  try {
+    if (fs.existsSync(filePath)) {
+      try { fs.rmSync(filePath, { force: true }); } catch { }
+    }
+    fs.renameSync(tempPath, filePath);
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      try { fs.rmSync(tempPath, { force: true }); } catch { }
+    }
+  }
+};
+
 const serviceMetadataDefaults = {
   serviceIdentification: {
     title: "Local WMTS",
@@ -1074,17 +1144,15 @@ const getProjectIndexPath = (projectId) => path.join(cacheDir, projectId, "index
 
 const loadProjectIndexData = (projectId) => {
   const indexPath = getProjectIndexPath(projectId);
-  if (!fs.existsSync(indexPath)) {
+  try {
+    const parsed = readJsonFileWithBackup(indexPath);
+    if (parsed) return parsed;
     return {
       project: null,
       id: projectId,
       created: new Date().toISOString(),
       layers: []
     };
-  }
-  try {
-    const raw = fs.readFileSync(indexPath, "utf8");
-    return raw ? JSON.parse(raw) : { project: null, id: projectId, layers: [] };
   } catch (err) {
     console.warn("Failed to read index for", projectId, err);
     return { project: null, id: projectId, layers: [] };
@@ -1093,8 +1161,7 @@ const loadProjectIndexData = (projectId) => {
 
 const writeProjectIndexData = (projectId, data) => {
   const indexPath = getProjectIndexPath(projectId);
-  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-  fs.writeFileSync(indexPath, JSON.stringify(data, null, 2), "utf8");
+  writeFileAtomicWithBackup(indexPath, JSON.stringify(data, null, 2));
 };
 
 const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => {
@@ -1461,18 +1528,15 @@ const readProjectConfig = (projectId, { useCache = true } = {}) => {
   const defaults = defaultProjectConfig(projectId);
   const configPath = getProjectConfigPath(projectId);
   let config = { ...defaults };
-  if (fs.existsSync(configPath)) {
-    try {
-      const raw = fs.readFileSync(configPath, "utf8");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        config = deepMerge({ ...defaults }, parsed || {});
-        config.projectId = projectId;
-        if (!config.createdAt) config.createdAt = config.updatedAt || new Date().toISOString();
-      }
-    } catch (err) {
-      console.error("Failed to read project config", projectId, err);
+  try {
+    const parsed = readJsonFileWithBackup(configPath);
+    if (parsed) {
+      config = deepMerge({ ...defaults }, parsed || {});
+      config.projectId = projectId;
+      if (!config.createdAt) config.createdAt = config.updatedAt || new Date().toISOString();
     }
+  } catch (err) {
+    console.error("Failed to read project config", projectId, err);
   }
   projectConfigCache.set(projectId, config);
   return config;
@@ -1497,7 +1561,7 @@ const writeProjectConfig = (projectId, config, { skipReschedule = false } = {}) 
   } catch (e) {
     // ignore logging errors
   }
-  fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf8");
+  writeFileAtomicWithBackup(configPath, JSON.stringify(merged, null, 2));
   projectConfigCache.set(projectId, merged);
   if (!skipReschedule) {
     scheduleProjectRecache(projectId, merged);
@@ -2172,6 +2236,89 @@ const computeNextScheduleIso = (schedule, { now = Date.now() } = {}) => {
   return nextTs ? new Date(nextTs).toISOString() : null;
 };
 
+const buildScheduledFallbackParams = (projectId, targetMode, targetName, config, { zoomMin = null, zoomMax = null } = {}) => {
+  if (!projectId || !targetName) return null;
+  const cfg = config && typeof config === 'object' ? config : readProjectConfig(projectId, { useCache: false });
+  const prefs = cfg?.cachePreferences || {};
+  const out = {};
+
+  const resolvedZoomMin = Number.isFinite(Number(zoomMin)) ? Math.floor(Number(zoomMin)) : (Number.isFinite(Number(cfg?.zoom?.min)) ? Math.floor(Number(cfg.zoom.min)) : null);
+  const resolvedZoomMax = Number.isFinite(Number(zoomMax)) ? Math.floor(Number(zoomMax)) : (Number.isFinite(Number(cfg?.zoom?.max)) ? Math.floor(Number(cfg.zoom.max)) : null);
+  if (resolvedZoomMin == null || resolvedZoomMax == null) {
+    return null;
+  }
+  out.zoom_min = resolvedZoomMin;
+  out.zoom_max = Math.max(resolvedZoomMax, resolvedZoomMin);
+
+  // Extent
+  const bbox = Array.isArray(cfg?.extent?.bbox) && cfg.extent.bbox.length === 4 ? cfg.extent.bbox : null;
+  if (bbox && bbox.every((n) => Number.isFinite(Number(n)))) {
+    out.project_extent = `${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}`;
+    if (cfg?.extent?.crs) out.extent_crs = cfg.extent.crs;
+  }
+
+  // Basic options
+  out.allow_remote = prefs.allowRemote === true;
+  if (Number.isFinite(Number(prefs.throttleMs)) && Number(prefs.throttleMs) > 0) {
+    out.throttle_ms = Math.floor(Number(prefs.throttleMs));
+  }
+  out.xyz_mode = 'partial';
+
+  // Use index.json to capture CRS/preset when available.
+  let indexEntry = null;
+  try {
+    const indexData = loadProjectIndexData(projectId);
+    const layers = Array.isArray(indexData?.layers) ? indexData.layers : [];
+    indexEntry = layers.find((e) => e && e.name === targetName && (e.kind || 'layer') === targetMode) || null;
+  } catch {
+    indexEntry = null;
+  }
+
+  const normalizedTileCrs = (() => {
+    const candidates = [
+      indexEntry?.tile_crs,
+      indexEntry?.crs,
+      prefs.tileCrs,
+      prefs.tile_crs,
+      detectProjectCrs(projectId)
+    ];
+    for (const c of candidates) {
+      if (typeof c !== 'string') continue;
+      const t = c.trim();
+      if (t) return t.toUpperCase();
+    }
+    return null;
+  })();
+  if (normalizedTileCrs) {
+    out.tile_crs = normalizedTileCrs;
+  }
+
+  const presetFromIndex = typeof indexEntry?.tile_matrix_preset === 'string' ? indexEntry.tile_matrix_preset.trim() : '';
+  const derivedPreset = (!presetFromIndex && normalizedTileCrs) ? (deriveTileMatrixInfoForCrs(normalizedTileCrs)?.presetId || '') : '';
+  const effectivePreset = presetFromIndex || derivedPreset;
+  if (effectivePreset) {
+    out.tile_matrix_preset = effectivePreset;
+    out.wmts = true;
+  }
+
+  // Scheme note: generate_cache.py only accepts {auto, xyz, custom}. WMTS is enabled via --wmts + preset.
+  // Respect cachePreferences.mode when set, otherwise infer from CRS.
+  const prefMode = typeof prefs.mode === 'string' ? prefs.mode.trim().toLowerCase() : '';
+  if (prefMode === 'xyz') {
+    out.scheme = 'xyz';
+  } else if (prefMode === 'wmts') {
+    out.scheme = 'custom';
+    out.wmts = true;
+  } else if (normalizedTileCrs) {
+    out.scheme = normalizedTileCrs === 'EPSG:3857' ? 'xyz' : 'custom';
+    if (out.scheme === 'custom') out.wmts = true;
+  } else {
+    out.scheme = 'auto';
+  }
+
+  return out;
+};
+
 const runScheduledLayer = async (projectId, layerName, config) => {
   const currentConfig = config || readProjectConfig(projectId, { useCache: false });
   const layerEntry = currentConfig.layers && currentConfig.layers[layerName] ? currentConfig.layers[layerName] : null;
@@ -2194,9 +2341,17 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     schedule.nextRunAt = schedule.enabled === true ? computeNextScheduleIso(schedule, { now: Date.now() + 5000 }) : null;
   };
 
-  if (!layerEntry.lastParams || typeof layerEntry.lastParams !== "object") {
+  let effectiveLastParams = layerEntry.lastParams && typeof layerEntry.lastParams === "object" ? layerEntry.lastParams : null;
+  if (!effectiveLastParams) {
+    effectiveLastParams = buildScheduledFallbackParams(projectId, 'layer', layerName, currentConfig, {
+      zoomMin: scheduleMin,
+      zoomMax: scheduleMax
+    });
+  }
+  if (!effectiveLastParams || typeof effectiveLastParams !== 'object') {
     const message = "Skipped automatic recache: no parameters recorded";
     appendHistory("skipped", message);
+    logProjectEvent(projectId, `Scheduled recache skipped for ${layerName}: ${message}`, "warn");
     const updated = updateProjectConfig(projectId, {
       layers: {
         [layerName]: {
@@ -2223,7 +2378,7 @@ const runScheduledLayer = async (projectId, layerName, config) => {
   let status = "success";
   let message = "Automatic recache completed";
   try {
-    const params = { ...layerEntry.lastParams, project: projectId, layer: layerName };
+    const params = { ...effectiveLastParams, project: projectId, layer: layerName };
     params.project = projectId;
     params.layer = layerName;
     params.run_reason = "scheduled-layer";
@@ -2232,6 +2387,14 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     params.batch_index = 0;
     if (scheduleMin != null) params.zoom_min = scheduleMin;
     if (scheduleMax != null) params.zoom_max = scheduleMax;
+
+    // If the project allows remote providers, enforce allow_remote for scheduled runs.
+    // (generate_cache.py rejects remote WMS/WMTS/XYZ unless allow_remote is enabled.)
+    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote === true;
+    if (projectAllowsRemote && params.allow_remote !== true) {
+      params.allow_remote = true;
+    }
+
     const result = await runCacheJobViaHttp(params, {});
     const rawStatus = result && result.status ? String(result.status) : "completed";
     if (rawStatus !== "completed") {
@@ -2253,6 +2416,7 @@ const runScheduledLayer = async (projectId, layerName, config) => {
     layers: {
       [layerName]: {
         schedule,
+        lastParams: effectiveLastParams,
         lastResult: status,
         lastMessage: message,
         lastRunAt: nowIso
@@ -2284,9 +2448,17 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     schedule.nextRunAt = schedule.enabled === true ? computeNextScheduleIso(schedule, { now: Date.now() + 5000 }) : null;
   };
 
-  if (!themeEntry.lastParams || typeof themeEntry.lastParams !== "object") {
+  let effectiveLastParams = themeEntry.lastParams && typeof themeEntry.lastParams === "object" ? themeEntry.lastParams : null;
+  if (!effectiveLastParams) {
+    effectiveLastParams = buildScheduledFallbackParams(projectId, 'theme', themeName, currentConfig, {
+      zoomMin: scheduleMin,
+      zoomMax: scheduleMax
+    });
+  }
+  if (!effectiveLastParams || typeof effectiveLastParams !== 'object') {
     const message = "Skipped automatic recache: no parameters recorded";
     appendHistory("skipped", message);
+    logProjectEvent(projectId, `Scheduled recache skipped for theme ${themeName}: ${message}`, "warn");
     const updated = updateProjectConfig(projectId, {
       themes: {
         [themeName]: {
@@ -2311,7 +2483,7 @@ const runScheduledTheme = async (projectId, themeName, config) => {
   let status = "success";
   let message = "Automatic theme recache completed";
   try {
-    const params = { ...themeEntry.lastParams, project: projectId, theme: themeName };
+    const params = { ...effectiveLastParams, project: projectId, theme: themeName };
     params.project = projectId;
     params.theme = themeName;
     params.run_reason = "scheduled-theme";
@@ -2320,6 +2492,12 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     params.batch_index = 0;
     if (scheduleMin != null) params.zoom_min = scheduleMin;
     if (scheduleMax != null) params.zoom_max = scheduleMax;
+
+    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote === true;
+    if (projectAllowsRemote && params.allow_remote !== true) {
+      params.allow_remote = true;
+    }
+
     const result = await runCacheJobViaHttp(params, {});
     const rawStatus = result && result.status ? String(result.status) : "completed";
     if (rawStatus !== "completed") {
@@ -2336,6 +2514,7 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     themes: {
       [themeName]: {
         schedule,
+        lastParams: effectiveLastParams,
         lastResult: status,
         lastMessage: message,
         lastRunAt: nowIso
@@ -4834,6 +5013,11 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     tileMatrixPreset: tileMatrixPresetCamel = null
   } = req.body;
 
+  // Backward-compatibility: older callers may send scheme=wmts, but generate_cache.py expects {auto, xyz, custom}.
+  const normalizedScheme = (typeof scheme === 'string' && scheme.trim().toLowerCase() === 'wmts')
+    ? 'custom'
+    : scheme;
+
   const normalizedTileCrs = (typeof tile_crs === "string" && tile_crs.trim().toUpperCase() === "AUTO")
     ? null
     : tile_crs;
@@ -4947,7 +5131,7 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
     "--publish_zoom_max", String(publishZoomMax),
     "--output_dir", outBase,
     "--index_path", projectIndex,
-    "--scheme", scheme,
+    "--scheme", normalizedScheme,
     "--xyz_mode", xyz_mode
   );
   if (normalizedTileCrs) {
@@ -5951,6 +6135,9 @@ app.get(
       return res.status(404).send("Layer not available");
     }
 
+    // GIS clients (incl. QGIS) benefit a lot from HTTP caching.
+    setWmtsTileCacheHeaders(res);
+
     const styleId = String(req.params.styleId || "").toLowerCase();
     const requestedSetId = String(req.params.setId || "");
     const tileMatrixId = String(req.params.tileMatrix || "");
@@ -6618,6 +6805,33 @@ const RENDER_TIMEOUT_MS = Number.isFinite(Number(process.env.RENDER_TIMEOUT_MS |
 const RENDER_TILE_RETRIES = Number.isFinite(Number(process.env.RENDER_TILE_RETRIES || 1)) ? Number(process.env.RENDER_TILE_RETRIES || 1) : 1;
 const activeRenders = new Set();
 const renderQueue = [];
+// Coalesce duplicate in-flight tile requests (common with QGIS) without polling.
+// key -> { filePath: string, callbacks: Function[] }
+const inflightTileWaiters = new Map();
+
+// Avoid excessive project-config/index writes when a client requests many tiles.
+const ON_DEMAND_RECORD_THROTTLE_MS = (() => {
+  const raw = process.env.ON_DEMAND_RECORD_THROTTLE_MS;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
+  return 5000;
+})();
+const lastOnDemandRecordAt = new Map();
+
+const WMTS_TILE_CACHE_MAX_AGE_S = (() => {
+  const raw = process.env.WMTS_TILE_CACHE_MAX_AGE_S ?? process.env.TILE_CACHE_MAX_AGE_S;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
+  return 3600; // 1h by default (safe-ish for on-demand tiles)
+})();
+
+const setWmtsTileCacheHeaders = (res) => {
+  try {
+    if (!res || typeof res.setHeader !== 'function') return;
+    // Cacheable for GIS clients; tiles are file-backed and stable per z/x/y until cache is explicitly cleared.
+    res.setHeader('Cache-Control', `public, max-age=${WMTS_TILE_CACHE_MAX_AGE_S}`);
+  } catch {}
+};
 // Track viewer sessions that requested on-demand tile generation.
 // This allows us to stop on-demand rendering when a viewer tab is closed.
 const abortedOnDemandSessions = new Set();
@@ -6874,37 +7088,34 @@ function queueTileRender(params, filePath, cb) {
   // Generar clave única para evitar duplicados simultáneos
   const key = `${params.project}|${params.layer || params.theme}|${params.z}|${params.x}|${params.y}`;
 
-  // 1. Registro de métricas (Igual que antes)
+  // 1. Registro de métricas (throttled to reduce disk churn under heavy clients like QGIS)
   try {
     const targetMode = params.targetMode || (params.theme ? "theme" : "layer");
     const targetName = params.theme || params.layer || params.name || null;
     if (params.project && targetName) {
-      recordOnDemandRequest(params.project, targetMode, targetName);
+      const recordKey = `${params.project}|${targetMode}|${targetName}`;
+      const now = Date.now();
+      const last = lastOnDemandRecordAt.get(recordKey) || 0;
+      if (ON_DEMAND_RECORD_THROTTLE_MS <= 0 || (now - last) >= ON_DEMAND_RECORD_THROTTLE_MS) {
+        lastOnDemandRecordAt.set(recordKey, now);
+        recordOnDemandRequest(params.project, targetMode, targetName);
+      }
     }
   } catch (err) {
     console.warn("Failed to record on-demand metadata", { project: params.project, layer: params.layer || params.theme, error: err?.message || err });
   }
 
-  // 2. Control de concurrencia para la misma tesela (Polling)
-  if (activeRenders.has(key)) {
-    let tries = 0;
-    const interval = setInterval(() => {
-      // Si el archivo aparece, terminamos
-      if (fs.existsSync(filePath)) {
-        clearInterval(interval);
-        cb(null, filePath);
-      } else if (++tries > 300) { // Esperar hasta 5 minutos (300 * 1000ms) si la cola está llena
-        clearInterval(interval);
-        cb(new Error('Timeout esperando tile (deduplicación)'), null);
-      }
-    }, 1000); 
-    if (sessionId) {
-      const set = onDemandPollersBySession.get(sessionId) || new Set();
-      set.add(interval);
-      onDemandPollersBySession.set(sessionId, set);
+  // 2. Control de concurrencia para la misma tesela (no polling): coalesce callbacks.
+  const inflight = inflightTileWaiters.get(key);
+  if (inflight) {
+    try {
+      inflight.callbacks.push(cb);
+    } catch {
+      try { cb(new Error('dedupe_failed'), null); } catch {}
     }
     return;
   }
+  inflightTileWaiters.set(key, { filePath, callbacks: [cb] });
 
   // 3. Marcar como activa
   activeRenders.add(key);
@@ -6955,6 +7166,8 @@ function queueTileRender(params, filePath, cb) {
     .then((result) => {
       // Limpiar estado
       activeRenders.delete(key);
+      const waiters = inflightTileWaiters.get(key);
+      inflightTileWaiters.delete(key);
       
       if (result.status === 'error' || result.error) {
         throw new Error(result.message || result.error || "Worker error");
@@ -6967,11 +7180,19 @@ function queueTileRender(params, filePath, cb) {
       }
       
       // Éxito: devolver ruta del archivo
-      cb(null, filePath);
+      if (waiters && Array.isArray(waiters.callbacks)) {
+        for (const fn of waiters.callbacks) {
+          try { fn(null, filePath); } catch {}
+        }
+      } else {
+        cb(null, filePath);
+      }
     })
     .catch((err) => {
       // Error
       activeRenders.delete(key);
+      const waiters = inflightTileWaiters.get(key);
+      inflightTileWaiters.delete(key);
       console.error(`[Pool Error] ${params.project} ${params.z}/${params.x}/${params.y}:`, err.message);
       
       // Intentar limpiar archivo corrupto/vacío si se creó
@@ -6979,7 +7200,13 @@ function queueTileRender(params, filePath, cb) {
         try { fs.unlinkSync(filePath); } catch(e) {} 
       }
       
-      cb(err, null);
+      if (waiters && Array.isArray(waiters.callbacks)) {
+        for (const fn of waiters.callbacks) {
+          try { fn(err, null); } catch {}
+        }
+      } else {
+        cb(err, null);
+      }
     });
 }
 
@@ -7711,11 +7938,13 @@ app.get("/wmts", (req, res, next) => {
                         if (!res.headersSent) res.status(500).send("Generation failed");
                     } else {
                         // Éxito: enviar archivo generado
+                    setWmtsTileCacheHeaders(res);
                         if (!res.headersSent) res.sendFile(outFile);
                     }
                 });
             } else {
                 // EXISTE: Enviar archivo
+                setWmtsTileCacheHeaders(res);
                 if (!res.headersSent) res.sendFile(filePath);
             }
         });
