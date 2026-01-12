@@ -3412,8 +3412,13 @@ function extractJsonLike(text) {
 }
 
 const sanitizeExtentCoordinates = (value) => {
-  if (!Array.isArray(value) || value.length !== 4) return null;
-  const parsed = value.map((coordinate) => {
+  // Accept both raw arrays and extract_info shapes like { bbox: [...] } or { extent: [...] }
+  const candidate = (value && typeof value === 'object' && !Array.isArray(value))
+    ? (Array.isArray(value.bbox) ? value.bbox : (Array.isArray(value.extent) ? value.extent : null))
+    : value;
+
+  if (!Array.isArray(candidate) || candidate.length !== 4) return null;
+  const parsed = candidate.map((coordinate) => {
     const num = Number(coordinate);
     return Number.isFinite(num) ? num : null;
   });
@@ -3572,6 +3577,170 @@ const createAutoGridPreset = (crs, extent, projectId = null) => {
   }
 };
 
+const buildScaleDerivedPreset = ({
+  crs,
+  extent,
+  extentWgs84 = null,
+  scales = [],
+  projectId = null,
+  tileSize = 256
+} = {}) => {
+  if (!crs || !Array.isArray(extent) || extent.length < 4) return null;
+  const cleanExtent = sanitizeExtentCoordinates(extent);
+  if (!cleanExtent) return null;
+  const unique = Array.isArray(scales) ? Array.from(new Set(scales.map((s) => Number(s)).filter((n) => Number.isFinite(n) && n > 0))) : [];
+  if (!unique.length) return null;
+
+  const width = cleanExtent[2] - cleanExtent[0];
+  const height = cleanExtent[3] - cleanExtent[1];
+  const maxDim = Math.max(Math.abs(width), Math.abs(height));
+  if (!Number.isFinite(maxDim) || maxDim <= 0) return null;
+
+  const normalized = normalizeCrsCode(crs) || crs;
+  const isGeographic = normalized === 'EPSG:4326' || normalized === 'CRS:84';
+  let lat0 = 0;
+  if (Array.isArray(extentWgs84) && extentWgs84.length === 4) {
+    const candidate = (Number(extentWgs84[1]) + Number(extentWgs84[3])) / 2;
+    if (Number.isFinite(candidate)) lat0 = Math.max(-89.9, Math.min(89.9, candidate));
+  }
+  const metersPerDegreeLon = 111319.49079327358 * Math.max(1e-6, Math.cos((lat0 * Math.PI) / 180));
+
+  const toResolution = (scaleDen) => {
+    const s = Number(scaleDen);
+    if (!Number.isFinite(s) || s <= 0) return null;
+    const metersPerPx = s * 0.00028;
+    return isGeographic ? (metersPerPx / metersPerDegreeLon) : metersPerPx;
+  };
+  const toScaleDen = (resolution) => {
+    const r = Number(resolution);
+    if (!Number.isFinite(r) || r <= 0) return null;
+    const metersPerPx = isGeographic ? (r * metersPerDegreeLon) : r;
+    return metersPerPx / 0.00028;
+  };
+
+  // Sort scales from coarse -> fine.
+  const sortedScales = unique.sort((a, b) => b - a);
+  let resolutions = sortedScales.map(toResolution).filter((r) => Number.isFinite(r) && r > 0);
+  if (!resolutions.length) return null;
+
+  // Ensure z=0 covers the project extent (otherwise on-demand/viewer will clip).
+  const requiredRes0 = maxDim / tileSize;
+  if (Number.isFinite(requiredRes0) && requiredRes0 > 0) {
+    const res0 = resolutions[0];
+    if (!Number.isFinite(res0) || res0 < requiredRes0) {
+      const syntheticScale = toScaleDen(requiredRes0);
+      if (syntheticScale && Number.isFinite(syntheticScale) && syntheticScale > 0) {
+        resolutions = [requiredRes0, ...resolutions];
+      } else {
+        resolutions = [requiredRes0, ...resolutions];
+      }
+    }
+  }
+
+  // Build WMTS-like matrices. Matrix width/height must reflect the extent at each resolution.
+  // This is important for Leaflet bounds math and for WMTS clients (e.g. QGIS).
+  const extentWidth = Math.abs(cleanExtent[2] - cleanExtent[0]);
+  const extentHeight = Math.abs(cleanExtent[3] - cleanExtent[1]);
+  const matrices = resolutions.map((res, z) => {
+    const r = Number(res);
+    const spanX = Number.isFinite(extentWidth) && Number.isFinite(r) && r > 0 ? (extentWidth / (tileSize * r)) : 1;
+    const spanY = Number.isFinite(extentHeight) && Number.isFinite(r) && r > 0 ? (extentHeight / (tileSize * r)) : 1;
+    const matrixWidth = Math.max(1, Math.ceil(spanX));
+    const matrixHeight = Math.max(1, Math.ceil(spanY));
+    const scaleDen = toScaleDen(r) || sortedScales[Math.min(z, sortedScales.length - 1)] || (r / 0.00028);
+    return {
+      identifier: String(z),
+      id: String(z),
+      z,
+      source_level: z,
+      resolution: r,
+      scale_denominator: scaleDen,
+      matrix_width: matrixWidth,
+      matrix_height: matrixHeight,
+      tileWidth: tileSize,
+      tileHeight: tileSize,
+      topLeftCorner: [cleanExtent[0], cleanExtent[3]],
+      top_left: [cleanExtent[0], cleanExtent[3]]
+    };
+  });
+
+  const safeCrs = String(normalized).replace(/[^a-zA-Z0-9]/g, "_");
+  const safeProject = projectId ? `_${String(projectId).replace(/[^a-zA-Z0-9]/g, "_")}` : "";
+  const id = `SCALES_${safeCrs}${safeProject}`;
+  return {
+    id,
+    preset: {
+      id,
+      title: `Project scales for ${normalized}${projectId ? ` (${projectId})` : ''}`,
+      supported_crs: [normalized],
+      coordinateReferenceSystem: normalized,
+      tile_width: tileSize,
+      tile_height: tileSize,
+      axis_order: "xy",
+      top_left_corner: [cleanExtent[0], cleanExtent[3]],
+      topLeftCorner: [cleanExtent[0], cleanExtent[3]],
+      matrices,
+      matrixSet: matrices,
+      project_id: projectId,
+      scale_denominators: sortedScales,
+      derived_from: "project_scales"
+    },
+    zoomMin: 0,
+    zoomMax: Math.max(0, matrices.length - 1)
+  };
+};
+
+const ensureScaleGridPreset = ({ crs, extent, extentWgs84, scales, projectId }) => {
+  const derived = buildScaleDerivedPreset({ crs, extent, extentWgs84, scales, projectId });
+  if (!derived) return null;
+  try {
+    if (!fs.existsSync(tileGridDir)) {
+      fs.mkdirSync(tileGridDir, { recursive: true });
+    }
+    const filename = `${derived.id}.json`;
+    const filePath = path.join(tileGridDir, filename);
+    const nextContent = JSON.stringify(derived.preset, null, 2);
+    let changed = true;
+    if (fs.existsSync(filePath)) {
+      try {
+        const prev = fs.readFileSync(filePath, 'utf8');
+        changed = (prev || '') !== nextContent;
+      } catch {
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(filePath, nextContent, 'utf8');
+      console.log(`[scales-grid] Updated project scale preset ${derived.id} -> ${filePath}`);
+      invalidateTileGridCaches();
+    }
+    return derived;
+  } catch (err) {
+    console.warn('[scales-grid] Failed to persist scale preset', { projectId, crs, error: err?.message || err });
+    return null;
+  }
+};
+
+const deriveMercatorZoomRangeFromScales = (scales = [], { tileSize = 256, maxZoom = 30 } = {}) => {
+  const list = Array.isArray(scales) ? scales : [];
+  const cleaned = list.map((s) => Number(s)).filter((n) => Number.isFinite(n) && n > 0);
+  if (!cleaned.length) return null;
+  const initialResolution = (2 * Math.PI * 6378137) / tileSize;
+  const zooms = [];
+  for (const scaleDen of cleaned) {
+    const res = scaleDen * 0.00028;
+    if (!Number.isFinite(res) || res <= 0) continue;
+    const z = Math.round(Math.log2(initialResolution / res));
+    if (Number.isFinite(z)) {
+      zooms.push(Math.max(0, Math.min(maxZoom, z)));
+    }
+  }
+  if (!zooms.length) return null;
+  const min = 0;
+  const max = Math.max(min, ...zooms);
+  return { min, max };
+};
+
 const pickBootstrapTileProfile = (candidateList = [], autoGenExtent = null, projectId = null) => {
   const candidates = Array.isArray(candidateList) ? candidateList : [];
   for (const candidate of candidates) {
@@ -3662,6 +3831,18 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
   const projectExtentWgs = coalesceExtent(projectInfo.extent_wgs84, projectInfo.view_extent_wgs84);
   const projectCrs = projectInfo.crs || null;
   const projectCrsNormalized = normalizeCrsCode(projectCrs);
+
+  const projectScaleList = Array.isArray(projectInfo.scales) ? projectInfo.scales : null;
+  const mercatorZoomFromScales = (projectCrsNormalized === 'EPSG:3857' && projectScaleList && projectScaleList.length)
+    ? deriveMercatorZoomRangeFromScales(projectScaleList)
+    : null;
+  const scalePreset = (projectCrsNormalized
+    && projectCrsNormalized !== 'EPSG:3857'
+    && projectScaleList
+    && projectScaleList.length
+    && projectExtent)
+    ? ensureScaleGridPreset({ crs: projectCrsNormalized, extent: projectExtent, extentWgs84: projectExtentWgs, scales: projectScaleList, projectId })
+    : null;
   const EXTENT_RATIO_THRESHOLD = 25;
   const computeExtentArea = (bbox) => {
     const clean = sanitizeExtentCoordinates(bbox);
@@ -3703,12 +3884,28 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       ? coalesceExtent(projectExtentWgs, options.extentWgs) || null
       : coalesceExtent(options.extentWgs, projectExtentWgs) || null;
 
-    const tileProfile = pickBootstrapTileProfile([
-      { value: projectCrs, source: "project" },
-      { value: options.crs, source: kind === "theme" ? "project" : "layer" },
-      { value: BOOTSTRAP_TILE_CRS, source: "config" }
-    ], projectExtent, projectId);
+    const tileProfile = scalePreset
+      ? {
+          tileCrs: projectCrsNormalized,
+          scheme: 'wmts',
+          tileMatrixPreset: scalePreset.id,
+          tileMatrixSet: cloneObject(scalePreset.preset),
+          source: 'project_scales'
+        }
+      : pickBootstrapTileProfile([
+          { value: projectCrs, source: "project" },
+          { value: options.crs, source: kind === "theme" ? "project" : "layer" },
+          { value: BOOTSTRAP_TILE_CRS, source: "config" }
+        ], projectExtent, projectId);
+
     const entryTileCrs = tileProfile.tileCrs || projectCrsNormalized || BOOTSTRAP_TILE_CRS;
+
+    const effectiveZoomMin = scalePreset
+      ? scalePreset.zoomMin
+      : (mercatorZoomFromScales ? mercatorZoomFromScales.min : BOOTSTRAP_ZOOM_MIN);
+    const effectiveZoomMax = scalePreset
+      ? scalePreset.zoomMax
+      : (mercatorZoomFromScales ? mercatorZoomFromScales.max : BOOTSTRAP_ZOOM_MAX);
 
     const entry = {
       name: finalName,
@@ -3720,10 +3917,10 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       cacheable: options.cacheable !== false,
       extent,
       extent_wgs84: extentWgs,
-      zoom_min: BOOTSTRAP_ZOOM_MIN,
-      zoom_max: BOOTSTRAP_ZOOM_MAX,
-      published_zoom_min: BOOTSTRAP_ZOOM_MIN,
-      published_zoom_max: BOOTSTRAP_ZOOM_MAX,
+      zoom_min: effectiveZoomMin,
+      zoom_max: effectiveZoomMax,
+      published_zoom_min: effectiveZoomMin,
+      published_zoom_max: effectiveZoomMax,
       cached_zoom_min: null,
       cached_zoom_max: null,
       tile_format: "png",
@@ -3800,7 +3997,9 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
     ? {
         scheme: entries[0].scheme,
         tileCrs: entries[0].tile_crs,
-        tileMatrixPreset: entries[0].tile_matrix_preset || null
+        tileMatrixPreset: entries[0].tile_matrix_preset || null,
+        zoomMin: entries[0].zoom_min,
+        zoomMax: entries[0].zoom_max
       }
     : null;
 
@@ -3859,8 +4058,8 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
       projectExtent,
       projectExtentWgs,
       projectCrs,
-      zoomMin: BOOTSTRAP_ZOOM_MIN,
-      zoomMax: BOOTSTRAP_ZOOM_MAX,
+      zoomMin: defaultTileProfile?.zoomMin ?? BOOTSTRAP_ZOOM_MIN,
+      zoomMax: defaultTileProfile?.zoomMax ?? BOOTSTRAP_ZOOM_MAX,
       tileProfile: defaultTileProfile,
       allowRemote: requiresAllowRemote
     });
@@ -5568,13 +5767,15 @@ const buildWmtsInventory = (options = {}) => {
       let rawTileMatrixSet = layerEntry.tile_matrix_set && (Array.isArray(layerEntry.tile_matrix_set.matrices) || Array.isArray(layerEntry.tile_matrix_set.matrixSet))
         ? layerEntry.tile_matrix_set
         : null;
-      if (!rawTileMatrixSet && layerPresetId) {
+      const profileSource = typeof layerEntry.tile_profile_source === 'string' ? layerEntry.tile_profile_source.toLowerCase() : '';
+      const preferPreset = !!(layerPresetId && (layerPresetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
+      if ((!rawTileMatrixSet || preferPreset) && layerPresetId) {
         const presetDef = getTileMatrixPresetRaw(layerPresetId);
         if (presetDef && (Array.isArray(presetDef.matrices) || Array.isArray(presetDef.matrixSet))) {
           try {
-            rawTileMatrixSet = JSON.parse(JSON.stringify(presetDef));
+            rawTileMatrixSet = normalizeTileMatrixSetForExtent(presetDef, layerEntry.extent);
           } catch (err) {
-            rawTileMatrixSet = presetDef;
+            rawTileMatrixSet = normalizeTileMatrixSetForExtent(presetDef, layerEntry.extent);
           }
         }
       }
@@ -5791,51 +5992,46 @@ app.get(
     const filePath = path.join(baseDir, String(sourceLevel), String(tileCol), `${tileRow}.png`);
 
     fs.access(filePath, fs.constants.F_OK, (err) => {
+      // If the tile exists but looks invalid (empty/partial), delete it and re-render.
+      if (!err) {
+        const deleted = deleteTileFileIfInvalid(filePath);
+        if (!deleted) {
+          return res.sendFile(filePath, (sendErr) => {
+            if (sendErr) {
+              console.warn("WMTS REST tile send failed", {
+                project: layer.project,
+                layer: layer.layerName,
+                tileMatrixId,
+                tileCol,
+                tileRow,
+                error: sendErr?.message
+              });
+              if (!res.headersSent) res.status(500).send("Failed to deliver tile");
+            }
+          });
+        }
+        // treat as missing after deletion
+        err = new Error('invalid_tile_deleted');
+      }
+
       if (err) {
-        // Tile missing: enqueue on-demand render and respond 202 (Accepted)
+        // Tile missing (or invalid): render on-demand and respond with the generated image.
         try {
           const renderParams = { project: layer.project, layer: layer.layerName, z: sourceLevel, x: tileCol, y: tileRow };
-          queueTileRender(renderParams, filePath, (qerr, out) => {
-            // callback after render finishes; we only log here
+          return queueTileRender(renderParams, filePath, (qerr, outFile) => {
             if (qerr) {
               logProjectEvent(layer.project, `On-demand render failed for ${filePath}: ${String(qerr)}`);
-            } else {
-              logProjectEvent(layer.project, `On-demand render completed: ${out}`);
+              if (!res.headersSent) return res.status(500).send("Generation failed");
+              return;
             }
+            logProjectEvent(layer.project, `On-demand render completed: ${outFile}`);
+            if (!res.headersSent) return res.sendFile(outFile);
           });
         } catch (queueErr) {
           console.warn('Failed to queue tile render', queueErr);
-        }
-        // Provide estimated retry time based on current queue length
-        try {
-          const queuePos = Math.max(0, renderQueue.length - 1); // position (0-based) assuming push already happened
-          const queueLen = renderQueue.length;
-          // heuristic: each batch of MAX_RENDER_PROCS adds ~2 seconds (conservative)
-          const estSeconds = Math.min(60, 2 + Math.floor(queuePos / Math.max(1, MAX_RENDER_PROCS)) * 2);
-          res.set('Retry-After', String(estSeconds));
-          res.set('X-Tile-Status', 'generating');
-          res.set('X-Queue-Position', String(queuePos));
-          res.set('X-Queue-Length', String(queueLen));
-          return res.status(202).json({ status: 'generating', retry_after: estSeconds, queue_position: queuePos, queue_length: queueLen, requested: { z: sourceLevel, x: tileCol, y: tileRow } });
-        } catch (hdrErr) {
-          res.set('Retry-After', '2');
-          res.set('X-Tile-Status', 'generating');
-          return res.status(202).json({ status: 'generating', retry_after: 2, requested: { z: sourceLevel, x: tileCol, y: tileRow } });
+          if (!res.headersSent) return res.status(500).send("Generation failed");
         }
       }
-      res.sendFile(filePath, (sendErr) => {
-        if (sendErr) {
-          console.warn("WMTS REST tile send failed", {
-            project: layer.project,
-            layer: layer.layerName,
-            tileMatrixId,
-            tileCol,
-            tileRow,
-            error: sendErr?.message
-          });
-          res.status(500).send("Failed to deliver tile");
-        }
-      });
     });
   }
 );
@@ -5919,6 +6115,47 @@ const computeTileBBoxFromTileMatrixSet = (tileMatrixSet, z, x, y) => {
   return [minx, miny, maxx, maxy];
 };
 
+const normalizeTileMatrixSetForExtent = (tileMatrixSet, extent) => {
+  if (!tileMatrixSet || typeof tileMatrixSet !== 'object') return tileMatrixSet;
+  const cleanExtent = sanitizeExtentCoordinates(extent);
+  if (!cleanExtent) return tileMatrixSet;
+
+  const width = Math.abs(Number(cleanExtent[2]) - Number(cleanExtent[0]));
+  const height = Math.abs(Number(cleanExtent[3]) - Number(cleanExtent[1]));
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return tileMatrixSet;
+
+  let cloned;
+  try {
+    cloned = JSON.parse(JSON.stringify(tileMatrixSet));
+  } catch {
+    cloned = { ...tileMatrixSet };
+  }
+
+  const matrices = Array.isArray(cloned.matrices)
+    ? cloned.matrices
+    : (Array.isArray(cloned.matrixSet) ? cloned.matrixSet : null);
+  if (!matrices) return cloned;
+
+  const tileWidth = Number(cloned.tile_width || cloned.tileWidth || 256);
+  const tileHeight = Number(cloned.tile_height || cloned.tileHeight || 256);
+  if (!Number.isFinite(tileWidth) || tileWidth <= 0 || !Number.isFinite(tileHeight) || tileHeight <= 0) return cloned;
+
+  for (const m of matrices) {
+    if (!m || typeof m !== 'object') continue;
+    let res = Number(m.resolution);
+    if (!Number.isFinite(res) && Number.isFinite(Number(m.scale_denominator))) {
+      res = Number(m.scale_denominator) * 0.00028;
+    }
+    if (!Number.isFinite(res) || res <= 0) continue;
+    m.matrix_width = Math.max(1, Math.ceil(width / (tileWidth * res)));
+    m.matrix_height = Math.max(1, Math.ceil(height / (tileHeight * res)));
+  }
+
+  if (Array.isArray(cloned.matrices)) cloned.matrices = matrices;
+  if (Array.isArray(cloned.matrixSet)) cloned.matrixSet = matrices;
+  return cloned;
+};
+
 const deriveOnDemandTileGrid = (projectId, targetMode, targetName) => {
   try {
     const idx = loadProjectIndexData(projectId);
@@ -5931,10 +6168,14 @@ const deriveOnDemandTileGrid = (projectId, targetMode, targetName) => {
     if (!entry) return null;
     const tileCrs = typeof entry.tile_crs === 'string' && entry.tile_crs.trim() ? entry.tile_crs.trim().toUpperCase() : null;
     let tileMatrixSet = entry.tile_matrix_set || entry.tileMatrixSet || null;
-    if (!tileMatrixSet && typeof entry.tile_matrix_preset === 'string' && entry.tile_matrix_preset.trim()) {
-      const preset = getTileMatrixPresetRaw(entry.tile_matrix_preset.trim());
+    const presetIdRaw = typeof entry.tile_matrix_preset === 'string' ? entry.tile_matrix_preset.trim() : '';
+    const presetId = presetIdRaw && presetIdRaw.endsWith('.json') ? presetIdRaw.replace(/\.json$/i, '') : presetIdRaw;
+    const profileSource = String(entry.tile_profile_source || entry.tileProfileSource || '').toLowerCase();
+    const preferPreset = !!(presetId && (presetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
+    if ((preferPreset || !tileMatrixSet) && presetId) {
+      const preset = getTileMatrixPresetRaw(presetId);
       if (preset && typeof preset === 'object') {
-        tileMatrixSet = preset;
+        tileMatrixSet = normalizeTileMatrixSetForExtent(preset, entry.extent);
       }
     }
     return { tileCrs, tileMatrixSet, entry };
@@ -6002,6 +6243,58 @@ app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
           data.layers = layers.map((entry) => {
             if (!entry || typeof entry !== 'object') return entry;
             const out = { ...entry };
+
+            // Prefer persisted scale-derived presets over embedded tile_matrix_set.
+            // Embedded definitions can become stale across versions.
+            try {
+              let presetIdRaw = typeof out.tile_matrix_preset === 'string' ? out.tile_matrix_preset.trim() : '';
+              if (!presetIdRaw && out.tile_matrix_set && typeof out.tile_matrix_set.id === 'string') {
+                presetIdRaw = out.tile_matrix_set.id.trim();
+              }
+              const presetId = presetIdRaw && presetIdRaw.endsWith('.json') ? presetIdRaw.replace(/\.json$/i, '') : presetIdRaw;
+              const profileSource = String(out.tile_profile_source || out.tileProfileSource || '').toLowerCase();
+              const isScalePreset = !!(presetId && (presetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
+              if (isScalePreset) {
+                const preset = getTileMatrixPresetRaw(presetId);
+                if (preset && typeof preset === 'object') {
+                  out.tile_matrix_set = normalizeTileMatrixSetForExtent(preset, out.extent);
+                }
+              }
+            } catch {}
+
+            // Backfill zoom range from tile_matrix_set when missing.
+            // Some on-demand entries may not have zoom_min/zoom_max yet, but the viewer needs them.
+            try {
+              if ((!Number.isFinite(Number(out.zoom_min)) || !Number.isFinite(Number(out.zoom_max)))
+                && out.tile_matrix_set && Array.isArray(out.tile_matrix_set.matrices)) {
+                const zs = out.tile_matrix_set.matrices
+                  .map((m) => {
+                    if (!m) return null;
+                    if (Number.isFinite(Number(m.z))) return Number(m.z);
+                    if (Number.isFinite(Number(m.source_level))) return Number(m.source_level);
+                    const idNum = parseInt(m.identifier, 10);
+                    return Number.isFinite(idNum) ? idNum : null;
+                  })
+                  .filter((z) => Number.isFinite(z));
+                if (zs.length) {
+                  const minZ = Math.min(...zs);
+                  const maxZ = Math.max(...zs);
+                  if (!Number.isFinite(Number(out.zoom_min))) out.zoom_min = minZ;
+                  if (!Number.isFinite(Number(out.zoom_max))) out.zoom_max = maxZ;
+                  if (!Number.isFinite(Number(out.published_zoom_min))) out.published_zoom_min = out.zoom_min;
+                  if (!Number.isFinite(Number(out.published_zoom_max))) out.published_zoom_max = out.zoom_max;
+                }
+              }
+            } catch {}
+
+            // If this looks like a scale-derived preset but the source flag is missing, backfill it.
+            try {
+              const presetId = typeof out.tile_matrix_preset === 'string' ? out.tile_matrix_preset.trim() : '';
+              if (presetId && presetId.toUpperCase().startsWith('SCALES_') && !out.tile_profile_source) {
+                out.tile_profile_source = 'project_scales';
+              }
+            } catch {}
+
             const count = Number(out.tile_count ?? out.tiles ?? out.tileCount);
             if (Number.isFinite(count) && count > 0) {
               out.has_tiles = true;
@@ -6495,6 +6788,75 @@ const ENABLE_RENDER_FILE_LOGS = (() => {
   return raw === "1" || raw === "true" || raw === "yes";
 })();
 
+// Invalid-tile detection: prefer structural PNG validation over file size.
+// Many legitimate transparent tiles compress to very small files, so a byte-threshold
+// causes false positives and 500s in the viewer.
+const MIN_TILE_BYTES = (() => {
+  // Only enforce a size threshold if explicitly configured.
+  const env = process.env.MIN_TILE_BYTES ?? process.env.ON_DEMAND_MIN_TILE_BYTES;
+  if (env == null || String(env).trim() === '') return 0;
+  const raw = Number(env);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.floor(raw));
+})();
+
+const looksLikeValidPng = (filePath) => {
+  try {
+    // PNG signature (8 bytes) + length(4) + type(4) + IHDR data (at least 8 bytes for width/height)
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const header = Buffer.alloc(24);
+      const read = fs.readSync(fd, header, 0, header.length, 0);
+      if (read < 24) return false;
+      // 89 50 4E 47 0D 0A 1A 0A
+      if (
+        header[0] !== 0x89 || header[1] !== 0x50 || header[2] !== 0x4E || header[3] !== 0x47
+        || header[4] !== 0x0D || header[5] !== 0x0A || header[6] !== 0x1A || header[7] !== 0x0A
+      ) {
+        return false;
+      }
+      const chunkType = header.toString('ascii', 12, 16);
+      if (chunkType !== 'IHDR') return false;
+      const width = header.readUInt32BE(16);
+      const height = header.readUInt32BE(20);
+      if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+      if (width <= 0 || height <= 0) return false;
+      // Sanity cap to avoid pathological values.
+      if (width > 16384 || height > 16384) return false;
+      return true;
+    } finally {
+      try { fs.closeSync(fd); } catch {}
+    }
+  } catch {
+    return false;
+  }
+};
+
+const isLikelyInvalidTileFile = (filePath) => {
+  if (!filePath) return true;
+  try {
+    const st = fs.statSync(filePath);
+    if (!st.isFile()) return true;
+    if (st.size <= 0) return true;
+    if (MIN_TILE_BYTES > 0 && st.size < MIN_TILE_BYTES) return true;
+    // If it's a PNG tile, validate it structurally.
+    return !looksLikeValidPng(filePath);
+  } catch {
+    return true;
+  }
+};
+
+const deleteTileFileIfInvalid = (filePath) => {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    if (!isLikelyInvalidTileFile(filePath)) return false;
+    try { fs.unlinkSync(filePath); } catch {}
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 
 
 // --- FUNCIÓN ACTUALIZADA ---
@@ -6596,6 +6958,12 @@ function queueTileRender(params, filePath, cb) {
       
       if (result.status === 'error' || result.error) {
         throw new Error(result.message || result.error || "Worker error");
+      }
+
+      // Validate output tile; if it's empty/partial, delete it so it can be regenerated.
+      if (!fs.existsSync(filePath) || isLikelyInvalidTileFile(filePath)) {
+        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
+        throw new Error('invalid_tile_output');
       }
       
       // Éxito: devolver ruta del archivo
@@ -6811,8 +7179,13 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
   
   // 1. Si la tile YA EXISTE, enviarla inmediatamente
   if (fs.existsSync(file)) {
+    // If the tile is empty/partial, delete it so it will be regenerated below.
+    if (deleteTileFileIfInvalid(file)) {
+      logProjectEvent(project, `Tile invalid (deleted): ${file}`);
+    } else {
     logProjectEvent(project, `Tile hit: ${file}`);
     return res.sendFile(file);
+    }
   }
 
   // Lógica de fallback (si el tema no existe, buscar capa con el mismo nombre)
@@ -6836,8 +7209,12 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     logProjectEvent(project, `Theme '${theme}' not defined; forced fallback to layer '${theme}' -> ${fallbackFile}`);
     
     if (fs.existsSync(fallbackFile)) {
-      logProjectEvent(project, `Tile hit (fallback): ${fallbackFile}`);
-      return res.sendFile(fallbackFile);
+      if (deleteTileFileIfInvalid(fallbackFile)) {
+        logProjectEvent(project, `Tile invalid (deleted) (fallback): ${fallbackFile}`);
+      } else {
+        logProjectEvent(project, `Tile hit (fallback): ${fallbackFile}`);
+        return res.sendFile(fallbackFile);
+      }
     }
     
     logProjectEvent(project, `Tile miss (fallback): ${fallbackFile}. Generating on-demand...`);
@@ -6895,8 +7272,12 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
 
   // 1. Si existe, enviar inmediatamente
   if (fs.existsSync(file)) {
-    logProjectEvent(project, `Tile hit: ${file}`);
-    return res.sendFile(file);
+    if (deleteTileFileIfInvalid(file)) {
+      logProjectEvent(project, `Tile invalid (deleted): ${file}`);
+    } else {
+      logProjectEvent(project, `Tile hit: ${file}`);
+      return res.sendFile(file);
+    }
   }
 
   // 2. Si no existe, Generar on-demand Y ESPERAR
@@ -6918,8 +7299,12 @@ app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
   const { layer, z, x, y } = req.params;
   const file = path.join(cacheDir, layer, z, x, `${y}.png`);
   if (fs.existsSync(file)) {
-    logProjectEvent('nogo', `Tile hit: ${file}`);
-    return res.sendFile(file);
+    if (deleteTileFileIfInvalid(file)) {
+      logProjectEvent('nogo', `Tile invalid (deleted): ${file}`);
+    } else {
+      logProjectEvent('nogo', `Tile hit: ${file}`);
+      return res.sendFile(file);
+    }
   }
   logProjectEvent('nogo', `Tile miss: ${file}. Generating on-demand...`);
   queueTileRender({ project: 'nogo', layer, z, x, y }, file, (err, outFile) => {
@@ -7299,7 +7684,16 @@ app.get("/wmts", (req, res, next) => {
 
         // Verificar existencia o Generar On-Demand
         fs.access(filePath, fs.constants.F_OK, (err) => {
-            if (err) {
+          if (!err) {
+            // Exists but might be empty/partial from a previous failed render
+            const deleted = deleteTileFileIfInvalid(filePath);
+            if (deleted) {
+              logProjectEvent(projectId, `KVP Tile invalid (deleted): ${filePath}`);
+              err = new Error('invalid_tile_deleted');
+            }
+          }
+
+          if (err) {
                 // NO EXISTE: Generar y ESPERAR
                 const renderParams = { 
                   project: projectId, 

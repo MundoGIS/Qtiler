@@ -1596,13 +1596,8 @@ elif scheme == "wmts":
             publish_zoom_max_effective = publish_levels[-1]
         tile_runs = []
         for matrix in selected:
-            # --- FIX: override matrix origin to use actual extent_in_tile_crs (minX, maxY)
-            try:
-                matrix['origin_x'] = float(extent_in_tile_crs.xMinimum())
-                matrix['origin_y'] = float(extent_in_tile_crs.yMaximum())
-            except Exception:
-                # keep preset origin if extent not available
-                pass
+            # IMPORTANT: keep the preset origin stable.
+            # The cached extent only controls which tiles to generate, not the WMTS grid origin.
 
             # Recortar el rango de tiles a solo los que intersectan el extent deseado
             span = _compute_tile_span(extent_in_tile_crs, matrix)
@@ -1719,10 +1714,10 @@ elif scheme == "wmts":
                 "scale_denominator": m.get("scale_denominator"),
                 "matrix_width": m.get("matrix_width"),
                 "matrix_height": m.get("matrix_height"),
-                # --- FIX: ensure top_left uses extent_in_tile_crs (fallback to preset origin)
+                # Keep top-left stable per preset so all layers share the same grid.
                 "top_left": [
-                    float(extent_in_tile_crs.xMinimum()) if extent_in_tile_crs is not None else (m.get("origin_x") or 0.0),
-                    float(extent_in_tile_crs.yMaximum()) if extent_in_tile_crs is not None else (m.get("origin_y") or 0.0)
+                    float(m.get("origin_x") if m.get("origin_x") is not None else (tile_matrix_preset.get("origin_x") if tile_matrix_preset else 0.0)),
+                    float(m.get("origin_y") if m.get("origin_y") is not None else (tile_matrix_preset.get("origin_y") if tile_matrix_preset else 0.0))
                 ]
             }
             for idx, m in enumerate(publish_matrices)
@@ -1965,6 +1960,17 @@ try:
             index = {}
     else:
         index = {"project": args.project, "created": datetime.datetime.now().isoformat(), "layers": []}
+    # extent to record in index.json: default to the effective render extent in tile CRS
+    try:
+        layer_entry_extent = [
+            float(extent_in_tile_crs.xMinimum()),
+            float(extent_in_tile_crs.yMinimum()),
+            float(extent_in_tile_crs.xMaximum()),
+            float(extent_in_tile_crs.yMaximum())
+        ]
+    except Exception:
+        layer_entry_extent = None
+
     layer_entry = {
         "name": target_name,
         "kind": target_mode,
@@ -1985,6 +1991,7 @@ try:
         "scheme": scheme,
         "xyz_mode": args.xyz_mode,
         "tile_crs": tile_crs.authid(),
+        "tile_matrix_preset": (tile_matrix_preset.get("id") if tile_matrix_preset else tile_matrix_preset_name),
         "source_layers": [getattr(lyr, "name", lambda: "?")() for lyr in target_layers if lyr]
     }
     if target_mode == "theme":
@@ -2000,11 +2007,14 @@ try:
         tile_width_value = int(tile_matrix_preset.get("tile_width") or 256) if tile_matrix_preset else 256
         tile_height_value = int(tile_matrix_preset.get("tile_height") or 256) if tile_matrix_preset else 256
 
-        # --- FIX: siempre derivar top-left del extent re-proyectado (extent_in_tile_crs)
-        top_left_corner_record = [
-            float(extent_in_tile_crs.xMinimum()),
-            float(extent_in_tile_crs.yMaximum())
-        ]
+        # Keep WMTS grid origin stable (prefer preset origin).
+        if tile_matrix_preset and tile_matrix_preset.get("origin_x") is not None and tile_matrix_preset.get("origin_y") is not None:
+            top_left_corner_record = [float(tile_matrix_preset.get("origin_x")), float(tile_matrix_preset.get("origin_y"))]
+        else:
+            top_left_corner_record = [
+                float(extent_in_tile_crs.xMinimum()),
+                float(extent_in_tile_crs.yMaximum())
+            ]
         supported_crs_value = (tile_matrix_preset.get("supported_crs") if tile_matrix_preset else None) or tile_crs.authid()
 
         layer_entry["tile_matrix_set"] = {
@@ -2051,6 +2061,24 @@ try:
         if not (l.get("name") == target_name and (l.get("kind") or "layer") == target_mode)
     ]
     if existing_entry:
+        # If the user provided an explicit bbox/project_extent override, avoid shrinking the stored extent.
+        # The extent in index.json should remain a stable layer/project extent so the viewer bounds don't jump.
+        if extent_override_provided:
+            try:
+                prev_extent = existing_entry.get("extent")
+                if isinstance(prev_extent, list) and len(prev_extent) == 4:
+                    layer_entry["extent"] = prev_extent
+            except Exception:
+                pass
+
+        # Preserve profile source metadata so the server can keep preferring the persisted grid preset.
+        try:
+            prev_profile_source = existing_entry.get("tile_profile_source")
+            if prev_profile_source and "tile_profile_source" not in layer_entry:
+                layer_entry["tile_profile_source"] = prev_profile_source
+        except Exception:
+            pass
+
         prev_publish_min = _safe_int(existing_entry.get("published_zoom_min"))
         prev_publish_max = _safe_int(existing_entry.get("published_zoom_max"))
         if prev_publish_min is None and prev_publish_max is None:

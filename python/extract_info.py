@@ -10,6 +10,7 @@ import json
 import argparse
 from pathlib import Path
 from urllib.parse import parse_qsl
+from typing import Any
 
 # --- Cargar .env (intenta python-dotenv, fallback manual) ---
 def load_dotenv_file(path: Path):
@@ -167,6 +168,8 @@ project_extent = None
 project_extent_wgs84 = None
 project_view_extent = None
 project_view_extent_wgs84 = None
+project_scales = []
+project_scales_source = None
 layers = []
 wgs84 = QgsCoordinateReferenceSystem('EPSG:4326')
 themes = []
@@ -214,6 +217,55 @@ try:
         project_view_extent = None
 except Exception:
     view_settings = None
+
+# Try to read project-defined map scales (scale denominators).
+try:
+    scales_candidate: Any = None
+    if view_settings:
+        for attr in ("mapScales", "scales", "mapScalesList", "scalesList"):
+            getter = getattr(view_settings, attr, None)
+            if callable(getter):
+                try:
+                    scales_candidate = getter()
+                    if scales_candidate is not None:
+                        project_scales_source = f"viewSettings.{attr}()"
+                        break
+                except Exception:
+                    continue
+    # QGIS sometimes returns a QgsMapScales-like object with .scales() method.
+    if scales_candidate is not None and not isinstance(scales_candidate, (list, tuple)):
+        getter = getattr(scales_candidate, "scales", None)
+        if callable(getter):
+            try:
+                scales_candidate = getter()
+                if project_scales_source is None:
+                    project_scales_source = "viewSettings.mapScales().scales()"
+            except Exception:
+                pass
+    if scales_candidate is not None:
+        tmp = []
+        iterable: Any = None
+        if isinstance(scales_candidate, (list, tuple, set)):
+            iterable = list(scales_candidate)
+        else:
+            try:
+                iterable = list(scales_candidate)
+            except Exception:
+                iterable = None
+        if iterable is not None:
+            for v in iterable:
+                try:
+                    num = float(v)
+                    if num > 0:
+                        tmp.append(num)
+                except Exception:
+                    continue
+        # Normalize: unique + sort from coarse -> fine (largest denom first)
+        if tmp:
+            project_scales = sorted(list({float(x) for x in tmp if x and x > 0}), reverse=True)
+except Exception:
+    project_scales = []
+    project_scales_source = None
 
 for layer in project.mapLayers().values():
     extent = layer.extent()
@@ -320,11 +372,16 @@ if theme_collection:
         getter = getattr(theme_collection, attr, None)
         if callable(getter):
             try:
-                value = getter()
+                value: Any = getter()
                 if isinstance(value, dict):
                     theme_names = list(value.keys())
-                else:
+                elif isinstance(value, (list, tuple, set)):
                     theme_names = list(value)
+                else:
+                    try:
+                        theme_names = list(value)
+                    except Exception:
+                        theme_names = []
                 if theme_names:
                     break
             except Exception:
@@ -380,6 +437,8 @@ result = {
         "id": Path(PROJECT_PATH).stem,
         "path": PROJECT_PATH,
         "crs": project_crs.authid() if project_crs.isValid() else None,
+        "scales": project_scales if project_scales else None,
+        "scales_source": project_scales_source,
         "extent": {
             "bbox": proj_extent_list,
             "crs": project_crs.authid() if project_crs.isValid() else None
