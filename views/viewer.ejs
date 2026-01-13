@@ -30,7 +30,7 @@
   extraStyles: viewerStyles,
   headScripts: viewerScripts
 }) %>
-    <script src="/js/viewer.js"></script>
+    <script src="/js/viewer.js?v=<%= encodeURIComponent(assetVersion || '') %>"></script>
   <div class="viewer-shell">
     <%- include('partials/header', {
       headerMode: 'viewer',

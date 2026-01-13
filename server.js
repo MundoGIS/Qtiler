@@ -54,6 +54,10 @@ import { PluginManager } from "./lib/pluginManager.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set("trust proxy", true);
+
+// Cache-buster for static assets. Helps avoid stale JS in browsers/proxies (e.g. IIS reverse proxy).
+// Changes on each server start unless QTILER_ASSET_VERSION is provided.
+app.locals.assetVersion = process.env.QTILER_ASSET_VERSION || String(Date.now());
 const dataDir = path.resolve(__dirname, "data");
 const pluginsDir = path.resolve(__dirname, "plugins");
 const viewsDir = path.resolve(__dirname, "views");

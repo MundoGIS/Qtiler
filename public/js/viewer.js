@@ -560,6 +560,58 @@
       }
     }
 
+    // Leaflet's GridLayer assumes that for a non-infinite CRS (`!crs.infinite`),
+    // Map.getPixelWorldBounds() returns a bounds object. If it doesn't, Leaflet 1.9.4
+    // can throw in GridLayer._isValidTile when it tries to access `_globalTileRange.min`.
+    //
+    // This can happen with some custom CRS/projection setups (notably large extents like
+    // EPSG:3006 Sweden) on certain deployments. If we detect missing projected bounds at
+    // any relevant zoom, switch CRS to "infinite" mode. Tile requests remain constrained
+    // by `layerOptions.bounds` + `noWrap`.
+    if (mapOptions.crs && !mapOptions.crs.infinite) {
+      try {
+        const crsCandidate = mapOptions.crs;
+        const zoomCandidates = [];
+        const pushZoom = (z) => {
+          if (!Number.isFinite(z)) return;
+          const zi = Math.max(0, Math.round(z));
+          if (!zoomCandidates.includes(zi)) zoomCandidates.push(zi);
+        };
+        pushZoom(0);
+        if (meta) {
+          pushZoom(meta.zoom_min);
+          pushZoom(meta.zoom_max);
+        }
+        pushZoom(mapOptions.maxZoom);
+
+        let hasProjectedBounds = true;
+        if (typeof crsCandidate.getProjectedBounds !== 'function') {
+          hasProjectedBounds = false;
+        } else {
+          for (const z of zoomCandidates) {
+            try {
+              const projected = crsCandidate.getProjectedBounds(z);
+              if (!projected || !projected.min || !projected.max) {
+                hasProjectedBounds = false;
+                break;
+              }
+            } catch {
+              hasProjectedBounds = false;
+              break;
+            }
+          }
+        }
+
+        if (!hasProjectedBounds) {
+          mapOptions.crs.infinite = true;
+          warnInvalidBounds();
+        }
+      } catch {
+        mapOptions.crs.infinite = true;
+        warnInvalidBounds();
+      }
+    }
+
     const map = L.map('map', mapOptions);
     // Prefer project extent (WGS84) for initial view if available, otherwise fall back to grid bounds
     const projectBounds = (meta && Array.isArray(meta.extent_wgs84))
@@ -954,6 +1006,13 @@
     };
     if (extentLatLngBounds) {
       layerOptions.bounds = extentLatLngBounds;
+    } else if (meta && Array.isArray(meta.extent_wgs84) && meta.extent_wgs84.length === 4) {
+      // Fallback bounds for custom CRS when unprojected grid bounds are not usable.
+      // Still helps constrain tile requests when CRS is forced to infinite mode.
+      layerOptions.bounds = L.latLngBounds(
+        [meta.extent_wgs84[1], meta.extent_wgs84[0]],
+        [meta.extent_wgs84[3], meta.extent_wgs84[2]]
+      );
     }
     if (!crs) {
       layerOptions.detectRetina = false;
