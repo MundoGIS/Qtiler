@@ -71,13 +71,23 @@ if not OSGEO4W_BIN:
     sys.stderr.write(json.dumps({"error": "missing_env", "var": "OSGEO4W_BIN", "msg": "Set OSGEO4W_BIN in .env to your o4w bin path (or QGIS bin)"}) + "\n")
     sys.exit(2)
 
+# --- argumentos opcionales (must be parsed BEFORE PROJECT_PATH auto-detect/exit) ---
+parser = argparse.ArgumentParser()
+parser.add_argument("--project", default=None)
+args = parser.parse_args()
+if args.project:
+    # If an explicit project path is provided, it overrides PROJECT_PATH and
+    # avoids failing early when qgisprojects/ has no root-level projects.
+    DEFAULT_PROJECT_PATH = args.project
+
 # If PROJECT_PATH not set, auto-detect any project in repo qgisprojects folder
 if not DEFAULT_PROJECT_PATH:
     candidate_dir = Path(__file__).resolve().parent.parent / 'qgisprojects'
     picked = None
     if candidate_dir.exists() and candidate_dir.is_dir():
-        for ext in ('*.qgz', '*.qgs'):
-            found = list(candidate_dir.glob(ext))
+        # Search recursively to support bundle projects stored in subfolders.
+        for ext in ('**/*.qgz', '**/*.qgs'):
+            found = sorted(candidate_dir.glob(ext))
             if found:
                 picked = found[0]
                 break
@@ -128,6 +138,12 @@ QgsApplication.setPrefixPath(QGIS_PREFIX, True)
 qgs = QgsApplication([], False)
 qgs.initQgis()
 
+try:
+    from qgis.core import QgsMapLayerType, QgsWkbTypes
+except Exception:
+    QgsMapLayerType = None
+    QgsWkbTypes = None
+
 # Attempt to override network disk cache to repo-local directory to avoid AppData access
 try:
     from qgis.PyQt.QtNetwork import QNetworkDiskCache
@@ -151,10 +167,7 @@ except Exception:
     pass
 
 # argumentos opcionales
-parser = argparse.ArgumentParser()
-parser.add_argument("--project", default=None)
-args = parser.parse_args()
-PROJECT_PATH = args.project or DEFAULT_PROJECT_PATH
+PROJECT_PATH = DEFAULT_PROJECT_PATH
 
 project = QgsProject.instance()
 if not project.read(PROJECT_PATH):
@@ -357,6 +370,40 @@ for layer in project.mapLayers().values():
         "provider": provider,
         "cacheable": cacheable
     }
+
+    # Layer kind (vector/raster/other) for UI feature gating.
+    kind = None
+    geom_type = None
+    try:
+        if QgsMapLayerType is not None:
+            lt = layer.type()
+            if lt == QgsMapLayerType.VectorLayer:
+                kind = 'vector'
+            elif lt == QgsMapLayerType.RasterLayer:
+                kind = 'raster'
+            else:
+                kind = 'other'
+        else:
+            # Best-effort if enum isn't available.
+            if hasattr(layer, 'wkbType') and hasattr(layer, 'getFeatures'):
+                kind = 'vector'
+            elif provider_lc in {'gdal', 'wcs', 'wms', 'wmts'}:
+                kind = 'raster'
+            else:
+                kind = 'other'
+    except Exception:
+        kind = 'other'
+
+    if kind == 'vector':
+        try:
+            if QgsWkbTypes is not None and hasattr(layer, 'wkbType'):
+                geom_type = QgsWkbTypes.displayString(layer.wkbType())
+        except Exception:
+            geom_type = None
+
+    layer_payload['kind'] = kind
+    if geom_type:
+        layer_payload['geometry_type'] = geom_type
     if remote_source:
         layer_payload["remote_source"] = remote_source
 

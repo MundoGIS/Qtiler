@@ -31,7 +31,8 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
-    "node-windows": "^1.0.0-beta.8"
+    "node-windows": "^1.0.0-beta.8",
+    "yauzl": "^3.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

@@ -1,10 +1,8 @@
-
-
- * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
- * If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
- * Copyright (C) 2025 MundoGIS.
- 
-
+REM
+REM This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+REM If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+REM Copyright (C) 2025 MundoGIS.
+REM
 @echo off
 REM Wrapper to run QGIS Python with a flexible o4w environment.
 REM It prefers the OSGEO4W_BIN env var if present, otherwise falls back to C:\QGIS\bin.

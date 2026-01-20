@@ -25,8 +25,7 @@ data/auth-users.json
 data/project-access.json
 data/auth/
 
-# QGIS projects (if not needed in repo)
-qgisprojects/
+
 
 # OS files
 .DS_Store
@@ -49,3 +48,4 @@ tools/inspect_png_q.py
 tools/inspect_png_raw.py
 tools/set-admin-password.mjs
 tools/package-auth-plugin.mjs
+public/Thirdparty

@@ -54,6 +54,13 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Cached layers',
     'portal.section.availableThemes': 'Available themes',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.wms': 'WMS (GetCapabilities)',
+    'portal.layer.wfs': 'WFS (GetCapabilities)',
+    'portal.layer.copy.wmts': 'Copy WMTS URL',
+    'portal.layer.copy.wms': 'Copy WMS URL',
+    'portal.layer.copy.wfs': 'Copy WFS URL',
+    'portal.layer.copy.copied': '{label} URL copied to clipboard.',
+    'portal.layer.copy.failed': 'Unable to copy {label} URL.',
     'portal.layer.xyz': 'XYZ (Tiles)',
     'portal.layer.xyz.copy': 'Copy XYZ URL',
     'portal.layer.xyz.copied': 'XYZ URL copied to clipboard.',
@@ -96,6 +103,13 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Capas en caché',
     'portal.section.availableThemes': 'Temas disponibles',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.wms': 'WMS (GetCapabilities)',
+    'portal.layer.wfs': 'WFS (GetCapabilities)',
+    'portal.layer.copy.wmts': 'Copiar URL WMTS',
+    'portal.layer.copy.wms': 'Copiar URL WMS',
+    'portal.layer.copy.wfs': 'Copiar URL WFS',
+    'portal.layer.copy.copied': 'URL {label} copiada al portapapeles.',
+    'portal.layer.copy.failed': 'No se pudo copiar la URL {label}.',
     'portal.layer.xyz': 'XYZ (Teselas)',
     'portal.layer.xyz.copy': 'Copiar URL XYZ',
     'portal.layer.xyz.copied': 'URL XYZ copiada al portapapeles.',
@@ -138,6 +152,13 @@ const TRANSLATIONS = {
     'portal.section.cachedLayers': 'Cachelagrade lager',
     'portal.section.availableThemes': 'Tillgängliga teman',
     'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.wms': 'WMS (GetCapabilities)',
+    'portal.layer.wfs': 'WFS (GetCapabilities)',
+    'portal.layer.copy.wmts': 'Kopiera WMTS-URL',
+    'portal.layer.copy.wms': 'Kopiera WMS-URL',
+    'portal.layer.copy.wfs': 'Kopiera WFS-URL',
+    'portal.layer.copy.copied': '{label}-URL kopierad till urklipp.',
+    'portal.layer.copy.failed': 'Det gick inte att kopiera {label}-URL.',
     'portal.layer.xyz': 'XYZ (Tiles)',
     'portal.layer.xyz.copy': 'Kopiera XYZ-URL',
     'portal.layer.xyz.copied': 'XYZ-URL kopierad till urklipp.',
@@ -307,6 +328,8 @@ const renderLayerGroup = (titleKey, items) => {
     const actions = document.createElement('div');
     actions.className = 'portal-layer-actions';
 
+    const isTheme = item && item.kind === 'theme';
+
     const projectIdEnc = encodeURIComponent(item.projectId);
     const nameEnc = encodeURIComponent(item.name);
     const xyzPath = item.kind === 'theme'
@@ -314,9 +337,18 @@ const renderLayerGroup = (titleKey, items) => {
       : `/wmts/${projectIdEnc}/${nameEnc}/{z}/{x}/{y}.png`;
     const xyzUrl = `${window.location.origin}${xyzPath}`;
 
+    const layerParam = item.kind === 'theme' ? 'theme' : 'layer';
+    const wmtsCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`;
+    const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&layer=${encodeURIComponent(item.name)}`;
+    const wfsCapabilitiesUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}`;
+
+    const viewerBase = `/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`;
+    const viewerWms = `${viewerBase}&service=wms`;
+    const viewerWfs = `${viewerBase}&service=wfs`;
+
     // Add Viewer link (Eye icon)
     const viewerLink = document.createElement('a');
-    viewerLink.href = `/viewer.html?project=${encodeURIComponent(item.projectId)}&${item.kind === 'theme' ? 'theme' : 'layer'}=${encodeURIComponent(item.name)}`;
+    viewerLink.href = viewerBase;
     viewerLink.target = '_blank';
     viewerLink.rel = 'noopener';
     viewerLink.className = 'portal-action-icon';
@@ -324,13 +356,25 @@ const renderLayerGroup = (titleKey, items) => {
     viewerLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
     actions.appendChild(viewerLink);
 
-    const wmtsLink = document.createElement('a');
-    const layerParam = item.kind === 'theme' ? 'theme' : 'layer';
-    wmtsLink.href = `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`;
-    wmtsLink.target = '_blank';
-    wmtsLink.rel = 'noopener';
-    wmtsLink.textContent = tr('portal.layer.wmts');
-    actions.appendChild(wmtsLink);
+    const viewerWmsLink = document.createElement('a');
+    viewerWmsLink.href = viewerWms;
+    viewerWmsLink.target = '_blank';
+    viewerWmsLink.rel = 'noopener';
+    viewerWmsLink.className = 'portal-action-icon';
+    viewerWmsLink.title = 'Open WMS viewer';
+    viewerWmsLink.textContent = 'WMS';
+    actions.appendChild(viewerWmsLink);
+
+    if (!isTheme) {
+      const viewerWfsLink = document.createElement('a');
+      viewerWfsLink.href = viewerWfs;
+      viewerWfsLink.target = '_blank';
+      viewerWfsLink.rel = 'noopener';
+      viewerWfsLink.className = 'portal-action-icon';
+      viewerWfsLink.title = 'Open WFS viewer';
+      viewerWfsLink.textContent = 'WFS';
+      actions.appendChild(viewerWfsLink);
+    }
 
     /* XYZ link removed as requested
     const xyzLink = document.createElement('a');
@@ -344,15 +388,37 @@ const renderLayerGroup = (titleKey, items) => {
     actions.appendChild(xyzLink);
     */
 
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'portal-action-button';
-    copyBtn.textContent = tr('portal.layer.xyz.copy');
-    copyBtn.addEventListener('click', async () => {
-      const ok = await copyToClipboard(xyzUrl);
-      flashStatusText(tr(ok ? 'portal.layer.xyz.copied' : 'portal.layer.xyz.copyFailed'), { tone: ok ? 'info' : 'error' });
+    const copyWmtsBtn = document.createElement('button');
+    copyWmtsBtn.type = 'button';
+    copyWmtsBtn.className = 'portal-action-button';
+    copyWmtsBtn.textContent = tr('portal.layer.copy.wmts');
+    copyWmtsBtn.addEventListener('click', async () => {
+      const ok = await copyToClipboard(wmtsCapabilitiesUrl);
+      flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMTS' }), { tone: ok ? 'info' : 'error' });
     });
-    actions.appendChild(copyBtn);
+    actions.appendChild(copyWmtsBtn);
+
+    const copyWmsBtn = document.createElement('button');
+    copyWmsBtn.type = 'button';
+    copyWmsBtn.className = 'portal-action-button';
+    copyWmsBtn.textContent = tr('portal.layer.copy.wms');
+    copyWmsBtn.addEventListener('click', async () => {
+      const ok = await copyToClipboard(wmsCapabilitiesUrl);
+      flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMS' }), { tone: ok ? 'info' : 'error' });
+    });
+    actions.appendChild(copyWmsBtn);
+
+    if (!isTheme) {
+      const copyWfsBtn = document.createElement('button');
+      copyWfsBtn.type = 'button';
+      copyWfsBtn.className = 'portal-action-button';
+      copyWfsBtn.textContent = tr('portal.layer.copy.wfs');
+      copyWfsBtn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(wfsCapabilitiesUrl);
+        flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WFS' }), { tone: ok ? 'info' : 'error' });
+      });
+      actions.appendChild(copyWfsBtn);
+    }
 
     head.appendChild(actions);
     entry.appendChild(head);
@@ -471,12 +537,25 @@ const renderProjects = (projects) => {
 
     const links = document.createElement('div');
     links.className = 'portal-links';
-    const wmtsLink = document.createElement('a');
-    wmtsLink.href = project.wmtsUrl;
-    wmtsLink.target = '_blank';
-    wmtsLink.rel = 'noopener';
-    wmtsLink.textContent = tr('portal.layer.wmts');
-    links.appendChild(wmtsLink);
+    const projectWmtsUrl = project.wmtsUrl || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const projectWmsUrl = project.wmsUrl || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const projectWfsUrl = project.wfsUrl || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+
+    const copyProjectBtn = (key, url, label) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'portal-action-button';
+      btn.textContent = tr(key);
+      btn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(url);
+        flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label }), { tone: ok ? 'info' : 'error' });
+      });
+      return btn;
+    };
+
+    links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
+    links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
+    links.appendChild(copyProjectBtn('portal.layer.copy.wfs', projectWfsUrl, 'WFS'));
 
     const cacheUpdatedLabel = formatDateTime(project.cacheUpdatedAt);
     if (cacheUpdatedLabel) {

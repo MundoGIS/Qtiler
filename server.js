@@ -22,6 +22,9 @@ import { registerUiRoutes } from "./routes/ui.js";
 import { registerProj4Routes } from "./routes/proj4.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerWmsRoutes } from "./routes/wms.js";
+import { registerWfsRoutes } from "./routes/wfs.js";
+import { registerOrigoRoutes } from "./routes/origo.js";
 
 
 dotenv.config();
@@ -217,6 +220,23 @@ const requireAdminPage = (req, res, next) => {
 const ensureProjectAccess = (selector) => (req, res, next) => {
   try {
     const projectId = selector(req);
+    const authEnabled = !!(security.isEnabled && security.isEnabled());
+    if (!authEnabled) {
+      return next();
+    }
+
+    // Fast-path: if our access snapshot says the request is allowed (public/assigned/admin),
+    // let it through even when the auth plugin would otherwise reject unauthenticated users.
+    try {
+      const snapshot = readProjectAccessSnapshot();
+      const accessInfo = deriveProjectAccess(snapshot, req.user || null, projectId);
+      if (accessInfo && accessInfo.allowed === true) {
+        return next();
+      }
+    } catch {
+      // fall through to plugin enforcement
+    }
+
     const output = security.ensureProjectAccess(req, res, next, projectId);
     if (output && typeof output.then === "function") {
       output.catch(next);
@@ -313,6 +333,23 @@ app.locals.pluginManager = pluginManager;
 
 app.use(cors());
 app.use(express.json());
+// WFS-T Transaction uses XML payloads; parse them as raw text.
+app.use(
+  "/wfs",
+  express.text({
+    type: [
+      "application/xml",
+      "text/xml",
+      "application/*+xml",
+      "application/gml+xml",
+      "application/ogc+xml",
+      // QGIS WFS can POST KVP bodies (form-encoded) for GetFeature etc.
+      "application/x-www-form-urlencoded",
+      "text/plain"
+    ],
+    limit: "10mb"
+  })
+);
 app.use(cookieParser());
 app.use((req, res, next) => security.attachUser(req, res, next));
 
@@ -487,6 +524,11 @@ registerProj4Routes({
   getProj4Presets: () => proj4Presets
 });
 
+registerOrigoRoutes({
+  app,
+  publicDir
+});
+
 app.use(express.static(publicDir, { index: false }));
 
 // Plugin routes are registered after upload middleware initialization.
@@ -497,7 +539,7 @@ const projectsDir = path.resolve(__dirname, "qgisprojects");
 const logsDir = path.resolve(__dirname, "logs");
 const uploadTempDir = path.resolve(__dirname, "temp_uploads");
 
-const defaultUploadLimit = parseInt(process.env.PROJECT_UPLOAD_MAX_BYTES || "209715200", 10); // 200 MB por defecto
+const defaultUploadLimit = parseInt(process.env.PROJECT_UPLOAD_MAX_BYTES || "10737418240", 10); // 10 GiB por defecto
 const projectUpload = createProjectUpload({ uploadTempDir, maxBytes: defaultUploadLimit });
 
 const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
@@ -716,18 +758,44 @@ const computeScheduleNextRun = (schedule, { now = Date.now() } = {}) => {
   return null;
 };
 
+const safePathSegment = (value, { fallback = 'x' } = {}) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  const cleaned = raw
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 120);
+  return cleaned || fallback;
+};
+
 const limitScheduleHistory = (history) => {
   if (!Array.isArray(history)) return [];
   const trimmed = history.slice(-SCHEDULE_HISTORY_LIMIT);
   return trimmed;
 };
 
+const redactSecrets = (value) => {
+  const input = value == null ? "" : String(value);
+  if (!input) return "";
+  let out = input;
+  // Common key-value patterns
+  out = out.replace(/(\b(password|passwd|pwd)\s*[=:]\s*)([^\s&;\r\n]+)/gi, "$1***");
+  out = out.replace(/(\b(api[_-]?key|token|access[_-]?token)\s*[=:]\s*)([^\s&;\r\n]+)/gi, "$1***");
+  // Quoted patterns (password '...')
+  out = out.replace(/(\b(password|passwd|pwd)\b[^'\"]*['\"])([^'\"]+)(['\"])/gi, "$1***$4");
+  // URL basic-auth: scheme://user:pass@
+  out = out.replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^:\s\/]+:)([^@\s\/]+)(@)/gi, "$1***$3");
+  return out;
+};
+
 const logProjectEvent = (projectId, message, level = "info") => {
   if (!projectId || !message) return;
-  const line = `[${new Date().toISOString()}][${level.toUpperCase()}] ${message}\n`;
+  const safeMessage = redactSecrets(message);
+  const line = `[${new Date().toISOString()}][${level.toUpperCase()}] ${safeMessage}\n`;
   const last = projectLogLastMessage.get(projectId);
-  if (last === message) return;
-  projectLogLastMessage.set(projectId, message);
+  if (last === safeMessage) return;
+  projectLogLastMessage.set(projectId, safeMessage);
   const logPath = path.join(logsDir, `project-${projectId}.log`);
   try {
     fs.appendFileSync(logPath, line, "utf8");
@@ -1619,6 +1687,58 @@ const resolveProjectFilePath = (projectId) => {
       // ignore and continue with next candidate
     }
   }
+
+  // Bundle projects: qgisprojects/<projectId>/.../<something>.qgz|.qgs
+  try {
+    const folder = path.join(projectsDir, normalizedId);
+    if (fs.existsSync(folder)) {
+      const stat = fs.statSync(folder);
+      if (stat.isDirectory()) {
+        const matches = [];
+        const stack = [folder];
+        const folderResolved = path.resolve(folder);
+        const folderLower = folderResolved.toLowerCase();
+        let scanned = 0;
+        const MAX_SCAN = 2000;
+
+        while (stack.length) {
+          const current = stack.pop();
+          scanned += 1;
+          if (scanned > MAX_SCAN) break;
+          let listing;
+          try {
+            listing = fs.readdirSync(current, { withFileTypes: true });
+          } catch {
+            continue;
+          }
+          for (const ent of listing) {
+            if (!ent) continue;
+            const fullPath = path.join(current, ent.name);
+            const fullResolved = path.resolve(fullPath);
+            if (!fullResolved.toLowerCase().startsWith(folderLower + path.sep)) {
+              continue;
+            }
+            if (ent.isDirectory()) {
+              if (ent.name === 'node_modules' || ent.name === '.git') continue;
+              stack.push(fullPath);
+            } else if (ent.isFile()) {
+              const lower = ent.name.toLowerCase();
+              if (lower.endsWith('.qgz') || lower.endsWith('.qgs')) {
+                matches.push(fullPath);
+                if (matches.length > 1) {
+                  console.warn(`Multiple project files found under ${folderResolved}; cannot resolve uniquely.`);
+                  return null;
+                }
+              }
+            }
+          }
+        }
+        if (matches.length === 1) return matches[0];
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to resolve bundle project path', { projectId, error: err?.message || err });
+  }
   try {
     const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
     const lowered = normalizedId.toLowerCase();
@@ -2081,6 +2201,9 @@ const buildProjectConfigPatch = (input = {}) => {
       if (Array.isArray(info.center)) layerPatch.center = info.center;
       if (Array.isArray(info.resolutions)) layerPatch.resolutions = info.resolutions;
       if (info.tileGridId) layerPatch.tileGridId = info.tileGridId;
+
+      // WFS: allow admins to toggle editability per vector layer.
+      if (typeof info.wfsEditable === "boolean") layerPatch.wfsEditable = info.wfsEditable;
       
       if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
         if (info.schedule === null) {
@@ -3026,6 +3149,73 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   } catch (relocateErr) {
     if (!silent) console.warn("Failed to relocate cache prior to delete", projectId, layerName, relocateErr);
   }
+
+  // Also purge WMS tile cache for this layer.
+  // WMS caching stores tiles under:
+  //   cache/<project>/_wms_tiles/<crs>/<layers>/<styles>/<t|o>/<z>/<x>/<y>.<ext>
+  // where <layers> is a safePathSegment of the LAYERS string.
+  const purgeWmsCacheForLayer = async () => {
+    const layerSeg = safePathSegment(layerName, { fallback: 'layers' });
+    const projectSeg = safePathSegment(projectId, { fallback: projectId || 'project' });
+
+    const candidateRoots = Array.from(new Set([
+      path.join(cacheDir, projectId, '_wms_tiles'),
+      path.join(cacheDir, projectSeg, '_wms_tiles'),
+      // legacy root used by older WMS cache implementation
+      path.join(cacheDir, '_wms_tiles', projectSeg)
+    ]));
+
+    const removeDirBestEffort = async (dirPath) => {
+      if (!dirPath) return;
+      try {
+        if (!fs.existsSync(dirPath)) return;
+      } catch {
+        return;
+      }
+      let removal = dirPath;
+      try {
+        const relocated = await relocateDirectoryForRemoval(dirPath);
+        if (relocated) removal = relocated;
+      } catch {
+        removal = dirPath;
+      }
+      try {
+        await removeDirectorySafe(removal, {});
+        if (removal !== dirPath) {
+          try { await removeDirectorySafe(dirPath, { attempts: 2, delayMs: 100 }); } catch {}
+        }
+      } catch (e) {
+        if (!silent) console.warn('Failed to remove WMS cache dir', dirPath, e?.message || e);
+      }
+    };
+
+    for (const root of candidateRoots) {
+      try {
+        if (!fs.existsSync(root)) continue;
+      } catch {
+        continue;
+      }
+
+      // Root may either contain CRS dirs (new layout) or already be the CRS dir (legacy variants).
+      let crsDirs = [];
+      try {
+        crsDirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+      } catch {
+        crsDirs = [];
+      }
+
+      // New layout: root/<crs>/<layers>/...
+      for (const crsName of crsDirs) {
+        const target = path.join(root, crsName, layerSeg);
+        await removeDirBestEffort(target);
+      }
+
+      // Legacy layout might have root/<layers>/... directly.
+      await removeDirBestEffort(path.join(root, layerSeg));
+    }
+  };
+
+  await purgeWmsCacheForLayer();
   try {
     await removeDirectorySafe(removalPath, {});
     if (removalPath !== layerDir) {
@@ -3972,7 +4162,7 @@ const runExtractInfoForProject = (projectPath) => new Promise((resolve, reject) 
     return resolve(null);
   }
   const args = ["--project", projectPath];
-  const proc = runPythonViaOSGeo4W(script, args);
+  const proc = runPythonViaOSGeo4W(script, args, { cwd: path.dirname(projectPath) });
   let stdout = "";
   let stderr = "";
   proc.stdout.on("data", (chunk) => {
@@ -4315,13 +4505,70 @@ const seedProjectConfigFromBootstrap = (projectId, info = {}) => {
 const listProjects = () => {
   try {
     if (!fs.existsSync(projectsDir)) return [];
-    const files = fs.readdirSync(projectsDir, { withFileTypes: true });
-    const items = files
-      .filter(d => d.isFile() && (d.name.toLowerCase().endsWith('.qgz') || d.name.toLowerCase().endsWith('.qgs')))
-      .map(d => {
-        const id = d.name.replace(/\.(qgz|qgs)$/i, "");
-        return { id, name: id, file: path.join(projectsDir, d.name) };
-      });
+    const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+
+    const findSingleProjectFileRecursive = (rootDir) => {
+      const matches = [];
+      const stack = [rootDir];
+      const rootResolved = path.resolve(rootDir);
+      const rootLower = rootResolved.toLowerCase();
+      let scanned = 0;
+      const MAX_SCAN = 2000;
+
+      while (stack.length) {
+        const current = stack.pop();
+        scanned += 1;
+        if (scanned > MAX_SCAN) break;
+        let listing;
+        try {
+          listing = fs.readdirSync(current, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const ent of listing) {
+          if (!ent) continue;
+          const fullPath = path.join(current, ent.name);
+          const fullResolved = path.resolve(fullPath);
+          if (!fullResolved.toLowerCase().startsWith(rootLower + path.sep)) {
+            continue;
+          }
+          if (ent.isDirectory()) {
+            // avoid deeply nested node_modules-like folders if ever present
+            if (ent.name === 'node_modules' || ent.name === '.git') continue;
+            stack.push(fullPath);
+          } else if (ent.isFile()) {
+            const lower = ent.name.toLowerCase();
+            if (lower.endsWith('.qgz') || lower.endsWith('.qgs')) {
+              matches.push(fullPath);
+              if (matches.length > 1) return matches;
+            }
+          }
+        }
+      }
+      return matches;
+    };
+
+    const items = [];
+
+    for (const ent of entries) {
+      if (!ent) continue;
+      if (ent.isFile() && (ent.name.toLowerCase().endsWith('.qgz') || ent.name.toLowerCase().endsWith('.qgs'))) {
+        const id = ent.name.replace(/\.(qgz|qgs)$/i, "");
+        items.push({ id, name: id, file: path.join(projectsDir, ent.name) });
+        continue;
+      }
+      if (ent.isDirectory()) {
+        const projectId = ent.name;
+        const folder = path.join(projectsDir, projectId);
+        const found = findSingleProjectFileRecursive(folder);
+        if (found.length === 1) {
+          items.push({ id: projectId, name: projectId, file: found[0] });
+        } else if (found.length > 1) {
+          console.warn(`[projects] Skipping folder '${projectId}': multiple .qgs/.qgz found.`);
+        }
+      }
+    }
+
     return items;
   } catch (e) { return []; }
 };
@@ -4554,6 +4801,8 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   const displayName = projectMeta?.title || projectMeta?.name || project.name || projectId;
   const summary = projectMeta?.summary || projectMeta?.description || null;
   const wmtsUrl = `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
+  const wmsUrl = `/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
+  const wfsUrl = `/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
   const cacheUpdatedAt = indexData.updated || indexData.modified || indexData.generatedAt || indexData.created || null;
   const accessInfo = access && typeof access === "object" ? access : { public: true, allowed: true };
   return {
@@ -4563,6 +4812,8 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
     summary,
     public: accessInfo.public === true,
     wmtsUrl,
+    wmsUrl,
+    wfsUrl,
     cacheUpdatedAt,
     layers,
     themes,
@@ -4991,6 +5242,25 @@ registerProjectRoutes({
   logProjectEvent,
   buildPublicProjectsListing,
   resolvePublicProject
+});
+
+registerWmsRoutes({
+  app,
+  cacheDir,
+  tileGridDir,
+  tileRendererPool,
+  ensureProjectAccessFromQuery,
+  findProjectById
+});
+
+registerWfsRoutes({
+  app,
+  tileRendererPool,
+  ensureProjectAccessFromQuery,
+  requireAdmin,
+  findProjectById,
+  readProjectConfig,
+  logProjectEvent
 });
 
 // generate-cache -> spawn para proceso largo (pasar args)
@@ -5904,6 +6174,8 @@ const buildLayerTitle = (projectId, layerName, kind) => {
 
 const buildWmtsInventory = (options = {}) => {
   const filterProject = options.filterProjectId ? String(options.filterProjectId).toLowerCase() : "";
+  const filterLayerRaw = options.filterLayerName != null ? String(options.filterLayerName).trim() : "";
+  const filterLayerNorm = filterLayerRaw ? normalizeIdentifier(filterLayerRaw, "layer") : "";
   const projects = fs.existsSync(cacheDir)
     ? fs.readdirSync(cacheDir).filter((dir) => fs.statSync(path.join(cacheDir, dir)).isDirectory())
     : [];
@@ -5973,6 +6245,17 @@ const buildWmtsInventory = (options = {}) => {
 
       const layerName = layerEntry.name || layerEntry.layer || layerEntry.theme || "layer";
       const storageName = layerEntry.layer || layerEntry.theme || layerEntry.name || layerName;
+
+      if (filterLayerRaw) {
+        const candidateRaw = String(layerName ?? '').trim();
+        const candidateNorm = normalizeIdentifier(candidateRaw, 'layer');
+        const candidateStorageNorm = normalizeIdentifier(String(storageName ?? '').trim(), 'layer');
+        const matches = (candidateRaw === filterLayerRaw)
+          || (filterLayerNorm && candidateNorm && filterLayerNorm === candidateNorm)
+          || (filterLayerNorm && candidateStorageNorm && filterLayerNorm === candidateStorageNorm);
+        if (!matches) continue;
+      }
+
       const extent = sanitizeExtent(layerEntry.extent);
       const extentWgs = sanitizeExtent(layerEntry.extent_wgs84);
       const zoomMin = Number.isFinite(Number(layerEntry.zoom_min)) ? Number(layerEntry.zoom_min) : 0;
@@ -6311,9 +6594,12 @@ const normalizeTileMatrixSetForExtent = (tileMatrixSet, extent) => {
   const cleanExtent = sanitizeExtentCoordinates(extent);
   if (!cleanExtent) return tileMatrixSet;
 
-  const width = Math.abs(Number(cleanExtent[2]) - Number(cleanExtent[0]));
-  const height = Math.abs(Number(cleanExtent[3]) - Number(cleanExtent[1]));
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return tileMatrixSet;
+  const minX = Number(cleanExtent[0]);
+  const minY = Number(cleanExtent[1]);
+  const maxX = Number(cleanExtent[2]);
+  const maxY = Number(cleanExtent[3]);
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) return tileMatrixSet;
+  if (!(maxX > minX) || !(maxY > minY)) return tileMatrixSet;
 
   let cloned;
   try {
@@ -6331,6 +6617,17 @@ const normalizeTileMatrixSetForExtent = (tileMatrixSet, extent) => {
   const tileHeight = Number(cloned.tile_height || cloned.tileHeight || 256);
   if (!Number.isFinite(tileWidth) || tileWidth <= 0 || !Number.isFinite(tileHeight) || tileHeight <= 0) return cloned;
 
+  // IMPORTANT:
+  // - Many presets (e.g. Swedish EPSG:3006 grids) already have correct matrixWidth/Height
+  //   for their fixed topLeftCorner.
+  // - If we recompute using only the layer extent size, we can accidentally *shrink* the matrix
+  //   and cause tiles to 404 at higher zooms (viewer shows shifted tiles / disappears on zoom-in).
+  // So we compute the minimum matrix size needed to cover the extent from the declared origin,
+  // and we never reduce existing matrix sizes.
+  const origin = getOriginFromTileMatrixSet(cloned);
+  const originX = origin ? origin[0] : null;
+  const originY = origin ? origin[1] : null;
+
   for (const m of matrices) {
     if (!m || typeof m !== 'object') continue;
     let res = Number(m.resolution);
@@ -6338,8 +6635,27 @@ const normalizeTileMatrixSetForExtent = (tileMatrixSet, extent) => {
       res = Number(m.scale_denominator) * 0.00028;
     }
     if (!Number.isFinite(res) || res <= 0) continue;
-    m.matrix_width = Math.max(1, Math.ceil(width / (tileWidth * res)));
-    m.matrix_height = Math.max(1, Math.ceil(height / (tileHeight * res)));
+
+    const spanX = tileWidth * res;
+    const spanY = tileHeight * res;
+
+    const existingWidth = Number(m.matrix_width || m.matrixWidth) || 0;
+    const existingHeight = Number(m.matrix_height || m.matrixHeight) || 0;
+
+    let requiredWidth = 0;
+    let requiredHeight = 0;
+    if (Number.isFinite(originX) && Number.isFinite(originY)) {
+      requiredWidth = Math.max(1, Math.ceil((maxX - originX) / spanX));
+      requiredHeight = Math.max(1, Math.ceil((originY - minY) / spanY));
+    } else {
+      // Fallback: if origin is missing, at least cover the extent width/height.
+      requiredWidth = Math.max(1, Math.ceil((maxX - minX) / spanX));
+      requiredHeight = Math.max(1, Math.ceil((maxY - minY) / spanY));
+    }
+
+    // Never reduce matrix sizes.
+    m.matrix_width = Math.max(existingWidth, requiredWidth);
+    m.matrix_height = Math.max(existingHeight, requiredHeight);
   }
 
   if (Array.isArray(cloned.matrices)) cloned.matrices = matrices;
@@ -6419,7 +6735,7 @@ app.get("/cache/index.json", requireAdmin, (req, res) => {
 });
 
 // index por proyecto
-app.get("/cache/:project/index.json", requireAdmin, (req, res) => {
+app.get("/cache/:project/index.json", ensureProjectAccess((req) => req.params.project), (req, res) => {
   try {
     const p = req.params.project;
     const pIndex = path.join(cacheDir, p, "index.json");
@@ -7227,7 +7543,7 @@ function processRenderQueue() {
   // Argumentos separados, nunca incluir el path del script
   const args = [
     '--single',
-    '--project', path.join(__dirname, 'qgisprojects', `${next.params.project}.qgz`),
+    '--project', (resolveProjectFilePath(next.params.project) || path.join(__dirname, 'qgisprojects', `${next.params.project}.qgz`)),
     next.params.layer ? '--layer' : null,
     next.params.layer ? next.params.layer : null,
     next.params.theme ? '--theme' : null,
@@ -7571,10 +7887,15 @@ app.get("/wmts", (req, res, next) => {
     const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
     const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
 
+    const filterLayer = String(findQ('layer') || findQ('LAYER') || '').trim();
+
     // For GetCapabilities, check project access if a specific project is requested
     const executeGetCapabilities = () => {
       try {
-        const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
+        const inventory = buildWmtsInventory({
+          ...(filterProjectId ? { filterProjectId } : {}),
+          ...(filterLayer ? { filterLayerName: filterLayer } : {})
+        });
         const { layers, tileMatrixSets } = inventory;
 
         const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -7597,6 +7918,9 @@ app.get("/wmts", (req, res, next) => {
         let kvpUrl = baseUrl + "/wmts?";
         if (filterProjectId) {
             kvpUrl += "project=" + encodeURIComponent(filterProjectId) + "&";
+        }
+        if (filterLayer) {
+          kvpUrl += "layer=" + encodeURIComponent(filterLayer) + "&";
         }
 
         const metadataSnapshot = serviceMetadata || serviceMetadataDefaults;

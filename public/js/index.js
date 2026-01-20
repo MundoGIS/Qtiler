@@ -1084,6 +1084,57 @@
         capUrlContainer.appendChild(capCopyBtn);
         wmtsSection.appendChild(capUrlContainer);
 
+        // WMS GetCapabilities URL
+        const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
+
+        const wmsLabel = document.createElement('div');
+        wmsLabel.style.fontSize = '14px';
+        wmsLabel.style.fontWeight = '600';
+        wmsLabel.style.marginTop = '20px';
+        wmsLabel.style.marginBottom = '12px';
+        wmsLabel.style.color = '#333';
+        wmsLabel.textContent = 'WMS URL';
+        wmtsSection.appendChild(wmsLabel);
+
+        const wmsCapLabel = document.createElement('div');
+        wmsCapLabel.style.fontSize = '12px';
+        wmsCapLabel.style.fontWeight = '600';
+        wmsCapLabel.style.marginBottom = '4px';
+        wmsCapLabel.style.color = '#666';
+        wmsCapLabel.textContent = 'GetCapabilities URL (standard WMS):';
+        wmtsSection.appendChild(wmsCapLabel);
+
+        const wmsCapUrlContainer = document.createElement('div');
+        wmsCapUrlContainer.style.display = 'flex';
+        wmsCapUrlContainer.style.gap = '8px';
+
+        const wmsCapUrlInput = document.createElement('input');
+        wmsCapUrlInput.type = 'text';
+        wmsCapUrlInput.readOnly = true;
+        wmsCapUrlInput.value = wmsCapabilitiesUrl;
+        wmsCapUrlInput.style.flex = '1';
+        wmsCapUrlInput.style.padding = '8px';
+        wmsCapUrlInput.style.fontFamily = 'Consolas, Monaco, monospace';
+        wmsCapUrlInput.style.fontSize = '12px';
+        wmsCapUrlInput.style.border = '1px solid #ccc';
+        wmsCapUrlInput.style.borderRadius = '4px';
+        wmsCapUrlInput.style.background = '#f8f9fa';
+        wmsCapUrlContainer.appendChild(wmsCapUrlInput);
+
+        const wmsCapCopyBtn = document.createElement('button');
+        wmsCapCopyBtn.type = 'button';
+        wmsCapCopyBtn.className = 'btn btn-secondary btn-sm';
+        wmsCapCopyBtn.textContent = 'Copy';
+        wmsCapCopyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(wmsCapabilitiesUrl).then(() => {
+            showStatus(tr('WMS URL copied to clipboard'));
+          }).catch(err => {
+            showStatus('Copy failed: ' + String(err), true);
+          });
+        });
+        wmsCapUrlContainer.appendChild(wmsCapCopyBtn);
+        wmtsSection.appendChild(wmsCapUrlContainer);
+
         detailsPane.appendChild(wmtsSection);
 
         // If admin, add editable fields section
@@ -2200,6 +2251,8 @@
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.23 8.97a.75.75 0 0 1 1.06-.08L12 13.01l4.71-4.12a.75.75 0 0 1 .99 1.12l-5.2 4.55a.75.75 0 0 1-.99 0l-5.2-4.55a.75.75 0 0 1-.08-1.04Z"/></svg>',
         layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
         wmts: '<img src="/css/images/wmts-letters.svg" alt="WMTS" width="28" height="18" loading="lazy" />',
+        wms: '<img src="/css/images/wms-letters.svg" alt="WMS" width="28" height="18" loading="lazy" />',
+        wfs: '<img src="/css/images/wfs-letters.svg" alt="WFS" width="28" height="18" loading="lazy" />',
         tiles: '<img src="/css/images/xyz-letters.svg" alt="XYZ" width="28" height="18" loading="lazy" />',
         theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.75a.75.75 0 0 1 1.5 0V4h7V2.75a.75.75 0 0 1 1.5 0V4h1.25A2.75 2.75 0 0 1 21 6.75v11.5A2.75 2.75 0 0 1 18.25 21H5.75A2.75 2.75 0 0 1 3 18.25V6.75A2.75 2.75 0 0 1 5.75 4H7V2.75ZM5.75 5.5A1.25 1.25 0 0 0 4.5 6.75v1.25h15V6.75A1.25 1.25 0 0 0 18.25 5.5H5.75Zm12.5 4.5h-15v8.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V10Z"/></svg>',
@@ -2207,6 +2260,7 @@
         trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3a1 1 0 0 0-1 1v1H4.75a.75.75 0 0 0 0 1.5h.68l.76 11.24A2.75 2.75 0 0 0 8.93 20.5h6.14a2.75 2.75 0 0 0 2.74-2.76l.76-11.24h.68a.75.75 0 0 0 0-1.5H16V4a1 1 0 0 0-1-1H9Zm1 1.5h4V5H10V4.5Zm-1.82 3h7.64l-.74 11a1.25 1.25 0 0 1-1.24 1.2H8.7a1.25 1.25 0 0 1-1.24-1.2l-.74-11Z"/></svg>',
         copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.75 4A3.75 3.75 0 0 0 6 7.75v8.5A3.75 3.75 0 0 0 9.75 20h8.5A3.75 3.75 0 0 0 22 16.25v-8.5A3.75 3.75 0 0 0 18.25 4h-8.5Zm0 1.5h8.5A2.25 2.25 0 0 1 20.5 7.75v8.5a2.25 2.25 0 0 1-2.25 2.25h-8.5A2.25 2.25 0 0 1 7.5 16.25v-8.5A2.25 2.25 0 0 1 9.75 5.5ZM4.75 7A.75.75 0 0 1 5.5 7.75v9a.75.75 0 0 1-1.5 0v-9A.75.75 0 0 1 4.75 7Z"/></svg>',
         eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c4.97 0 9.15 3.16 10.63 7.5C21.15 16.84 16.96 20 12 20s-9.15-3.16-10.63-7.5C2.85 8.16 7.04 5 12 5Zm0 1.5c-4.09 0-7.68 2.5-9.04 6 1.36 3.5 4.95 6 9.04 6 4.09 0 7.68-2.5 9.04-6-1.36-3.5-4.95-6-9.04-6Zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>',
+        map: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5 15 2l6 2.5v16L15 22l-6-2.5L3 22V6l6-1.5Zm0 1.6L4.5 7.3v12.2L9 18.4V6.1Zm1.5 0V18.4l4.5 1.9V7.9l-4.5-1.8Zm6 1.8v12.3l4.5-1.9V6.1l-4.5 1.8Z"/></svg>',
         link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.06 5.53a3.75 3.75 0 0 1 5.3-.02l.13.13a3.75 3.75 0 0 1 0 5.3l-1.84 1.84a.75.75 0 0 1-1.06-1.06l1.84-1.84a2.25 2.25 0 0 0 0-3.18l-.13-.13a2.25 2.25 0 0 0-3.18 0l-1.84 1.84a.75.75 0 1 1-1.06-1.06l1.84-1.84Zm-6.25 6.23a.75.75 0 0 1 1.06 1.06l-1.84 1.84a2.25 2.25 0 0 0 0 3.18l.13.13a2.25 2.25 0 0 0 3.18 0l1.84-1.84a.75.75 0 0 1 1.06 1.06l-1.84 1.84a3.75 3.75 0 0 1-5.3 0l-.13-.13a3.75 3.75 0 0 1 0-5.3l1.84-1.84Zm6.59-4.13a.75.75 0 0 1 0 1.06l-5.02 5.02a.75.75 0 0 1-1.06-1.06l5.02-5.02a.75.75 0 0 1 1.06 0Z"/></svg>'
         ,
         info: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm0 7a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75ZM12 7a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"/></svg>'
@@ -2368,6 +2422,21 @@
         btn.dataset.iconHtml = ICONS[iconName] || '';
         btn.title = label;
         btn.setAttribute('aria-label', label);
+        if (typeof onClick === 'function') {
+          btn.addEventListener('click', onClick);
+        }
+        return btn;
+      }
+
+      function makeLabeledIconButton(label, iconName, text, onClick, extraClass = '') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary layer-action-labeled' + (extraClass ? ' ' + extraClass : '');
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.innerHTML =
+          `<span class="layer-action-labeled__icon" aria-hidden="true">${ICONS[iconName] || ''}</span>` +
+          `<span class="layer-action-labeled__text">${escapeHtml(text)}</span>`;
         if (typeof onClick === 'function') {
           btn.addEventListener('click', onClick);
         }
@@ -3607,14 +3676,24 @@
         const originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = 'Uploading…';
-        showStatus('Uploading project: ' + file.name);
+        const ext = String(file.name || '').toLowerCase().split('.').pop();
+        if (ext === 'zip') {
+          showStatus('Uploading bundle (.zip): ' + file.name + ' (must contain exactly one .qgz/.qgs project)');
+        } else {
+          showStatus('Uploading project: ' + file.name);
+        }
         try {
           const form = new FormData();
           form.append('project', file, file.name);
           const res = await fetch('/projects', { method: 'POST', body: form });
           const data = await res.json().catch(() => null);
           if (!res.ok) {
-            const detail = data?.error || data?.details || res.statusText;
+            let detail = data?.error || data?.details || res.statusText;
+            if (data?.error === 'zip_missing_project') {
+              detail = 'ZIP must contain exactly one QGIS project (.qgz or .qgs).';
+            } else if (data?.error === 'zip_multiple_projects') {
+              detail = 'ZIP contains multiple QGIS projects (.qgz/.qgs). Keep only one.';
+            }
             showStatus('Upload failed: ' + detail, true);
             return;
           }
@@ -3901,6 +3980,15 @@
         const isAdmin = !window.appState.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
         const canView = isAdmin || project.isPublic || (window.appState.user && project.allowedRoles && project.allowedRoles.includes('authenticated')) || (window.appState.user && project.allowedUsers && project.allowedUsers.includes(window.appState.user.id));
 
+        const safeXmlName = (value) => {
+          const raw = (value == null ? '' : String(value)).trim();
+          if (!raw) return '_';
+          let out = raw.replace(/[^A-Za-z0-9_.-]+/g, '_');
+          if (!/^[A-Za-z_]/.test(out)) out = '_' + out;
+          if (out.toLowerCase().startsWith('xml')) out = '_' + out;
+          return out;
+        };
+
         const metaViewExtent = normalizeExtentList(projectMeta && projectMeta.view_extent_wgs84);
         const metaExtentDefault = normalizeExtentList(projectMeta && projectMeta.extent_wgs84);
         state.projectViewExtent = metaViewExtent ? metaViewExtent.slice() : null;
@@ -3984,6 +4072,34 @@
               });
             });
             controlsBox.appendChild(copyWmtsBtn);
+
+            const copyWmsBtn = document.createElement('button');
+            copyWmsBtn.className = 'btn btn-outline';
+            copyWmsBtn.type = 'button';
+            copyWmsBtn.textContent = tr('Copy WMS URL');
+            copyWmsBtn.addEventListener('click', () => {
+              const wmsUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              navigator.clipboard.writeText(wmsUrl).then(() => {
+                showStatus(tr('WMS URL copied to clipboard'));
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+            });
+            controlsBox.appendChild(copyWmsBtn);
+
+            const copyWfsBtn = document.createElement('button');
+            copyWfsBtn.className = 'btn btn-outline';
+            copyWfsBtn.type = 'button';
+            copyWfsBtn.textContent = tr('Copy WFS URL');
+            copyWfsBtn.addEventListener('click', () => {
+              const wfsUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              navigator.clipboard.writeText(wfsUrl).then(() => {
+                showStatus(tr('WFS URL copied to clipboard'));
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+            });
+            controlsBox.appendChild(copyWfsBtn);
           }
 
           const extentToggle = document.createElement('button');
@@ -4174,10 +4290,80 @@
             });
           });
 
+          const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`;
+          const copyWmsBtn = makeIconButton(tr('Copy WMS URL'), 'wms', () => {
+            navigator.clipboard.writeText(wmsCapabilitiesUrl).then(() => {
+              showStatus(tr('WMS URL copied to clipboard'));
+            }).catch(err => {
+              showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+            });
+          });
+
+          const isVectorLayer = !!(l && (l.kind === 'vector' || l.kind === 'VectorLayer' || l.geometry_type));
+          const wfsCapabilitiesUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&TYPENAME=${encodeURIComponent(safeXmlName(l.name))}`;
+          const copyWfsBtn = makeIconButton(tr('Copy WFS URL'), 'wfs', () => {
+            navigator.clipboard.writeText(wfsCapabilitiesUrl).then(() => {
+              showStatus(tr('WFS URL copied to clipboard'));
+            }).catch(err => {
+              showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+            });
+          });
+
           const controls = document.createElement('div');
           controls.className = 'actions';
           controls.setAttribute('role', 'group');
           controls.addEventListener('click', (event) => event.stopPropagation());
+
+          const actionBox = document.createElement('div');
+          actionBox.className = 'layer-actions-box';
+
+          const rowCache = document.createElement('div');
+          rowCache.className = 'layer-actions-row';
+          rowCache.dataset.row = 'cache';
+
+          const rowCopy = document.createElement('div');
+          rowCopy.className = 'layer-actions-row';
+          rowCopy.dataset.row = 'copy';
+
+          const rowView = document.createElement('div');
+          rowView.className = 'layer-actions-row';
+          rowView.dataset.row = 'view';
+
+          if (isAdmin && l && (l.kind === 'vector' || l.kind === 'VectorLayer' || l.geometry_type)) {
+            const editableWrap = document.createElement('label');
+            editableWrap.style.display = 'inline-flex';
+            editableWrap.style.alignItems = 'center';
+            editableWrap.style.gap = '6px';
+            editableWrap.style.padding = '0 6px';
+            editableWrap.style.height = '32px';
+            editableWrap.style.border = '1px solid var(--border)';
+            editableWrap.style.borderRadius = '8px';
+            editableWrap.style.background = 'var(--card)';
+            editableWrap.title = tr('Enable editing over WFS');
+
+            const editableInput = document.createElement('input');
+            editableInput.type = 'checkbox';
+            editableInput.checked = !(configLayer && configLayer.wfsEditable === false);
+            editableInput.addEventListener('click', (event) => event.stopPropagation());
+            editableInput.addEventListener('change', () => {
+              const next = !!editableInput.checked;
+              queueProjectConfigSave(project.id, {
+                layers: {
+                  [l.name]: {
+                    wfsEditable: next
+                  }
+                }
+              }, { immediate: true });
+              showStatus(next ? tr('Layer marked editable') : tr('Layer marked read-only'));
+            });
+
+            const editableText = document.createElement('span');
+            editableText.textContent = tr('Editable');
+
+            editableWrap.appendChild(editableInput);
+            editableWrap.appendChild(editableText);
+            controls.appendChild(editableWrap);
+          }
 
           if (exampleLink && !hasCachedTiles) {
             // Index can contain bootstrap placeholders; only show sample link when tiles exist.
@@ -4220,8 +4406,8 @@
 
           if (isAdmin) {
             const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
-            controls.appendChild(scheduleBtn);
-            controls.appendChild(genBtn);
+            rowCache.appendChild(scheduleBtn);
+            rowCache.appendChild(genBtn);
 
             if (hasCachedTiles) {
               const delBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
@@ -4229,16 +4415,43 @@
               const delWrap = document.createElement('span');
               delWrap.className = 'delete-cache-container has-cache';
               delWrap.appendChild(delBtn);
-              controls.appendChild(delWrap);
+              rowCache.appendChild(delWrap);
             }
           }
 
-          let viewCacheBtn = null;
+          // Copy URLs row (only when the user can view the project)
+          if (canView) {
+            rowCopy.appendChild(copyWmtsBtn);
+            rowCopy.appendChild(copyWmsBtn);
+            if (isVectorLayer) rowCopy.appendChild(copyWfsBtn);
+            rowCopy.appendChild(copyXyzBtn);
+          }
+
+          // Viewers row
           if (canView) {
             const viewerUrl = '/viewer.html?project=' + encodeURIComponent(project.id) + '&layer=' + encodeURIComponent(l.name);
-            viewCacheBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
+            const viewWmtsBtn = makeLabeledIconButton(tr('Open map viewer'), 'map', 'WMTS', () => {
               window.open(viewerUrl, '_blank', 'noopener');
-            }, 'btn-secondary');
+            });
+            rowView.appendChild(viewWmtsBtn);
+
+            const viewerWmsUrl = '/viewer.html?project=' + encodeURIComponent(project.id)
+              + '&layer=' + encodeURIComponent(l.name)
+              + '&service=wms';
+            const viewWmsBtn = makeLabeledIconButton(tr('Open WMS viewer'), 'map', 'WMS', () => {
+              window.open(viewerWmsUrl, '_blank', 'noopener');
+            });
+            rowView.appendChild(viewWmsBtn);
+
+            if (isVectorLayer) {
+              const viewerWfsUrl = '/viewer.html?project=' + encodeURIComponent(project.id)
+                + '&layer=' + encodeURIComponent(l.name)
+                + '&service=wfs';
+              const viewWfsBtn = makeLabeledIconButton(tr('Open WFS viewer'), 'map', 'WFS', () => {
+                window.open(viewerWfsUrl, '_blank', 'noopener');
+              });
+              rowView.appendChild(viewWfsBtn);
+            }
           }
 
           // Layer details button
@@ -4252,10 +4465,13 @@
             });
           }, 'btn-secondary');
 
-          controls.appendChild(copyWmtsBtn);
-          controls.appendChild(copyXyzBtn);
-          if (viewCacheBtn) controls.appendChild(viewCacheBtn);
-          if (detailsBtn) controls.appendChild(detailsBtn);
+          if (canView && detailsBtn) rowView.appendChild(detailsBtn);
+
+          // Assemble box rows (cache actions are admin-only)
+          if (isAdmin) actionBox.appendChild(rowCache);
+          if (canView) actionBox.appendChild(rowCopy);
+          if (canView) actionBox.appendChild(rowView);
+          controls.appendChild(actionBox);
           
 
           d.appendChild(info);
@@ -4338,6 +4554,15 @@
               });
             });
 
+            const themeWmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`;
+            const copyThemeWmsBtn = makeIconButton(tr('Copy WMS URL'), 'wms', () => {
+              navigator.clipboard.writeText(themeWmsCapabilitiesUrl).then(() => {
+                showStatus(tr('WMS URL copied to clipboard'));
+              }).catch(err => {
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+            });
+
             const copyThemeXyzBtn = makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
               navigator.clipboard.writeText(themeXyzTemplate).then(() => {
                 showStatus(tr('Tile template copied to clipboard: {url}', { url: themeXyzTemplate }));
@@ -4346,8 +4571,11 @@
               });
             });
 
-            actions.appendChild(copyThemeWmtsBtn);
-            actions.appendChild(copyThemeXyzBtn);
+            if (canView) {
+              actions.appendChild(copyThemeWmtsBtn);
+              actions.appendChild(copyThemeWmsBtn);
+              actions.appendChild(copyThemeXyzBtn);
+            }
 
             if (canView) {
               const viewThemeBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {

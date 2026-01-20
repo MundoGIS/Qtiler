@@ -206,6 +206,9 @@
       "viewer.info.layer": "Layer: {value}",
       "viewer.info.mode": "Mode: {value}",
       "viewer.info.template": "Tile template: {value}",
+      "viewer.mode.cache": "WMTS (cache/on-demand)",
+      "viewer.mode.wms": "WMS (tiled)",
+      "viewer.mode.wfs": "WFS (vector)",
       "viewer.value.notAvailable": "Not available",
       "viewer.info.zoomRange": "Zoom range: {min} — {max}",
       "viewer.info.tiles": "Tiles: {count}",
@@ -221,6 +224,7 @@
       "viewer.notice.noMatrix": "Tile matrix definition missing",
       "viewer.notice.customMatrix": "Using custom matrix for {crs}",
       "viewer.notice.customExtent": "Using custom extent in {crs}",
+      "viewer.notice.wfsTruncated": "WFS load stopped at {count} features (safety limit)",
       "viewer.notice.osmUnavailable": "OSM layer unavailable",
       "viewer.control.cacheStart": "Cache on demand",
       "viewer.control.cacheStop": "Stop cache",
@@ -231,6 +235,28 @@
       "viewer.control.osmShow": "Show OSM",
       "viewer.control.osmHide": "Hide OSM",
       "viewer.control.resetExtent": "Reset extent"
+      ,
+      "Open WMS viewer": "Open WMS viewer"
+      ,
+      "Copy WMS URL": "Copy WMS URL"
+      ,
+      "Open WFS viewer": "Open WFS viewer"
+      ,
+      "Copy WFS URL": "Copy WFS URL"
+      ,
+      "WFS URL copied to clipboard": "WFS URL copied to clipboard"
+      ,
+      "viewer.error.wfsLoadFailed": "Failed to load WFS features"
+      ,
+      "Editable": "Editable"
+      ,
+      "Enable editing over WFS": "Enable editing over WFS"
+      ,
+      "Layer marked editable": "Layer marked editable"
+      ,
+      "Layer marked read-only": "Layer marked read-only"
+      ,
+      "Upload bundle hint": "If your QGIS project uses file-based layers, upload a .zip that includes exactly one .qgz/.qgs plus the data files, keeping the folder structure."
     },
     es: {
       "Dashboard": "Panel principal",
@@ -249,6 +275,7 @@
       "Close": "Cerrar",
       "Signed in as {user}": "Sesión como {user}",
       "Upload project": "Subir proyecto",
+      "Upload bundle hint": "Si tu proyecto QGIS usa capas basadas en archivos, sube un .zip que incluya exactamente un .qgz/.qgs y los datos, manteniendo la estructura de carpetas.",
       "Reload layers": "Recargar capas",
       "User guide": "Guía de uso",
       "Min zoom:": "Zoom mínimo:",
@@ -333,7 +360,13 @@
       "Map themes": "Temas de mapa",
       "Generate theme cache": "Generar caché de tema",
       "Copy WMTS URL": "Copiar URL WMTS",
+      "Copy WMS URL": "Copiar URL WMS",
+      "Editable": "Editable",
+      "Enable editing over WFS": "Habilitar edición por WFS",
+      "Layer marked editable": "Capa marcada como editable",
+      "Layer marked read-only": "Capa marcada como solo lectura",
       "WMTS theme URL copied: {url}": "URL WMTS copiada: {url}",
+      "WMS URL copied to clipboard": "URL WMS copiada al portapapeles",
       "Loading jobs…": "Cargando tareas…",
       "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet no cargó (revisa bloqueo de SRI o CSP)",
       "Show extent map": "Mostrar mapa de extensión",
@@ -456,6 +489,9 @@
       "viewer.info.layer": "Capa: {value}",
       "viewer.info.mode": "Modo: {value}",
       "viewer.info.template": "Plantilla de teselas: {value}",
+      "viewer.mode.cache": "WMTS (caché/bajo demanda)",
+      "viewer.mode.wms": "WMS (en teselas)",
+      "viewer.mode.wfs": "WFS (vectorial)",
       "viewer.value.notAvailable": "No disponible",
       "viewer.info.zoomRange": "Rango de zoom: {min} — {max}",
       "viewer.info.tiles": "Teselas: {count}",
@@ -471,6 +507,7 @@
       "viewer.notice.noMatrix": "Falta definición de matriz de teselas",
       "viewer.notice.customMatrix": "Usando matriz personalizada para {crs}",
       "viewer.notice.customExtent": "Usando extensión personalizada en {crs}",
+      "viewer.notice.wfsTruncated": "La carga WFS se detuvo en {count} elementos (límite de seguridad)",
       "viewer.notice.osmUnavailable": "Capa OSM no disponible",
       "viewer.control.cacheStart": "Cachear bajo demanda",
       "viewer.control.cacheStop": "Detener caché",
@@ -481,6 +518,16 @@
       "viewer.control.osmShow": "Mostrar OSM",
       "viewer.control.osmHide": "Ocultar OSM",
       "viewer.control.resetExtent": "Restablecer extensión"
+      ,
+      "Open WMS viewer": "Abrir visor WMS"
+      ,
+      "Open WFS viewer": "Abrir visor WFS"
+      ,
+      "Copy WFS URL": "Copiar URL WFS"
+      ,
+      "WFS URL copied to clipboard": "URL WFS copiada al portapapeles"
+      ,
+      "viewer.error.wfsLoadFailed": "No se pudieron cargar las entidades WFS"
     },
     sv: {
       "Dashboard": "Översikt",
@@ -499,6 +546,7 @@
       "Close": "Stäng",
       "Signed in as {user}": "Inloggad som {user}",
       "Upload project": "Ladda upp projekt",
+      "Upload bundle hint": "Om ditt QGIS-projekt använder filbaserade lager: ladda upp en .zip som innehåller exakt en .qgz/.qgs samt datafilerna och behåll mappstrukturen.",
       "Reload layers": "Ladda om lager",
       "User guide": "Användarguide",
       "Min zoom:": "Min zoom:",
@@ -581,7 +629,18 @@
       "Map themes": "Kartteman",
       "Generate theme cache": "Generera temacache",
       "Copy WMTS URL": "Kopiera WMTS-URL",
+      "Copy WMS URL": "Kopiera WMS-URL",
+      "Copy WFS URL": "Kopiera WFS-URL",
+      "Editable": "Redigerbar",
+      "Enable editing over WFS": "Aktivera redigering via WFS",
+      "Layer marked editable": "Lager markerat som redigerbart",
+      "Layer marked read-only": "Lager markerat som skrivskyddat",
       "WMTS theme URL copied: {url}": "WMTS-URL kopierad: {url}",
+      "WMS URL copied to clipboard": "WMS-URL kopierad till urklipp",
+      "WFS URL copied to clipboard": "WFS-URL kopierad till urklipp",
+      "Open WFS viewer": "Öppna WFS-visare",
+      "viewer.mode.wfs": "WFS (vektor)",
+      "viewer.error.wfsLoadFailed": "Misslyckades att ladda WFS-objekt",
       "Loading jobs…": "Laddar jobb…",
       "Leaflet no cargó (revisa bloqueo de SRI o CSP)": "Leaflet laddades inte (kontrollera SRI eller CSP)",
       "Show extent map": "Visa utbredningskarta",
@@ -704,6 +763,8 @@
       "viewer.info.layer": "Lager: {value}",
       "viewer.info.mode": "Läge: {value}",
       "viewer.info.template": "Tile-mall: {value}",
+      "viewer.mode.cache": "WMTS (cache/on-demand)",
+      "viewer.mode.wms": "WMS (tiled)",
       "viewer.value.notAvailable": "Inte tillgängligt",
       "viewer.info.zoomRange": "Zoomintervall: {min} — {max}",
       "viewer.info.tiles": "Tiles: {count}",
@@ -719,6 +780,7 @@
       "viewer.notice.noMatrix": "Tile-matris saknas",
       "viewer.notice.customMatrix": "Använder anpassad matris för {crs}",
       "viewer.notice.customExtent": "Använder anpassad utbredning i {crs}",
+      "viewer.notice.wfsTruncated": "WFS-laddning stoppade vid {count} objekt (säkerhetsgräns)",
       "viewer.notice.osmUnavailable": "OSM-lager ej tillgängligt",
       "viewer.control.cacheStart": "Cache on demand",
       "viewer.control.cacheStop": "Stoppa cache",
@@ -729,6 +791,8 @@
       "viewer.control.osmShow": "Visa OSM",
       "viewer.control.osmHide": "Dölj OSM",
       "viewer.control.resetExtent": "Återställ utbredning"
+      ,
+      "Open WMS viewer": "Öppna WMS-visare"
     }
   };
 

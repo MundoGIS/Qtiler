@@ -5,7 +5,40 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
+import yauzl from "yauzl";
+import { pipeline } from "stream/promises";
+
+const redactSecrets = (value) => {
+  const input = value == null ? "" : String(value);
+  if (!input) return "";
+  let out = input;
+  // Common key-value patterns
+  out = out.replace(/(\b(password|passwd|pwd)\s*[=:]\s*)([^\s&;\r\n]+)/gi, "$1***");
+  out = out.replace(/(\b(api[_-]?key|token|access[_-]?token)\s*[=:]\s*)([^\s&;\r\n]+)/gi, "$1***");
+  // Quoted patterns (password '...')
+  out = out.replace(/(\b(password|passwd|pwd)\b[^'\"]*['\"])([^'\"]+)(['\"])/gi, "$1***$4");
+  // URL basic-auth: scheme://user:pass@
+  out = out.replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^:\s\/]+:)([^@\s\/]+)(@)/gi, "$1***$3");
+  return out;
+};
+
+const stripProjectPathsAndSecrets = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  let clone;
+  try {
+    clone = JSON.parse(JSON.stringify(payload));
+  } catch {
+    clone = { ...payload };
+  }
+  try {
+    if (clone.project && typeof clone.project === 'object') {
+      delete clone.project.path;
+    }
+  } catch {}
+  return clone;
+};
 
 export const registerProjectRoutes = ({
   app,
@@ -14,95 +47,45 @@ export const registerProjectRoutes = ({
   requireAdmin,
   ensureProjectAccess,
   sanitizeProjectId,
-  allowedProjectExtensions,
-  projectUpload,
-  projectsDir,
-  cacheDir,
-  tileGridDir,
-  pythonDir,
-  pythonExe,
-  runPythonViaOSGeo4W,
-  extractJsonLike,
-  listProjects,
-  readProjectAccessSnapshot,
   resolveProjectAccessEntry,
+  readProjectAccessSnapshot,
   deriveProjectAccess,
   isProjectPublic,
   buildProjectDescriptor,
-  buildPublicProjectsListing,
-  resolvePublicProject,
+  listProjects,
   findProjectById,
+  projectsDir,
+  projectUpload,
+  allowedProjectExtensions,
   bootstrapProjectCacheIndex,
+  runningJobs,
+  activeKeys,
   cancelProjectTimer,
   projectConfigCache,
   projectLogLastMessage,
   projectBatchCleanupTimers,
   projectBatchRuns,
-  invalidateTileGridCaches,
   removeProjectAccessEntry,
   purgeProjectFromAuthUsers,
   removeProjectLogs,
-  runningJobs,
-  activeKeys,
+  cacheDir,
+  tileGridDir,
+  invalidateTileGridCaches,
+  pythonDir,
+  pythonExe,
+  runPythonViaOSGeo4W,
+  extractJsonLike,
   readProjectConfig,
+  buildProjectConfigPatch,
   updateProjectConfig,
   getProjectConfigPath,
-  buildProjectConfigPatch,
   deleteLayerCacheInternal,
   updateProjectBatchRun,
   runRecacheForProject,
-  logProjectEvent
+  logProjectEvent,
+  buildPublicProjectsListing,
+  resolvePublicProject
 }) => {
-  app.get("/public/projects", (_req, res) => {
-    try {
-      const listing = buildPublicProjectsListing();
-      res.json(listing);
-    } catch (err) {
-      console.error("Failed to build public project listing", err);
-      res.status(500).json({ error: "public_projects_failed", details: String(err?.message || err) });
-    }
-  });
-
-  app.get("/public/projects/:id", (req, res) => {
-    try {
-      const projectId = sanitizeProjectId(req.params.id);
-      if (!projectId) {
-        return res.status(400).json({ error: "project_id_required" });
-      }
-      const descriptor = resolvePublicProject(projectId);
-      if (!descriptor) {
-        return res.status(404).json({ error: "project_not_found_or_private" });
-      }
-      res.json({ project: descriptor });
-    } catch (err) {
-      console.error("Failed to resolve public project", err);
-      res.status(500).json({ error: "public_project_failed", details: String(err?.message || err) });
-    }
-  });
-
-  app.get("/public/my-projects", (req, res) => {
-    if (!security.isEnabled()) {
-      return res.status(404).json({ error: "auth_plugin_disabled" });
-    }
-    if (!req.user) {
-      return res.status(401).json({ error: "auth_required" });
-    }
-    try {
-      const snapshot = readProjectAccessSnapshot();
-      const projects = listProjects();
-      const visible = [];
-      for (const project of projects) {
-        const accessInfo = deriveProjectAccess(snapshot, req.user, project.id);
-        if (!accessInfo.allowed && req.user.role !== "admin") continue;
-        const descriptor = buildProjectDescriptor(project, { snapshot, access: accessInfo });
-        if (descriptor) visible.push(descriptor);
-      }
-      res.json({ projects: visible, generatedAt: new Date().toISOString() });
-    } catch (err) {
-      console.error("Failed to build user project listing", err);
-      res.status(500).json({ error: "my_projects_failed", details: String(err?.message || err) });
-    }
-  });
 
   // listar proyectos
   app.get("/projects", (req, res) => {
@@ -120,13 +103,6 @@ export const registerProjectRoutes = ({
     const user = req.user;
     const isAdmin = user && user.role === 'admin';
     const accessSnapshot = readProjectAccessSnapshot();
-
-    console.log('[/projects] Debug:', {
-      totalProjects: allProjects.length,
-      projectIds: allProjects.map((p) => p.id),
-      accessSnapshot: accessSnapshot.projects,
-      user: user ? { id: user.id, role: user.role } : null
-    });
 
     const visibleProjects = allProjects
       .map((p) => {
@@ -152,7 +128,6 @@ export const registerProjectRoutes = ({
       })
       .filter((p) => {
         if (isAdmin) return true;
-        // deriveProjectAccess already knows public/role/user/assignment; keep filtering consistent.
         const accessInfo = deriveProjectAccess(accessSnapshot, user, p.id);
         return accessInfo.allowed === true;
       });
@@ -185,6 +160,251 @@ export const registerProjectRoutes = ({
       if (!projectId) {
         projectId = `project_${Date.now()}`;
       }
+
+      const ensureUniqueProjectId = (baseId) => {
+        let nextId = baseId;
+        let suffix = 1;
+        while (
+          fs.existsSync(path.join(projectsDir, `${nextId}.qgz`)) ||
+          fs.existsSync(path.join(projectsDir, `${nextId}.qgs`)) ||
+          fs.existsSync(path.join(projectsDir, nextId))
+        ) {
+          nextId = `${baseId}_${suffix}`;
+          suffix += 1;
+        }
+        return nextId;
+      };
+
+      projectId = ensureUniqueProjectId(projectId);
+
+      if (ext === ".zip") {
+        const targetDir = path.join(projectsDir, projectId);
+        let extractedProjectPath = null;
+        try {
+          const maxZipEntries = Number.parseInt(process.env.ZIP_UPLOAD_MAX_ENTRIES || '20000', 10);
+          const maxZipTotalBytes = Number.parseInt(process.env.ZIP_EXTRACT_MAX_BYTES || String(10 * 1024 * 1024 * 1024), 10); // 10 GiB
+          const maxZipEntryBytes = Number.parseInt(process.env.ZIP_EXTRACT_MAX_ENTRY_BYTES || String(10 * 1024 * 1024 * 1024), 10); // 10 GiB
+          const zipEntriesLimit = Number.isFinite(maxZipEntries) && maxZipEntries > 0 ? maxZipEntries : 20000;
+          const zipTotalLimit = Number.isFinite(maxZipTotalBytes) && maxZipTotalBytes > 0 ? maxZipTotalBytes : (10 * 1024 * 1024 * 1024);
+          const zipEntryLimit = Number.isFinite(maxZipEntryBytes) && maxZipEntryBytes > 0 ? maxZipEntryBytes : (10 * 1024 * 1024 * 1024);
+
+          const openZip = (zipPath) => new Promise((resolve, reject) => {
+            yauzl.open(zipPath, { lazyEntries: true, validateEntrySizes: true }, (err, zipfile) => {
+              if (err) return reject(err);
+              return resolve(zipfile);
+            });
+          });
+
+          const inspectZip = async (zipPath) => {
+            const zipfile = await openZip(zipPath);
+            const entries = [];
+            return await new Promise((resolve, reject) => {
+              let totalUncompressed = 0;
+              let entryCount = 0;
+              zipfile.on('error', (e) => {
+                try { zipfile.close(); } catch {}
+                reject(e);
+              });
+              zipfile.on('entry', (entry) => {
+                try {
+                  entryCount += 1;
+                  if (entryCount > zipEntriesLimit) {
+                    try { zipfile.close(); } catch {}
+                    return reject(Object.assign(new Error('zip_too_many_entries'), { code: 'ZIP_TOO_MANY_ENTRIES', entryCount, maxEntries: zipEntriesLimit }));
+                  }
+
+                  const nameRaw = String(entry.fileName || '');
+                  const normalized = nameRaw.replace(/\\/g, '/');
+                  const isDirectory = normalized.endsWith('/');
+                  if (!isDirectory && normalized && !normalized.startsWith('__MACOSX/')) {
+                    const uncompressedSize = Number(entry.uncompressedSize);
+                    const safeSize = Number.isFinite(uncompressedSize) && uncompressedSize >= 0 ? uncompressedSize : 0;
+                    if (safeSize > zipEntryLimit) {
+                      try { zipfile.close(); } catch {}
+                      return reject(Object.assign(new Error('zip_entry_too_large'), { code: 'ZIP_ENTRY_TOO_LARGE', name: normalized, maxEntryBytes: zipEntryLimit }));
+                    }
+                    totalUncompressed += safeSize;
+                    if (totalUncompressed > zipTotalLimit) {
+                      try { zipfile.close(); } catch {}
+                      return reject(Object.assign(new Error('zip_extract_too_large'), { code: 'ZIP_EXTRACT_TOO_LARGE', maxExtractBytes: zipTotalLimit }));
+                    }
+                  }
+
+                  entries.push({ name: normalized, isDirectory, uncompressedSize: Number(entry.uncompressedSize) || 0 });
+                  zipfile.readEntry();
+                } catch (e) {
+                  try { zipfile.close(); } catch {}
+                  reject(e);
+                }
+              });
+              zipfile.on('end', () => {
+                try { zipfile.close(); } catch {}
+                resolve({ entries, totalUncompressed });
+              });
+              zipfile.readEntry();
+            });
+          };
+
+          const { entries } = await inspectZip(file.path);
+          const projectEntries = entries
+            .filter((e) => e && !e.isDirectory)
+            .filter((e) => {
+              const name = String(e.name || '');
+              if (!name) return false;
+              if (name.startsWith('__MACOSX/')) return false;
+              const lower = name.toLowerCase();
+              return lower.endsWith('.qgz') || lower.endsWith('.qgs');
+            });
+
+          if (projectEntries.length === 0) {
+            return res.status(400).json({
+              error: 'zip_missing_project',
+              message: 'Zip archive must contain exactly one QGIS project (.qgz or .qgs). None found.'
+            });
+          }
+          if (projectEntries.length > 1) {
+            return res.status(400).json({
+              error: 'zip_multiple_projects',
+              message: 'Zip archive must contain exactly one QGIS project (.qgz or .qgs). Multiple found.',
+              projects: projectEntries.map((e) => String(e.name || ''))
+            });
+          }
+
+          const projectEntry = projectEntries[0];
+          const relProjectPosix = path.posix.normalize(String(projectEntry.name || '').replace(/^\/+/, ''));
+          const projectParts = relProjectPosix.split('/').filter(Boolean);
+
+          await fs.promises.mkdir(targetDir, { recursive: true });
+          const targetRootResolved = path.resolve(targetDir);
+          const targetRootLower = targetRootResolved.toLowerCase();
+
+          const extractZip = async (zipPath) => {
+            const zipfile = await openZip(zipPath);
+            return await new Promise((resolve, reject) => {
+              zipfile.on('error', (e) => {
+                try { zipfile.close(); } catch {}
+                reject(e);
+              });
+              zipfile.on('entry', (entry) => {
+                const rawName = String(entry.fileName || '');
+                const normalized = rawName.replace(/\\/g, '/').replace(/^\/+/, '');
+                const posixSafe = path.posix.normalize(normalized);
+                const isDirectory = posixSafe.endsWith('/') || /\/$/.test(normalized);
+                if (!posixSafe || posixSafe === '.' || posixSafe === '..') {
+                  zipfile.readEntry();
+                  return;
+                }
+                if (path.posix.isAbsolute(posixSafe) || posixSafe.startsWith('../') || posixSafe.includes('/../')) {
+                  try { zipfile.close(); } catch {}
+                  reject(new Error(`Unsafe zip entry path: ${rawName}`));
+                  return;
+                }
+                if (posixSafe.startsWith('__MACOSX/')) {
+                  zipfile.readEntry();
+                  return;
+                }
+
+                const parts = posixSafe.split('/').filter(Boolean);
+                const outPath = path.join(targetDir, ...parts);
+                const outResolved = path.resolve(outPath);
+                const outLower = outResolved.toLowerCase();
+                if (!outLower.startsWith(targetRootLower + path.sep) && outLower !== targetRootLower) {
+                  try { zipfile.close(); } catch {}
+                  reject(new Error(`Zip entry escapes target directory: ${rawName}`));
+                  return;
+                }
+
+                const uncompressedSize = Number(entry.uncompressedSize);
+                const safeSize = Number.isFinite(uncompressedSize) && uncompressedSize >= 0 ? uncompressedSize : 0;
+                if (!isDirectory && safeSize > zipEntryLimit) {
+                  try { zipfile.close(); } catch {}
+                  reject(new Error(`Zip entry exceeds max size (${zipEntryLimit}): ${rawName}`));
+                  return;
+                }
+
+                if (isDirectory) {
+                  fs.promises.mkdir(outResolved, { recursive: true })
+                    .then(() => zipfile.readEntry())
+                    .catch((e) => {
+                      try { zipfile.close(); } catch {}
+                      reject(e);
+                    });
+                  return;
+                }
+
+                fs.promises.mkdir(path.dirname(outResolved), { recursive: true })
+                  .then(() => {
+                    zipfile.openReadStream(entry, async (err, readStream) => {
+                      if (err) {
+                        try { zipfile.close(); } catch {}
+                        reject(err);
+                        return;
+                      }
+                      try {
+                        const writeStream = fs.createWriteStream(outResolved);
+                        await pipeline(readStream, writeStream);
+                        zipfile.readEntry();
+                      } catch (e) {
+                        try { zipfile.close(); } catch {}
+                        reject(e);
+                      }
+                    });
+                  })
+                  .catch((e) => {
+                    try { zipfile.close(); } catch {}
+                    reject(e);
+                  });
+              });
+              zipfile.on('end', () => {
+                try { zipfile.close(); } catch {}
+                resolve();
+              });
+              zipfile.readEntry();
+            });
+          };
+
+          await extractZip(file.path);
+
+          extractedProjectPath = path.join(targetDir, ...projectParts);
+          if (!fs.existsSync(extractedProjectPath)) {
+            return res.status(400).json({
+              error: 'zip_project_extract_failed',
+              message: 'Project file listed in zip could not be extracted.'
+            });
+          }
+
+          try {
+            await bootstrapProjectCacheIndex(projectId, extractedProjectPath);
+          } catch (bootstrapErr) {
+            console.warn(`[bootstrap] Initialization failed for ${projectId}:`, bootstrapErr?.message || bootstrapErr);
+          }
+
+          return res.status(201).json({
+            status: 'uploaded',
+            id: projectId,
+            filename: path.basename(file.originalname || 'bundle.zip'),
+            kind: 'bundle',
+            projectFile: path.relative(projectsDir, extractedProjectPath).replace(/\\/g, '/')
+          });
+        } catch (zipErr) {
+          const code = String(zipErr?.code || '');
+          if (code === 'ZIP_TOO_MANY_ENTRIES') {
+            return res.status(413).json({ error: 'zip_too_many_entries', maxEntries: zipErr.maxEntries });
+          }
+          if (code === 'ZIP_EXTRACT_TOO_LARGE') {
+            return res.status(413).json({ error: 'zip_extract_too_large', maxExtractBytes: zipErr.maxExtractBytes });
+          }
+          if (code === 'ZIP_ENTRY_TOO_LARGE') {
+            return res.status(413).json({ error: 'zip_entry_too_large', entry: zipErr.name, maxEntryBytes: zipErr.maxEntryBytes });
+          }
+          console.error('Bundle upload failed', zipErr);
+          try { await fs.promises.rm(targetDir, { recursive: true, force: true }); } catch {}
+          return res.status(500).json({ error: 'zip_upload_failed', details: redactSecrets(String(zipErr?.message || zipErr)) });
+        } finally {
+          try { if (file.path) await fs.promises.unlink(file.path); } catch {}
+        }
+      }
+
       let targetName = `${projectId}${ext}`;
       let suffix = 1;
       while (fs.existsSync(path.join(projectsDir, targetName))) {
@@ -246,7 +466,18 @@ export const registerProjectRoutes = ({
     }
 
     try {
-      fs.unlinkSync(proj.file);
+      const projectDirCandidate = path.join(projectsDir, proj.id);
+      const projectDirResolved = path.resolve(projectDirCandidate);
+      const projFileResolved = path.resolve(proj.file);
+      const projectsRootResolved = path.resolve(projectsDir);
+      const projectDirExists = fs.existsSync(projectDirCandidate) && fs.statSync(projectDirCandidate).isDirectory();
+      const inProjectDir = projFileResolved.toLowerCase().startsWith(projectDirResolved.toLowerCase() + path.sep);
+
+      if (projectDirExists && inProjectDir && projectDirResolved.toLowerCase().startsWith(projectsRootResolved.toLowerCase() + path.sep)) {
+        fs.rmSync(projectDirCandidate, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(proj.file);
+      }
     } catch (err) {
       return res.status(500).json({ error: "delete_failed", details: String(err) });
     }
@@ -332,18 +563,22 @@ export const registerProjectRoutes = ({
     const proj = findProjectById(req.params.id);
     if (!proj) return res.status(404).json({ error: "project_not_found" });
     const script = path.join(pythonDir, "extract_info.py");
-    const proc = runPythonViaOSGeo4W(script, ["--project", proj.file]);
+    const proc = runPythonViaOSGeo4W(script, ["--project", proj.file], {
+      cwd: path.dirname(proj.file)
+    });
 
     let stdout = "", stderr = "";
     proc.stdout.on("data", (d) => {
       const s = d.toString();
       stdout += s;
-      console.log("[py stdout]", s.trim());
+      // Avoid logging full JSON output (may contain URLs/tokens).
     });
     proc.stderr.on("data", (d) => {
       const s = d.toString();
       stderr += s;
-      console.error("[py stderr]", s.trim());
+      // Avoid leaking secrets in logs.
+      const line = s.trim();
+      if (line) console.error("[py stderr]", redactSecrets(line));
     });
     proc.on("error", (err) => {
       console.error("Failed to spawn python:", err);
@@ -356,13 +591,26 @@ export const registerProjectRoutes = ({
         if (candidate) {
           try {
             const parsed = JSON.parse(candidate);
-            return res.status(code === 0 ? 200 : 500).json(parsed);
+            if (code === 0) {
+              return res.status(200).json(stripProjectPathsAndSecrets(parsed));
+            }
+            // Never echo raw stderr/stdout back to clients on failure.
+            return res.status(500).json({ error: "extract_info_failed", code });
           } catch (e) {
-            return res.status(code === 0 ? 200 : 500).json({ raw, code });
+            if (code === 0) {
+              return res.status(200).json({ ok: true });
+            }
+            return res.status(500).json({ error: "extract_info_failed", code });
           }
-        } else return res.status(code === 0 ? 200 : 500).json({ raw, code });
+        }
+        if (code === 0) {
+          // Unexpected non-JSON output; avoid returning it.
+          return res.status(200).json({ ok: true });
+        }
+        return res.status(500).json({ error: "extract_info_failed", code });
       }
-      return res.status(code === 0 ? 200 : 500).json({ code, details: stderr || "no output" });
+      if (code === 0) return res.status(200).json({ ok: true });
+      return res.status(500).json({ error: "extract_info_failed", code });
     });
   });
 

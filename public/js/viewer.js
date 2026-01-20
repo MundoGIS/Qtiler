@@ -42,10 +42,15 @@
     }
     const languageSelect = document.getElementById('language_selector');
 
+    const serviceParam = String(params.get('service') || params.get('mode') || '').trim().toLowerCase();
+    const isWmsMode = serviceParam === 'wms';
+    const isWfsMode = serviceParam === 'wfs';
+
     const viewerState = {
       project: params.get('project'),
       theme: params.get('theme'),
-      layer: params.get('layer')
+      layer: params.get('layer'),
+      service: isWfsMode ? 'wfs' : (isWmsMode ? 'wms' : 'wmts')
     };
 
     const viewerSessionId = (() => {
@@ -55,15 +60,26 @@
       return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     })();
 
-    const displayMode = 'cache';
-    const showCache = true;
+    const displayMode = isWfsMode ? 'wfs' : (isWmsMode ? 'wms' : 'cache');
+    const showCache = !(isWmsMode || isWfsMode);
     const showRemote = false;
-    const tileTemplateBase = viewerState.theme
-      ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
-      : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`;
-    const tileTemplate = `${tileTemplateBase}?sid=${encodeURIComponent(viewerSessionId)}`;
-    const tileTemplateLabel = tileTemplate.replace('{z}', '{z}');
-    const modeLabelKey = 'viewer.mode.cache';
+
+    const tileTemplateBase = isWfsMode
+      ? `/wfs?project=${encodeURIComponent(viewerState.project || '')}`
+      : (isWmsMode
+        ? `/wms?project=${encodeURIComponent(viewerState.project || '')}`
+        : (viewerState.theme
+          ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
+          : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`));
+    const tileTemplate = (isWmsMode || isWfsMode)
+      ? tileTemplateBase
+      : `${tileTemplateBase}?sid=${encodeURIComponent(viewerSessionId)}`;
+    const tileTemplateLabel = isWfsMode
+      ? `${window.location.origin}${tileTemplateBase}&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${encodeURIComponent(viewerState.layer || '')}&outputFormat=application/json`
+      : (isWmsMode
+        ? `${window.location.origin}${tileTemplateBase}&LAYERS=${encodeURIComponent(viewerState.layer || '')}`
+        : tileTemplate.replace('{z}', '{z}'));
+    const modeLabelKey = isWfsMode ? 'viewer.mode.wfs' : (isWmsMode ? 'viewer.mode.wms' : 'viewer.mode.cache');
 
     const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
       ? window.qtilerLang.SUPPORTED_LANGS
@@ -260,6 +276,20 @@
     const missingLayerOrTheme = !viewerData.layer && !viewerData.theme;
     const missingProject = !viewerData.project;
 
+    if (isWmsMode && viewerData.theme) {
+      viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
+      viewerData.loading = false;
+      applyTranslations();
+      return;
+    }
+
+    if (isWfsMode && viewerData.theme) {
+      viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
+      viewerData.loading = false;
+      applyTranslations();
+      return;
+    }
+
     if (missingLayerOrTheme) {
       viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
     }
@@ -329,6 +359,218 @@
 
     if (typeof L === 'undefined') {
       viewerData.messages.push({ type: 'error', key: 'viewer.error.leafletMissing' });
+      renderInfo();
+      return;
+    }
+
+    if (isWfsMode) {
+      const map = L.map('map', { preferCanvas: true, zoomControl: true });
+      // Default view: try to fit the layer's WGS84 extent if available.
+      try {
+        const e = viewerData.meta && Array.isArray(viewerData.meta.extent_wgs84) ? viewerData.meta.extent_wgs84 : null;
+        if (e && e.length === 4 && e.every((v) => Number.isFinite(Number(v)))) {
+          const b = L.latLngBounds([e[1], e[0]], [e[3], e[2]]);
+          map.fitBounds(b.pad(0.05));
+        } else {
+          map.setView([0, 0], 2);
+        }
+      } catch {
+        map.setView([0, 0], 2);
+      }
+
+      const extentBtn = document.getElementById('viewer_extent_btn');
+      if (extentBtn) {
+        extentBtn.disabled = true;
+        extentBtn.setAttribute('aria-disabled', 'true');
+      }
+      const cacheBtn = document.getElementById('viewer_cache_btn');
+      const cacheStatusEl = document.getElementById('viewer_cache_status');
+      if (cacheBtn) {
+        cacheBtn.disabled = true;
+        cacheBtn.setAttribute('aria-disabled', 'true');
+        cacheBtn.style.display = 'none';
+      }
+      if (cacheStatusEl) {
+        cacheStatusEl.textContent = '';
+        cacheStatusEl.style.display = 'none';
+      }
+
+      const osmBtn = document.getElementById('viewer_osm_btn');
+      let osmLayer = null;
+      let osmVisible = false;
+      const refreshOsmLabel = () => {
+        if (!osmBtn) return;
+        const key = osmVisible ? 'viewer.control.osmHide' : 'viewer.control.osmShow';
+        osmBtn.textContent = tr(key);
+        osmBtn.classList.toggle('is-active', osmVisible);
+      };
+      const ensureOsm = () => {
+        if (osmLayer) return osmLayer;
+        osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19,
+          opacity: 0.6
+        });
+        return osmLayer;
+      };
+      if (osmBtn) {
+        osmBtn.addEventListener('click', () => {
+          osmVisible = !osmVisible;
+          const layer = ensureOsm();
+          if (osmVisible) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+          refreshOsmLabel();
+        });
+        refreshOsmLabel();
+      }
+
+      const typeName = viewerData.layer ? String(viewerData.layer) : '';
+      if (!viewerData.project || !typeName) {
+        viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
+        renderInfo();
+        return;
+      }
+
+      // NOTE:
+      // Previously we did a single request with MAXFEATURES=2000.
+      // That truncates layers with >2000 features and looks like "it loads one group then stops".
+      // Use WFS 2.0 paging (COUNT/STARTINDEX) to keep requesting until complete.
+      // WFS strategy for very large layers (millions of points):
+      // - Load by current view extent (BBOX) so the request stays bounded.
+      // - Page with WFS 2.0 (COUNT/STARTINDEX) to fetch the full visible set.
+      // - Cancel and reload on pan/zoom.
+      const baseUrl = `/wfs?project=${encodeURIComponent(viewerData.project)}`
+        + `&SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAME=${encodeURIComponent(typeName)}`
+        + `&outputFormat=application/json&SRSNAME=EPSG:4326`;
+
+      const PAGE_SIZE = 5000;
+      const MAX_FEATURES_PER_VIEW = 100000;
+      const LOAD_DEBOUNCE_MS = 250;
+
+      const wfsLayer = L.geoJSON(null, {
+        style: () => ({ weight: 2 }),
+        pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 5, weight: 2, fillOpacity: 0.2 }),
+        onEachFeature: (feature, layer) => {
+          try {
+            const props = feature && feature.properties ? feature.properties : {};
+            const keys = Object.keys(props);
+            if (!keys.length) return;
+            const rows = keys.slice(0, 30).map((k) => `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(props[k])}</div>`).join('');
+            layer.bindPopup(rows);
+          } catch {}
+        }
+      }).addTo(map);
+
+      let activeAbort = null;
+      let loadSeq = 0;
+      let debounceTimer = null;
+
+      const clearWfsNotices = () => {
+        viewerData.messages = (viewerData.messages || []).filter((m) => m && m.key !== 'viewer.notice.wfsTruncated');
+      };
+
+      const fetchJson = async (url, abortController) => {
+        const res = await fetch(url, abortController ? { signal: abortController.signal } : undefined);
+        if (!res.ok) throw new Error(`wfs_http_${res.status}`);
+        return res.json();
+      };
+
+      const loadVisibleWfs = async () => {
+        const mySeq = ++loadSeq;
+
+        if (activeAbort) {
+          try { activeAbort.abort(); } catch {}
+        }
+        activeAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+
+        clearWfsNotices();
+        renderInfo();
+
+        try {
+          wfsLayer.clearLayers();
+        } catch {}
+
+        const b = map.getBounds();
+        if (!b || !b.isValid || !b.isValid()) return;
+
+        const west = b.getWest();
+        const south = b.getSouth();
+        const east = b.getEast();
+        const north = b.getNorth();
+        if (![west, south, east, north].every((v) => Number.isFinite(v))) return;
+
+        // Our server expects minx,miny,maxx,maxy in XY order.
+        const bbox = `${west},${south},${east},${north},EPSG:4326`;
+
+        let totalLoaded = 0;
+        let startIndex = 0;
+
+        try {
+          while (true) {
+            if (mySeq !== loadSeq) return; // superseded by a newer view
+
+            if (totalLoaded >= MAX_FEATURES_PER_VIEW) {
+              viewerData.messages.push({
+                type: 'warn',
+                key: 'viewer.notice.wfsTruncated',
+                params: { count: escapeHtml(String(MAX_FEATURES_PER_VIEW)) }
+              });
+              renderInfo();
+              break;
+            }
+
+            const url = baseUrl
+              + `&BBOX=${encodeURIComponent(bbox)}`
+              + `&COUNT=${encodeURIComponent(String(PAGE_SIZE))}`
+              + `&STARTINDEX=${encodeURIComponent(String(startIndex))}`;
+
+            const geo = await fetchJson(url, activeAbort);
+            const features = Array.isArray(geo?.features) ? geo.features : [];
+            if (!features.length) break;
+
+            wfsLayer.addData(geo);
+            totalLoaded += features.length;
+            startIndex += features.length;
+
+            if (features.length < PAGE_SIZE) break;
+
+            // Yield to the UI thread so the browser stays responsive.
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        } catch (err) {
+          // Ignore aborts; report real failures.
+          const isAbort = err && (err.name === 'AbortError' || String(err).toLowerCase().includes('abort'));
+          if (!isAbort && mySeq === loadSeq) {
+            viewerData.messages.push({ type: 'error', key: 'viewer.error.wfsLoadFailed' });
+            renderInfo();
+          }
+        }
+      };
+
+      const scheduleLoad = () => {
+        if (debounceTimer) {
+          try { clearTimeout(debounceTimer); } catch {}
+        }
+        debounceTimer = setTimeout(() => {
+          debounceTimer = null;
+          loadVisibleWfs();
+        }, LOAD_DEBOUNCE_MS);
+      };
+
+      map.on('moveend zoomend', scheduleLoad);
+      // Initial load for the starting view.
+      scheduleLoad();
+
+      try {
+        const b = wfsLayer.getBounds();
+        if (b && b.isValid && b.isValid()) {
+          map.fitBounds(b.pad(0.05));
+        }
+      } catch {}
+
       renderInfo();
       return;
     }
@@ -468,15 +710,49 @@
             const originX = origin[0];
             const originY = origin[1];
 
-            const referenceMatrix = matricesByZoom.get(highestZoom) || matrices[matrices.length - 1];
-            const refRes = referenceMatrix?.resolution || filledResolutions[highestZoom] || 1;
-            const spanX = (referenceMatrix?.matrix_width || 1) * tileWidth * refRes;
-            const spanY = (referenceMatrix?.matrix_height || 1) * tileHeight * refRes;
+            // IMPORTANT:
+            // The WMTS matrix set can have non power-of-two scale steps.
+            // That means `matrix_width * resolution` isn't guaranteed to be constant across zooms.
+            // If we derive bounds from a single reference zoom, Leaflet can mis-compute the global
+            // tile range at other zooms (symptoms: tiles shifted, disappear when zooming in).
+            // So compute projected bounds that cover *all* matrices.
+            let maxx = originX;
+            let miny = originY;
+            for (const m of matrices) {
+              if (!m) continue;
+              const mw = Number(m.matrix_width ?? m.matrixWidth);
+              const mh = Number(m.matrix_height ?? m.matrixHeight);
+              if (!Number.isFinite(mw) || mw <= 0 || !Number.isFinite(mh) || mh <= 0) continue;
+
+              let mZoom = m.z;
+              if (typeof mZoom !== 'number') {
+                if (typeof m.source_level === 'number') mZoom = m.source_level;
+                else {
+                  const idNum = parseInt(m.identifier, 10);
+                  if (Number.isFinite(idNum)) mZoom = idNum;
+                }
+              }
+
+              let res = null;
+              if (Number.isFinite(m.resolution)) {
+                res = m.resolution;
+              } else if (Number.isFinite(m.scale_denominator)) {
+                res = m.scale_denominator * 0.00028;
+              } else if (typeof mZoom === 'number' && Number.isFinite(filledResolutions[mZoom])) {
+                res = filledResolutions[mZoom];
+              }
+              if (!Number.isFinite(res) || res <= 0) continue;
+
+              const spanX = mw * tileWidth * res;
+              const spanY = mh * tileHeight * res;
+              const candMaxX = originX + spanX;
+              const candMinY = originY - spanY;
+              if (Number.isFinite(candMaxX) && candMaxX > maxx) maxx = candMaxX;
+              if (Number.isFinite(candMinY) && candMinY < miny) miny = candMinY;
+            }
 
             const minx = originX;
-            const maxx = originX + spanX;
             const maxy = originY;
-            const miny = originY - spanY;
 
             const projectedBounds = L.bounds(L.point(minx, miny), L.point(maxx, maxy));
             const crsOptions = {
@@ -694,6 +970,7 @@
 
     refreshCacheControlLabel = () => {
       if (!cacheBtn) return;
+      if (isWmsMode) return;
       cacheBtn.textContent = tr(autoCacheActive ? 'viewer.control.cacheStop' : 'viewer.control.cacheStart');
       cacheBtn.classList.toggle('is-active', autoCacheActive);
     };
@@ -709,6 +986,10 @@
 
     const setCacheStatus = (state, params = {}) => {
       if (!cacheStatusEl) return;
+      if (isWmsMode) {
+        cacheStatusEl.textContent = '';
+        return;
+      }
       let key = null;
       if (state === 'busy') key = 'viewer.control.cacheBusy';
       else if (state === 'done') key = 'viewer.control.cacheDone';
@@ -716,6 +997,18 @@
       else if (state === 'idle' && autoCacheActive) key = 'viewer.control.cacheIdle';
       cacheStatusEl.textContent = key ? tr(key, params) : '';
     };
+
+    if (isWmsMode) {
+      if (cacheBtn) {
+        cacheBtn.disabled = true;
+        cacheBtn.setAttribute('aria-disabled', 'true');
+        cacheBtn.style.display = 'none';
+      }
+      if (cacheStatusEl) {
+        cacheStatusEl.textContent = '';
+        cacheStatusEl.style.display = 'none';
+      }
+    }
 
     const abortCurrentCacheJob = () => {
       const jobId = currentCacheJobId;
@@ -951,7 +1244,7 @@
       }
     };
 
-    if (cacheBtn) {
+    if (cacheBtn && !isWmsMode) {
       cacheBtn.addEventListener('click', () => {
         autoCacheActive = !autoCacheActive;
         refreshCacheControlLabel();
@@ -987,7 +1280,7 @@
 
     map.on('zoomend moveend', () => {
       updateZoomDisplay();
-      if (autoCacheActive) {
+      if (!isWmsMode && autoCacheActive) {
         scheduleAutoCache();
       }
     });
@@ -1019,8 +1312,28 @@
     }
 
     let tiles = null;
-    const cacheEnabled = showCache && viewerData.cacheMeta;
-    if (cacheEnabled) {
+
+    if (isWmsMode) {
+      const wmsBaseUrl = viewerData.tileTemplate;
+      const wmsLayers = viewerData.layer ? String(viewerData.layer) : '';
+      if (!wmsBaseUrl || !wmsLayers) {
+        viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
+        renderInfo();
+        return;
+      }
+      tiles = L.tileLayer.wms(wmsBaseUrl, {
+        ...layerOptions,
+        layers: wmsLayers,
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        styles: '',
+        uppercase: true,
+        noWrap: true
+      });
+    } else {
+      const cacheEnabled = showCache && viewerData.cacheMeta;
+      if (cacheEnabled) {
       const matricesByZoom = new Map();
       if (meta && meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) {
         meta.tile_matrix_set.matrices.forEach((m) => {
@@ -1060,8 +1373,9 @@
       });
       
       tiles = new CustomTileLayer(viewerData.tileTemplate, layerOptionsFinal);
-    } else {
-      tiles = L.tileLayer(viewerData.tileTemplate, layerOptions);
+      } else {
+        tiles = L.tileLayer(viewerData.tileTemplate, layerOptions);
+      }
     }
 
     tiles.addTo(map);

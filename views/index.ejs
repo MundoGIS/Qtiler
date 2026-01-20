@@ -35,9 +35,10 @@
           <div class="control-toolbar">
             <div class="control-actions">
               <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
-              <input id="project_upload_input" type="file" accept=".qgz,.qgs" style="display:none" />
+              <input id="project_upload_input" type="file" accept=".qgz,.qgs,.zip" style="display:none" />
               <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
             </div>
+            <div class="meta" style="margin-top:8px" data-i18n="Upload bundle hint">If your QGIS project uses file-based layers, upload a .zip that includes exactly one .qgz/.qgs plus the data files, keeping the folder structure.</div>
           </div>
           <div class="control-grid">
             <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" class="input-number" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
