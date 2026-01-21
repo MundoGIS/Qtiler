@@ -6,13 +6,14 @@ Copyright (C) 2025 MundoGIS.
 
 # Qtiler
 
-Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
+Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. Qtiler also produces WMS and WFS-T endpoints, supporting full OGC workflows (read and transactional vector editing). The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
 
 ## Features
 - Upload `.qgs`/`.qgz` projects and extract layer metadata automatically.
 - Generate caches per layer, per map theme, or entirely on demand, each with progress tracking and job history.
 - Persist project zoom presets, extent, and scheduled recache windows.
-- Serve cached tiles and expose a WMTS GetCapabilities endpoint (layers and themes) ready for GIS clients.
+- Serve cached tiles and expose a WMTS GetCapabilities endpoint (OGC WMTS 1.0.0, layers and themes) ready for GIS clients.
+- Expose WMS 1.3.0 (GetCapabilities, tiled GetMap) and WFS 1.1.0 endpoints, including WFS-T (transactional editing for vector layers).
 - Built-in Leaflet viewer with CRS awareness, on/off layer toggles, and WMTS URL helpers.
 - Optional QtilerAuth plugin (one-time ZIP download) to manage users, roles, and customer-specific WMTS access.
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
@@ -48,14 +49,14 @@ npm install
 ### Repository layout
 ```
 Qtiler/
-  public/           # Dashboard + portal UI
-  python/           # QGIS helpers (extract info, generate cache)
-  qgisprojects/     # Uploaded .qgs/.qgz files
-  cache/            # Generated tiles and index metadata
-  plugins/          # Optional plugins (QtilerAuth, custom modules)
-  logs/             # Runtime logs
-  service/          # Windows service helpers
-  temp_uploads/     # Multer workspace for uploads
+   public/           # Dashboard + portal UI
+   python/           # QGIS helpers (extract info, generate cache)
+   qgisprojects/     # Uploaded .qgs/.qgz files (includes a demo project in qgisprojects/demo)
+   cache/            # Generated tiles and index metadata
+   plugins/          # Optional plugins (QtilerAuth, custom modules)
+   logs/             # Runtime logs
+   service/          # Windows service helpers
+   temp_uploads/     # Multer workspace for uploads
 ```
 
 ## Run the development server
@@ -75,6 +76,15 @@ The server listens on `http://localhost:3000` by default; override with `PORT` i
 
 ## On-demand WMTS/XYZ tiles
 Qtiler can render tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrency is capped (2 workers by default) so misses are queued safely. See `README_on_demand.md` for a deeper walkthrough and test commands.
+
+
+## Supported OGC service versions
+- **WMTS**: 1.0.0
+- **WMS**: 1.3.0
+- **WFS**: 1.1.0 and 2.0.0 (WFS-T transactional editing is guaranteed for 1.1.0)
+
+## Demo project
+A demo QGIS project is included in `qgisprojects/demo` so you can test the full workflow out of the box.
 
 ## WMS (GetCapabilities + tiled GetMap)
 Qtiler exposes a lightweight WMS 1.3.0 endpoint intended for tiled clients and GIS integration.

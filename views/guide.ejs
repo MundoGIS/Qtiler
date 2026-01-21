@@ -74,7 +74,8 @@
             <div class="grid two">
               <div class="card-mini">
                 <h3 data-i18n="guide.uploadRefresh">1️⃣ Upload or refresh projects</h3>
-                <p data-i18n-html="guide.uploadRefresh.body">Use <strong>Upload project</strong> for `.qgs/.qgz` files. Qtiler drops them into <code>qgisprojects/</code> and extracts layers, CRS, extent, and themes. Manual copies work too—just hit <strong>Reload layers</strong>.</p>
+                <p data-i18n-html="guide.uploadRefresh.body">Use <strong>Upload project</strong> for `.qgs/.qgz` files. Qtiler drops them into <code>qgisprojects/</code> and extracts layers, CRS, extent, and themes. Manual copies work too—just hit <strong>Reload layers</strong>.<br><br>
+                <strong>Importante:</strong> Si tu proyecto QGIS utiliza capas en archivos externos (por ejemplo, shapefiles, geopackages, etc.), debes comprimir el proyecto junto con todas sus capas y carpetas relacionadas en un archivo <code>.zip</code> manteniendo la misma estructura de carpetas. Al subir el ZIP, Qtiler extraerá el contenido y el proyecto debe poder encontrar las capas en las rutas relativas originales. Si cambias la estructura al comprimir, QGIS no podrá localizar las capas y el proyecto no funcionará correctamente.</p>
               </div>
               <div class="card-mini">
                 <h3 data-i18n="guide.adjustZoom">2️⃣ Adjust zoom and extent</h3>
@@ -82,12 +83,12 @@
               </div>
               <div class="card-mini">
                 <h3 data-i18n="guide.cachePerLayer">3️⃣ Cache per layer</h3>
-                <p data-i18n="guide.cachePerLayer.intro">Each layer row offers:</p>
+                <p data-i18n="guide.cachePerLayer.intro"></p>
                 <ul>
-                  <li data-i18n="guide.cachePerLayer.option1">▶ Generate/refresh cache.</li>
-                  <li data-i18n="guide.cachePerLayer.option2">🗑 Delete stored tiles.</li>
-                  <li data-i18n="guide.cachePerLayer.option3">📋 Copy tile URL (`/wmts/&lt;project&gt;/&lt;layer&gt;/{z}/{x}/{y}.png`).</li>
-                  <li data-i18n="guide.cachePerLayer.option4">👁 Open the Leaflet viewer in the layer’s native CRS.</li>
+                  <li data-i18n="guide.cachePerLayer.option1"></li>
+                  <li data-i18n="guide.cachePerLayer.option2"></li>
+                  <li data-i18n="guide.cachePerLayer.option3"></li>
+                  <li data-i18n="guide.cachePerLayer.option4"></li>
                 </ul>
               </div>
               <div class="card-mini">
@@ -129,14 +130,20 @@
                 </ul>
               </div>
               <div class="card-mini">
-                <h3>WMS &amp; WFS endpoints</h3>
-                <p style="margin-bottom:10px;color:var(--muted)">In addition to WMTS/XYZ tiles, Qtiler also exposes WMS and WFS endpoints per project:</p>
+                <h3>WMS, WFS &amp; WMTS endpoints</h3>
+                <p style="margin-bottom:10px;color:var(--muted)">In addition to WMTS/XYZ tiles, Qtiler exposes OGC endpoints per project. Supported versions:</p>
+                <ul>
+                  <li><strong>WMTS</strong>: 1.0.0</li>
+                  <li><strong>WMS</strong>: 1.3.0</li>
+                  <li><strong>WFS</strong>: 1.1.0 and 2.0.0 (WFS-T editing is guaranteed for 1.1.0)</li>
+                </ul>
                 <ul>
                   <li><strong>WMS GetCapabilities</strong>: <code>/wms?SERVICE=WMS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code></li>
                   <li><strong>WFS GetCapabilities</strong>: <code>/wfs?SERVICE=WFS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code></li>
                   <li><strong>WFS read</strong> (GeoJSON): <code>/wfs?SERVICE=WFS&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application/json&amp;TYPENAME=&lt;layer&gt;&amp;project=&lt;id&gt;</code></li>
                 </ul>
-                <div class="tip" style="margin-top:12px;">WFS-T (editing) uses <code>POST /wfs?project=&lt;id&gt;</code> with an XML <code>&lt;wfs:Transaction&gt;</code> body and may require admin access depending on your auth setup.</div>
+                <div class="tip" style="margin-top:12px;">WFS-T (editing) uses <code>POST /wfs?project=&lt;id&gt;</code> with an XML <code>&lt;wfs:Transaction&gt;</code> body and may require admin access depending on your auth setup. WFS-T is supported for WFS 1.1.0.</div>
+                <div class="tip" style="margin-top:12px;">A demo QGIS project is included in <code>qgisprojects/demo</code> so you can test the full workflow out of the box.</div>
               </div>
               <div class="card-mini">
                 <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
