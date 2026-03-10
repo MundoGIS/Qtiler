@@ -16,9 +16,18 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Persist project zoom presets, extent, and scheduled recache windows.
 - Serve cached tiles and expose a WMTS GetCapabilities endpoint (OGC WMTS 1.0.0, layers and themes) ready for GIS clients.
 - Expose WMS 1.3.0 (GetCapabilities, tiled GetMap) and WFS 1.1.0 endpoints, including WFS-T (transactional editing for vector layers).
+- Vector tiles support through the commercial VectorTiles plugin (MBTiles generation + TileJSON/Style endpoints).
 - Built-in Leaflet viewer with CRS awareness, on/off layer toggles, and WMTS URL helpers.
 - Origo Map integration via Qrigo plugin (Origo Map: https://github.com/origo-map/origo).
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
+
+## Commercial plugin support
+Qtiler supports optional commercial plugins. Current bundled versions:
+
+- QtilerAuth: `0.1.0`
+- ProjectSearch: `0.1.0`
+- Qrigo: `0.1.0`
+- VectorTiles: `0.1.1`
 
 ## System Requirements
 - Windows 10/11 or Windows Server 2019+ (64-bit).
