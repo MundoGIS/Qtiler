@@ -8,6 +8,8 @@ Copyright (C) 2025 MundoGIS.
 
 Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. Qtiler also produces WMS and WFS-T endpoints, supporting full OGC workflows (read and transactional vector editing). The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
 
+![Qtiler](https://github.com/MundoGIS/Qtiler/blob/master/public/css/images/Qtiler.png)
+
 ## Features
 - Upload `.qgs`/`.qgz` projects and extract layer metadata automatically.
 - Generate caches per layer, per map theme, or entirely on demand, each with progress tracking and job history.
@@ -15,7 +17,7 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Serve cached tiles and expose a WMTS GetCapabilities endpoint (OGC WMTS 1.0.0, layers and themes) ready for GIS clients.
 - Expose WMS 1.3.0 (GetCapabilities, tiled GetMap) and WFS 1.1.0 endpoints, including WFS-T (transactional editing for vector layers).
 - Built-in Leaflet viewer with CRS awareness, on/off layer toggles, and WMTS URL helpers.
-- Optional QtilerAuth plugin (one-time ZIP download) to manage users, roles, and customer-specific WMTS access.
+- Origo Map integration via Qrigo plugin (Origo Map: https://github.com/origo-map/origo).
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
 
 ## System Requirements
@@ -48,12 +50,10 @@ npm install
 
 ### Repository layout
 ```
-Qtiler/
-   public/           # Dashboard + portal UI
-   python/           # QGIS helpers (extract info, generate cache)
+Qtil
    qgisprojects/     # Uploaded .qgs/.qgz files (includes a demo project in qgisprojects/demo)
    cache/            # Generated tiles and index metadata
-   plugins/          # Optional plugins (QtilerAuth, custom modules)
+   plugins/          # Optional plugins (Qrigo, ProjectSearch, custom modules)
    logs/             # Runtime logs
    service/          # Windows service helpers
    temp_uploads/     # Multer workspace for uploads
@@ -110,7 +110,7 @@ Qtiler exposes a minimal WFS 1.1.0 endpoint for vector layers.
    - `/wfs?SERVICE=WFS&REQUEST=GetFeature&TYPENAME=<layer>&OUTPUTFORMAT=application/json&project=<id>`
 
 ### WFS-T editing (Transaction)
-WFS-T uses `POST /wfs?project=<id>` with an XML `<wfs:Transaction>` body. Clients like Origo can use this for insert/update/delete.
+WFS-T uses `POST /wfs?project=<id>` with an XML `<wfs:Transaction>` body. Clients like Origo Map (https://github.com/origo-map/origo) can use this for insert/update/delete.
 
 Requirements and caveats:
 - Transactions are admin-only when authentication is enabled.
@@ -150,7 +150,7 @@ Most production setups place Qtiler on Windows Server and expose it via IIS or A
 3. Add HTTPS certificates and harden headers/caching rules at the proxy level.
 4. Optionally keep the Node service internal and only publish the proxy site.
 
-Need assistance designing the reverse-proxy rules or securing the stack? Contact MundoGIS at [mundogis.se](https://mundogis.se) or email abel.gonzalez@mundogis.se.
+Need assistance designing the reverse-proxy rules or securing the stack? Contact MundoGIS at [mundogis.se](https://mundogis.se) or email support@mundogis.se.
 
 ## Environment variables (quick reference)
 ```

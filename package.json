@@ -1,6 +1,6 @@
 {
   "name": "qtiler",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Qtiler by MundoGIS – tile cache orchestration for QGIS projects",
   "type": "module",
   "main": "server.js",
@@ -8,6 +8,11 @@
     "start": "node server.js",
     "dev": "nodemon --watch . --exec node server.js",
     "build:qtilerauth": "node tools/package-auth-plugin.mjs",
+    "build:projectsearch": "node tools/package-projectsearch-plugin.mjs",
+    "build:wmscache": "node tools/package-wmscache-plugin.mjs",
+    "build:vectortiles": "node tools/package-vectortiles-plugin.mjs",
+    "generate:license": "node tools/generate-license.mjs",
+    "generate:license:ui": "node tools/generate-license-ui.mjs",
     "set:admin-password": "node tools/set-admin-password.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

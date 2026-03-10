@@ -55,6 +55,15 @@ const clampInt = (value, { min = 0, max = 1_000_000, fallback = null } = {}) => 
   return Math.max(min, Math.min(max, n));
 };
 
+const envFlag = (value, fallback = false) => {
+  if (value == null) return fallback;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(raw)) return true;
+  if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+  return fallback;
+};
+
 const wfsExceptionXml = (message, { code = 'NoApplicableCode' } = {}) => {
   const safe = String(message || 'WFS error')
     .replace(/&/g, '&amp;')
@@ -103,8 +112,7 @@ const normalizeSrsName = (value) => {
   return raw;
 };
 
-const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '2.0.0', defaultCount = 1000 }) => {
-  const now = new Date().toISOString();
+const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '1.1.0', defaultCount = 1000 }) => {  const now = new Date().toISOString();
   const ns = `http://qtiler.local/${encodeURIComponent(projectId || 'project')}`;
 
   const ver = String(version || '1.1.0').trim();
@@ -217,12 +225,16 @@ export const registerWfsRoutes = ({
     const v = String(version || '').trim();
     if (v) return v;
     const accepts = parseCsv(acceptVersions).map((x) => String(x || '').trim()).filter(Boolean);
-    const supported = ['2.0.0', '1.1.0'];
+    
+    // CAMBIO 1: Ponemos 1.1.0 primero en la lista de soportados
+    const supported = ['1.1.0', '2.0.0']; 
+    
     for (const candidate of supported) {
       if (accepts.some((a) => a === candidate || a.startsWith(candidate))) return candidate;
     }
-    // default: prefer 2.0.0 so QGIS can enable paging.
-    return process.env.WFS_CAPABILITIES_DEFAULT_VERSION || '2.0.0';
+    
+    // CAMBIO 2: El fallback por defecto ahora es 1.1.0
+    return process.env.WFS_CAPABILITIES_DEFAULT_VERSION || '1.1.0';
   };
 
   const logTx = (projectId, message, level = 'info') => {
@@ -289,8 +301,12 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
         const serviceUrl = `${req.protocol}://${req.get('host')}/wfs?project=${encodeURIComponent(projectId)}`;
-        // For WFS 2.0 paging, advertise a conservative CountDefault (page size suggestion).
-        const countDefault = Number.parseInt(process.env.WFS_CAPABILITIES_COUNT_DEFAULT || '1000', 10) || 1000;
+        // Advertise the same default cap used by GetFeature to avoid client-side truncation surprises.
+        const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '50000', 10) || 50000;
+        const countDefault = Number.parseInt(
+          process.env.WFS_CAPABILITIES_COUNT_DEFAULT || process.env.WFS_DEFAULT_MAX_FEATURES || String(hardLimit),
+          10
+        ) || hardLimit;
         const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type('text/xml').send(xml);
@@ -346,11 +362,21 @@ export const registerWfsRoutes = ({
       const bbox = bboxParsed?.bbox || null;
       const bboxCrs = normalizeSrsName(bboxParsed?.crs) || null;
       const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || bboxCrs;
-        const wfsMaxHardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '10000', 10);
-        const wfsDefaultMax = Number.parseInt(process.env.WFS_DEFAULT_MAX_FEATURES || '1000', 10);
-        const hardLimit = Number.isFinite(wfsMaxHardLimit) && wfsMaxHardLimit > 0 ? wfsMaxHardLimit : 10000;
-        const fallback = Number.isFinite(wfsDefaultMax) && wfsDefaultMax > 0 ? wfsDefaultMax : 1000;
-        const maxFeatures = clampInt(getQueryCI(req, 'MAXFEATURES') ?? getQueryCI(req, 'COUNT'), { min: 1, max: hardLimit, fallback });
+      const requestedCountRaw = getQueryCI(req, 'MAXFEATURES') ?? getQueryCI(req, 'COUNT');
+      const requestedCount = clampInt(requestedCountRaw, { min: 1, max: 10_000_000, fallback: null });
+      const wfsMaxHardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '50000', 10);
+      const hardLimit = Number.isFinite(wfsMaxHardLimit) && wfsMaxHardLimit > 0 ? wfsMaxHardLimit : 50000;
+      const wfsAbsoluteLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_ABSOLUTE_LIMIT || '250000', 10);
+      const absoluteLimit = Number.isFinite(wfsAbsoluteLimit) && wfsAbsoluteLimit > 0 ? wfsAbsoluteLimit : 250000;
+      const autoExpand = envFlag(process.env.WFS_AUTO_EXPAND_LIMIT, true);
+      const effectiveHardLimit = autoExpand && requestedCount != null && requestedCount > hardLimit
+        ? Math.min(requestedCount, Math.max(hardLimit, absoluteLimit))
+        : hardLimit;
+      const wfsDefaultMax = Number.parseInt(process.env.WFS_DEFAULT_MAX_FEATURES || String(hardLimit), 10);
+      const fallback = Number.isFinite(wfsDefaultMax) && wfsDefaultMax > 0
+        ? Math.min(wfsDefaultMax, effectiveHardLimit)
+        : effectiveHardLimit;
+      const maxFeatures = clampInt(requestedCountRaw, { min: 1, max: effectiveHardLimit, fallback });
       const startIndex = clampInt(getQueryCI(req, 'STARTINDEX'), { min: 0, max: 10_000_000, fallback: 0 });
       const outputFormatRaw = String(getQueryCI(req, 'OUTPUTFORMAT') || '').trim();
       const outputFormat = outputFormatRaw ? outputFormatRaw.split(';')[0].trim().toLowerCase() : '';
@@ -372,6 +398,7 @@ export const registerWfsRoutes = ({
           bbox,
           srs_name: srsName,
           max_features: maxFeatures,
+          hard_limit_override: effectiveHardLimit,
           start_index: startIndex,
           output_format: asJson ? 'application/json' : 'application/gml+xml'
         });
@@ -485,122 +512,127 @@ export const registerWfsRoutes = ({
   app.get('/wfs', ensureProjectAccessFromQuery('project'), handleWfsKvp);
 
   // Support POST for non-transaction operations (QGIS defaults to POST for WFS).
-  app.post('/wfs', ensureProjectAccessFromQuery('project'), async (req, res, next) => {
+  // ===========================================================================
+  // MANEJO UNIFICADO DE POST (GetFeature KVP y WFS-T Transaction)
+  // ===========================================================================
+  app.post('/wfs', ensureProjectAccessFromQuery('project'), async (req, res) => {
+    
+    // 1. Obtener el cuerpo crudo y limpiarlo
     const rawBody = typeof req.body === 'string'
       ? req.body
       : (Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '');
 
     const trimmed = String(rawBody || '').trim().replace(/^\uFEFF/, '');
+    
+    // 2. Intentar parsear XML para ver qué operación es
+    let parsedXml = null;
     if (trimmed && trimmed.startsWith('<')) {
-      const parsed = parseWfsXmlToQuery(trimmed);
-      if (parsed?.isTransaction) {
-        return next();
-      }
-      if (parsed?.query) {
-        const mergedReq = {
-          ...req,
-          query: {
-            ...(req.query || {}),
-            ...(parsed.query || {})
-          }
-        };
-        return handleWfsKvp(mergedReq, res);
-      }
-      res.status(400).type('application/xml').send(wfsExceptionXml('Unsupported XML operation (expected Transaction/GetFeature/DescribeFeatureType/GetCapabilities)', { code: 'OperationNotSupported' }));
-      return;
+      parsedXml = parseWfsXmlToQuery(trimmed);
     }
 
-    // KVP in body (application/x-www-form-urlencoded)
-    const bodyParams = parseKvpBody(trimmed);
-    if (Object.keys(bodyParams).length) {
+    // =======================================================================
+    // CASO A: ES UNA TRANSACCIÓN (EDITAR)
+    // =======================================================================
+    if (parsedXml?.isTransaction) {
+      console.log(`[WFS] Transacción detectada para proyecto: ${req.query.project}`);
+
+      // A1. VERIFICACIÓN DE PERMISOS MANUAL
+      // ensureProjectAccessFromQuery('project') ya validó acceso al proyecto.
+      // Para WFS-T exigimos sesión autenticada y, opcionalmente, rol admin si la instancia lo requiere.
+      const txRequireAdmin = String(process.env.WFS_TX_REQUIRE_ADMIN || 'false').toLowerCase() === 'true';
+      const userRole = String(req.user?.role || '').toLowerCase();
+
+      if (!req.user) {
+        console.error('[WFS] Bloqueado: Transacción sin usuario autenticado');
+        res.status(401).type('application/xml').send(wfsExceptionXml('Access Denied: Authentication required for transactions', { code: 'SecurityError' }));
+        return;
+      }
+
+      if (txRequireAdmin && userRole !== 'admin') {
+        console.error('[WFS] Bloqueado: Transacción requiere admin (WFS_TX_REQUIRE_ADMIN=true)');
+        res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: You must be admin to perform transactions', { code: 'SecurityError' }));
+        return;
+      }
+
+      // A2. LÓGICA DE TRANSACCIÓN (Tu código original movido aquí)
+      const projectId = String(getQueryCI(req, 'project') || '').trim();
+      const project = findProjectById(projectId);
+      if (!project || !project.file) {
+        return res.status(404).type('application/xml').send(wfsExceptionXml('Project not found', { code: 'NotFound' }));
+      }
+
+      const config = typeof readProjectConfig === 'function' ? (readProjectConfig(projectId) || {}) : {};
+      
+      let tmpDir;
+      try {
+        tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-tx-'));
+        const outFile = path.join(tmpDir, 'tx.xml');
+        
+        // Ejecutar el worker
+        const result = await tileRendererPool.renderTile({
+          action: 'wfs_transaction',
+          project_path: project.file,
+          output_file: outFile,
+          xml: trimmed, // Usamos el XML limpio
+          layer_edit_config: config?.layers || {}
+        });
+
+        if (!result || result.status !== 'success') {
+          const msg = result?.message || result?.error || 'transaction_failed';
+          logTx(projectId, `WFS-T Transaction failed: ${String(msg)}`, 'error');
+          return res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(msg))));
+        }
+
+        // Logs de éxito
+        const inserted = Number(result?.inserted ?? 0);
+        const updated = Number(result?.updated ?? 0);
+        const deleted = Number(result?.deleted ?? 0);
+        const errors = Array.isArray(result?.errors) ? result.errors : [];
+        logTx(projectId, `WFS-T OK: ins=${inserted} upd=${updated} del=${deleted}`);
+
+        if (errors.length) {
+           return res.status(400).type('application/xml').send(wfsExceptionXml(redactSecrets(errors.slice(0, 5).join(' | '))));
+        }
+
+        // Enviar respuesta
+        res.setHeader('Cache-Control', 'no-store');
+        res.type('application/xml');
+        res.sendFile(outFile, async () => {
+          try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
+        });
+        return;
+
+      } catch (err) {
+        try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
+        console.error('[WFS] Error en transacción:', err);
+        return res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
+      }
+    }
+
+    // =======================================================================
+    // CASO B: ES UNA PETICIÓN XML NORMAL (GetFeature via POST)
+    // =======================================================================
+    if (parsedXml?.query) {
       const mergedReq = {
         ...req,
-        query: {
-          ...(req.query || {}),
-          ...bodyParams
-        }
+        query: { ...(req.query || {}), ...(parsedXml.query || {}) }
       };
       return handleWfsKvp(mergedReq, res);
     }
 
-    // If no body, fall back to query string.
+    // =======================================================================
+    // CASO C: ES FORM-URLENCODED (KVP en body)
+    // =======================================================================
+    const bodyParams = parseKvpBody(trimmed);
+    if (Object.keys(bodyParams).length) {
+      const mergedReq = {
+        ...req,
+        query: { ...(req.query || {}), ...bodyParams }
+      };
+      return handleWfsKvp(mergedReq, res);
+    }
+
+    // Si no es nada de lo anterior, intentar tratar como GET con query params
     return handleWfsKvp(req, res);
-  });
-
-  // WFS-T Transaction (admin-only)
-  app.post('/wfs', ensureProjectAccessFromQuery('project'), requireAdmin, async (req, res) => {
-    const projectId = String(getQueryCI(req, 'project') || '').trim();
-    if (!projectId) {
-      res.status(400).type('application/xml').send(wfsExceptionXml('project is required', { code: 'MissingParameterValue' }));
-      return;
-    }
-    const project = findProjectById(projectId);
-    if (!project || !project.file) {
-      res.status(404).type('application/xml').send(wfsExceptionXml('Project not found', { code: 'NotFound' }));
-      return;
-    }
-
-    const config = typeof readProjectConfig === 'function' ? (readProjectConfig(projectId) || {}) : {};
-
-    const xmlBody = typeof req.body === 'string'
-      ? req.body
-      : (Buffer.isBuffer(req.body) ? req.body.toString('utf8') : null);
-
-    if (!xmlBody || !xmlBody.trim()) {
-      res.status(400).type('application/xml').send(wfsExceptionXml('Missing XML body', { code: 'MissingParameterValue' }));
-      return;
-    }
-
-    let tmpDir;
-    try {
-      tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-tx-'));
-      const outFile = path.join(tmpDir, 'tx.xml');
-      const result = await tileRendererPool.renderTile({
-        action: 'wfs_transaction',
-        project_path: project.file,
-        output_file: outFile,
-        xml: xmlBody,
-        layer_edit_config: config?.layers || {}
-      });
-
-      if (!result || result.status !== 'success') {
-        const msg = result?.message || result?.error || 'transaction_failed';
-        logTx(projectId, `WFS-T Transaction failed: ${String(msg)}`, 'error');
-        res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(msg))));
-        return;
-      }
-
-      const inserted = Number(result?.inserted ?? 0);
-      const updated = Number(result?.updated ?? 0);
-      const deleted = Number(result?.deleted ?? 0);
-      const errors = Array.isArray(result?.errors) ? result.errors : [];
-      logTx(projectId, `WFS-T Transaction result: inserted=${inserted} updated=${updated} deleted=${deleted} errors=${errors.length}`);
-
-      if (errors.length) {
-        for (const [i, err] of errors.slice(0, 10).entries()) {
-          logTx(projectId, `WFS-T Transaction error[${i}]: ${redactSecrets(String(err))}`, 'error');
-        }
-        if (errors.length > 10) {
-          logTx(projectId, `WFS-T Transaction error: (${errors.length - 10} more omitted)`, 'error');
-        }
-      }
-
-      // Origo's editor only alerts automatically for OWS ExceptionReport.
-      // If the worker reports errors, convert them to an ExceptionReport so the user sees what's wrong.
-      if (errors.length) {
-        res.status(400).type('application/xml').send(wfsExceptionXml(redactSecrets(errors.slice(0, 5).join(' | '))));
-        return;
-      }
-
-      res.setHeader('Cache-Control', 'no-store');
-      res.type('application/xml');
-      res.sendFile(outFile, async () => {
-        try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-      });
-    } catch (err) {
-      try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-      logTx(projectId, `WFS-T Transaction error: ${String(err?.message || err)}`, 'error');
-      res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
-    }
   });
 };

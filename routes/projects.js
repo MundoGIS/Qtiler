@@ -82,10 +82,153 @@ export const registerProjectRoutes = ({
   deleteLayerCacheInternal,
   updateProjectBatchRun,
   runRecacheForProject,
+  tileRendererPool,
   logProjectEvent,
   buildPublicProjectsListing,
   resolvePublicProject
 }) => {
+
+  const parseBool = (value, fallback = false) => {
+    if (value == null) return fallback;
+    if (typeof value === 'boolean') return value;
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return fallback;
+    if (['1', 'true', 'yes', 'on', 'si', 'sí'].includes(raw)) return true;
+    if (['0', 'false', 'no', 'off'].includes(raw)) return false;
+    return fallback;
+  };
+
+  const detectRequestLanguage = (req) => {
+    try {
+      const q = req?.query?.lang;
+      const fromQuery = Array.isArray(q) ? q[0] : q;
+      const fromCookie = req?.cookies?.qtiler_lang || req?.cookies?.['qtiler.lang'];
+      const fromHeader = req?.get?.('x-qtiler-lang') || req?.headers?.['accept-language'];
+      const raw = String(fromQuery || fromCookie || fromHeader || 'en').toLowerCase();
+      if (raw.startsWith('es')) return 'es';
+      if (raw.startsWith('sv')) return 'sv';
+      return 'en';
+    } catch {
+      return 'en';
+    }
+  };
+
+  const conflictText = (lang, projectId) => {
+    if (lang === 'es') {
+      return {
+        title: 'Proyecto ya existe',
+        message: `Ya existe un proyecto con el id "${projectId}". ¿Deseas reemplazar el existente?`,
+        hint: 'Puedes elegir mantener o eliminar la configuracion y la cache existentes.'
+      };
+    }
+    if (lang === 'sv') {
+      return {
+        title: 'Projektet finns redan',
+        message: `Ett projekt med id "${projectId}" finns redan. Vill du ersatta det befintliga?`,
+        hint: 'Du kan valja att behalla eller radera befintlig konfiguration och cache.'
+      };
+    }
+    return {
+      title: 'Project already exists',
+      message: `A project with id "${projectId}" already exists. Do you want to replace the existing one?`,
+      hint: 'You can choose to keep or delete existing configuration and cache.'
+    };
+  };
+
+  const removeExistingProjectStorage = async (proj) => {
+    if (!proj || !proj.file) return;
+    const projectsRootResolved = path.resolve(projectsDir).toLowerCase();
+    const projFileResolved = path.resolve(proj.file);
+    const projectDirCandidate = path.join(projectsDir, proj.id);
+    const projectDirResolved = path.resolve(projectDirCandidate);
+    const isDirectory = (targetPath) => {
+      try {
+        return fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+      } catch {
+        return false;
+      }
+    };
+
+    const removeWithRetries = async (targetPath, { recursive = false, force = true } = {}) => {
+      const maxRetries = 4;
+      let lastErr = null;
+      for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+        try {
+          await fs.promises.rm(targetPath, { recursive, force });
+          return;
+        } catch (err) {
+          lastErr = err;
+          const code = String(err?.code || '');
+          if (code === 'ENOENT') return;
+          if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (lastErr) throw lastErr;
+    };
+
+    const projectDirExists = isDirectory(projectDirCandidate);
+    const inProjectDir = projFileResolved.toLowerCase().startsWith(projectDirResolved.toLowerCase() + path.sep);
+
+    try {
+      tileRendererPool?.abortAll?.({ reason: 'project_replace' });
+    } catch {}
+
+    if (projectDirExists && inProjectDir && projectDirResolved.toLowerCase().startsWith(projectsRootResolved + path.sep)) {
+      await removeWithRetries(projectDirCandidate, { recursive: true, force: true });
+      return;
+    }
+
+    // Remove stale id-folder even if the current project file points elsewhere.
+    if (projectDirExists && projectDirResolved.toLowerCase().startsWith(projectsRootResolved + path.sep)) {
+      await removeWithRetries(projectDirCandidate, { recursive: true, force: true });
+    }
+
+    await removeWithRetries(proj.file, { recursive: true, force: true });
+
+    const parentDir = path.dirname(projFileResolved);
+    if (parentDir.toLowerCase().startsWith(projectsRootResolved + path.sep) && parentDir.toLowerCase() !== projectsRootResolved) {
+      try {
+        const entries = await fs.promises.readdir(parentDir);
+        if (!entries.length) {
+          await removeWithRetries(parentDir, { recursive: true, force: true });
+        }
+      } catch {
+        // Ignore parent cleanup failures.
+      }
+    }
+  };
+
+  const applyReplaceRetentionPolicy = async (projectId, { keepExistingConfig, keepExistingCache }) => {
+    const projectCacheDir = path.join(cacheDir, projectId);
+    const projectConfigPath = getProjectConfigPath(projectId);
+    let configBackup = null;
+
+    if (keepExistingConfig && fs.existsSync(projectConfigPath)) {
+      try {
+        configBackup = await fs.promises.readFile(projectConfigPath, 'utf8');
+      } catch {
+        configBackup = null;
+      }
+    }
+
+    if (!keepExistingCache && fs.existsSync(projectCacheDir)) {
+      await fs.promises.rm(projectCacheDir, { recursive: true, force: true });
+      if (keepExistingConfig && configBackup != null) {
+        await fs.promises.mkdir(path.dirname(projectConfigPath), { recursive: true });
+        await fs.promises.writeFile(projectConfigPath, configBackup, 'utf8');
+      }
+      return;
+    }
+
+    if (!keepExistingConfig && fs.existsSync(projectConfigPath)) {
+      await fs.promises.rm(projectConfigPath, { force: true });
+      projectConfigCache.delete(projectId);
+    }
+  };
 
   // listar proyectos
   app.get("/projects", (req, res) => {
@@ -139,6 +282,32 @@ export const registerProjectRoutes = ({
     });
   });
 
+  // listar proyectos públicos (sin autenticación)
+  app.get("/public/projects", (_req, res) => {
+    try {
+      const listing = buildPublicProjectsListing();
+      return res.json(listing);
+    } catch (err) {
+      console.error("Failed to build public projects listing", err);
+      return res.status(500).json({ error: "public_projects_failed" });
+    }
+  });
+
+  // obtener un proyecto público por id (sin autenticación)
+  app.get("/public/projects/:id", (req, res) => {
+    const raw = req.params?.id ? String(req.params.id) : "";
+    const projectId = sanitizeProjectId(raw);
+    if (!projectId) return res.status(400).json({ error: "invalid_project_id" });
+    try {
+      const descriptor = resolvePublicProject(projectId);
+      if (!descriptor) return res.status(404).json({ error: "project_not_found" });
+      return res.json({ project: descriptor });
+    } catch (err) {
+      console.error("Failed to resolve public project", { projectId, error: err?.message || err });
+      return res.status(500).json({ error: "public_project_failed" });
+    }
+  });
+
   app.post("/projects", requireAdmin, (req, res) => {
     projectUpload.single("project")(req, res, async (err) => {
       if (err) {
@@ -161,21 +330,39 @@ export const registerProjectRoutes = ({
         projectId = `project_${Date.now()}`;
       }
 
-      const ensureUniqueProjectId = (baseId) => {
-        let nextId = baseId;
-        let suffix = 1;
-        while (
-          fs.existsSync(path.join(projectsDir, `${nextId}.qgz`)) ||
-          fs.existsSync(path.join(projectsDir, `${nextId}.qgs`)) ||
-          fs.existsSync(path.join(projectsDir, nextId))
-        ) {
-          nextId = `${baseId}_${suffix}`;
-          suffix += 1;
-        }
-        return nextId;
-      };
+      const existingProject = findProjectById(projectId);
+      const replaceExisting = parseBool(req.body?.replaceExisting ?? req.body?.overwrite, false);
+      const keepExistingConfig = parseBool(req.body?.keepExistingConfig, true);
+      const keepExistingCache = parseBool(req.body?.keepExistingCache, true);
 
-      projectId = ensureUniqueProjectId(projectId);
+      if (existingProject && !replaceExisting) {
+        const lang = detectRequestLanguage(req);
+        const text = conflictText(lang, projectId);
+        return res.status(409).json({
+          error: 'project_already_exists',
+          code: 'PROJECT_ALREADY_EXISTS',
+          projectId,
+          language: lang,
+          requiresConfirmation: true,
+          title: text.title,
+          message: text.message,
+          hint: text.hint,
+          options: {
+            replaceExisting: true,
+            keepExistingConfig: true,
+            keepExistingCache: true
+          }
+        });
+      }
+
+      if (existingProject && replaceExisting) {
+        try {
+          await removeExistingProjectStorage(existingProject);
+          await applyReplaceRetentionPolicy(projectId, { keepExistingConfig, keepExistingCache });
+        } catch (replaceErr) {
+          return res.status(500).json({ error: 'replace_failed', details: redactSecrets(String(replaceErr?.message || replaceErr)) });
+        }
+      }
 
       if (ext === ".zip") {
         const targetDir = path.join(projectsDir, projectId);
@@ -384,7 +571,10 @@ export const registerProjectRoutes = ({
             id: projectId,
             filename: path.basename(file.originalname || 'bundle.zip'),
             kind: 'bundle',
-            projectFile: path.relative(projectsDir, extractedProjectPath).replace(/\\/g, '/')
+            projectFile: path.relative(projectsDir, extractedProjectPath).replace(/\\/g, '/'),
+            replaced: Boolean(existingProject && replaceExisting),
+            keepExistingConfig,
+            keepExistingCache
           });
         } catch (zipErr) {
           const code = String(zipErr?.code || '');
@@ -405,12 +595,7 @@ export const registerProjectRoutes = ({
         }
       }
 
-      let targetName = `${projectId}${ext}`;
-      let suffix = 1;
-      while (fs.existsSync(path.join(projectsDir, targetName))) {
-        targetName = `${projectId}_${suffix}${ext}`;
-        suffix += 1;
-      }
+      const targetName = `${projectId}${ext}`;
       const targetPath = path.join(projectsDir, targetName);
       try {
         if (!file.path) {
@@ -434,11 +619,62 @@ export const registerProjectRoutes = ({
       } catch (bootstrapErr) {
         console.warn(`[bootstrap] Initialization failed for ${finalId}:`, bootstrapErr?.message || bootstrapErr);
       }
-      return res.status(201).json({ status: "uploaded", id: finalId, filename: targetName });
+      return res.status(201).json({
+        status: "uploaded",
+        id: finalId,
+        filename: targetName,
+        replaced: Boolean(existingProject && replaceExisting),
+        keepExistingConfig,
+        keepExistingCache
+      });
     });
   });
 
-  app.delete("/projects/:id", requireAdmin, (req, res) => {
+  const removePathWithRetries = async (targetPath, { isDir = false } = {}) => {
+    const maxRetries = 5;
+    const retryDelayMs = 300;
+    let lastErr = null;
+    for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+      try {
+        if (isDir) {
+          await fs.promises.rm(targetPath, { recursive: true, force: true });
+        } else {
+          await fs.promises.unlink(targetPath);
+        }
+        return true;
+      } catch (err) {
+        lastErr = err;
+        const code = String(err?.code || '');
+        if (code === 'ENOENT') return true;
+        if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') {
+          try { await fs.promises.chmod(targetPath, 0o666); } catch {}
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (lastErr) throw lastErr;
+    return false;
+  };
+
+  const removeWithWorkerReset = async (targetPath, { isDir = false } = {}) => {
+    try {
+      return await removePathWithRetries(targetPath, { isDir });
+    } catch (err) {
+      const code = String(err?.code || '');
+      if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') {
+        try {
+          tileRendererPool?.abortAll?.({ reason: 'project_delete' });
+        } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return await removePathWithRetries(targetPath, { isDir });
+      }
+      throw err;
+    }
+  };
+
+  app.delete("/projects/:id", requireAdmin, async (req, res) => {
     const projectId = req.params.id;
     if (!projectId) {
       return res.status(400).json({ error: "project_id_required" });
@@ -465,6 +701,7 @@ export const registerProjectRoutes = ({
       }
     }
 
+    let removedProjectDir = false;
     try {
       const projectDirCandidate = path.join(projectsDir, proj.id);
       const projectDirResolved = path.resolve(projectDirCandidate);
@@ -474,9 +711,19 @@ export const registerProjectRoutes = ({
       const inProjectDir = projFileResolved.toLowerCase().startsWith(projectDirResolved.toLowerCase() + path.sep);
 
       if (projectDirExists && inProjectDir && projectDirResolved.toLowerCase().startsWith(projectsRootResolved.toLowerCase() + path.sep)) {
-        fs.rmSync(projectDirCandidate, { recursive: true, force: true });
+        await removeWithWorkerReset(projectDirCandidate, { isDir: true });
+        removedProjectDir = true;
       } else {
-        fs.unlinkSync(proj.file);
+        await removeWithWorkerReset(proj.file, { isDir: false });
+      }
+
+      // If the project file is inside a folder under projectsDir, remove that folder as well.
+      if (!removedProjectDir) {
+        const parentDir = path.dirname(projFileResolved);
+        if (parentDir.toLowerCase().startsWith(projectsRootResolved.toLowerCase() + path.sep)) {
+          await removeWithWorkerReset(parentDir, { isDir: true });
+          removedProjectDir = true;
+        }
       }
     } catch (err) {
       return res.status(500).json({ error: "delete_failed", details: String(err) });
@@ -527,11 +774,24 @@ export const registerProjectRoutes = ({
             console.warn(`[cleanup] Failed to read index.json for preset cleanup:`, indexErr);
           }
         }
-        fs.rmSync(projectCacheDir, { recursive: true, force: true });
+        await removeWithWorkerReset(projectCacheDir, { isDir: true });
         cacheRemoved = true;
       } catch (err) {
         return res.status(500).json({ error: "cache_delete_failed", details: String(err) });
       }
+    }
+
+    // Also remove cache by file-based id if it differs (e.g., zip uploads with inner demo.qgz)
+    try {
+      const fileBase = path.basename(proj.file).replace(/\.(qgz|qgs)$/i, "");
+      if (fileBase && fileBase !== proj.id) {
+        const altCacheDir = path.join(cacheDir, fileBase);
+        if (fs.existsSync(altCacheDir)) {
+          await removeWithWorkerReset(altCacheDir, { isDir: true });
+        }
+      }
+    } catch (err) {
+      return res.status(500).json({ error: "cache_delete_failed", details: String(err) });
     }
 
     try {
@@ -764,6 +1024,98 @@ export const registerProjectRoutes = ({
         updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
         logProjectEvent(projectId, `Project cache run ${runId} failed: ${message}`, "error");
       }
+    });
+  });
+
+  // /layers -> ejecutar script extract_info.py usando o4w_env.bat
+  app.get("/layers", requireAdmin, (req, res) => {
+    const script = path.join(pythonDir, "extract_info.py");
+    console.log("GET /layers -> launching python:", pythonExe, script);
+    const proc = runPythonViaOSGeo4W(script, []);
+
+    let stdout = "", stderr = "";
+    proc.stdout.on("data", (d) => {
+      const s = d.toString();
+      stdout += s;
+      console.log("[py stdout]", s.trim());
+    });
+    proc.stderr.on("data", (d) => {
+      const s = d.toString();
+      stderr += s;
+      console.error("[py stderr]", s.trim());
+    });
+    proc.on("error", (err) => {
+      console.error("Failed to spawn python:", err);
+      res.status(500).json({ error: "spawn_error", details: String(err) });
+    });
+
+    proc.on("close", (code) => {
+      console.log(`python process exited ${code}`);
+      let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
+      if (raw) {
+        const candidate = extractJsonLike(raw);
+        if (candidate) {
+          try {
+            const parsed = JSON.parse(candidate);
+            return res.status(code === 0 ? 200 : 500).json(parsed);
+          } catch (e) {
+            return res.status(code === 0 ? 200 : 500).json({ raw, code });
+          }
+        } else {
+          return res.status(code === 0 ? 200 : 500).json({ raw, code });
+        }
+      }
+      return res.status(code === 0 ? 200 : 500).json({ code, details: stderr || "no output" });
+    });
+  });
+
+  app.get("/projects/:id/searchable", ensureProjectAccess((req) => req.params.id), (req, res) => {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) {
+      return res.status(400).json({ error: "invalid_project" });
+    }
+    const searchableDir = path.join(process.cwd(), 'data', 'searchable-layers');
+    const searchableLayersPath = path.join(searchableDir, `${projectId}.json`);
+    fs.readFile(searchableLayersPath, 'utf8', (err, data) => {
+      if (err) {
+        if (err.code === 'ENOENT') {
+          return res.json([]);
+        }
+        console.error("Failed to read searchable layers file", err);
+        return res.status(500).json({ error: "read_failed" });
+      }
+      try {
+        const layers = JSON.parse(data);
+        res.json(layers);
+      } catch (parseErr) {
+        console.error("Failed to parse searchable layers file", parseErr);
+        res.status(500).json({ error: "parse_failed" });
+      }
+    });
+  });
+
+  app.post("/projects/:id/searchable", requireAdmin, (req, res) => {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) {
+      return res.status(400).json({ error: "invalid_project" });
+    }
+    const searchableDir = path.join(process.cwd(), 'data', 'searchable-layers');
+    const searchableLayersPath = path.join(searchableDir, `${projectId}.json`);
+    const updatedLayers = req.body;
+
+    fs.mkdir(searchableDir, { recursive: true }, (dirErr) => {
+      if (dirErr) {
+        console.error("Failed to create searchable layers dir", dirErr);
+        return res.status(500).json({ error: "dir_create_failed" });
+      }
+
+      fs.writeFile(searchableLayersPath, JSON.stringify(updatedLayers, null, 2), 'utf8', (err) => {
+      if (err) {
+        console.error("Failed to write searchable layers file", err);
+        return res.status(500).json({ error: "write_failed" });
+      }
+      res.status(200).json({ status: "success" });
+      });
     });
   });
 

@@ -553,6 +553,28 @@ def _atomic_save_image(qimage, dest_path, compression=3, min_bytes=None):
             try: sys.stdout.write(json.dumps({"debug": "atomic_save_no_image", "dest": dest_path}) + "\n"); sys.stdout.flush()
             except Exception: pass
             return False
+        # detectar tiles totalmente blancas (opcional)
+        skip_white = str(os.environ.get("SKIP_WHITE_TILES", "0")).strip().lower() in ("1", "true", "yes")
+        is_white_tile = False
+        if skip_white:
+            try:
+                w = int(qimage.width())
+                h = int(qimage.height())
+                if w > 0 and h > 0:
+                    coords = [
+                        (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+                        (w // 2, h // 2)
+                    ]
+                    base = qimage.pixelColor(coords[0][0], coords[0][1])
+                    same = True
+                    for (cx, cy) in coords[1:]:
+                        if qimage.pixelColor(cx, cy) != base:
+                            same = False
+                            break
+                    if same:
+                        is_white_tile = (base.red() == 255 and base.green() == 255 and base.blue() == 255 and base.alpha() == 255)
+            except Exception:
+                is_white_tile = False
         ddir = os.path.dirname(dest_path) or "."
         os.makedirs(ddir, exist_ok=True)
         # elegir tamaño mínimo aceptable (podemos configurarlo via env)
@@ -678,6 +700,14 @@ def _atomic_save_image(qimage, dest_path, compression=3, min_bytes=None):
             sys.stdout.flush()
         except Exception:
             pass
+        # marcar tile blanca para regenerar en el próximo zoom
+        if skip_white and is_white_tile:
+            try:
+                marker = dest_path + ".blank"
+                with open(marker, "w", encoding="utf-8") as f:
+                    f.write("white")
+            except Exception:
+                pass
         return True
     except Exception as e:
         try: sys.stderr.write(json.dumps({"error": "atomic_save_exception", "dest": dest_path, "details": str(e)}) + "\n")

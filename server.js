@@ -28,6 +28,30 @@ import { registerOrigoRoutes } from "./routes/origo.js";
 
 
 dotenv.config();
+const ensureLicenseSecret = () => {
+  const current = process.env.LICENSE_SECRET || '';
+  if (current && current !== 'CHANGE_ME') return;
+  const secret = crypto.randomBytes(32).toString('hex');
+  process.env.LICENSE_SECRET = secret;
+  const envPath = path.resolve(process.cwd(), '.env');
+  try {
+    if (fs.existsSync(envPath)) {
+      const raw = fs.readFileSync(envPath, 'utf8');
+      if (/^\s*LICENSE_SECRET\s*=/.test(raw)) {
+        const updated = raw.replace(/^\s*LICENSE_SECRET\s*=.*$/m, `LICENSE_SECRET=${secret}`);
+        fs.writeFileSync(envPath, updated, 'utf8');
+      } else {
+        const newline = raw.endsWith('\n') ? '' : '\n';
+        fs.writeFileSync(envPath, `${raw}${newline}LICENSE_SECRET=${secret}\n`, 'utf8');
+      }
+    } else {
+      fs.writeFileSync(envPath, `LICENSE_SECRET=${secret}\n`, 'utf8');
+    }
+  } catch (err) {
+    console.warn('[licenses] Failed to persist LICENSE_SECRET', err?.message || err);
+  }
+};
+ensureLicenseSecret();
 // Verificación automática de entorno QGIS/Python
 function verifyQGISEnv() {
   const qgisBin = process.env.OSGEO4W_BIN || null;
@@ -186,6 +210,23 @@ const requireRoles = (...roles) => (req, res, next) => {
 
 const requireAdmin = requireRoles("admin");
 
+const INTERNAL_JOB_TOKEN = process.env.QTILER_INTERNAL_JOB_TOKEN || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+const INTERNAL_JOB_HEADER = "x-qtiler-internal-token";
+
+const isInternalJobRequest = (req) => {
+  try {
+    const token = String(req.get(INTERNAL_JOB_HEADER) || "");
+    return Boolean(token) && token === INTERNAL_JOB_TOKEN;
+  } catch {
+    return false;
+  }
+};
+
+const requireAdminOrInternal = (req, res, next) => {
+  if (isInternalJobRequest(req)) return next();
+  return requireAdmin(req, res, next);
+};
+
 // Middleware that requires admin only if auth is enabled
 const requireAdminIfEnabled = (req, res, next) => {
   if (security.isEnabled && security.isEnabled()) {
@@ -247,9 +288,17 @@ const ensureProjectAccess = (selector) => (req, res, next) => {
 };
 
 const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess((req) => {
-  const value = req.query ? req.query[param] : null;
-  if (Array.isArray(value)) return value[0];
-  return value || null;
+  if (!req || !req.query) return null;
+  const direct = req.query[param];
+  if (direct != null) return Array.isArray(direct) ? direct[0] : direct;
+  const target = String(param || "").toLowerCase();
+  if (!target) return null;
+  for (const [key, value] of Object.entries(req.query)) {
+    if (String(key).toLowerCase() === target) {
+      return Array.isArray(value) ? value[0] : value;
+    }
+  }
+  return null;
 });
 
 const supportedLanguages = ["en", "es", "sv"];
@@ -524,11 +573,6 @@ registerProj4Routes({
   getProj4Presets: () => proj4Presets
 });
 
-registerOrigoRoutes({
-  app,
-  publicDir
-});
-
 app.use(express.static(publicDir, { index: false }));
 
 // Plugin routes are registered after upload middleware initialization.
@@ -544,6 +588,49 @@ const projectUpload = createProjectUpload({ uploadTempDir, maxBytes: defaultUplo
 
 const defaultPluginUploadLimit = parseInt(process.env.PLUGIN_UPLOAD_MAX_BYTES || "52428800", 10);
 const pluginUpload = createPluginUpload({ uploadTempDir, maxBytes: defaultPluginUploadLimit });
+
+app.get('/searchable-layers', (req, res) => {
+  const searchableLayersPath = path.join(__dirname, 'data', 'searchable-layers.json');
+  
+  try {
+    const searchableData = fs.readFileSync(searchableLayersPath, 'utf8');
+    const searchableLayersConfig = JSON.parse(searchableData);
+    const searchableLayersMap = new Map(searchableLayersConfig.map(l => [l.name, l]));
+
+    const projects = listProjects();
+    const result = [];
+
+    for (const project of projects) {
+      const config = readProjectConfig(project.id);
+      if (config && config.layers) {
+        for (const layerName in config.layers) {
+          const layerConfig = config.layers[layerName];
+          if (layerConfig.wfsSearchable === true) {
+            const searchableConfig = searchableLayersMap.get(layerName);
+            if (searchableConfig) {
+              const wfsUrl = `${req.protocol}://${req.get('host')}/wfs/${project.id}`;
+              result.push({
+                name: layerName,
+                projectId: project.id,
+                type: 'WFS',
+                ...searchableConfig,
+                searchUrl: wfsUrl,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('Failed to build searchable layers response:', err);
+    if (err.code === 'ENOENT') {
+      return res.status(404).json({ error: 'configuration_file_not_found', details: err.path });
+    }
+    res.status(500).json({ error: 'failed_to_get_searchable_layers' });
+  }
+});
 
 registerPluginRoutes({
   app,
@@ -1311,6 +1398,84 @@ const hasAnyTileFiles = (baseDir) => {
     return false;
   }
   return false;
+};
+
+const directoryHasTileLikeFilesBounded = (baseDir, { maxDirs = 1200, maxFiles = 25000 } = {}) => {
+  if (!baseDir || typeof baseDir !== 'string') return false;
+  if (!fs.existsSync(baseDir)) return false;
+  const imageExtRe = /\.(png|jpe?g|webp|pbf|mvt)$/i;
+  const queue = [baseDir];
+  let dirsScanned = 0;
+  let filesScanned = 0;
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current) continue;
+    dirsScanned += 1;
+    if (dirsScanned > maxDirs) return false;
+
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        queue.push(path.join(current, entry.name));
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      filesScanned += 1;
+      if (filesScanned > maxFiles) return false;
+      if (imageExtRe.test(entry.name)) return true;
+    }
+  }
+
+  return false;
+};
+
+const hasWmsCacheForLayer = (projectId, layerName) => {
+  if (!projectId || !layerName) return false;
+  const layerSeg = safePathSegment(layerName, { fallback: 'layers' });
+  const projectSeg = safePathSegment(projectId, { fallback: projectId || 'project' });
+  const roots = Array.from(new Set([
+    path.join(cacheDir, projectId, '_wms_tiles'),
+    path.join(cacheDir, projectSeg, '_wms_tiles'),
+    path.join(cacheDir, '_wms_tiles', projectSeg)
+  ]));
+
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const directCandidate = path.join(root, layerSeg);
+    if (directoryHasTileLikeFilesBounded(directCandidate)) return true;
+
+    let crsEntries = [];
+    try {
+      crsEntries = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch {
+      crsEntries = [];
+    }
+    for (const crsName of crsEntries) {
+      const layerCandidate = path.join(root, crsName, layerSeg);
+      if (directoryHasTileLikeFilesBounded(layerCandidate)) return true;
+    }
+  }
+
+  return false;
+};
+
+const hasVectorTilesCacheForProject = (projectId) => {
+  if (!projectId) return false;
+  const vtProjectDir = path.join(cacheDir, 'vector-tiles', projectId);
+  if (!fs.existsSync(vtProjectDir)) return false;
+  try {
+    const entries = fs.readdirSync(vtProjectDir, { withFileTypes: true });
+    return entries.some((entry) => entry.isFile() && /\.(mbtiles|json)$/i.test(entry.name));
+  } catch {
+    return false;
+  }
 };
 
 const pruneZoomDirectories = (baseDir, { minZoom = null, maxZoom = null } = {}) => {
@@ -2204,6 +2369,7 @@ const buildProjectConfigPatch = (input = {}) => {
 
       // WFS: allow admins to toggle editability per vector layer.
       if (typeof info.wfsEditable === "boolean") layerPatch.wfsEditable = info.wfsEditable;
+      if (typeof info.wfsSearchable === "boolean") layerPatch.wfsSearchable = info.wfsSearchable;
       
       if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
         if (info.schedule === null) {
@@ -2716,9 +2882,13 @@ const handleProjectTimer = async (projectId, targetTime) => {
 
 const runCacheJobViaHttp = async (payload, { timeoutMs = 3600000 } = {}) => {
   const controller = new AbortController();
+  const internalHeaders = {
+    "Content-Type": "application/json",
+    [INTERNAL_JOB_HEADER]: INTERNAL_JOB_TOKEN
+  };
   const res = await fetch("http://127.0.0.1:3000/generate-cache", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalHeaders,
     body: JSON.stringify(payload),
     signal: controller.signal
   });
@@ -2730,7 +2900,9 @@ const runCacheJobViaHttp = async (payload, { timeoutMs = 3600000 } = {}) => {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     await sleep(2000);
-    const statusRes = await fetch(`http://127.0.0.1:3000/generate-cache/${encodeURIComponent(jobId)}?tail=20000`);
+    const statusRes = await fetch(`http://127.0.0.1:3000/generate-cache/${encodeURIComponent(jobId)}?tail=20000`, {
+      headers: { [INTERNAL_JOB_HEADER]: INTERNAL_JOB_TOKEN }
+    });
     if (statusRes.status === 404) {
       throw new Error(`Job ${jobId} no longer available`);
     }
@@ -2936,9 +3108,12 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
   }
 };
 
-const deleteLayerCacheInternal = async (projectId, layerName, { force = false, silent = false } = {}) => {
+const deleteLayerCacheInternal = async (projectId, layerName, { force = false, silent = false, cacheType = 'all' } = {}) => {
   if (!projectId) throw new Error("project required");
   if (!layerName) throw new Error("layer required");
+  const normalizedCacheType = String(cacheType || 'all').toLowerCase();
+  const shouldDeleteWmts = normalizedCacheType === 'all' || normalizedCacheType === 'wmts';
+  const shouldDeleteWms = normalizedCacheType === 'all' || normalizedCacheType === 'wms';
   const sleepLocal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const listJobPidFiles = () => {
@@ -3141,13 +3316,15 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
 
   const layerDir = path.join(cacheDir, projectId, layerName);
   let removalPath = layerDir;
-  try {
-    const relocated = await relocateDirectoryForRemoval(layerDir);
-    if (relocated) {
-      removalPath = relocated;
+  if (shouldDeleteWmts) {
+    try {
+      const relocated = await relocateDirectoryForRemoval(layerDir);
+      if (relocated) {
+        removalPath = relocated;
+      }
+    } catch (relocateErr) {
+      if (!silent) console.warn("Failed to relocate cache prior to delete", projectId, layerName, relocateErr);
     }
-  } catch (relocateErr) {
-    if (!silent) console.warn("Failed to relocate cache prior to delete", projectId, layerName, relocateErr);
   }
 
   // Also purge WMS tile cache for this layer.
@@ -3215,74 +3392,85 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
     }
   };
 
-  await purgeWmsCacheForLayer();
-  try {
-    await removeDirectorySafe(removalPath, {});
-    if (removalPath !== layerDir) {
-      try {
-        await removeDirectorySafe(layerDir, { attempts: 2, delayMs: 100 });
-      } catch { }
-    }
-  } catch (rmErr) {
-    if (!silent) console.error("Failed to remove cache directory", projectId, layerName, rmErr);
-    throw rmErr;
+  if (shouldDeleteWms) {
+    await purgeWmsCacheForLayer();
   }
 
-  const projectIndexPath = path.join(cacheDir, projectId, "index.json");
-  let index = { layers: [] };
-  try {
-    const raw = fs.readFileSync(projectIndexPath, "utf8");
-    if (raw) index = JSON.parse(raw);
-  } catch {
-    index = { layers: [] };
-  }
-  // Update index.json: preserve layer entry but mark cache as removed/cleared
-  try {
-    if (!Array.isArray(index.layers)) index.layers = [];
-    let found = false;
-    index.layers = index.layers.map((l) => {
-      if (!l || l.name !== layerName) return l;
-      found = true;
-      const updated = Object.assign({}, l);
-      // mark cache fields as cleared
-      updated.cached_zoom_min = null;
-      updated.cached_zoom_max = null;
-      // remove path reference to avoid pointing to removed directory
-      if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
-      // optional metadata about removal
-      updated.cache_removed_at = new Date().toISOString();
-      updated.cache_exists = false;
-      updated.updated = new Date().toISOString();
-      // remove any tile counts/sizes if present
-      if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
-      if (Object.prototype.hasOwnProperty.call(updated, 'tile_count')) updated.tile_count = 0;
-      if (Object.prototype.hasOwnProperty.call(updated, 'tileCount')) updated.tileCount = 0;
-      if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
-      return updated;
-    });
-    // if not present, add a minimal placeholder entry so index retains layer metadata
-    if (!found) {
-      index.layers.push({
-        name: layerName,
-        kind: 'layer',
-        cached_zoom_min: null,
-        cached_zoom_max: null,
-        cache_removed_at: new Date().toISOString(),
-        cache_exists: false,
-        updated: new Date().toISOString()
-      });
+  if (shouldDeleteWmts) {
+    try {
+      await removeDirectorySafe(removalPath, {});
+      if (removalPath !== layerDir) {
+        try {
+          await removeDirectorySafe(layerDir, { attempts: 2, delayMs: 100 });
+        } catch { }
+      }
+    } catch (rmErr) {
+      if (!silent) console.error("Failed to remove cache directory", projectId, layerName, rmErr);
+      throw rmErr;
     }
-    fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
-  } catch (err) {
-    if (!silent) console.error("Failed to write project index after delete", err);
-    throw err;
   }
+
+  if (shouldDeleteWmts) {
+    const projectIndexPath = path.join(cacheDir, projectId, "index.json");
+    let index = { layers: [] };
+    try {
+      const raw = fs.readFileSync(projectIndexPath, "utf8");
+      if (raw) index = JSON.parse(raw);
+    } catch {
+      index = { layers: [] };
+    }
+    // Update index.json: preserve layer entry but mark cache as removed/cleared
+    try {
+      if (!Array.isArray(index.layers)) index.layers = [];
+      let found = false;
+      index.layers = index.layers.map((l) => {
+        if (!l || l.name !== layerName) return l;
+        found = true;
+        const updated = Object.assign({}, l);
+        // mark cache fields as cleared
+        updated.cached_zoom_min = null;
+        updated.cached_zoom_max = null;
+        // remove path reference to avoid pointing to removed directory
+        if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
+        // optional metadata about removal
+        updated.cache_removed_at = new Date().toISOString();
+        updated.cache_exists = false;
+        updated.updated = new Date().toISOString();
+        // remove any tile counts/sizes if present
+        if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
+        if (Object.prototype.hasOwnProperty.call(updated, 'tile_count')) updated.tile_count = 0;
+        if (Object.prototype.hasOwnProperty.call(updated, 'tileCount')) updated.tileCount = 0;
+        if (Object.prototype.hasOwnProperty.call(updated, 'size')) updated.size = 0;
+        return updated;
+      });
+      // if not present, add a minimal placeholder entry so index retains layer metadata
+      if (!found) {
+        index.layers.push({
+          name: layerName,
+          kind: 'layer',
+          cached_zoom_min: null,
+          cached_zoom_max: null,
+          cache_removed_at: new Date().toISOString(),
+          cache_exists: false,
+          updated: new Date().toISOString()
+        });
+      }
+      fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
+    } catch (err) {
+      if (!silent) console.error("Failed to write project index after delete", err);
+      throw err;
+    }
+  }
+
   try {
+    const message = shouldDeleteWmts && shouldDeleteWms
+      ? "Cache removed"
+      : (shouldDeleteWmts ? "WMTS cache removed" : "WMS cache removed");
     updateProjectConfig(projectId, {
       layers: {
         [layerName]: {
           lastResult: "deleted",
-          lastMessage: "Cache removed",
+          lastMessage: message,
           lastRunAt: new Date().toISOString()
         }
       }
@@ -3290,7 +3478,8 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   } catch (cfgErr) {
     if (!silent) console.warn("Failed to record layer delete in config", cfgErr);
   }
-  logProjectEvent(projectId, `Layer ${layerName} cache deleted${force ? " (force)" : ""}.`);
+  const scopeLabel = shouldDeleteWmts && shouldDeleteWms ? 'all' : (shouldDeleteWmts ? 'wmts' : 'wms');
+  logProjectEvent(projectId, `Layer ${layerName} cache deleted (${scopeLabel})${force ? " (force)" : ""}.`);
   return { project: projectId, layer: layerName };
 };
 
@@ -3617,7 +3806,11 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
     throw new Error('PYTHON_EXE no definido y no se pudo resolver desde OSGEO4W_BIN; revisa .env');
   }
 
-  const spawnOpts = { env: makeChildEnv(), cwd: __dirname, stdio: 'pipe', ...options };
+  const baseEnv = makeChildEnv();
+  const mergedEnv = options && options.env && typeof options.env === 'object'
+    ? { ...baseEnv, ...options.env }
+    : baseEnv;
+  const spawnOpts = { env: mergedEnv, cwd: __dirname, stdio: 'pipe', ...options, env: mergedEnv };
 
   // If an OSGeo4W batch wrapper exists and the user didn't force direct spawn,
   // run the batch and python in a shell so the QGIS python environment is valid.
@@ -3626,7 +3819,7 @@ const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
     const o4wPart = `"${o4wBatch}" >nul 2>&1`;
     const cmdParts = [o4wPart, '&&', `"${pythonExe}"`, `"${script}"`, ...args.map(a => `"${String(a)}"`)];
     const cmd = cmdParts.join(' ');
-    return spawn(cmd, { shell: true, env: makeChildEnv(), cwd: __dirname, ...options });
+    return spawn(cmd, { shell: true, env: mergedEnv, cwd: __dirname, ...options, env: mergedEnv });
   }
 
   // Otherwise spawn python directly (useful for pure-Python setups / venvs).
@@ -4428,6 +4621,7 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
     writeProjectIndexData(projectId, payload);
     console.log(`[bootstrap] Initialized cache index for project ${projectId} (${entries.length} placeholder layer(s))`);
     seedProjectConfigFromBootstrap(projectId, {
+      entries,
       projectExtent,
       projectExtentWgs,
       projectCrs,
@@ -4489,6 +4683,35 @@ const seedProjectConfigFromBootstrap = (projectId, info = {}) => {
           throttleMs: Number.isFinite(Number(prefs.throttleMs)) ? Number(prefs.throttleMs) : 0,
           updatedAt: nowIso
         };
+      }
+    }
+
+    // Default new project layers to non-editable and non-searchable.
+    // The UI currently treats missing flags as enabled, so we persist explicit false values.
+    const sourceEntries = Array.isArray(info.entries) ? info.entries : [];
+    if (sourceEntries.length) {
+      const layerPatch = {};
+      const currentLayers = current && typeof current.layers === "object" && current.layers ? current.layers : {};
+      for (const entry of sourceEntries) {
+        if (!entry || entry.kind !== "layer") continue;
+        const layerName = typeof entry.name === "string" ? entry.name : "";
+        if (!layerName) continue;
+        const existingLayerCfg = currentLayers[layerName] && typeof currentLayers[layerName] === "object"
+          ? currentLayers[layerName]
+          : {};
+        const nextLayerCfg = {};
+        if (typeof existingLayerCfg.wfsEditable !== "boolean") {
+          nextLayerCfg.wfsEditable = false;
+        }
+        if (typeof existingLayerCfg.wfsSearchable !== "boolean") {
+          nextLayerCfg.wfsSearchable = false;
+        }
+        if (Object.keys(nextLayerCfg).length) {
+          layerPatch[layerName] = nextLayerCfg;
+        }
+      }
+      if (Object.keys(layerPatch).length) {
+        patch.layers = layerPatch;
       }
     }
 
@@ -4573,6 +4796,14 @@ const listProjects = () => {
   } catch (e) { return []; }
 };
 const findProjectById = (id) => listProjects().find(p => p.id === id);
+
+registerOrigoRoutes({
+  app,
+  publicDir,
+  requireAdmin,
+  tileRendererPool,
+  findProjectById
+});
 
 const persistProjectAccessSnapshot = (snapshot) => {
   if (!snapshot || typeof snapshot !== "object") return;
@@ -5238,6 +5469,7 @@ registerProjectRoutes({
   getProjectConfigPath,
   deleteLayerCacheInternal,
   updateProjectBatchRun,
+  tileRendererPool,
   runRecacheForProject,
   logProjectEvent,
   buildPublicProjectsListing,
@@ -5264,7 +5496,7 @@ registerWfsRoutes({
 });
 
 // generate-cache -> spawn para proceso largo (pasar args)
-app.post("/generate-cache", requireAdmin, (req, res) => {
+app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
   const {
     project: projectId,
     layer,
@@ -5471,7 +5703,11 @@ app.post("/generate-cache", requireAdmin, (req, res) => {
   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   // Attach job id so we can reliably find/abort the real python process even when spawned via shell/batch on Windows.
   try { args.push('--job_id', String(id)); } catch {}
-  const proc = runPythonViaOSGeo4W(script, args, {});
+  const childEnvOverrides = {};
+  if (projectPath) {
+    childEnvOverrides.PROJECT_PATH = projectPath;
+  }
+  const proc = runPythonViaOSGeo4W(script, args, { env: childEnvOverrides });
   console.log("Launching python generate_cache.py with args:", args);
 
   const runReason = typeof req.body.run_reason === "string" && req.body.run_reason.trim() ? req.body.run_reason.trim() : null;
@@ -5742,16 +5978,18 @@ app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
   const project = req.params.project;
   const name = req.params.name;
   const force = (req.query && (req.query.force === '1' || req.query.force === 'true')) || false;
+  const requestedType = String(req.query?.type || 'all').toLowerCase();
+  const cacheType = ['all', 'wmts', 'wms'].includes(requestedType) ? requestedType : 'all';
   const layerPath = path.join(cacheDir, project, name);
   const themePath = path.join(cacheDir, project, '_themes', name);
   try {
-    if (fs.existsSync(layerPath)) {
-      await deleteLayerCacheInternal(project, name, { force: Boolean(force), silent: false });
-      return res.json({ status: 'deleted', project, layer: name, path: layerPath, force });
-    }
-    if (fs.existsSync(themePath)) {
+    if (cacheType !== 'wms' && fs.existsSync(themePath)) {
       await deleteThemeCacheInternal(project, name, { force: Boolean(force), silent: false });
-      return res.json({ status: 'deleted', project, theme: name, path: themePath, force });
+      return res.json({ status: 'deleted', project, theme: name, path: themePath, force, type: 'wmts' });
+    }
+    if (fs.existsSync(layerPath) || cacheType === 'wms' || cacheType === 'all' || cacheType === 'wmts') {
+      await deleteLayerCacheInternal(project, name, { force: Boolean(force), silent: false, cacheType });
+      return res.json({ status: 'deleted', project, layer: name, path: layerPath, force, type: cacheType });
     }
     // Cambia esto:
     // return res.status(404).json({ error: 'cache_not_found', project, name });
@@ -5769,7 +6007,7 @@ app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
 });
 
 // Obtener detalles de un job (estado y logs)
-app.get("/generate-cache/:id", requireAdmin, (req, res) => {
+app.get("/generate-cache/:id", requireAdminOrInternal, (req, res) => {
   const id = req.params.id;
   const job = runningJobs.get(id);
   // In cluster mode the request may hit a different worker, so fall back to
@@ -6492,14 +6730,18 @@ app.get(
         // Tile missing (or invalid): render on-demand and respond with the generated image.
         try {
           const renderParams = { project: layer.project, layer: layer.layerName, z: sourceLevel, x: tileCol, y: tileRow };
-          return queueTileRender(renderParams, filePath, (qerr, outFile) => {
+          return queueTileRender(renderParams, filePath, (qerr, outFile, meta) => {
             if (qerr) {
               logProjectEvent(layer.project, `On-demand render failed for ${filePath}: ${String(qerr)}`);
               if (!res.headersSent) return res.status(500).send("Generation failed");
               return;
             }
             logProjectEvent(layer.project, `On-demand render completed: ${outFile}`);
-            if (!res.headersSent) return res.sendFile(outFile);
+            if (!res.headersSent) return res.sendFile(outFile, () => {
+              if (meta?.transient) {
+                try { fs.unlinkSync(outFile); } catch {}
+              }
+            });
           });
         } catch (queueErr) {
           console.warn('Failed to queue tile render', queueErr);
@@ -6725,6 +6967,153 @@ function processTileQueue() {
 // Uso: reemplaza la invocación directa de generación de tile por enqueueTileJob(() => generarTile(...))
 // ...existing code...
 
+// API endpoint for search functionality (Origo-compatible response)
+app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  if (!query) {
+    return res.status(400).json({ error: 'Query parameter `q` is required.' });
+  }
+
+  // Prevent client-side caching (avoid 304 with empty body)
+  try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+    res.setHeader('ETag', `W/"${Date.now()}"`);
+  } catch {}
+
+  try {
+    const requestedProject = String(req.query.project || '').trim();
+    let projectId = requestedProject || '';
+
+    if (!projectId) {
+      // If there's only one cached project, default to it
+      try {
+        const candidates = fs.readdirSync(cacheDir)
+          .filter((p) => fs.existsSync(path.join(cacheDir, p, 'index.json')));
+        if (candidates.length === 1) {
+          projectId = candidates[0];
+        }
+      } catch {}
+    }
+
+    if (!projectId) {
+      return res.status(400).json({
+        error: 'project_required',
+        message: 'Add ?project=<id> to the search URL or configure a single project.'
+      });
+    }
+
+    const project = findProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'project_not_found', details: projectId });
+    }
+
+    // Load searchable layers configuration (per project)
+    const searchableLayersDir = path.resolve(dataDir, 'searchable-layers');
+    const searchableLayersPath = path.join(searchableLayersDir, `${projectId}.json`);
+    let searchableLayers = [];
+    const hasSearchableConfig = fs.existsSync(searchableLayersPath);
+    if (hasSearchableConfig) {
+      searchableLayers = JSON.parse(fs.readFileSync(searchableLayersPath, 'utf-8'));
+    }
+
+    // Respect per-layer wfsSearchable=false in project-config
+    let wfsSearchableFlags = null;
+    try {
+      const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
+      if (fs.existsSync(cfgPath)) {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+        const layerCfg = cfg?.layers && typeof cfg.layers === 'object' ? cfg.layers : {};
+        wfsSearchableFlags = new Map();
+        Object.keys(layerCfg).forEach((key) => {
+          const entry = layerCfg[key] || {};
+          if (typeof entry.wfsSearchable === 'boolean') {
+            wfsSearchableFlags.set(String(key), entry.wfsSearchable);
+          }
+        });
+      }
+    } catch {}
+
+    // If no per-project config exists, try a safe fallback using project-config layers
+    if (!hasSearchableConfig && (!Array.isArray(searchableLayers) || searchableLayers.length === 0)) {
+      try {
+        const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
+        if (fs.existsSync(cfgPath)) {
+          const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+          const fallbackLayers = Object.keys(cfg?.layers || {});
+          if (fallbackLayers.length > 0) {
+            const defaultField = String(req.query.searchAttribute || 'NAMN').trim() || 'NAMN';
+            searchableLayers = fallbackLayers.map((name) => ({
+              name,
+              fields: [defaultField],
+              titleField: defaultField
+            }));
+          }
+        }
+      } catch {}
+    }
+    const layerFilterRaw = String(req.query.l || '').trim();
+    const layerFilter = layerFilterRaw
+      ? layerFilterRaw.split(',').map((v) => v.trim()).filter(Boolean)
+      : null;
+
+    const limitRaw = Number.parseInt(String(req.query.limit || req.query.max || '10'), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 10;
+
+    // Prepare results
+    const results = [];
+
+    for (const layer of Array.isArray(searchableLayers) ? searchableLayers : []) {
+      if (!layer || !layer.name || !Array.isArray(layer.fields) || layer.fields.length === 0) {
+        continue;
+      }
+      if (layer.searchable === false) continue;
+      if (wfsSearchableFlags && wfsSearchableFlags.get(String(layer.name)) === false) continue;
+      if (layerFilter && !layerFilter.includes(layer.name)) continue;
+
+      const layerResults = await (async () => {
+        try {
+          const result = await tileRendererPool.renderTile({
+            action: 'search_features',
+            project_path: project.file,
+            type_name: String(layer.name),
+            fields: Array.isArray(layer.fields) ? layer.fields : [],
+            query,
+            limit
+          });
+          if (result && result.status === 'success' && Array.isArray(result.results)) {
+            return result.results;
+          }
+          return [];
+        } catch (err) {
+          console.error('Search worker error:', err?.message || err);
+          return [];
+        }
+      })();
+
+      for (const row of layerResults) {
+        const centroidWkt = row.geometry_centroid || row.centroid || null;
+        const geomWkt = centroidWkt || row.GEOM || row.geometry || null;
+        const nameValue = row.NAMN || row.namn || row.Name || row.name || null;
+        const gidValue = row.GID || row.gid || row.ID || row.id || null;
+        results.push({
+          NAMN: nameValue,
+          GID: gidValue,
+          TYPE: layer.name,
+          GEOM: geomWkt
+        });
+      }
+    }
+
+    res.json(results.slice(0, limit));
+  } catch (error) {
+    console.error('Error handling search request:', error);
+    res.status(500).json({ error: 'internal_server_error' });
+  }
+});
+
 // servir index.json del cache para meta en el visor
 // ruta legacy desactivada: informar que ahora se usan índices por proyecto
 app.get("/cache/index.json", requireAdmin, (req, res) => {
@@ -6834,6 +7223,63 @@ app.get("/cache/:project/index.json", ensureProjectAccess((req) => req.params.pr
     return res.json(skeleton);
   } catch (e) {
     return res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.project), (req, res) => {
+  try {
+    const projectId = req.params.project;
+    const requestedLayersRaw = req.query?.layer;
+    const requestedLayers = Array.isArray(requestedLayersRaw)
+      ? requestedLayersRaw
+      : (typeof requestedLayersRaw === 'string' && requestedLayersRaw.trim() ? [requestedLayersRaw] : []);
+    const layerNames = Array.from(new Set(requestedLayers
+      .map((name) => String(name || '').trim())
+      .filter(Boolean)));
+
+    const indexData = loadProjectIndexData(projectId);
+    const indexLayers = Array.isArray(indexData?.layers) ? indexData.layers : [];
+    const indexByName = new Map();
+    for (const entry of indexLayers) {
+      if (!entry || (entry.kind && entry.kind !== 'layer')) continue;
+      const name = String(entry.name || '').trim();
+      if (!name) continue;
+      indexByName.set(name, entry);
+    }
+
+    const targetLayers = layerNames.length ? layerNames : Array.from(indexByName.keys());
+    const vectorTiles = hasVectorTilesCacheForProject(projectId);
+    const layers = {};
+
+    for (const layerName of targetLayers) {
+      const indexEntry = indexByName.get(layerName) || null;
+      const wmts = (() => {
+        if (!indexEntry) return false;
+        const count = Number(indexEntry.tile_count ?? indexEntry.tiles ?? indexEntry.tileCount);
+        if (Number.isFinite(count) && count > 0) return true;
+        const hasTilesFlag = indexEntry.has_tiles ?? indexEntry.hasTiles;
+        if (hasTilesFlag === true) return true;
+        const candidatePath = typeof indexEntry.path === 'string' && indexEntry.path.trim()
+          ? indexEntry.path
+          : path.join(cacheDir, projectId, layerName);
+        return directoryHasTileLikeFilesBounded(candidatePath);
+      })();
+      const wms = hasWmsCacheForLayer(projectId, layerName);
+      layers[layerName] = {
+        wmts,
+        wms,
+        vectortiles: vectorTiles,
+        any: wmts || wms || vectorTiles
+      };
+    }
+
+    return res.json({
+      project: projectId,
+      vectorTiles,
+      layers
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'cache_status_failed', details: String(err?.message || err || '') });
   }
 });
 
@@ -7372,6 +7818,10 @@ const isLikelyInvalidTileFile = (filePath) => {
     const st = fs.statSync(filePath);
     if (!st.isFile()) return true;
     if (st.size <= 0) return true;
+    try {
+      const marker = `${filePath}.blank`;
+      if (fs.existsSync(marker)) return true;
+    } catch {}
     if (MIN_TILE_BYTES > 0 && st.size < MIN_TILE_BYTES) return true;
     // If it's a PNG tile, validate it structurally.
     return !looksLikeValidPng(filePath);
@@ -7385,6 +7835,10 @@ const deleteTileFileIfInvalid = (filePath) => {
     if (!fs.existsSync(filePath)) return false;
     if (!isLikelyInvalidTileFile(filePath)) return false;
     try { fs.unlinkSync(filePath); } catch {}
+    try {
+      const marker = `${filePath}.blank`;
+      if (fs.existsSync(marker)) fs.unlinkSync(marker);
+    } catch {}
     return true;
   } catch {
     return false;
@@ -7498,14 +7952,16 @@ function queueTileRender(params, filePath, cb) {
         try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
         throw new Error('invalid_tile_output');
       }
+
+      const meta = { transient: !!result.blank };
       
       // Éxito: devolver ruta del archivo
       if (waiters && Array.isArray(waiters.callbacks)) {
         for (const fn of waiters.callbacks) {
-          try { fn(null, filePath); } catch {}
+          try { fn(null, filePath, meta); } catch {}
         }
       } else {
-        cb(null, filePath);
+        cb(null, filePath, meta);
       }
     })
     .catch((err) => {
@@ -7767,13 +8223,17 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     logProjectEvent(project, `Tile miss (fallback): ${fallbackFile}. Generating on-demand...`);
     
     // Generar fallback on-demand Y ESPERAR
-    return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (err, outFile) => {
+    return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (err, outFile, meta) => {
       if (err) {
         logProjectEvent(project, `Tile render error (fallback): ${fallbackFile} | ${err?.message || err}`);
         if (!res.headersSent) return res.status(500).send('Tile generation failed');
       } else {
         logProjectEvent(project, `Tile render success (fallback): ${outFile}`);
-        if (!res.headersSent) return res.sendFile(outFile);
+        if (!res.headersSent) return res.sendFile(outFile, () => {
+          if (meta?.transient) {
+            try { fs.unlinkSync(outFile); } catch {}
+          }
+        });
       }
     });
   }
@@ -7781,7 +8241,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
   // 2. Generación normal de tema on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
   
-  queueTileRender({ project, theme, z, x, y, sid }, file, (err, outFile) => {
+  queueTileRender({ project, theme, z, x, y, sid }, file, (err, outFile, meta) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
       
@@ -7790,13 +8250,17 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
         const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
         logProjectEvent(project, `Theme render failed; forced fallback to layer '${theme}' -> ${fallbackFile}`);
         
-        return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (layerErr, layerOutFile) => {
+        return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (layerErr, layerOutFile, layerMeta) => {
           if (layerErr) {
              logProjectEvent(project, `Tile render error (forced fallback): ${fallbackFile} | ${layerErr?.message || layerErr}`);
              if (!res.headersSent) return res.status(500).send('Tile generation failed');
           } else {
              logProjectEvent(project, `Tile render success (forced fallback): ${layerOutFile}`);
-             if (!res.headersSent) return res.sendFile(layerOutFile);
+             if (!res.headersSent) return res.sendFile(layerOutFile, () => {
+               if (layerMeta?.transient) {
+                 try { fs.unlinkSync(layerOutFile); } catch {}
+               }
+             });
           }
         });
       }
@@ -7804,7 +8268,11 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
       if (!res.headersSent) return res.status(500).send('Tile generation failed');
     } else {
       logProjectEvent(project, `Tile render success: ${outFile}`);
-      if (!res.headersSent) return res.sendFile(outFile);
+      if (!res.headersSent) return res.sendFile(outFile, () => {
+        if (meta?.transient) {
+          try { fs.unlinkSync(outFile); } catch {}
+        }
+      });
     }
   });
 });
@@ -7830,13 +8298,17 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
   // 2. Si no existe, Generar on-demand Y ESPERAR
   logProjectEvent(project, `Tile miss: ${file}. Generating on-demand...`);
   
-  queueTileRender({ project, layer, z, x, y, sid }, file, (err, outFile) => {
+  queueTileRender({ project, layer, z, x, y, sid }, file, (err, outFile, meta) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
       if (!res.headersSent) return res.status(500).send('Tile generation failed');
     } else {
       logProjectEvent(project, `Tile render success: ${outFile}`);
-      if (!res.headersSent) return res.sendFile(outFile);
+      if (!res.headersSent) return res.sendFile(outFile, () => {
+        if (meta?.transient) {
+          try { fs.unlinkSync(outFile); } catch {}
+        }
+      });
     }
   });
 });
@@ -7854,13 +8326,17 @@ app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
     }
   }
   logProjectEvent('nogo', `Tile miss: ${file}. Generating on-demand...`);
-  queueTileRender({ project: 'nogo', layer, z, x, y }, file, (err, outFile) => {
+  queueTileRender({ project: 'nogo', layer, z, x, y }, file, (err, outFile, meta) => {
     if (err) {
       logProjectEvent('nogo', `Tile render error: ${file} | ${err?.message || err}`);
       return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
     }
     logProjectEvent('nogo', `Tile render success: ${outFile}`);
-    res.sendFile(outFile);
+    res.sendFile(outFile, () => {
+      if (meta?.transient) {
+        try { fs.unlinkSync(outFile); } catch {}
+      }
+    });
   });
 });
 // KVP GetTile shortcut: handle WMTS GetTile KVP requests (used by QGIS)
@@ -8260,14 +8736,18 @@ app.get("/wmts", (req, res, next) => {
                 
                 logProjectEvent(projectId, `KVP Tile miss (QGIS): ${filePath}. Generating...`);
                 
-                queueTileRender(renderParams, filePath, (qerr, outFile) => {
+                queueTileRender(renderParams, filePath, (qerr, outFile, meta) => {
                     if (qerr) {
                         logProjectEvent(projectId, `KVP Render failed: ${String(qerr)}`);
                         if (!res.headersSent) res.status(500).send("Generation failed");
                     } else {
                         // Éxito: enviar archivo generado
                     setWmtsTileCacheHeaders(res);
-                        if (!res.headersSent) res.sendFile(outFile);
+                        if (!res.headersSent) res.sendFile(outFile, () => {
+                          if (meta?.transient) {
+                            try { fs.unlinkSync(outFile); } catch {}
+                          }
+                        });
                     }
                 });
             } else {

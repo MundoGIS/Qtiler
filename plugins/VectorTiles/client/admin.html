@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VectorTiles</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: "Segoe UI", system-ui, sans-serif; padding: 20px; background: #f8fafc; color: #0f172a; }
+      .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 10px 24px rgba(15,23,42,.08); }
+      h2 { margin: 0 0 8px; font-size: 1.35rem; }
+      p { margin: 0 0 10px; color: #475569; }
+      .row { display: grid; grid-template-columns: 1fr 120px 120px auto; gap: 10px; margin-top: 12px; align-items: end; }
+      label { display: block; font-size: .85rem; color: #334155; margin-bottom: 4px; }
+      input, select, button { font: inherit; }
+      input, select { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; width: 100%; }
+      button { border: 1px solid #2563eb; background: #2563eb; color: #fff; border-radius: 8px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
+      button.secondary { border-color: #cbd5e1; background: #fff; color: #0f172a; }
+      .msg { min-height: 20px; margin-top: 8px; font-size: .92rem; }
+      .msg.error { color: #991b1b; }
+      table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+      th, td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: .9rem; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+      .layers { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; background: #fff; }
+      .layers-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+      .layers-list { max-height: 180px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
+      .layer-item { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 8px; padding: 4px 0; }
+      .layer-item .meta { color: #64748b; font-size: .8rem; }
+      .layer-item .name { min-width: 0; word-break: break-word; }
+      .style-links { display: grid; gap: 4px; }
+      .style-links a { font-size: .82rem; }
+      .style-link-row { display: flex; align-items: center; gap: 6px; }
+      .style-link-row button { padding: 3px 8px; font-size: .78rem; font-weight: 600; }
+      .token-box { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; }
+      .token-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; margin-top: 8px; align-items: center; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h2 data-i18n="title">VectorTiles plugin</h2>
+      <p data-i18n="subtitle">Create MBTiles vector tiles from QGIS projects and expose TileJSON + MVT URLs.</p>
+      <div class="row">
+        <div>
+          <label for="project" data-i18n="project">Project</label>
+          <select id="project"></select>
+        </div>
+        <div>
+          <label for="minZoom" data-i18n="minZoom">Min zoom</label>
+          <input id="minZoom" type="number" min="0" max="24" value="0">
+        </div>
+        <div>
+          <label for="maxZoom" data-i18n="maxZoom">Max zoom</label>
+          <input id="maxZoom" type="number" min="0" max="24" value="14">
+        </div>
+        <div>
+          <button id="generate" type="button" data-i18n="generate">Generate</button>
+        </div>
+      </div>
+      <div class="layers">
+        <label data-i18n="selectLayers">Select layers</label>
+        <div class="layers-toolbar">
+          <button id="selectAllLayers" class="secondary" type="button" data-i18n="selectAll">Select all</button>
+          <button id="clearAllLayers" class="secondary" type="button" data-i18n="clearAll">Clear all</button>
+        </div>
+        <div id="layersList" class="layers-list"></div>
+      </div>
+      <div class="token-box">
+        <label data-i18n="tokenTitle">QGIS token URL</label>
+        <div class="token-row">
+          <input id="tokenHours" type="number" min="1" max="8760" value="24">
+          <input id="tokenTileUrl" type="text" readonly>
+          <button id="createToken" class="secondary" type="button" data-i18n="createToken">Create token URL</button>
+        </div>
+        <div class="token-row">
+          <input disabled value="Style URL">
+          <input id="tokenStyleUrl" type="text" readonly>
+          <button id="copyStyleUrl" class="secondary" type="button" data-i18n="copyStyle">Copy style URL</button>
+        </div>
+      </div>
+      <div id="msg" class="msg" aria-live="polite"></div>
+      <table>
+        <thead><tr><th data-i18n="project">Project</th><th data-i18n="zoom">Zoom</th><th>TileJSON</th><th data-i18n="styleLinks">Style links</th><th></th></tr></thead>
+        <tbody id="list"></tbody>
+      </table>
+
+      <h3 style="margin-top:16px" data-i18n="jobsTitle">Jobs</h3>
+      <table>
+        <thead><tr><th data-i18n="project">Project</th><th data-i18n="status">Status</th><th data-i18n="created">Created</th><th></th></tr></thead>
+        <tbody id="jobs-list"></tbody>
+      </table>
+    </main>
+    <script>
+      const I18N = {
+        en: {
+          title: 'VectorTiles plugin',
+          subtitle: 'Create MBTiles vector tiles from QGIS projects and expose TileJSON + MVT URLs.',
+          project: 'Project',
+          minZoom: 'Min zoom',
+          maxZoom: 'Max zoom',
+          zoom: 'Zoom',
+          status: 'Status',
+          created: 'Created',
+          jobsTitle: 'Jobs queue',
+          selectLayers: 'Select layers',
+          selectAll: 'Select all',
+          clearAll: 'Clear all',
+          loadingLayers: 'Loading layers…',
+          noLayers: 'No vector layers found in project.',
+          tokenTitle: 'QGIS token URL',
+          createToken: 'Create token URL',
+          copyStyle: 'Copy style URL',
+          styleLinks: 'Style links',
+          combined: 'Combined',
+          layer: 'Layer',
+          copy: 'Copy',
+          styleCopied: 'Style URL copied.',
+          confirmOverwrite: 'A vector tile cache already exists for this project. Overwrite it?',
+          tokenCreated: 'Token URL created. Copy it into QGIS Vector Tiles URL field.',
+          generate: 'Generate',
+          delete: 'Delete',
+          retry: 'Retry',
+          generated: 'Vector tiles generated.',
+          queued: 'Job queued.',
+          running: 'Job running…',
+          completed: 'Job completed.',
+          failed: 'Job failed.',
+          cancel: 'Cancel',
+          prioritize: 'Prioritize',
+          cancelling: 'Cancelling job…',
+          cancelled: 'Job cancelled.',
+          timeoutRunning: 'Generation is still running in background (timeout reached while waiting).',
+          prioritized: 'Job prioritized.',
+          confirmDelete: 'Delete vector tile cache for this project?'
+        },
+        es: {
+          title: 'Plugin VectorTiles',
+          subtitle: 'Crea MBTiles vectoriales desde proyectos QGIS y expone URLs TileJSON + MVT.',
+          project: 'Proyecto',
+          minZoom: 'Zoom mínimo',
+          maxZoom: 'Zoom máximo',
+          zoom: 'Zoom',
+          status: 'Estado',
+          created: 'Creado',
+          jobsTitle: 'Cola de trabajos',
+          selectLayers: 'Seleccionar capas',
+          selectAll: 'Seleccionar todas',
+          clearAll: 'Quitar selección',
+          loadingLayers: 'Cargando capas…',
+          noLayers: 'No se encontraron capas vectoriales en el proyecto.',
+          tokenTitle: 'URL con token para QGIS',
+          createToken: 'Crear URL con token',
+          copyStyle: 'Copiar URL de estilo',
+          styleLinks: 'Links de estilo',
+          combined: 'Combinado',
+          layer: 'Capa',
+          copy: 'Copiar',
+          styleCopied: 'URL de estilo copiada.',
+          confirmOverwrite: 'Ya existe una caché vector tile para este proyecto. ¿Deseas sobrescribirla?',
+          tokenCreated: 'URL con token creada. Cópiala en el campo URL de QGIS Vector Tiles.',
+          generate: 'Generar',
+          delete: 'Eliminar',
+          retry: 'Reintentar',
+          generated: 'Vector tiles generados.',
+          queued: 'Trabajo en cola.',
+          running: 'Trabajo en ejecución…',
+          completed: 'Trabajo completado.',
+          failed: 'Trabajo fallido.',
+          cancel: 'Cancelar',
+          prioritize: 'Priorizar',
+          cancelling: 'Cancelando trabajo…',
+          cancelled: 'Trabajo cancelado.',
+          timeoutRunning: 'La generacion sigue ejecutandose en segundo plano (se alcanzo el tiempo de espera).',
+          prioritized: 'Trabajo priorizado.',
+          confirmDelete: '¿Eliminar la caché vector tile de este proyecto?'
+        },
+        sv: {
+          title: 'VectorTiles-plugin',
+          subtitle: 'Skapa vektor-MBTiles från QGIS-projekt och exponera TileJSON + MVT-URL:er.',
+          project: 'Projekt',
+          minZoom: 'Min zoom',
+          maxZoom: 'Max zoom',
+          zoom: 'Zoom',
+          status: 'Status',
+          created: 'Skapad',
+          jobsTitle: 'Jobbkö',
+          selectLayers: 'Välj lager',
+          selectAll: 'Välj alla',
+          clearAll: 'Rensa val',
+          loadingLayers: 'Laddar lager…',
+          noLayers: 'Inga vektorlager hittades i projektet.',
+          tokenTitle: 'QGIS token-URL',
+          createToken: 'Skapa token-URL',
+          copyStyle: 'Kopiera stil-URL',
+          styleLinks: 'Stillänkar',
+          combined: 'Kombinerad',
+          layer: 'Lager',
+          copy: 'Kopiera',
+          styleCopied: 'Stil-URL kopierad.',
+          confirmOverwrite: 'Det finns redan en vector tile-cache för projektet. Vill du skriva över den?',
+          tokenCreated: 'Token-URL skapad. Kopiera den till URL-fältet i QGIS Vector Tiles.',
+          generate: 'Generera',
+          delete: 'Ta bort',
+          retry: 'Försök igen',
+          generated: 'Vector tiles genererade.',
+          queued: 'Jobb i kö.',
+          running: 'Jobb körs…',
+          completed: 'Jobb klart.',
+          failed: 'Jobb misslyckades.',
+          cancel: 'Avbryt',
+          prioritize: 'Prioritera',
+          cancelling: 'Avbryter jobb…',
+          cancelled: 'Jobb avbrutet.',
+          timeoutRunning: 'Genereringen fortsatter i bakgrunden (vantetiden gick ut).',
+          prioritized: 'Jobb prioriterat.',
+          confirmDelete: 'Ta bort vector tile-cache för detta projekt?'
+        }
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const msg = $('msg');
+      const project = $('project');
+      const minZoom = $('minZoom');
+      const maxZoom = $('maxZoom');
+      const list = $('list');
+      const jobsList = $('jobs-list');
+      const layersList = $('layersList');
+      const selectAllLayersBtn = $('selectAllLayers');
+      const clearAllLayersBtn = $('clearAllLayers');
+      const tokenHours = $('tokenHours');
+      const tokenTileUrl = $('tokenTileUrl');
+      const tokenStyleUrl = $('tokenStyleUrl');
+      const createTokenBtn = $('createToken');
+      const copyStyleUrlBtn = $('copyStyleUrl');
+      const JOB_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
+      let projectLayers = [];
+      let currentLang = 'en';
+      const t = (key) => (I18N[currentLang] || I18N.en)[key] || I18N.en[key] || key;
+
+      const readLang = () => {
+        const parentLang = window.parent?.qtilerLang?.get?.();
+        const raw = String(parentLang || localStorage.getItem('qtiler.lang') || navigator.language || 'en').toLowerCase();
+        if (raw.startsWith('es')) return 'es';
+        if (raw.startsWith('sv')) return 'sv';
+        return 'en';
+      };
+
+      const applyTranslations = () => {
+        currentLang = readLang();
+        document.documentElement.lang = currentLang;
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-i18n');
+          if (!key) return;
+          el.textContent = t(key);
+        });
+      };
+
+      const setMsg = (text, error = false) => {
+        msg.className = `msg${error ? ' error' : ''}`;
+        msg.textContent = text || '';
+      };
+      const api = async (url, options = {}) => {
+        const r = await fetch(url, { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...options });
+        if (!r.ok) {
+          let p = null;
+          try { p = await r.json(); } catch {}
+          throw new Error(p?.error || p?.details || `HTTP ${r.status}`);
+        }
+        if (r.status === 204) return null;
+        return r.json();
+      };
+      const copyText = async (text) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'readonly');
+        area.style.position = 'absolute';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        document.body.removeChild(area);
+      };
+      const loadProjects = async () => {
+        const payload = await api('/plugins/VectorTiles/api/projects');
+        const arr = Array.isArray(payload?.projects) ? payload.projects : [];
+        project.innerHTML = arr.map((p) => `<option value="${p.id}">${p.name || p.id}</option>`).join('');
+        if (project.value) {
+          await loadProjectLayers(project.value);
+        } else {
+          renderLayerList();
+        }
+      };
+
+      const renderLayerList = () => {
+        if (!Array.isArray(projectLayers) || !projectLayers.length) {
+          layersList.innerHTML = `<div class="meta">${t('noLayers')}</div>`;
+          return;
+        }
+        layersList.innerHTML = projectLayers.map((layer) => {
+          const id = String(layer.id || '');
+          const name = String(layer.name || id);
+          const geometry = String(layer.geometry || '');
+          const safeName = name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const safeGeom = geometry.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return `<label class="layer-item">
+            <span class="name">${safeName} <span class="meta">(${safeGeom})</span></span>
+            <input type="checkbox" data-layer-id="${id}" checked>
+          </label>`;
+        }).join('');
+      };
+
+      const loadProjectLayers = async (projectId) => {
+        if (!projectId) {
+          projectLayers = [];
+          renderLayerList();
+          return;
+        }
+        layersList.innerHTML = `<div class="meta">${t('loadingLayers')}</div>`;
+        const payload = await api(`/plugins/VectorTiles/api/projects/${encodeURIComponent(projectId)}/layers`);
+        projectLayers = Array.isArray(payload?.layers) ? payload.layers : [];
+        renderLayerList();
+      };
+
+      const getSelectedLayerIds = () => {
+        return Array.from(layersList.querySelectorAll('input[type="checkbox"][data-layer-id]:checked'))
+          .map((el) => el.getAttribute('data-layer-id'))
+          .filter(Boolean);
+      };
+      const loadTilesets = async () => {
+        const payload = await api('/plugins/VectorTiles/api/tilesets');
+        const arr = Array.isArray(payload?.tilesets) ? payload.tilesets : [];
+        list.innerHTML = arr.map((item) => {
+          const tilejson = `/plugins/VectorTiles/tilejson/${encodeURIComponent(item.projectId)}.json`;
+          const combined = item?.styleLinks?.combined || null;
+          const perLayer = Array.isArray(item?.styleLinks?.perLayer) ? item.styleLinks.perLayer : [];
+          const styleLinksHtml = `
+            <div class="style-links">
+              ${combined?.url ? `<div class="style-link-row"><a href="${combined.url}" target="_blank" rel="noopener">${t('combined')}: ${combined.label || ''}</a><button class="secondary" type="button" data-copy-url="${combined.url}">${t('copy')}</button></div>` : ''}
+              ${perLayer.map((entry) => `<div class="style-link-row"><a href="${entry.url}" target="_blank" rel="noopener">${t('layer')}: ${entry.label || entry.name || ''}</a><button class="secondary" type="button" data-copy-url="${entry.url}">${t('copy')}</button></div>`).join('')}
+            </div>
+          `;
+          return `<tr>
+            <td>${item.projectId}</td>
+            <td>${item.minZoom}-${item.maxZoom}</td>
+            <td class="mono"><a href="${tilejson}" target="_blank" rel="noopener">${tilejson}</a></td>
+            <td>${styleLinksHtml}</td>
+            <td><button class="secondary" data-delete="${item.projectId}">${t('delete')}</button></td>
+          </tr>`;
+        }).join('');
+      };
+
+      const loadJobs = async () => {
+        const payload = await api('/plugins/VectorTiles/api/jobs');
+        const arr = Array.isArray(payload?.jobs) ? payload.jobs : [];
+        jobsList.innerHTML = arr.slice(0, 20).map((job) => {
+          const retryBtn = job.status === 'error'
+            ? `<button class="secondary" data-retry="${job.id}">${t('retry')}</button>`
+            : '';
+          const cancelBtn = (job.status === 'queued' || job.status === 'running')
+            ? `<button class="secondary" data-cancel="${job.id}">${t('cancel')}</button>`
+            : '';
+          const prioritizeBtn = job.status === 'queued'
+            ? `<button class="secondary" data-prioritize="${job.id}">${t('prioritize')}</button>`
+            : '';
+          return `<tr>
+            <td>${job.projectId}</td>
+            <td>${job.status}</td>
+            <td>${job.createdAt || ''}</td>
+            <td>${retryBtn}${cancelBtn}${prioritizeBtn}</td>
+          </tr>`;
+        }).join('');
+      };
+
+      const waitForJob = async (jobId, timeoutMs = JOB_WAIT_TIMEOUT_MS) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          let payload = null;
+          try {
+            payload = await api(`/plugins/VectorTiles/api/jobs/${encodeURIComponent(jobId)}`);
+          } catch (err) {
+            if (String(err?.message || '') === 'job_not_found') {
+              setMsg(t('running'));
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+              continue;
+            }
+            throw err;
+          }
+          const job = payload?.job || null;
+          if (!job) {
+            setMsg(t('running'));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            continue;
+          }
+          if (job.status === 'completed') return job;
+          if (job.status === 'cancelled') throw new Error(t('cancelled'));
+          if (job.status === 'error') throw new Error(job.error || t('failed'));
+          setMsg(t('running'));
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        throw new Error('job_timeout');
+      };
+      $('generate').addEventListener('click', async () => {
+        try {
+          setMsg('');
+          const payloadBase = {
+            projectId: project.value,
+            minZoom: Number(minZoom.value),
+            maxZoom: Number(maxZoom.value),
+            selectedLayerIds: getSelectedLayerIds()
+          };
+
+          let queued = null;
+          try {
+            queued = await api('/plugins/VectorTiles/api/generate', {
+              method: 'POST',
+              body: JSON.stringify(payloadBase)
+            });
+          } catch (firstErr) {
+            if (String(firstErr?.message || '') !== 'tileset_exists') throw firstErr;
+            if (!confirm(t('confirmOverwrite'))) return;
+            queued = await api('/plugins/VectorTiles/api/generate', {
+              method: 'POST',
+              body: JSON.stringify({ ...payloadBase, overwrite: true })
+            });
+          }
+
+          setMsg(t('queued'));
+          await loadJobs();
+          const jobId = queued?.job?.id;
+          if (jobId) {
+            await waitForJob(jobId);
+          }
+
+          setMsg(t('completed'));
+          await loadTilesets();
+          await loadJobs();
+        } catch (e) {
+          if (String(e?.message || '') === 'job_timeout') {
+            setMsg(t('timeoutRunning'));
+            await loadJobs().catch(() => {});
+            return;
+          }
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      list.addEventListener('click', async (event) => {
+        const copyBtn = event.target.closest('button[data-copy-url]');
+        if (copyBtn) {
+          const url = copyBtn.getAttribute('data-copy-url');
+          if (!url) return;
+          try {
+            await copyText(url);
+            setMsg(t('styleCopied'));
+          } catch (e) {
+            setMsg(String(e?.message || e), true);
+          }
+          return;
+        }
+
+        const btn = event.target.closest('button[data-delete]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-delete');
+        if (!id) return;
+        if (!confirm(t('confirmDelete'))) return;
+        try {
+          await api(`/plugins/VectorTiles/api/tilesets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          await loadTilesets();
+          await loadJobs().catch(() => {});
+        } catch (e) {
+          if (String(e?.message || '') === 'job_timeout') {
+            setMsg(t('timeoutRunning'));
+            await loadJobs().catch(() => {});
+            return;
+          }
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      jobsList.addEventListener('click', async (event) => {
+        const cancelBtn = event.target.closest('button[data-cancel]');
+        if (cancelBtn) {
+          const cancelId = cancelBtn.getAttribute('data-cancel');
+          if (!cancelId) return;
+          try {
+            setMsg(t('cancelling'));
+            await api(`/plugins/VectorTiles/api/jobs/${encodeURIComponent(cancelId)}/cancel`, { method: 'POST' });
+            await loadJobs();
+            setMsg(t('cancelled'));
+          } catch (e) {
+            setMsg(String(e?.message || e), true);
+          }
+          return;
+        }
+
+        const prioritizeBtn = event.target.closest('button[data-prioritize]');
+        if (prioritizeBtn) {
+          const prioritizeId = prioritizeBtn.getAttribute('data-prioritize');
+          if (!prioritizeId) return;
+          try {
+            await api(`/plugins/VectorTiles/api/jobs/${encodeURIComponent(prioritizeId)}/prioritize`, { method: 'POST' });
+            await loadJobs();
+            setMsg(t('prioritized'));
+          } catch (e) {
+            setMsg(String(e?.message || e), true);
+          }
+          return;
+        }
+
+        const btn = event.target.closest('button[data-retry]');
+        if (!btn) return;
+        const jobId = btn.getAttribute('data-retry');
+        if (!jobId) return;
+        try {
+          const queued = await api(`/plugins/VectorTiles/api/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST' });
+          setMsg(t('queued'));
+          await loadJobs();
+          const newJobId = queued?.job?.id;
+          if (newJobId) {
+            await waitForJob(newJobId);
+            await loadTilesets();
+            await loadJobs();
+            setMsg(t('completed'));
+          }
+        } catch (e) {
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      project.addEventListener('change', async () => {
+        try {
+          await loadProjectLayers(project.value);
+        } catch (e) {
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      selectAllLayersBtn.addEventListener('click', () => {
+        layersList.querySelectorAll('input[type="checkbox"][data-layer-id]').forEach((el) => {
+          el.checked = true;
+        });
+      });
+      clearAllLayersBtn.addEventListener('click', () => {
+        layersList.querySelectorAll('input[type="checkbox"][data-layer-id]').forEach((el) => {
+          el.checked = false;
+        });
+      });
+      createTokenBtn.addEventListener('click', async () => {
+        try {
+          const payload = await api('/plugins/VectorTiles/api/access-token', {
+            method: 'POST',
+            body: JSON.stringify({
+              projectId: project.value,
+              expiresHours: Number(tokenHours.value) || 24
+            })
+          });
+          tokenTileUrl.value = String(payload?.tileUrl || '');
+          tokenStyleUrl.value = String(payload?.styleUrl || '');
+          setMsg(t('tokenCreated'));
+        } catch (e) {
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      copyStyleUrlBtn.addEventListener('click', async () => {
+        const value = String(tokenStyleUrl.value || '');
+        if (!value) return;
+        try {
+          await copyText(value);
+          setMsg(t('styleCopied'));
+        } catch (e) {
+          setMsg(String(e?.message || e), true);
+        }
+      });
+      applyTranslations();
+      if (window.parent?.qtilerLang?.subscribe) {
+        window.parent.qtilerLang.subscribe(async () => {
+          applyTranslations();
+          renderLayerList();
+          await loadTilesets().catch(() => {});
+          await loadJobs().catch(() => {});
+        });
+      }
+      Promise.all([loadProjects(), loadTilesets(), loadJobs()]).catch((e) => setMsg(String(e?.message || e), true));
+      setInterval(() => {
+        loadJobs().catch(() => {});
+      }, 5000);
+    </script>
+  </body>
+</html>

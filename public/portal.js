@@ -7,6 +7,7 @@
 const statusEl = document.getElementById('public_status');
 const emptyEl = document.getElementById('public_empty');
 const listEl = document.getElementById('public_list');
+const updatedEl = document.getElementById('portal_updated');
 const sessionBadge = document.getElementById('session_badge');
 const loginButtons = document.querySelectorAll('[data-portal-login]');
 const logoutButton = document.getElementById('portal_logout_button');
@@ -32,6 +33,7 @@ let statusState = { key: null, params: {}, text: '', tone: 'info' };
 let cachedProjects = [];
 let sessionUserLabel = null;
 let sessionUser = null;
+let lastUpdatedAt = null;
 
 const TRANSLATIONS = {
   en: {
@@ -77,11 +79,15 @@ const TRANSLATIONS = {
     'portal.status.none': 'No public projects for now.',
     'portal.status.none.assigned': 'No projects are assigned to your account.',
     'portal.status.error': 'Failed to load public projects.',
+    'portal.projects.updated': 'Updated: {timestamp}',
     'portal.session.badge': 'Session: {user}',
     'portal.access.public': 'Public',
     'portal.access.assigned': 'Assigned',
     'portal.access.role': 'Role access',
-    'portal.access.user': 'Shared directly'
+    'portal.access.user': 'Shared directly',
+    'portal.project.label': 'QGIS project:',
+    'portal.project.expand': 'Expand',
+    'portal.project.collapse': 'Collapse'
   },
   es: {
     'Dashboard': 'Panel principal',
@@ -126,11 +132,15 @@ const TRANSLATIONS = {
     'portal.status.none': 'No hay proyectos públicos por ahora.',
     'portal.status.none.assigned': 'Todavía no hay proyectos asignados a tu cuenta.',
     'portal.status.error': 'Error al cargar los proyectos públicos.',
+    'portal.projects.updated': 'Actualizado: {timestamp}',
     'portal.session.badge': 'Sesión: {user}',
     'portal.access.public': 'Público',
     'portal.access.assigned': 'Asignado',
     'portal.access.role': 'Por rol',
-    'portal.access.user': 'Compartido directamente'
+    'portal.access.user': 'Compartido directamente',
+    'portal.project.label': 'Proyecto QGIS:',
+    'portal.project.expand': 'Expandir',
+    'portal.project.collapse': 'Contraer'
   },
   sv: {
     'Dashboard': 'Översikt',
@@ -175,11 +185,15 @@ const TRANSLATIONS = {
     'portal.status.none': 'Inga offentliga projekt just nu.',
     'portal.status.none.assigned': 'Inga projekt är tilldelade till ditt konto.',
     'portal.status.error': 'Det gick inte att läsa in offentliga projekt.',
+    'portal.projects.updated': 'Uppdaterad: {timestamp}',
     'portal.session.badge': 'Session: {user}',
     'portal.access.public': 'Offentlig',
     'portal.access.assigned': 'Tilldelad',
     'portal.access.role': 'Rollåtkomst',
-    'portal.access.user': 'Delad direkt'
+    'portal.access.user': 'Delad direkt',
+    'portal.project.label': 'QGIS-projekt:',
+    'portal.project.expand': 'Visa mer',
+    'portal.project.collapse': 'Dölj'
   }
 };
 
@@ -245,6 +259,18 @@ const renderStatus = () => {
   }
   statusEl.textContent = message;
   statusEl.dataset.tone = statusState.tone || 'info';
+};
+
+const renderUpdated = () => {
+  if (!updatedEl) return;
+  if (!lastUpdatedAt) {
+    updatedEl.textContent = '';
+    updatedEl.hidden = true;
+    return;
+  }
+  const label = formatDateTime(lastUpdatedAt);
+  updatedEl.textContent = label ? tr('portal.projects.updated', { timestamp: label }) : '';
+  updatedEl.hidden = !label;
 };
 
 const showStatus = (key, { params = {}, tone = 'info' } = {}) => {
@@ -329,6 +355,14 @@ const renderLayerGroup = (titleKey, items) => {
     actions.className = 'portal-layer-actions';
 
     const isTheme = item && item.kind === 'theme';
+    const isWfsCapable = !isTheme && (() => {
+      if (!item) return false;
+      const typeToken = String(item.type || '').toUpperCase();
+      if (typeToken === 'WFS') return true;
+      if (item.kind === 'vector' || item.kind === 'VectorLayer') return true;
+      if (item.geometry_type) return true;
+      return false;
+    })();
 
     const projectIdEnc = encodeURIComponent(item.projectId);
     const nameEnc = encodeURIComponent(item.name);
@@ -346,14 +380,14 @@ const renderLayerGroup = (titleKey, items) => {
     const viewerWms = `${viewerBase}&service=wms`;
     const viewerWfs = `${viewerBase}&service=wfs`;
 
-    // Add Viewer link (Eye icon)
+    // Add WMTS viewer link
     const viewerLink = document.createElement('a');
     viewerLink.href = viewerBase;
     viewerLink.target = '_blank';
     viewerLink.rel = 'noopener';
     viewerLink.className = 'portal-action-icon';
-    viewerLink.title = 'Open in Viewer';
-    viewerLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    viewerLink.title = 'Open WMTS viewer';
+    viewerLink.textContent = 'WMTS';
     actions.appendChild(viewerLink);
 
     const viewerWmsLink = document.createElement('a');
@@ -365,7 +399,7 @@ const renderLayerGroup = (titleKey, items) => {
     viewerWmsLink.textContent = 'WMS';
     actions.appendChild(viewerWmsLink);
 
-    if (!isTheme) {
+    if (isWfsCapable) {
       const viewerWfsLink = document.createElement('a');
       viewerWfsLink.href = viewerWfs;
       viewerWfsLink.target = '_blank';
@@ -376,17 +410,17 @@ const renderLayerGroup = (titleKey, items) => {
       actions.appendChild(viewerWfsLink);
     }
 
-    /* XYZ link removed as requested
-    const xyzLink = document.createElement('a');
-    xyzLink.href = xyzUrl;
-    xyzLink.textContent = tr('portal.layer.xyz');
-    xyzLink.addEventListener('click', async (event) => {
-      event.preventDefault();
-      const ok = await copyToClipboard(xyzUrl);
-      flashStatusText(tr(ok ? 'portal.layer.xyz.copied' : 'portal.layer.xyz.copyFailed'), { tone: ok ? 'info' : 'error' });
-    });
-    actions.appendChild(xyzLink);
-    */
+    if (!sessionUser) {
+      const copyXyzBtn = document.createElement('button');
+      copyXyzBtn.type = 'button';
+      copyXyzBtn.className = 'portal-action-button';
+      copyXyzBtn.textContent = tr('portal.layer.xyz.copy');
+      copyXyzBtn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(xyzUrl);
+        flashStatusText(tr(ok ? 'portal.layer.xyz.copied' : 'portal.layer.xyz.copyFailed'), { tone: ok ? 'info' : 'error' });
+      });
+      actions.appendChild(copyXyzBtn);
+    }
 
     const copyWmtsBtn = document.createElement('button');
     copyWmtsBtn.type = 'button';
@@ -408,7 +442,7 @@ const renderLayerGroup = (titleKey, items) => {
     });
     actions.appendChild(copyWmsBtn);
 
-    if (!isTheme) {
+    if (isWfsCapable) {
       const copyWfsBtn = document.createElement('button');
       copyWfsBtn.type = 'button';
       copyWfsBtn.className = 'portal-action-button';
@@ -512,7 +546,16 @@ const renderProjects = (projects) => {
     const card = document.createElement('article');
     card.className = 'portal-card';
 
+    const collapsedByDefault = true;
+    if (collapsedByDefault) {
+      card.classList.add('portal-card--collapsed');
+    }
+
     const header = document.createElement('header');
+    const label = document.createElement('span');
+    label.className = 'portal-project-label';
+    label.textContent = tr('portal.project.label');
+    header.appendChild(label);
     const title = document.createElement('h3');
     title.textContent = project.title || project.name || project.id;
     header.appendChild(title);
@@ -533,13 +576,38 @@ const renderProjects = (projects) => {
       badgesLine.textContent = badges.join(' · ');
       header.appendChild(badgesLine);
     }
+
+    const body = document.createElement('div');
+    body.className = 'portal-card-body';
+    if (collapsedByDefault) {
+      body.hidden = true;
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'portal-collapse-toggle';
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      toggleBtn.textContent = tr('portal.project.expand');
+      toggleBtn.addEventListener('click', () => {
+        const isCollapsed = card.classList.toggle('portal-card--collapsed');
+        body.hidden = isCollapsed;
+        toggleBtn.setAttribute('aria-expanded', String(!isCollapsed));
+        toggleBtn.textContent = tr(isCollapsed ? 'portal.project.expand' : 'portal.project.collapse');
+      });
+      header.appendChild(toggleBtn);
+    }
     card.appendChild(header);
 
     const links = document.createElement('div');
     links.className = 'portal-links';
-    const projectWmtsUrl = project.wmtsUrl || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
-    const projectWmsUrl = project.wmsUrl || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
-    const projectWfsUrl = project.wfsUrl || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const toAbsoluteUrl = (url) => {
+      if (!url) return url;
+      if (/^https?:\/\//i.test(url)) return url;
+      if (url.startsWith('//')) return `${window.location.protocol}${url}`;
+      if (url.startsWith('/')) return `${window.location.origin}${url}`;
+      return `${window.location.origin}/${url}`;
+    };
+    const projectWmtsUrl = toAbsoluteUrl(project.wmtsUrl) || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const projectWmsUrl = toAbsoluteUrl(project.wmsUrl) || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const projectWfsUrl = toAbsoluteUrl(project.wfsUrl) || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
 
     const copyProjectBtn = (key, url, label) => {
       const btn = document.createElement('button');
@@ -555,7 +623,18 @@ const renderProjects = (projects) => {
 
     links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
     links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
-    links.appendChild(copyProjectBtn('portal.layer.copy.wfs', projectWfsUrl, 'WFS'));
+    const projectLayers = Array.isArray(project.layers) ? project.layers : [];
+    const projectHasVector = projectLayers.some((layer) => {
+      if (!layer) return false;
+      const typeToken = String(layer.type || '').toUpperCase();
+      if (typeToken === 'WFS') return true;
+      if (layer.kind === 'vector' || layer.kind === 'VectorLayer') return true;
+      if (layer.geometry_type) return true;
+      return false;
+    });
+    if (projectHasVector || !!project.wfsUrl) {
+      links.appendChild(copyProjectBtn('portal.layer.copy.wfs', projectWfsUrl, 'WFS'));
+    }
 
     const cacheUpdatedLabel = formatDateTime(project.cacheUpdatedAt);
     if (cacheUpdatedLabel) {
@@ -564,25 +643,42 @@ const renderProjects = (projects) => {
       updateInfo.textContent = tr('portal.layer.cacheUpdated', { timestamp: cacheUpdatedLabel });
       links.appendChild(updateInfo);
     }
-    card.appendChild(links);
+    body.appendChild(links);
 
     const layerGroup = renderLayerGroup('portal.section.cachedLayers', Array.isArray(project.layers) ? project.layers : []);
     if (layerGroup) {
-      card.appendChild(layerGroup);
+      body.appendChild(layerGroup);
     } else {
       const placeholder = document.createElement('p');
       placeholder.className = 'portal-layer-meta';
       placeholder.textContent = tr('portal.layer.noCached');
-      card.appendChild(placeholder);
+      body.appendChild(placeholder);
     }
 
   const themeGroup = renderLayerGroup('portal.section.availableThemes', Array.isArray(project.themes) ? project.themes : []);
     if (themeGroup) {
-      card.appendChild(themeGroup);
+      body.appendChild(themeGroup);
     }
+
+    card.appendChild(body);
 
     listEl.appendChild(card);
   }
+
+  collapseAllProjectCards();
+};
+
+const collapseAllProjectCards = () => {
+  document.querySelectorAll('.portal-card').forEach((card) => {
+    card.classList.add('portal-card--collapsed');
+    const body = card.querySelector('.portal-card-body');
+    if (body) body.hidden = true;
+    const toggleBtn = card.querySelector('.portal-collapse-toggle');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      toggleBtn.textContent = tr('portal.project.expand');
+    }
+  });
 };
 
 const applyStaticTranslations = () => {
@@ -612,8 +708,10 @@ const applyStaticTranslations = () => {
     languageSelect.value = currentLang;
   }
   renderStatus();
+  renderUpdated();
   renderAuthUi();
   renderProjects(cachedProjects);
+  collapseAllProjectCards();
 };
 
 const loadPublicProjects = async () => {
@@ -628,13 +726,19 @@ const loadPublicProjects = async () => {
     renderProjects(projects);
     if (!projects.length) {
       showStatus('portal.status.none');
+      lastUpdatedAt = null;
+      renderUpdated();
     } else {
       clearStatus();
+      lastUpdatedAt = new Date().toISOString();
+      renderUpdated();
     }
   } catch (err) {
     console.error('Failed to load public projects', err);
     showStatus('portal.status.error', { tone: 'error' });
     emptyEl.hidden = false;
+    lastUpdatedAt = null;
+    renderUpdated();
   }
 };
 
@@ -659,13 +763,19 @@ const loadUserProjects = async () => {
     renderProjects(projects);
     if (!projects.length) {
       showStatus('portal.status.none.assigned');
+      lastUpdatedAt = null;
+      renderUpdated();
     } else {
       clearStatus();
+      lastUpdatedAt = new Date().toISOString();
+      renderUpdated();
     }
   } catch (err) {
     console.error('Failed to load user projects', err);
     showStatus('portal.status.error', { tone: 'error' });
     emptyEl.hidden = false;
+    lastUpdatedAt = null;
+    renderUpdated();
   }
 };
 

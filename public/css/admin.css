@@ -269,11 +269,28 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .plugin-card__meta h3 {
   margin: 0;
   font-size: 1.15rem;
+  min-width: 0;
+}
+
+.plugin-card__license {
+  width: 100%;
+}
+
+.plugin-card__license-row {
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.plugin-card__license-warning {
+  width: 100%;
+  color: #b45309;
 }
 
 .plugin-card__note {

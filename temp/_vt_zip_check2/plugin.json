@@ -1,0 +1,10 @@
+{
+  "name": "VectorTiles",
+  "version": "0.1.1",
+  "displayName": "VectorTiles · QGIS project vector tile generation",
+  "description": "Generate MBTiles vector tiles from QGIS projects and expose HTTP endpoints for clients.",
+  "autoEnable": false,
+  "license": "VectorTiles Commercial License",
+  "licenseFile": "LICENSE_VectorTiles.txt",
+  "supportContact": "support@mundogis.se"
+}

@@ -32,7 +32,7 @@
           <section class="guide-hero">
             <span class="guide-badge">Qtiler · MundoGIS</span>
             <h1 data-i18n="guide.heroTitle">Quick Start &amp; Workflow Guide</h1>
-            <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, build manual or on-demand WMTS caches with Qtiler, secure deployments with the optional auth plugin, and publish production-ready services.</p>
+            <p data-i18n="guide.heroSubtitle">Everything you need to prepare QGIS projects, generate manual or on-demand caches, publish WMTS/XYZ/WMS/WFS/WFS-T and Vector Tiles services, secure deployments with optional commercial plugins, and run production-ready stacks.</p>
           </section>
 
           <section class="guide-section">
@@ -130,22 +130,6 @@
                 </ul>
               </div>
               <div class="card-mini">
-                <h3>WMS, WFS &amp; WMTS endpoints</h3>
-                <p style="margin-bottom:10px;color:var(--muted)">In addition to WMTS/XYZ tiles, Qtiler exposes OGC endpoints per project. Supported versions:</p>
-                <ul>
-                  <li><strong>WMTS</strong>: 1.0.0</li>
-                  <li><strong>WMS</strong>: 1.3.0</li>
-                  <li><strong>WFS</strong>: 1.1.0 and 2.0.0 (WFS-T editing is guaranteed for 1.1.0)</li>
-                </ul>
-                <ul>
-                  <li><strong>WMS GetCapabilities</strong>: <code>/wms?SERVICE=WMS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code></li>
-                  <li><strong>WFS GetCapabilities</strong>: <code>/wfs?SERVICE=WFS&amp;REQUEST=GetCapabilities&amp;project=&lt;id&gt;</code></li>
-                  <li><strong>WFS read</strong> (GeoJSON): <code>/wfs?SERVICE=WFS&amp;REQUEST=GetFeature&amp;OUTPUTFORMAT=application/json&amp;TYPENAME=&lt;layer&gt;&amp;project=&lt;id&gt;</code></li>
-                </ul>
-                <div class="tip" style="margin-top:12px;">WFS-T (editing) uses <code>POST /wfs?project=&lt;id&gt;</code> with an XML <code>&lt;wfs:Transaction&gt;</code> body and may require admin access depending on your auth setup. WFS-T is supported for WFS 1.1.0.</div>
-                <div class="tip" style="margin-top:12px;">A demo QGIS project is included in <code>qgisprojects/demo</code> so you can test the full workflow out of the box.</div>
-              </div>
-              <div class="card-mini">
                 <h3 data-i18n="guide.leafletViewer">Leaflet viewer</h3>
                 <p data-i18n-html="guide.leafletViewer.body">Launch the Leaflet viewer from the eye icon next to each layer or theme. Compare cached tiles against the remote source or preview the cache on its own.</p>
               </div>
@@ -218,18 +202,65 @@
           </section>
 
           <section class="guide-section">
-            <h2><span>5</span> <span data-i18n="guide.sectionAuthTitle">Authentication &amp; access control</span></h2>
-            <p data-i18n-html="guide.authPluginIntro">Install the optional <code>QtilerAuth</code> plugin (see <code>plugins/QtilerAuth</code>) whenever you need login-protected dashboards or customer-specific WMTS access.</p>
-            <ul>
-              <li data-i18n="guide.authPlugin.userMgmt">Manage users and roles from the built-in admin UI, including password resets and project-level permissions.</li>
-              <li data-i18n="guide.authPlugin.portal">Apply consistent authentication across the portal, Leaflet viewer, and WMTS endpoints so only authorized clients reach cached tiles.</li>
-              <li data-i18n="guide.authPlugin.setup">Download the one-time QtilerAuth ZIP from mundogis.se and upload it through the built-in plugin installer to deploy—no floating licenses or repeat activations.</li>
-            </ul>
-            <div class="tip" data-i18n-html="guide.authPlugin.purchase">QtilerAuth ships as a one-time ZIP purchase: download it from <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>, upload it through the portal installer, and email <a href="mailto:abel.gonzalez@mundogis.se">abel.gonzalez@mundogis.se</a> for personalized guidance.</div>
+            <h2><span>5</span> <span data-i18n="guide.section5Title">Service Matrix &amp; Commercial Plugins</span></h2>
+            <p style="margin-bottom:18px;color:var(--muted)" data-i18n="guide.servicesIntro">Qtiler base includes OGC publishing and cache workflows. Commercial plugins extend search, security, vector-tile publication, and external integrations.</p>
+
+            <div class="guide-tabs" role="tablist" aria-label="Guide detail tabs">
+              <button type="button" class="guide-tab-btn active" role="tab" aria-selected="true" aria-controls="guide-tab-services" id="guide-tab-btn-services" data-target="guide-tab-services" data-i18n="guide.tabs.services">Services and versions</button>
+              <button type="button" class="guide-tab-btn" role="tab" aria-selected="false" aria-controls="guide-tab-plugins" id="guide-tab-btn-plugins" data-target="guide-tab-plugins" data-i18n="guide.tabs.plugins">Commercial plugins</button>
+            </div>
+
+            <div id="guide-tab-services" class="guide-tab-panel active" role="tabpanel" aria-labelledby="guide-tab-btn-services">
+              <div class="grid two">
+                <div class="card-mini">
+                  <h3 data-i18n="guide.services.blockTitle">Services published by Qtiler</h3>
+                  <ul>
+                    <li data-i18n-html="guide.services.wmts">WMTS <strong>1.0.0</strong> for tiled map publication via GetCapabilities and tile templates.</li>
+                    <li data-i18n-html="guide.services.xyz">XYZ template output for web map clients (<code>/wmts/&lt;project&gt;/&lt;layer&gt;/{z}/{x}/{y}.png</code>).</li>
+                    <li data-i18n-html="guide.services.wms">WMS <strong>1.3.0</strong> for rendered map images and GIS interoperability.</li>
+                    <li data-i18n-html="guide.services.wfs">WFS <strong>1.1.0</strong> and <strong>2.0.0</strong> for vector-feature queries.</li>
+                    <li data-i18n-html="guide.services.wfst">WFS-T transactions on WFS <strong>1.1.0</strong> using <code>POST /wfs?project=&lt;id&gt;</code>.</li>
+                    <li data-i18n-html="guide.services.vectortiles">Vector Tiles (MVT) with <strong>TileJSON 3.0.0</strong> and Mapbox Style <strong>v8</strong> via the VectorTiles plugin.</li>
+                  </ul>
+                </div>
+                <div class="card-mini">
+                  <h3 data-i18n="guide.services.useCasesTitle">When to use each service</h3>
+                  <ul>
+                    <li data-i18n="guide.services.useCase.wmts">Use WMTS for fast cached basemaps and high-traffic map viewers.</li>
+                    <li data-i18n="guide.services.useCase.xyz">Use XYZ when your frontend expects plain URL templates.</li>
+                    <li data-i18n="guide.services.useCase.wms">Use WMS when you need server-side rendering and style consistency.</li>
+                    <li data-i18n="guide.services.useCase.wfs">Use WFS when clients need raw vector features and attribute filtering.</li>
+                    <li data-i18n="guide.services.useCase.wfst">Use WFS-T for controlled editing workflows from GIS/web editors.</li>
+                    <li data-i18n="guide.services.useCase.vt">Use Vector Tiles for large vector datasets and smooth client-side rendering.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div id="guide-tab-plugins" class="guide-tab-panel" role="tabpanel" aria-labelledby="guide-tab-btn-plugins" hidden>
+              <div class="grid two">
+                <div class="card-mini">
+                  <h3 data-i18n="guide.plugins.blockTitle">Commercial plugins and typical usage</h3>
+                  <ul>
+                    <li data-i18n="guide.plugins.item.auth">QtilerAuth: authentication, role-based access, and protected project sharing.</li>
+                    <li data-i18n="guide.plugins.item.search">ProjectSearch: searchable endpoints and UI helpers for attribute-based search.</li>
+                    <li data-i18n="guide.plugins.item.qrigo">Qrigo: Origo-oriented integration helpers and publishing shortcuts.</li>
+                    <li data-i18n="guide.plugins.item.wmscache">WmsCache: external WMS source caching and acceleration.</li>
+                    <li data-i18n="guide.plugins.item.vectortiles">VectorTiles: MBTiles generation plus TileJSON/MVT endpoints for vector delivery.</li>
+                  </ul>
+                </div>
+                <div class="card-mini">
+                  <h3 data-i18n="guide.plugins.trialTitle">Commercial licensing behavior</h3>
+                  <p data-i18n="guide.plugins.trialBody">Commercial plugins include a one-month trial. During trial they work normally so you can validate workflows in your own environment.</p>
+                  <p data-i18n-html="guide.plugins.removalBody">After the trial expires, Qtiler automatically disables and removes the commercial plugin. The server continues running in base mode with core Qtiler features.</p>
+                  <div class="tip" data-i18n="guide.plugins.renewBody">To keep a plugin active after trial, apply a valid commercial license key from MundoGIS.</div>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section class="guide-section">
-            <h2><span>6</span> <span data-i18n="guide.section5Title">Best practices</span></h2>
+            <h2><span>6</span> <span data-i18n="guide.section6Title">Best practices</span></h2>
             <ul>
               <li data-i18n="guide.bestPractice1">Keep QGIS projects and themes organized—names map directly to WMTS paths.</li>
               <li data-i18n="guide.bestPractice2">Monitor disk usage; WMTS caches can grow fast. Clean up unused layers regularly.</li>
@@ -239,7 +270,7 @@
           </section>
 
           <p class="guide-note" data-i18n="guide.footer">
-            Need to customize further? Update the repository README with team-specific notes, purchase Qtiler via mundogis.se, or email abel.gonzalez@mundogis.se for more details.
+            Need to customize further? Update the repository README with team-specific notes, purchase Qtiler via mundogis.se, or email info@mundogis.se for more details.
           </p>
         </div>
       </main>
@@ -348,6 +379,25 @@
         if (navLanguageSelect) {
           navLanguageSelect.addEventListener("change", (event) => setLanguage(event.target.value));
         }
+
+        const tabButtons = Array.from(document.querySelectorAll('.guide-tab-btn'));
+        const tabPanels = Array.from(document.querySelectorAll('.guide-tab-panel'));
+        const activateTab = (targetId) => {
+          tabButtons.forEach((btn) => {
+            const isActive = btn.dataset.target === targetId;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          });
+          tabPanels.forEach((panel) => {
+            const isActive = panel.id === targetId;
+            panel.classList.toggle('active', isActive);
+            panel.hidden = !isActive;
+          });
+        };
+
+        tabButtons.forEach((btn) => {
+          btn.addEventListener('click', () => activateTab(btn.dataset.target));
+        });
 
         const footerYearEl = document.getElementById("guide_footer_year");
         if (footerYearEl) footerYearEl.textContent = String(new Date().getFullYear());

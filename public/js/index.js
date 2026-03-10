@@ -248,6 +248,44 @@
         footerYearEl.textContent = String(new Date().getFullYear());
       }
 
+      const qtilerPluginHooks = window.qtilerPluginHooks || { layerInfoTabs: [] };
+      window.qtilerPluginHooks = qtilerPluginHooks;
+      const loadedPluginClients = new Set();
+      const loadPluginClientScript = (url) => new Promise((resolve, reject) => {
+        if (!url || loadedPluginClients.has(url)) return resolve();
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = () => {
+          loadedPluginClients.add(url);
+          resolve();
+        };
+        script.onerror = () => reject(new Error('plugin_load_failed'));
+        document.head.appendChild(script);
+      });
+
+      const loadPluginClients = async () => {
+        try {
+          const res = await fetch('/plugins', { credentials: 'include' });
+          if (!res.ok) return;
+          const payload = await res.json().catch(() => null);
+          const enabled = Array.isArray(payload?.enabled) ? payload.enabled : [];
+          window.qtilerPluginsEnabled = enabled;
+          if (enabled.includes('Qrigo')) {
+            await loadPluginClientScript('/plugins/Qrigo/client/qrigo.js');
+          }
+          if (enabled.includes('ProjectSearch')) {
+            await loadPluginClientScript('/plugins/ProjectSearch/client/project-search.js');
+          }
+          if (enabled.includes('WmsCache')) {
+            await loadPluginClientScript('/plugins/WmsCache/client/wmscache-dashboard.js');
+          }
+          if (enabled.includes('VectorTiles')) {
+            await loadPluginClientScript('/plugins/VectorTiles/client/vectortiles-dashboard.js');
+          }
+        } catch {}
+      };
+
       // Check if auth plugin is enabled and update header buttons
       async function checkAuthPlugin() {
         const installBtn = document.getElementById('admin_install_dashboard');
@@ -391,6 +429,7 @@
       
       // Run immediately
       checkAuthPlugin();
+      loadPluginClients();
 
       const deepMergeObjects = (target, patch) => {
         if (!patch || typeof patch !== 'object') return target;
@@ -503,10 +542,10 @@
       const formatTriggerLabel = (token) => {
         if (!token) return '';
         const lower = String(token).toLowerCase();
-        if (lower === 'timer' || lower === 'scheduled' || lower === 'scheduled-layer' || lower === 'scheduled-theme') return 'Timer';
-        if (lower === 'manual-recache') return 'Manual recache';
-        if (lower === 'manual-project' || lower === 'manual') return 'Manual';
-        if (lower === 'manual-theme') return 'Manual theme';
+        if (lower === 'timer' || lower === 'scheduled' || lower === 'scheduled-layer' || lower === 'scheduled-theme') return tr('Timer');
+        if (lower === 'manual-recache') return tr('Manual recache');
+        if (lower === 'manual-project' || lower === 'manual') return tr('Manual WMTS-cache');
+        if (lower === 'manual-theme') return tr('Manual theme');
         return token.charAt(0).toUpperCase() + token.slice(1);
       };
 
@@ -815,11 +854,31 @@
         }
       }
 
-      async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin }) {
+      async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin, configLayer }) {
         if (!projectId || !layerData) return;
+
+        const safeXmlNameLocal = (value) => {
+          const raw = (value == null ? '' : String(value)).trim();
+          if (!raw) return '_';
+          let out = raw.replace(/[^A-Za-z0-9_.-]+/g, '_');
+          if (!/^[A-Za-z_]/.test(out)) out = '_' + out;
+          if (out.toLowerCase().startsWith('xml')) out = '_' + out;
+          return out;
+        };
+
+        const isVectorLayerLikeLocal = (layer) => {
+          if (!layer) return false;
+          if (layer.kind === 'vector' || layer.kind === 'VectorLayer') return true;
+          const typeToken = String(layer.type || '').toUpperCase();
+          if (layer.geometry_type && !['XYZ', 'OSM', 'WMS', 'WMTS', 'TILE', 'RASTER'].includes(typeToken)) return true;
+          return false;
+        };
         
         ensureLayerDetailsModal();
         layerDetailsModal.innerHTML = '';
+
+        const state = getProjectState(projectId);
+        const projectMeta = state ? state.projectMeta : null;
         
         // Header
         const header = document.createElement('div');
@@ -840,10 +899,36 @@
         // Tabs
         const tabs = document.createElement('div');
         tabs.className = 'qtiler-layer-modal__tabs';
+
+        // Content
+        const content = document.createElement('div');
+        content.className = 'qtiler-layer-modal__content';
+
+        const detailsPane = document.createElement('div');
+        detailsPane.className = 'qtiler-layer-modal__pane';
+        const editPane = document.createElement('div');
+        editPane.className = 'qtiler-layer-modal__pane';
+
+        const tabRegistry = [];
+        const registerTab = (id, button, pane) => {
+          tabRegistry.push({ id, button, pane });
+          if (button) tabs.appendChild(button);
+          if (pane) content.appendChild(pane);
+        };
+        const setActiveTab = (id) => {
+          tabRegistry.forEach((tab) => {
+            const active = tab.id === id;
+            if (tab.button) tab.button.classList.toggle('is-active', active);
+            if (tab.pane) tab.pane.style.display = active ? '' : 'none';
+          });
+        };
+
         const tabDetails = document.createElement('button');
         tabDetails.type = 'button';
-        tabDetails.className = 'qtiler-layer-modal__tab is-active';
+        tabDetails.className = 'qtiler-layer-modal__tab';
         tabDetails.textContent = 'Layer Details';
+        tabDetails.addEventListener('click', () => setActiveTab('details'));
+
         const tabEdit = document.createElement('button');
         tabEdit.type = 'button';
         tabEdit.className = 'qtiler-layer-modal__tab';
@@ -852,32 +937,13 @@
           tabEdit.disabled = true;
           tabEdit.title = 'Admin only';
         }
-        tabs.appendChild(tabDetails);
-        tabs.appendChild(tabEdit);
-        layerDetailsModal.appendChild(tabs);
-        
-        // Content
-        const content = document.createElement('div');
-        content.className = 'qtiler-layer-modal__content';
-
-        const detailsPane = document.createElement('div');
-        detailsPane.className = 'qtiler-layer-modal__pane is-active';
-        const editPane = document.createElement('div');
-        editPane.className = 'qtiler-layer-modal__pane';
-        editPane.style.display = 'none';
-
-        const setActiveTab = (which) => {
-          const isDetails = which === 'details';
-          tabDetails.classList.toggle('is-active', isDetails);
-          tabEdit.classList.toggle('is-active', !isDetails);
-          detailsPane.style.display = isDetails ? '' : 'none';
-          editPane.style.display = isDetails ? 'none' : '';
-        };
-        tabDetails.addEventListener('click', () => setActiveTab('details'));
         tabEdit.addEventListener('click', () => setActiveTab('edit'));
 
-        content.appendChild(detailsPane);
-        content.appendChild(editPane);
+        registerTab('details', tabDetails, detailsPane);
+        registerTab('edit', tabEdit, editPane);
+        layerDetailsModal.appendChild(tabs);
+        layerDetailsModal.appendChild(content);
+        setActiveTab('details');
 
         // Fetch cached layer data to get tile_matrix_set
         let tileMatrixSet = null;
@@ -1137,6 +1203,81 @@
 
         detailsPane.appendChild(wmtsSection);
 
+        const pluginTabs = Array.isArray(window.qtilerPluginHooks?.layerInfoTabs)
+          ? window.qtilerPluginHooks.layerInfoTabs
+          : [];
+        const pluginTabInstances = [];
+        const buildPluginContext = () => ({
+          projectId,
+          layerData,
+          cachedEntry,
+          projectMeta,
+          tileMatrixSet,
+          output,
+          isAdmin,
+          configLayer,
+          tr
+        });
+        const renderPluginTab = (tab, pane) => {
+          pane.innerHTML = '';
+          try {
+            const rendered = tab.render ? tab.render({ ...buildPluginContext(), container: pane }) : null;
+            if (rendered && typeof rendered.then === 'function') {
+              rendered.then((node) => {
+                if (node instanceof HTMLElement) pane.appendChild(node);
+              }).catch(() => {
+                const msg = document.createElement('div');
+                msg.className = 'meta';
+                msg.textContent = 'Plugin tab failed to render.';
+                pane.appendChild(msg);
+              });
+            } else if (rendered instanceof HTMLElement) {
+              pane.appendChild(rendered);
+            }
+          } catch (err) {
+            const msg = document.createElement('div');
+            msg.className = 'meta';
+            msg.textContent = 'Plugin tab failed to render.';
+            pane.appendChild(msg);
+          }
+        };
+        const refreshPluginTabs = () => {
+          pluginTabInstances.forEach((entry) => {
+            if (!entry?.tab || !entry?.pane) return;
+            renderPluginTab(entry.tab, entry.pane);
+          });
+        };
+
+        if (pluginTabs.length) {
+          const pluginContext = buildPluginContext();
+          for (const tab of pluginTabs) {
+            if (!tab || typeof tab !== 'object') continue;
+            const tabId = String(tab.id || tab.title || 'plugin').trim();
+            if (!tabId) continue;
+            if (typeof tab.shouldShow === 'function') {
+              try {
+                if (!tab.shouldShow(pluginContext)) continue;
+              } catch {
+                continue;
+              }
+            }
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'qtiler-layer-modal__tab';
+            button.textContent = String(tab.title || tabId);
+
+            const pane = document.createElement('div');
+            pane.className = 'qtiler-layer-modal__pane';
+            pane.style.display = 'none';
+
+            registerTab(tabId, button, pane);
+            button.addEventListener('click', () => setActiveTab(tabId));
+
+            renderPluginTab(tab, pane);
+            pluginTabInstances.push({ tab, pane, id: tabId });
+          }
+        }
+
         // If admin, add editable fields section
         if (isAdmin) {
           const editSection = document.createElement('div');
@@ -1390,11 +1531,17 @@
                   extentInputs[1].value = Number(src.extent[1]);
                   extentInputs[2].value = Number(src.extent[2]);
                   extentInputs[3].value = Number(src.extent[3]);
+                  output.extent = src.extent.slice();
                 }
                 if (Array.isArray(src.resolutions)) {
                   try { resTextarea.value = JSON.stringify(src.resolutions, null, 2); } catch { resTextarea.value = String(src.resolutions); }
+                  output.resolutions = src.resolutions.slice();
                 }
               } catch (e) { /* ignore */ }
+
+              try {
+                refreshPluginTabs();
+              } catch {}
 
               // re-run validation to reflect updated content and enable save
               validateFields();
@@ -2068,6 +2215,8 @@
         projectConfigTimers.set(projectId, timer);
       }
 
+      // Origo auto-add removed.
+
       function setProjectBatchPolling(projectId, active){
         const state = getProjectState(projectId);
         if (!state) return;
@@ -2085,8 +2234,18 @@
       function updateProjectBatchInfo(projectId, payload){
         const state = getProjectState(projectId);
         if (!state || !state.batchInfoEl) return;
-        const current = payload?.current || null;
+        let current = payload?.current || null;
         const last = payload?.last || null;
+        const terminalStatusMaxAgeMs = 2 * 60 * 1000;
+
+        if (current && current.status && current.status !== 'running' && current.status !== 'queued') {
+          const endedAt = Number(current.endedAt);
+          const terminalAge = Number.isFinite(endedAt) ? (Date.now() - endedAt) : Number.POSITIVE_INFINITY;
+          if (terminalAge > terminalStatusMaxAgeMs) {
+            current = null;
+          }
+        }
+
         const lines = [];
         if (current) {
           const status = current.status || 'unknown';
@@ -2111,14 +2270,25 @@
           }
           const triggerToken = current.trigger || current.reason || null;
           const triggerLabel = formatTriggerLabel(triggerToken);
-          if (triggerLabel) lines.push('Trigger: ' + triggerLabel);
+          if (triggerLabel) lines.push(tr('Trigger: {value}', { value: triggerLabel }));
         } else {
           lines.push('Project cache idle');
         }
         if (last?.lastRunAt) {
           const parsed = Date.parse(last.lastRunAt);
-          const label = Number.isNaN(parsed) ? last.lastRunAt : new Date(parsed).toLocaleString();
-          lines.push(`Last result: ${last.lastResult || 'unknown'}${label ? ` at ${label}` : ''}`);
+          const isParsed = !Number.isNaN(parsed);
+          const ageMs = isParsed ? (Date.now() - parsed) : Number.POSITIVE_INFINITY;
+          const keepErrorWindowMs = 15 * 60 * 1000;
+          const lastResultToken = String(last.lastResult || 'unknown').toLowerCase();
+          const shouldShowLast =
+            lastResultToken === 'success'
+            || current
+            || (lastResultToken !== 'error')
+            || ageMs <= keepErrorWindowMs;
+          if (shouldShowLast) {
+            const label = isParsed ? new Date(parsed).toLocaleString() : last.lastRunAt;
+            lines.push(`Last result: ${last.lastResult || 'unknown'}${label ? ` at ${label}` : ''}`);
+          }
         }
         state.batchInfoEl.textContent = lines.join(' · ');
         const nextStatus = current ? current.status : null;
@@ -2162,82 +2332,283 @@
         }
       }
 
-      async function startProjectCache(project, layers, triggerBtn){
-        if (!project?.id) return;
-        if (!Array.isArray(layers) || layers.length === 0) {
-          showStatus('No layers available for this project', true);
-          return;
-        }
-        const skipped = [];
-        enforceCacheControls();
-        const allowRemote = true;
-        let zoomMin = parseInt(zoomMinInput ? zoomMinInput.value : '0') || 0;
-        let zoomMax = parseInt(zoomMaxInput ? zoomMaxInput.value : '0') || 0;
-        if (zoomMin < 0) zoomMin = 0;
-        if (zoomMax < 0) zoomMax = 0;
-        if (zoomMin > zoomMax && !(zoomMin === 0 && zoomMax === 0)) {
-          const tmp = zoomMin; zoomMin = zoomMax; zoomMax = tmp;
-        }
-    const mode = 'wmts';
-      const rawTileCrs = 'AUTO';
-      const throttleVal = Math.max(300, parseInt(throttleInput ? throttleInput.value : '300') || 300);
-        const state = getProjectState(project.id);
-        const extent = state?.extent && Array.isArray(state.extent) && state.extent.length === 4 ? state.extent : null;
-        const extentPayload = getProjectedExtentPayload(project.id);
-        const payloadLayers = [];
-        layers.forEach(layer => {
-          if (!layer?.name) return;
-          if (layer.cacheable === false && !allowRemote) {
-            skipped.push(layer.name);
+      function openProjectCacheDialog(project, layers) {
+        return new Promise((resolve) => {
+          if (!project?.id || !Array.isArray(layers) || layers.length === 0) {
+            resolve(null);
             return;
           }
+
+          enforceCacheControls();
+          const defaultMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
+          const defaultMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
+          const initialMin = Number.isFinite(defaultMin) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, defaultMin)) : 0;
+          const initialMax = Number.isFinite(defaultMax) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, defaultMax)) : 0;
+
+          const backdrop = document.createElement('div');
+          backdrop.className = 'schedule-backdrop';
+          backdrop.dataset.open = '1';
+
+          const dialog = document.createElement('div');
+          dialog.className = 'schedule-dialog';
+          dialog.style.maxWidth = '720px';
+
+          const title = document.createElement('h3');
+          title.textContent = tr('Generate cache');
+
+          const subtitle = document.createElement('p');
+          subtitle.className = 'dialog-description';
+          subtitle.textContent = tr('Select layers and zoom range for project cache.');
+
+          const zoomGrid = document.createElement('div');
+          zoomGrid.style.display = 'grid';
+          zoomGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(160px, 1fr))';
+          zoomGrid.style.gap = '10px';
+
+          const minWrap = document.createElement('label');
+          minWrap.className = 'schedule-field';
+          const minLabel = document.createElement('span');
+          minLabel.textContent = tr('Min zoom:');
+          const minInput = document.createElement('input');
+          minInput.type = 'number';
+          minInput.min = '0';
+          minInput.max = String(MAX_ZOOM_LEVEL);
+          minInput.value = String(initialMin);
+          minWrap.append(minLabel, minInput);
+
+          const maxWrap = document.createElement('label');
+          maxWrap.className = 'schedule-field';
+          const maxLabel = document.createElement('span');
+          maxLabel.textContent = tr('Max zoom:');
+          const maxInput = document.createElement('input');
+          maxInput.type = 'number';
+          maxInput.min = '0';
+          maxInput.max = String(MAX_ZOOM_LEVEL);
+          maxInput.value = String(initialMax);
+          maxWrap.append(maxLabel, maxInput);
+
+          zoomGrid.append(minWrap, maxWrap);
+
+          const toolsRow = document.createElement('div');
+          toolsRow.style.display = 'flex';
+          toolsRow.style.gap = '8px';
+          toolsRow.style.marginTop = '10px';
+          toolsRow.style.flexWrap = 'wrap';
+
+          const selectAllBtn = document.createElement('button');
+          selectAllBtn.type = 'button';
+          selectAllBtn.className = 'btn btn-secondary';
+          selectAllBtn.textContent = tr('Select all layers');
+
+          const clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'btn btn-secondary';
+          clearBtn.textContent = tr('Clear selection');
+
+          toolsRow.append(selectAllBtn, clearBtn);
+
+          const listWrap = document.createElement('div');
+          listWrap.style.maxHeight = '320px';
+          listWrap.style.overflow = 'auto';
+          listWrap.style.border = '1px solid var(--border)';
+          listWrap.style.borderRadius = '10px';
+          listWrap.style.padding = '8px';
+          listWrap.style.marginTop = '8px';
+          listWrap.style.background = 'var(--card)';
+
+          const layerItems = [];
+          layers.forEach((layer) => {
+            if (!layer?.name) return;
+            const row = document.createElement('label');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.justifyContent = 'space-between';
+            row.style.gap = '10px';
+            row.style.padding = '8px';
+            row.style.borderBottom = '1px dashed var(--border)';
+
+            const left = document.createElement('span');
+            left.style.display = 'inline-flex';
+            left.style.alignItems = 'center';
+            left.style.gap = '8px';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+
+            const name = document.createElement('span');
+            name.textContent = layer.name;
+
+            left.append(checkbox, name);
+
+            const right = document.createElement('span');
+            right.style.fontSize = '12px';
+            right.style.opacity = '0.8';
+            right.textContent = layer.cacheable === false
+              ? tr('Remote layer') + ` · z${initialMin}-${initialMax}`
+              : `z${initialMin}-${initialMax}`;
+
+            row.append(left, right);
+            listWrap.appendChild(row);
+            layerItems.push({ layer, checkbox, rangeEl: right });
+          });
+
+          const updateRangeLabels = () => {
+            const minVal = Number.parseInt(minInput.value, 10);
+            const maxVal = Number.parseInt(maxInput.value, 10);
+            const min = Number.isFinite(minVal) ? minVal : 0;
+            const max = Number.isFinite(maxVal) ? maxVal : 0;
+            layerItems.forEach(({ layer, rangeEl }) => {
+              rangeEl.textContent = layer.cacheable === false
+                ? tr('Remote layer') + ` · z${min}-${max}`
+                : `z${min}-${max}`;
+            });
+          };
+
+          minInput.addEventListener('input', updateRangeLabels);
+          maxInput.addEventListener('input', updateRangeLabels);
+
+          selectAllBtn.addEventListener('click', () => {
+            layerItems.forEach(item => { item.checkbox.checked = true; });
+          });
+          clearBtn.addEventListener('click', () => {
+            layerItems.forEach(item => { item.checkbox.checked = false; });
+          });
+
+          const errorBox = document.createElement('div');
+          errorBox.style.color = 'var(--danger, #b42318)';
+          errorBox.style.fontSize = '13px';
+          errorBox.style.minHeight = '18px';
+          errorBox.style.marginTop = '8px';
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.justifyContent = 'flex-end';
+          actions.style.gap = '10px';
+          actions.style.marginTop = '14px';
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.type = 'button';
+          cancelBtn.className = 'btn btn-secondary';
+          cancelBtn.textContent = tr('Cancel');
+
+          const startBtn = document.createElement('button');
+          startBtn.type = 'button';
+          startBtn.className = 'btn btn-primary';
+          startBtn.textContent = tr('Start cache generation');
+
+          actions.append(cancelBtn, startBtn);
+
+          dialog.append(title, subtitle, zoomGrid, toolsRow, listWrap, errorBox, actions);
+          backdrop.appendChild(dialog);
+          document.body.appendChild(backdrop);
+
+          const cleanup = (value) => {
+            try { document.removeEventListener('keydown', onKeyDown); } catch {}
+            try { backdrop.remove(); } catch {}
+            resolve(value || null);
+          };
+
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') cleanup(null);
+          };
+
+          cancelBtn.addEventListener('click', () => cleanup(null));
+          backdrop.addEventListener('click', (event) => {
+            if (event.target === backdrop) cleanup(null);
+          });
+          document.addEventListener('keydown', onKeyDown);
+
+          startBtn.addEventListener('click', () => {
+            errorBox.textContent = '';
+            const min = Number.parseInt(minInput.value, 10);
+            const max = Number.parseInt(maxInput.value, 10);
+            if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0 || min > MAX_ZOOM_LEVEL || max > MAX_ZOOM_LEVEL) {
+              errorBox.textContent = tr('Provide valid zoom numbers (0-30).');
+              return;
+            }
+            if (min > max) {
+              errorBox.textContent = tr('Min zoom must be less than or equal to max zoom.');
+              return;
+            }
+            const selectedLayers = layerItems
+              .filter(item => item.checkbox.checked)
+              .map(item => item.layer)
+              .filter(layer => layer?.name);
+            if (!selectedLayers.length) {
+              errorBox.textContent = tr('Select at least one layer.');
+              return;
+            }
+            cleanup({ zoomMin: min, zoomMax: max, selectedLayers });
+          });
+        });
+      }
+
+      async function runProjectCacheFromDialog(project, layers, triggerBtn){
+        if (!project?.id) return;
+        if (!Array.isArray(layers) || layers.length === 0) {
+          showStatus(tr('No layers available for this project'), true);
+          return;
+        }
+
+        const selection = await openProjectCacheDialog(project, layers);
+        if (!selection) return;
+
+        const { zoomMin, zoomMax, selectedLayers } = selection;
+        const throttleVal = Math.max(300, parseInt(throttleInput ? throttleInput.value : '300', 10) || 300);
+        const extentPayload = getProjectedExtentPayload(project.id);
+        const payloadLayers = [];
+
+        selectedLayers.forEach(layer => {
           const params = {
             project: project.id,
             layer: layer.name,
             zoom_min: zoomMin,
-            zoom_max: zoomMax
+            zoom_max: zoomMax,
+            scheme: 'auto',
+            wmts: true,
+            allow_remote: true,
+            throttle_ms: throttleVal
           };
-          // Forced: WMTS automatic (native CRS)
-          params.scheme = 'auto';
-          params.wmts = true;
           if (extentPayload) {
             params.project_extent = extentPayload.extentString;
             params.extent_crs = extentPayload.crs;
           }
-          params.allow_remote = true;
-          params.throttle_ms = throttleVal;
           payloadLayers.push({ layer: layer.name, params });
         });
-        if (payloadLayers.length === 0) {
-          showStatus('No layers eligible for project cache. Enable remote caching or select layers individually.', true);
+
+        if (!payloadLayers.length) {
+          showStatus(tr('No layers selected for cache generation.'), true);
           return;
         }
+
         const originalLabel = triggerBtn ? triggerBtn.innerHTML : null;
         if (triggerBtn) {
           triggerBtn.disabled = true;
           triggerBtn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
         }
-        const body = { layers: payloadLayers };
-        showStatus(`Starting project cache for ${project.id} (${payloadLayers.length} layers)…`);
+
+        showStatus(tr('Starting project cache for {project} ({count} layers)…', {
+          project: project.id,
+          count: payloadLayers.length
+        }));
+
         try {
           const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/cache/project', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify({ layers: payloadLayers })
           });
           const data = await res.json().catch(() => null);
           if (!res.ok) {
             const detail = data?.message || data?.error || res.statusText;
-            showStatus('Project cache failed to start: ' + detail, true);
+            showStatus(tr('Project cache failed to start: {detail}', { detail }), true);
             return;
           }
-          showStatus('Project cache started (run ' + (data?.runId || 'unknown') + ').');
+          showStatus(tr('Project cache started (run {runId}).', { runId: data?.runId || 'unknown' }));
           refreshProjectBatchStatus(project.id);
-          if (skipped.length) {
-            showStatus('Skipped (remote disabled): ' + skipped.join(', '));
-          }
         } catch (err) {
-          showStatus('Project cache error: ' + err, true);
+          showStatus(tr('Project cache error: {error}', { error: err }), true);
         } finally {
           if (triggerBtn) {
             triggerBtn.disabled = false;
@@ -3390,6 +3761,7 @@
 
       async function loadLayers(options = {}) {
         const forceConfigReload = !!options.forceConfigReload;
+        let loadLayersError = false;
         if (loadLayersRunning) {
           loadLayersQueued = true;
           loadLayersQueuedOptions = options ? { ...options } : {};
@@ -3510,12 +3882,16 @@
             setActiveProject(projects[0].id);
           }
         } catch (err) {
+          loadLayersError = true;
           layersEl.innerHTML = '<div class="error">Network error: ' + String(err) + '</div>';
           showStatus('Network error: ' + String(err), true);
           console.error('Fetch /projects failed', err);
         }
         finally {
           loadLayersRunning = false;
+          if (!loadLayersError && statusEl) {
+            statusEl.innerHTML = '';
+          }
           syncRemoteButtons();
           if (loadLayersQueued) {
             const queuedOptions = loadLayersQueuedOptions ? { ...loadLayersQueuedOptions } : {};
@@ -3670,6 +4046,150 @@
         }, timeout);
       }
 
+      function showProjectReplaceDialog(conflictPayload = {}) {
+        const lang = String(conflictPayload?.language || currentLang || 'en').toLowerCase();
+        const isEs = lang.startsWith('es');
+        const isSv = lang.startsWith('sv');
+
+        const text = {
+          title: conflictPayload?.title || (isEs ? 'Proyecto ya existe' : (isSv ? 'Projektet finns redan' : 'Project already exists')),
+          message: conflictPayload?.message || (isEs
+            ? 'Ya existe un proyecto con el mismo id. ¿Deseas reemplazarlo?'
+            : (isSv ? 'Ett projekt med samma id finns redan. Vill du ersatta det?' : 'A project with the same id already exists. Do you want to replace it?')),
+          hint: conflictPayload?.hint || (isEs
+            ? 'Puedes elegir mantener o eliminar la configuracion y cache existentes.'
+            : (isSv ? 'Du kan valja att behalla eller radera befintlig konfiguration och cache.' : 'You can choose to keep or delete existing configuration and cache.')),
+          keepConfig: isEs ? 'Mantener configuracion existente' : (isSv ? 'Behall befintlig konfiguration' : 'Keep existing configuration'),
+          keepCache: isEs ? 'Mantener cache existente' : (isSv ? 'Behall befintlig cache' : 'Keep existing cache'),
+          replaceBtn: isEs ? 'Reemplazar' : (isSv ? 'Ersatt' : 'Replace'),
+          cancelBtn: isEs ? 'Cancelar' : (isSv ? 'Avbryt' : 'Cancel')
+        };
+
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed';
+          overlay.style.inset = '0';
+          overlay.style.background = 'rgba(2, 8, 23, 0.65)';
+          overlay.style.display = 'flex';
+          overlay.style.alignItems = 'center';
+          overlay.style.justifyContent = 'center';
+          overlay.style.zIndex = '4200';
+          overlay.style.padding = '16px';
+
+          const card = document.createElement('div');
+          card.style.width = 'min(560px, 96vw)';
+          card.style.background = '#0f1729';
+          card.style.border = '1px solid #334766';
+          card.style.borderRadius = '12px';
+          card.style.padding = '16px';
+          card.style.color = '#e6edf7';
+          card.style.boxShadow = '0 20px 50px rgba(0,0,0,.45)';
+          overlay.appendChild(card);
+
+          const title = document.createElement('h3');
+          title.textContent = text.title;
+          title.style.margin = '0 0 8px 0';
+          card.appendChild(title);
+
+          const message = document.createElement('p');
+          message.textContent = text.message;
+          message.style.margin = '0 0 6px 0';
+          message.style.lineHeight = '1.45';
+          card.appendChild(message);
+
+          if (text.hint) {
+            const hint = document.createElement('p');
+            hint.textContent = text.hint;
+            hint.style.margin = '0 0 14px 0';
+            hint.style.color = '#9fb0ca';
+            hint.style.fontSize = '0.92rem';
+            card.appendChild(hint);
+          }
+
+          const opts = document.createElement('div');
+          opts.style.display = 'grid';
+          opts.style.gap = '10px';
+          opts.style.marginBottom = '14px';
+
+          const keepCfgLabel = document.createElement('label');
+          keepCfgLabel.style.display = 'flex';
+          keepCfgLabel.style.gap = '10px';
+          keepCfgLabel.style.alignItems = 'center';
+          const keepCfg = document.createElement('input');
+          keepCfg.type = 'checkbox';
+          keepCfg.checked = true;
+          keepCfgLabel.appendChild(keepCfg);
+          keepCfgLabel.appendChild(document.createTextNode(text.keepConfig));
+
+          const keepCacheLabel = document.createElement('label');
+          keepCacheLabel.style.display = 'flex';
+          keepCacheLabel.style.gap = '10px';
+          keepCacheLabel.style.alignItems = 'center';
+          const keepCache = document.createElement('input');
+          keepCache.type = 'checkbox';
+          keepCache.checked = true;
+          keepCacheLabel.appendChild(keepCache);
+          keepCacheLabel.appendChild(document.createTextNode(text.keepCache));
+
+          opts.appendChild(keepCfgLabel);
+          opts.appendChild(keepCacheLabel);
+          card.appendChild(opts);
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.gap = '10px';
+          actions.style.justifyContent = 'flex-end';
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.type = 'button';
+          cancelBtn.textContent = text.cancelBtn;
+          cancelBtn.className = 'secondary';
+
+          const replaceBtn = document.createElement('button');
+          replaceBtn.type = 'button';
+          replaceBtn.textContent = text.replaceBtn;
+          replaceBtn.className = 'primary';
+
+          actions.appendChild(cancelBtn);
+          actions.appendChild(replaceBtn);
+          card.appendChild(actions);
+
+          const cleanup = () => {
+            try {
+              window.removeEventListener('keydown', onKey);
+              overlay.remove();
+            } catch {}
+          };
+
+          const done = (result) => {
+            cleanup();
+            resolve(result);
+          };
+
+          const onKey = (ev) => {
+            if (ev.key === 'Escape') {
+              done(null);
+            }
+          };
+
+          window.addEventListener('keydown', onKey);
+          overlay.addEventListener('click', (ev) => {
+            if (ev.target === overlay) done(null);
+          });
+          cancelBtn.addEventListener('click', () => done(null));
+          replaceBtn.addEventListener('click', () => {
+            done({
+              replaceExisting: true,
+              keepExistingConfig: !!keepCfg.checked,
+              keepExistingCache: !!keepCache.checked
+            });
+          });
+
+          document.body.appendChild(overlay);
+          replaceBtn.focus();
+        });
+      }
+
       async function uploadProjectFile(btn, file) {
         if (!file) return;
         const originalDisabled = btn.disabled;
@@ -3683,16 +4203,46 @@
           showStatus('Uploading project: ' + file.name);
         }
         try {
-          const form = new FormData();
-          form.append('project', file, file.name);
-          const res = await fetch('/projects', { method: 'POST', body: form });
-          const data = await res.json().catch(() => null);
+          const submitUpload = async (options = null) => {
+            const form = new FormData();
+            form.append('project', file, file.name);
+            if (options && typeof options === 'object') {
+              if (Object.prototype.hasOwnProperty.call(options, 'replaceExisting')) {
+                form.append('replaceExisting', options.replaceExisting ? '1' : '0');
+              }
+              if (Object.prototype.hasOwnProperty.call(options, 'keepExistingConfig')) {
+                form.append('keepExistingConfig', options.keepExistingConfig ? '1' : '0');
+              }
+              if (Object.prototype.hasOwnProperty.call(options, 'keepExistingCache')) {
+                form.append('keepExistingCache', options.keepExistingCache ? '1' : '0');
+              }
+            }
+            const response = await fetch('/projects', { method: 'POST', body: form });
+            const payload = await response.json().catch(() => null);
+            return { response, payload };
+          };
+
+          let { response: res, payload: data } = await submitUpload();
+
+          if (!res.ok && res.status === 409 && (data?.code === 'PROJECT_ALREADY_EXISTS' || data?.error === 'project_already_exists')) {
+            const decision = await showProjectReplaceDialog(data || {});
+            if (!decision) {
+              const lang = String(data?.language || currentLang || 'en').toLowerCase();
+              showStatus(lang.startsWith('es') ? 'Subida cancelada por el usuario.' : (lang.startsWith('sv') ? 'Uppladdning avbruten av anvandaren.' : 'Upload cancelled by user.'));
+              return;
+            }
+
+            ({ response: res, payload: data } = await submitUpload(decision));
+          }
+
           if (!res.ok) {
             let detail = data?.error || data?.details || res.statusText;
             if (data?.error === 'zip_missing_project') {
               detail = 'ZIP must contain exactly one QGIS project (.qgz or .qgs).';
             } else if (data?.error === 'zip_multiple_projects') {
               detail = 'ZIP contains multiple QGIS projects (.qgz/.qgs). Keep only one.';
+            } else if (data?.error === 'project_already_exists') {
+              detail = data?.message || 'Project already exists.';
             }
             showStatus('Upload failed: ' + detail, true);
             return;
@@ -3989,6 +4539,16 @@
           return out;
         };
 
+        const isVectorLayerLike = (layer) => {
+          if (!layer) return false;
+          if (layer.kind === 'vector' || layer.kind === 'VectorLayer') return true;
+          const typeToken = String(layer.type || '').toUpperCase();
+          if (layer.geometry_type && !['XYZ', 'OSM', 'WMS', 'WMTS', 'TILE', 'RASTER'].includes(typeToken)) return true;
+          return false;
+        };
+
+        const hasVectorLayers = Array.isArray(layers) && layers.some((l) => isVectorLayerLike(l));
+
         const metaViewExtent = normalizeExtentList(projectMeta && projectMeta.view_extent_wgs84);
         const metaExtentDefault = normalizeExtentList(projectMeta && projectMeta.extent_wgs84);
         state.projectViewExtent = metaViewExtent ? metaViewExtent.slice() : null;
@@ -4099,7 +4659,7 @@
                 showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
             });
-            controlsBox.appendChild(copyWfsBtn);
+            if (hasVectorLayers) controlsBox.appendChild(copyWfsBtn);
           }
 
           const extentToggle = document.createElement('button');
@@ -4137,8 +4697,8 @@
             const runAllBtn = document.createElement('button');
             runAllBtn.className = 'btn btn-primary';
             runAllBtn.type = 'button';
-            runAllBtn.textContent = 'Cache all layers';
-            runAllBtn.addEventListener('click', () => startProjectCache(project, layers, runAllBtn));
+            runAllBtn.textContent = tr('Generate cache');
+            runAllBtn.addEventListener('click', () => runProjectCacheFromDialog(project, layers, runAllBtn));
             batchActions.appendChild(runAllBtn);
             batchRow.appendChild(batchInfo);
             batchRow.appendChild(batchActions);
@@ -4180,6 +4740,28 @@
             }
           }
         } catch {}
+        const cachePresenceByLayer = new Map();
+        let hasVectorTilesProjectCache = false;
+        if (isAdmin) {
+          try {
+            const params = new URLSearchParams();
+            for (const layer of layers) {
+              if (layer && layer.name) params.append('layer', layer.name);
+            }
+            const statusRes = await fetch('/cache/' + encodeURIComponent(project.id) + '/status?' + params.toString());
+            if (statusRes.ok) {
+              const statusJson = await statusRes.json().catch(() => null);
+              hasVectorTilesProjectCache = !!statusJson?.vectorTiles;
+              const layerStatus = statusJson?.layers && typeof statusJson.layers === 'object' ? statusJson.layers : {};
+              for (const [layerName, state] of Object.entries(layerStatus)) {
+                if (!layerName) continue;
+                cachePresenceByLayer.set(layerName, state || {});
+              }
+            }
+          } catch {
+            // Ignore status fetch errors and keep WMTS-only behavior as fallback.
+          }
+        }
         const projectState = getProjectState(project.id);
         if (projectState) {
           if (cachedProjectMin != null || cachedProjectMax != null) {
@@ -4199,6 +4781,7 @@
           const d = document.createElement('div');
           d.className = 'layer';
           const info = document.createElement('div');
+          info.className = 'layer-info';
           const provider = (l.provider || '').toLowerCase();
           const remoteSource = l.remote_source || null;
           const cacheable = !!l.cacheable;
@@ -4210,6 +4793,10 @@
           const tileCount = Number.isFinite(Number(tileCountRaw)) ? Number(tileCountRaw) : 0;
           const hasTilesFlag = cachedEntry ? (cachedEntry.has_tiles ?? cachedEntry.hasTiles) : null;
           const hasCachedTiles = hasCacheEntry && (tileCount > 0 || hasTilesFlag === true);
+          const cachePresence = cachePresenceByLayer.get(l.name) || null;
+          const hasWmsCache = !!cachePresence?.wms;
+          const hasVectorTilesCache = !!cachePresence?.vectortiles || hasVectorTilesProjectCache;
+          const hasAnyCacheForDelete = hasCachedTiles || hasWmsCache || hasVectorTilesCache;
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
           const scheduleSummary = describeSchedule(scheduleObj);
@@ -4299,7 +4886,7 @@
             });
           });
 
-          const isVectorLayer = !!(l && (l.kind === 'vector' || l.kind === 'VectorLayer' || l.geometry_type));
+          const isVectorLayer = isVectorLayerLike(l);
           const wfsCapabilitiesUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&TYPENAME=${encodeURIComponent(safeXmlName(l.name))}`;
           const copyWfsBtn = makeIconButton(tr('Copy WFS URL'), 'wfs', () => {
             navigator.clipboard.writeText(wfsCapabilitiesUrl).then(() => {
@@ -4316,6 +4903,10 @@
 
           const actionBox = document.createElement('div');
           actionBox.className = 'layer-actions-box';
+
+          const rowFlags = document.createElement('div');
+          rowFlags.className = 'layer-actions-row';
+          rowFlags.dataset.row = 'flags';
 
           const rowCache = document.createElement('div');
           rowCache.className = 'layer-actions-row';
@@ -4358,11 +4949,52 @@
             });
 
             const editableText = document.createElement('span');
+            editableText.setAttribute('data-i18n', 'Editable');
             editableText.textContent = tr('Editable');
 
             editableWrap.appendChild(editableInput);
             editableWrap.appendChild(editableText);
-            controls.appendChild(editableWrap);
+            rowFlags.appendChild(editableWrap);
+
+            const qrigoEnabled = Array.isArray(window.qtilerPluginsEnabled)
+              ? window.qtilerPluginsEnabled.includes('Qrigo')
+              : false;
+            if (qrigoEnabled) {
+              const searchableWrap = document.createElement('label');
+              searchableWrap.style.display = 'inline-flex';
+              searchableWrap.style.alignItems = 'center';
+              searchableWrap.style.gap = '6px';
+              searchableWrap.style.padding = '0 6px';
+              searchableWrap.style.height = '32px';
+              searchableWrap.style.border = '1px solid var(--border)';
+              searchableWrap.style.borderRadius = '8px';
+              searchableWrap.style.background = 'var(--card)';
+              searchableWrap.title = tr('Enable searching over WFS');
+
+              const searchableInput = document.createElement('input');
+              searchableInput.type = 'checkbox';
+              searchableInput.checked = !(configLayer && configLayer.wfsSearchable === false);
+              searchableInput.addEventListener('click', (event) => event.stopPropagation());
+              searchableInput.addEventListener('change', () => {
+                const next = !!searchableInput.checked;
+                queueProjectConfigSave(project.id, {
+                  layers: {
+                    [l.name]: {
+                      wfsSearchable: next
+                    }
+                  }
+                }, { immediate: true });
+                showStatus(next ? tr('Layer marked searchable') : tr('Layer marked not searchable'));
+              });
+
+              const searchableText = document.createElement('span');
+              searchableText.setAttribute('data-i18n', 'Searchable');
+              searchableText.textContent = tr('Searchable');
+
+              searchableWrap.appendChild(searchableInput);
+              searchableWrap.appendChild(searchableText);
+              rowFlags.appendChild(searchableWrap);
+            }
           }
 
           if (exampleLink && !hasCachedTiles) {
@@ -4409,7 +5041,7 @@
             rowCache.appendChild(scheduleBtn);
             rowCache.appendChild(genBtn);
 
-            if (hasCachedTiles) {
+            if (hasAnyCacheForDelete) {
               const delBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
               delBtn.addEventListener('click', () => deleteCache(delBtn, project.id, l.name));
               const delWrap = document.createElement('span');
@@ -4451,6 +5083,8 @@
                 window.open(viewerWfsUrl, '_blank', 'noopener');
               });
               rowView.appendChild(viewWfsBtn);
+
+              // Add-to-Origo button removed.
             }
           }
 
@@ -4461,13 +5095,15 @@
               projectId: project.id, 
               layerData: l, 
               cachedEntry, 
-              isAdmin 
+              isAdmin,
+              configLayer
             });
           }, 'btn-secondary');
 
           if (canView && detailsBtn) rowView.appendChild(detailsBtn);
 
           // Assemble box rows (cache actions are admin-only)
+          if (rowFlags.childElementCount > 0) actionBox.appendChild(rowFlags);
           if (isAdmin) actionBox.appendChild(rowCache);
           if (canView) actionBox.appendChild(rowCopy);
           if (canView) actionBox.appendChild(rowView);
@@ -4493,6 +5129,7 @@
             const themeRow = document.createElement('div');
             themeRow.className = 'layer';
             const infoBox = document.createElement('div');
+            infoBox.className = 'layer-info';
             const themeHeaderPieces = [
               `<span class="layer-title-icon theme">${ICONS.theme}</span>`,
               `<span>${escapeHtml(theme.name)}</span>`,
@@ -4578,7 +5215,7 @@
             }
 
             if (canView) {
-              const viewThemeBtn = makeIconButton(tr('Open map viewer'), 'eye', () => {
+              const viewThemeBtn = makeLabeledIconButton(tr('Open map viewer'), 'map', 'WMTS', () => {
                 const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
                 window.open(url, '_blank', 'noopener');
               }, 'btn-secondary');
@@ -4589,7 +5226,8 @@
                   projectId: project.id, 
                   layerData: themeObj, 
                   cachedEntry: cachedTheme || null, 
-                  isAdmin 
+                  isAdmin,
+                  configLayer: null
                 });
               }, 'btn-secondary');
               actions.appendChild(themeDetailsBtn);
@@ -4892,7 +5530,80 @@
         }
       }
 
+      function chooseCacheDeleteType() {
+        return new Promise((resolve) => {
+          const backdrop = document.createElement('div');
+          backdrop.className = 'schedule-backdrop';
+          backdrop.dataset.open = '1';
+
+          const dialog = document.createElement('div');
+          dialog.className = 'schedule-dialog';
+          dialog.style.maxWidth = '460px';
+
+          const title = document.createElement('h3');
+          title.textContent = tr('Delete cache');
+          title.style.marginBottom = '8px';
+
+          const subtitle = document.createElement('p');
+          subtitle.className = 'dialog-description';
+          subtitle.textContent = tr('Choose which cache type you want to delete for this layer.');
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.flexWrap = 'wrap';
+          actions.style.gap = '10px';
+          actions.style.marginTop = '14px';
+
+          const btnWmts = document.createElement('button');
+          btnWmts.type = 'button';
+          btnWmts.className = 'btn btn-secondary';
+          btnWmts.textContent = tr('Delete WMTS cache');
+
+          const btnWms = document.createElement('button');
+          btnWms.type = 'button';
+          btnWms.className = 'btn btn-secondary';
+          btnWms.textContent = tr('Delete WMS cache');
+
+          const btnVector = document.createElement('button');
+          btnVector.type = 'button';
+          btnVector.className = 'btn btn-secondary';
+          btnVector.textContent = tr('Delete VectorTiles cache');
+
+          const btnCancel = document.createElement('button');
+          btnCancel.type = 'button';
+          btnCancel.className = 'btn btn-primary';
+          btnCancel.textContent = tr('Cancel');
+
+          actions.append(btnWmts, btnWms, btnVector, btnCancel);
+          dialog.append(title, subtitle, actions);
+          backdrop.appendChild(dialog);
+          document.body.appendChild(backdrop);
+
+          const cleanup = (value) => {
+            try { document.removeEventListener('keydown', onKeyDown); } catch {}
+            try { backdrop.remove(); } catch {}
+            resolve(value || null);
+          };
+
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') cleanup(null);
+          };
+
+          backdrop.addEventListener('click', (event) => {
+            if (event.target === backdrop) cleanup(null);
+          });
+          btnCancel.addEventListener('click', () => cleanup(null));
+          btnWmts.addEventListener('click', () => cleanup('wmts'));
+          btnWms.addEventListener('click', () => cleanup('wms'));
+          btnVector.addEventListener('click', () => cleanup('vectortiles'));
+          document.addEventListener('keydown', onKeyDown);
+        });
+      }
+
       async function deleteCache(btn, projectId, layerName) {
+        const cacheType = await chooseCacheDeleteType();
+        if (!cacheType) return;
+
         const initialDisabled = btn.disabled;
         const originalHtml = btn.innerHTML;
         const originalTitle = btn.title;
@@ -4904,20 +5615,27 @@
         };
         btn.disabled = true;
         btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
-        btn.title = 'Deleting cache…';
+        btn.title = tr('Deleting {type} cache...', { type: cacheType.toUpperCase() });
         btn.setAttribute('aria-busy', 'true');
         try {
-          const res = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
+          const endpoint = cacheType === 'vectortiles'
+            ? '/plugins/VectorTiles/api/tilesets/' + encodeURIComponent(projectId)
+            : '/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1&type=' + encodeURIComponent(cacheType);
+          const res = await fetch(endpoint, { method: 'DELETE' });
           const data = await res.json().catch(()=>null);
           if (!res.ok) {
-            showStatus('Delete failed: ' + (data?.error || data?.details || res.statusText), true);
-            console.error('/cache DELETE non-ok', res.status, data);
+            showStatus(tr('Failed to delete cache: {error}', { error: data?.error || data?.details || res.statusText }), true);
+            console.error('cache DELETE non-ok', res.status, data);
           } else {
-            showStatus('Cache deleted: ' + layerName);
+            if (cacheType === 'vectortiles') {
+              showStatus(tr('VectorTiles cache deleted for project: {projectId}', { projectId }));
+            } else {
+              showStatus(tr('{type} cache deleted: {layer}', { type: cacheType.toUpperCase(), layer: layerName }));
+            }
             scheduleProjectRefresh(projectId, { forceConfigReload: true });
           }
         } catch (err) {
-          showStatus('Network error: ' + err, true);
+          showStatus(tr('Failed to delete cache: {error}', { error: err }), true);
           console.error('deleteCache failed', err);
         } finally {
           restoreButton();

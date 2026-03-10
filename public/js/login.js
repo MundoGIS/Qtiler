@@ -24,7 +24,7 @@
   const submitBtn = document.getElementById('login_submit');
   const resetBtn = document.getElementById('login_reset');
   const statusEl = document.getElementById('login_status');
-  const languageSelect = document.getElementById('lang_select');
+  const languageSelect = document.getElementById('language_selector') || document.getElementById('lang_select');
   
   if (togglePasswordBtn && passwordInput) {
     togglePasswordBtn.addEventListener('click', () => {
@@ -273,16 +273,10 @@
     const params = new URLSearchParams(window.location.search || '');
     const justInstalled = params.get('justInstalled');
     if (justInstalled && justInstalled !== '0') {
-      const lang = window.qtilerLang?.get?.() || currentLang;
       const defaultUser = 'admin';
-      const defaultPass = 'adminnuevo321';
-      const messages = {
-        en: `Use this username and password, then change the default password: ${defaultUser} / ${defaultPass}`,
-        es: `Usa este usuario y contraseña y cambia la contraseña por defecto: ${defaultUser} / ${defaultPass}`,
-        sv: `Använd detta användarnamn och lösenord och byt standardlösenordet: ${defaultUser} / ${defaultPass}`
-      };
-      const text = messages[lang] || messages[(lang || '').split('-')[0]] || messages.en;
-      flashStatusText(text, { state: 'info', ttlMs: 10000 });
+      const defaultPass = 'admin2026';
+      const text = `Use this username and password and change the default password: ${defaultUser} / ${defaultPass}`;
+      flashStatusText(text, { state: 'info', ttlMs: 20000 });
 
       params.delete('justInstalled');
       const nextQuery = params.toString();

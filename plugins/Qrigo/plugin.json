@@ -1,0 +1,10 @@
+{
+  "name": "Qrigo",
+  "version": "0.1.0",
+  "displayName": "Qrigo · Origo helper",
+  "description": "Adds Origo-ready WMS/WMTS/WFS snippets to the layer details modal.",
+  "autoEnable": false,
+  "license": "Qrigo Commercial License",
+  "licenseFile": "LICENSE_Qrigo.txt",
+  "supportContact": "@mundogis.se"
+}

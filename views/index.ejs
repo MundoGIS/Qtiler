@@ -67,7 +67,20 @@
               <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
               <div id="jobsList" class="list"></div>
             </div>
-            <div id="layers" class="list">Loading layers…</div>
+            <div id="layers" class="list">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Layer Name</th>
+                    <th>Editable</th>
+                    <th>Searchable</th>
+                  </tr>
+                </thead>
+                <tbody id="layersList">
+                  <!-- Layers will be dynamically populated here -->
+                </tbody>
+              </table>
+            </div>
           </section>
         </div>
       </main>
@@ -77,11 +90,17 @@
           <div class="footer-brand">© <span id="footer_year"></span> MundoGIS</div>
           <div class="footer-links">
             <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>
-            <a href="mailto:abel.gonzalez@mundogis.se">info@mundogis.se</a>
+            <a href="mailto:support@mundogis.se">support@mundogis.se</a>
           </div>
         </div>
       </footer>
     </div>
 
    <script src="/js/index.js"></script>
+   <script>
+     document.addEventListener('DOMContentLoaded', () => {
+       const layersList = document.getElementById('layersList');
+       if (!layersList) return;
+     });
+   </script>
 <%- include('partials/html-close') %>

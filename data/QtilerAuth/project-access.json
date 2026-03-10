@@ -1,13 +1,7 @@
 {
   "projects": {
-    "demo3011": {
-      "public": true
-    },
-    "points": {
-      "public": true
-    },
     "demo": {
-      "public": true
+      "public": false
     }
   }
 }

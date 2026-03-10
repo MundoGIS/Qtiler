@@ -25,12 +25,12 @@ Thanks for your interest in Qtiler! This document explains how to collaborate wi
 
 ## Donations and sponsorship
 - We accept individual donations and corporate sponsorships to fund infrastructure, community support, and roadmap work.
-- Contact **abel.gonzalez@mundogis.se** with the subject "Qtiler Donation" to coordinate transfers, invoices, or public acknowledgments.
+- Contact **support@mundogis.se** with the subject "Qtiler Donation" to coordinate transfers, invoices, or public acknowledgments.
 - A dedicated donations page is coming soon; meanwhile we can provide bank or PayPal details on request.
 
 ## Code of conduct
 - Be respectful and professional. Harassment, hate speech, or abusive behavior is not tolerated.
-- Report unacceptable conduct to **abel.gonzalez@mundogis.se**.
+- Report unacceptable conduct to **support@mundogis.se**.
 
 ## Need help?
-For technical questions, contribution support, or donation coordination, reach us at **abel.gonzalez@mundogis.se**.
+For technical questions, contribution support, or donation coordination, reach us at **support@mundogis.se**.

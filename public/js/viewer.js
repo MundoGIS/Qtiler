@@ -45,12 +45,17 @@
     const serviceParam = String(params.get('service') || params.get('mode') || '').trim().toLowerCase();
     const isWmsMode = serviceParam === 'wms';
     const isWfsMode = serviceParam === 'wfs';
+    const externalSource = String(params.get('external_source') || params.get('source') || '').trim();
+    const externalApiKey = String(params.get('api_key') || '').trim();
+    const isExternalSource = !!externalSource;
 
     const viewerState = {
       project: params.get('project'),
       theme: params.get('theme'),
       layer: params.get('layer'),
-      service: isWfsMode ? 'wfs' : (isWmsMode ? 'wms' : 'wmts')
+      service: isWfsMode ? 'wfs' : (isWmsMode ? 'wms' : 'wmts'),
+      externalSource: externalSource || null,
+      externalApiKey: externalApiKey || null
     };
 
     const viewerSessionId = (() => {
@@ -61,24 +66,30 @@
     })();
 
     const displayMode = isWfsMode ? 'wfs' : (isWmsMode ? 'wms' : 'cache');
-    const showCache = !(isWmsMode || isWfsMode);
+    const showCache = !(isWmsMode || isWfsMode) && !isExternalSource;
     const showRemote = false;
 
-    const tileTemplateBase = isWfsMode
-      ? `/wfs?project=${encodeURIComponent(viewerState.project || '')}`
-      : (isWmsMode
-        ? `/wms?project=${encodeURIComponent(viewerState.project || '')}`
-        : (viewerState.theme
-          ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
-          : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`));
+    const tileTemplateBase = isExternalSource
+      ? (isWmsMode
+        ? `/plugins/WmsCache/wms?source=${encodeURIComponent(viewerState.externalSource || '')}${viewerState.externalApiKey ? `&api_key=${encodeURIComponent(viewerState.externalApiKey)}` : ''}`
+        : `/plugins/WmsCache/wmts/${encodeURIComponent(viewerState.externalSource || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png${viewerState.externalApiKey ? `?api_key=${encodeURIComponent(viewerState.externalApiKey)}` : ''}`)
+      : (isWfsMode
+        ? `/wfs?project=${encodeURIComponent(viewerState.project || '')}`
+        : (isWmsMode
+          ? `/wms?project=${encodeURIComponent(viewerState.project || '')}`
+          : (viewerState.theme
+            ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
+            : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`)));
     const tileTemplate = (isWmsMode || isWfsMode)
       ? tileTemplateBase
       : `${tileTemplateBase}?sid=${encodeURIComponent(viewerSessionId)}`;
-    const tileTemplateLabel = isWfsMode
+    const tileTemplateLabel = isExternalSource
+      ? `${window.location.origin}${tileTemplateBase}${isWmsMode ? `&LAYERS=${encodeURIComponent(viewerState.layer || '')}` : ''}`
+      : (isWfsMode
       ? `${window.location.origin}${tileTemplateBase}&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${encodeURIComponent(viewerState.layer || '')}&outputFormat=application/json`
       : (isWmsMode
         ? `${window.location.origin}${tileTemplateBase}&LAYERS=${encodeURIComponent(viewerState.layer || '')}`
-        : tileTemplate.replace('{z}', '{z}'));
+        : tileTemplate.replace('{z}', '{z}')));
     const modeLabelKey = isWfsMode ? 'viewer.mode.wfs' : (isWmsMode ? 'viewer.mode.wms' : 'viewer.mode.cache');
 
     const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
@@ -274,7 +285,7 @@
     }
 
     const missingLayerOrTheme = !viewerData.layer && !viewerData.theme;
-    const missingProject = !viewerData.project;
+    const missingProject = !viewerData.project && !isExternalSource;
 
     if (isWmsMode && viewerData.theme) {
       viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
@@ -306,6 +317,32 @@
     applyTranslations();
 
     async function getLayerContext() {
+      if (isExternalSource) {
+        try {
+          const infoUrl = '/plugins/WmsCache/info?source=' + encodeURIComponent(viewerState.externalSource || '')
+            + '&layer=' + encodeURIComponent(viewerState.layer || '')
+            + (viewerState.externalApiKey ? '&api_key=' + encodeURIComponent(viewerState.externalApiKey) : '');
+          const response = await fetch(infoUrl);
+          if (!response.ok) return null;
+          const payload = await response.json();
+          if (payload && payload.sourceLabel) {
+            viewerData.project = payload.sourceLabel;
+          }
+          const layerMeta = payload && payload.layerMeta && typeof payload.layerMeta === 'object' ? payload.layerMeta : null;
+          const combined = layerMeta ? {
+            ...(layerMeta || {}),
+            name: viewerData.layer,
+            extent_wgs84: Array.isArray(layerMeta.extent_wgs84) ? layerMeta.extent_wgs84 : null,
+            extent: Array.isArray(layerMeta.extent) ? layerMeta.extent : null,
+            crs: layerMeta.crs || 'EPSG:3857',
+            tile_crs: layerMeta.crs || 'EPSG:3857'
+          } : null;
+          return { cacheEntry: null, layerEntry: layerMeta, themeEntry: null, combined };
+        } catch {
+          return null;
+        }
+      }
+
       if (!viewerData.project) return null;
       let cacheEntry = null;
       try {

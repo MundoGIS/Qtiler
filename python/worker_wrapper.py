@@ -606,6 +606,24 @@ def _atomic_save_with_format(image, path, fmt, compression=3):
             os.rename(tmp_path, path)
     return success
 
+def _is_white_tile(image):
+    try:
+        w = int(image.width())
+        h = int(image.height())
+        if w <= 0 or h <= 0:
+            return False
+        coords = [
+            (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+            (w // 2, h // 2)
+        ]
+        base = image.pixelColor(coords[0][0], coords[0][1])
+        for (cx, cy) in coords[1:]:
+            if image.pixelColor(cx, cy) != base:
+                return False
+        return (base.red() == 255 and base.green() == 255 and base.blue() == 255 and base.alpha() == 255)
+    except Exception:
+        return False
+
 # --- Procesamiento ---
 def process_task(params):
     try:
@@ -692,6 +710,209 @@ def process_task(params):
             except Exception:
                 feature_types = []
             return { 'status': 'success', 'featureTypes': feature_types }
+
+        if action in ('wfs_attributes', 'wfs_attrs'):
+            type_name = params.get('type_name') or params.get('typename')
+            if not type_name:
+                return { 'status': 'error', 'code': 'MissingParameterValue', 'message': 'Missing type_name' }
+
+            requested_type = str(type_name).strip()
+            lyr = _find_vector_layer_by_typename(proj, requested_type)
+            if lyr is None:
+                return { 'status': 'error', 'code': 'NotFound', 'message': 'Layer not found' }
+
+            def map_field_type(field):
+                try:
+                    tname = (field.typeName() or '').lower()
+                except Exception:
+                    tname = ''
+                try:
+                    length = int(field.length()) if hasattr(field, 'length') else 0
+                except Exception:
+                    length = 0
+                if 'date' in tname or 'time' in tname:
+                    return 'date'
+                if any(k in tname for k in ('int', 'double', 'real', 'float', 'numeric', 'decimal')):
+                    return 'number'
+                if 'bool' in tname:
+                    return 'boolean'
+                if length and length > 255:
+                    return 'textarea'
+                return 'text'
+
+            pk_names = set()
+            try:
+                dp = lyr.dataProvider() if hasattr(lyr, 'dataProvider') else None
+                pk_idxs = []
+                if dp is not None and hasattr(dp, 'pkAttributeIndexes'):
+                    try:
+                        raw = dp.pkAttributeIndexes()
+                        pk_idxs = [int(i) for i in list(raw) if i is not None]
+                    except Exception:
+                        pk_idxs = []
+                elif dp is not None and hasattr(dp, 'primaryKeyAttributes'):
+                    try:
+                        raw = dp.primaryKeyAttributes()
+                        pk_idxs = [int(i) for i in list(raw) if i is not None]
+                    except Exception:
+                        pk_idxs = []
+                if pk_idxs:
+                    flds = lyr.fields()
+                    for i in pk_idxs:
+                        if 0 <= i < flds.count():
+                            try:
+                                pk_names.add(str(flds.at(i).name() or '').strip().lower())
+                            except Exception:
+                                pass
+            except Exception:
+                pk_names = set()
+
+            attributes = []
+            try:
+                flds = lyr.fields()
+                for i in range(flds.count()):
+                    f = flds.at(i)
+                    name = str(f.name() or '').strip()
+                    if not name:
+                        continue
+                    lname = name.lower()
+                    entry_type = 'hidden' if lname in pk_names or lname in ('gid', 'id', 'fid', 'objectid') else map_field_type(f)
+                    entry = {
+                        'name': name,
+                        'title': name,
+                        'type': entry_type
+                    }
+                    try:
+                        length = int(f.length()) if hasattr(f, 'length') else 0
+                        if length and length > 0:
+                            entry['maxLength'] = length
+                    except Exception:
+                        pass
+                    attributes.append(entry)
+            except Exception:
+                attributes = []
+
+            return { 'status': 'success', 'attributes': attributes }
+
+        if action in ('search_features', 'wfs_search'):
+            type_name = params.get('type_name') or params.get('typename') or params.get('layer')
+            query = params.get('query') or params.get('q') or ''
+            fields = params.get('fields') or []
+            limit = params.get('limit')
+            try:
+                limit = int(limit) if limit is not None else 10
+            except Exception:
+                limit = 10
+            if limit < 1:
+                limit = 1
+            if limit > 200:
+                limit = 200
+
+            if not type_name:
+                return { 'status': 'error', 'code': 'MissingParameterValue', 'message': 'Missing type_name' }
+
+            requested_type = str(type_name).strip()
+            lyr = _find_vector_layer_by_typename(proj, requested_type)
+            if lyr is None:
+                return { 'status': 'error', 'code': 'NotFound', 'message': 'Layer not found' }
+
+            # Normalize fields: allow case-insensitive matches
+            try:
+                available = [f.name() for f in lyr.fields()]
+                available_lower = {f.name().lower(): f.name() for f in lyr.fields()}
+            except Exception:
+                available = []
+                available_lower = {}
+
+            normalized_fields = []
+            if isinstance(fields, list):
+                for f in fields:
+                    if f in available:
+                        normalized_fields.append(f)
+                    else:
+                        key = str(f).lower()
+                        if key in available_lower:
+                            normalized_fields.append(available_lower[key])
+
+            if not normalized_fields:
+                normalized_fields = available
+
+            import unicodedata
+            def _norm_text(value):
+                try:
+                    text = str(value)
+                except Exception:
+                    text = ''
+                text = unicodedata.normalize('NFKC', text)
+                text = text.strip()
+                try:
+                    text = text.casefold()
+                except Exception:
+                    text = text.lower()
+                # collapse whitespace
+                text = re.sub(r'\s+', ' ', text)
+                return text
+
+            q = _norm_text(query)
+            if not q:
+                return { 'status': 'success', 'results': [] }
+
+            expr_str = None
+
+            results = []
+
+            def append_feature(feature):
+                row = { 'id': feature.id(), '_layer': requested_type }
+                try:
+                    for fname in available:
+                        row[fname] = feature[fname]
+                except Exception:
+                    pass
+                try:
+                    geom = feature.geometry()
+                    row['geometry'] = geom.asWkt() if geom is not None else None
+                    try:
+                        if geom is not None and not geom.isEmpty():
+                            centroid = geom.centroid()
+                            row['geometry_centroid'] = centroid.asWkt() if centroid is not None else None
+                    except Exception:
+                        row['geometry_centroid'] = None
+                except Exception:
+                    row['geometry'] = None
+                    row['geometry_centroid'] = None
+                results.append(row)
+
+            try:
+                for feature in lyr.getFeatures():
+                    matched = False
+                    for fname in normalized_fields:
+                        try:
+                            val = feature[fname]
+                            if val is None:
+                                continue
+                            text = _norm_text(val)
+                            if not text:
+                                continue
+                            # match at string start or any token start
+                            if text.startswith(q):
+                                matched = True
+                                break
+                            for token in text.split(' '):
+                                if token.startswith(q):
+                                    matched = True
+                                    break
+                        except Exception:
+                            continue
+                        if matched:
+                            break
+                    if matched:
+                        append_feature(feature)
+                        if len(results) >= limit:
+                            break
+            except Exception:
+                pass
+
+            return { 'status': 'success', 'results': results }
 
         if action in ('wfs_describe', 'wfs_describefeaturetype'):
             type_name = params.get('type_name') or params.get('typename')
@@ -782,21 +1003,50 @@ def process_task(params):
                     rect = None
 
             max_features = params.get('max_features')
+            hard_limit_override = params.get('hard_limit_override')
             start_index = params.get('start_index')
             env_default = os.getenv('WFS_DEFAULT_MAX_FEATURES')
             env_hard_limit = os.getenv('WFS_MAX_FEATURES_LIMIT')
+            env_absolute_limit = os.getenv('WFS_MAX_FEATURES_ABSOLUTE_LIMIT')
+            env_auto_expand = os.getenv('WFS_AUTO_EXPAND_LIMIT')
+
+            auto_expand = True
+            if env_auto_expand is not None:
+                raw_auto = str(env_auto_expand).strip().lower()
+                if raw_auto in ('0', 'false', 'no', 'off'):
+                    auto_expand = False
+                elif raw_auto in ('1', 'true', 'yes', 'on'):
+                    auto_expand = True
+
             try:
-                default_max = int(env_default) if env_default is not None else 1000
+                hard_limit = int(env_hard_limit) if env_hard_limit is not None else 50000
             except Exception:
-                default_max = 1000
-            if default_max < 1:
-                default_max = 1
-            try:
-                hard_limit = int(env_hard_limit) if env_hard_limit is not None else 10000
-            except Exception:
-                hard_limit = 10000
+                hard_limit = 50000
             if hard_limit < 1:
                 hard_limit = 1
+
+            try:
+                absolute_limit = int(env_absolute_limit) if env_absolute_limit is not None else 250000
+            except Exception:
+                absolute_limit = 250000
+            if absolute_limit < 1:
+                absolute_limit = 1
+
+            try:
+                hard_limit_override = int(hard_limit_override) if hard_limit_override is not None else None
+            except Exception:
+                hard_limit_override = None
+            if auto_expand and hard_limit_override is not None and hard_limit_override > hard_limit:
+                hard_limit = min(hard_limit_override, max(hard_limit, absolute_limit))
+
+            try:
+                default_max = int(env_default) if env_default is not None else hard_limit
+            except Exception:
+                default_max = hard_limit
+            if default_max < 1:
+                default_max = 1
+            if default_max > hard_limit:
+                default_max = hard_limit
             try:
                 max_features = int(max_features) if max_features is not None else default_max
             except Exception:
@@ -1916,8 +2166,11 @@ def process_task(params):
             raise ValueError('Render failed: no image produced')
 
         _atomic_save_with_format(img, output_file, save_fmt)
-        
-        return {"status": "success", "file": output_file}
+
+        skip_white = str(os.environ.get("SKIP_WHITE_TILES", "0")).strip().lower() in ("1", "true", "yes")
+        blank = _is_white_tile(img) if skip_white else False
+
+        return {"status": "success", "file": output_file, "blank": blank}
 
     except Exception as e:
         return {"status": "error", "message": str(e), "trace": traceback.format_exc()}

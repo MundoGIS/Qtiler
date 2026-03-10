@@ -53,6 +53,14 @@ const clampInt = (value, { min = 1, max = 8192, fallback = null } = {}) => {
   return Math.max(min, Math.min(max, n));
 };
 
+const parseLimit = (value, fallback) => {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const WMS_MAX_PIXELS = parseLimit(process.env.QTILER_WMS_MAX_PIXELS, 4000000);
+const WMS_MAX_LAYERS = parseLimit(process.env.QTILER_WMS_MAX_LAYERS, 20);
+
 const normalizeCrs = (value) => {
   if (!value) return null;
   const raw = String(value).trim();
@@ -512,6 +520,13 @@ export const registerWmsRoutes = ({
         return;
       }
 
+      if (width * height > WMS_MAX_PIXELS) {
+        res.status(400).type("application/xml").send(
+          wmsExceptionXml(`Requested image size too large (max ${WMS_MAX_PIXELS} pixels).`, { code: "InvalidRequest" })
+        );
+        return;
+      }
+
       const formatRaw = String(getQueryCI(req, "FORMAT") || "image/png").trim().toLowerCase();
       const format = formatRaw.split(";")[0].trim();
       if (format !== "image/png" && format !== "image/jpeg" && format !== "image/jpg") {
@@ -526,6 +541,13 @@ export const registerWmsRoutes = ({
       const layers = parseCsv(getQueryCI(req, "LAYERS"));
       if (!layers.length) {
         res.status(400).type("application/xml").send(wmsExceptionXml("LAYERS is required"));
+        return;
+      }
+
+      if (layers.length > WMS_MAX_LAYERS) {
+        res.status(400).type("application/xml").send(
+          wmsExceptionXml(`Too many layers requested (max ${WMS_MAX_LAYERS}).`, { code: "InvalidRequest" })
+        );
         return;
       }
 

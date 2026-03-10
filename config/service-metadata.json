@@ -1,9 +1,9 @@
 {
   "serviceIdentification": {
-    "title": "Qtiler WMTS Service",
+    "title": "Qtiler Services",
     "abstract": "This is the fantastic Qtiler.",
-    "keywords": ["WMTS", "Qtiler", "GIS"],
-    "serviceType": "OGC WMTS",
+    "keywords": ["WMTS", "WMS", "WFS", "XYZ", "Qtiler", "GIS"],
+    "serviceType": "OGC WMTS, WMS, WFS, XYZ",
     "serviceTypeVersion": "1.0.0",
     "fees": "None",
     "accessConstraints": "none"
@@ -22,7 +22,7 @@
         "administrativeArea": "",
         "postalCode": "",
         "country": "Sweden",
-        "email": "abel.gonzalez@mundogis.se"
+        "email": "support@mundogis.se"
       }
     }
   },

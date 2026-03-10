@@ -510,6 +510,11 @@ a:focus {
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.layer-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .layer:hover,
 .layer:focus-within {
   transform: none;
@@ -521,6 +526,12 @@ a:focus {
 .meta {
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.layer .meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .layer-title {
@@ -590,6 +601,8 @@ a:focus {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .layer-actions-box {

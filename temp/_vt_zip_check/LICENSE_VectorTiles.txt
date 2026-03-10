@@ -1,0 +1,9 @@
+VectorTiles Commercial License
+
+Copyright (C) MundoGIS.
+All rights reserved.
+
+This plugin may be installed and used only with a valid Qtiler license and
+subject to the commercial agreement between MundoGIS and the licensee.
+
+For licensing and renewals, contact: support@mundogis.se

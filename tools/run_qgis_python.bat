@@ -1,23 +1,25 @@
+@echo off
 REM
 REM This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
 REM If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
 REM Copyright (C) 2025 MundoGIS.
 REM
-@echo off
 REM Wrapper to run QGIS Python with a flexible o4w environment.
 REM It prefers the OSGEO4W_BIN env var if present, otherwise falls back to C:\QGIS\bin.
+
+setlocal
 
 rem Build a list of candidate o4w_env.bat locations and call the first that exists
 if defined OSGEO4W_BIN (
 	if exist "%OSGEO4W_BIN%\o4w_env.bat" (
-		echo [RUN_QGIS_PY] calling o4w_env.bat at "%OSGEO4W_BIN%\o4w_env.bat"
+		echo [RUN_QGIS_PY] calling o4w_env.bat at "%OSGEO4W_BIN%\o4w_env.bat" >&2
 		call "%OSGEO4W_BIN%\o4w_env.bat"
 		goto :o4w_done
 	)
 )
 if defined QGIS_PREFIX (
 	if exist "%QGIS_PREFIX%\..\bin\o4w_env.bat" (
-		echo [RUN_QGIS_PY] calling o4w_env.bat at "%QGIS_PREFIX%\..\bin\o4w_env.bat"
+		echo [RUN_QGIS_PY] calling o4w_env.bat at "%QGIS_PREFIX%\..\bin\o4w_env.bat" >&2
 		call "%QGIS_PREFIX%\..\bin\o4w_env.bat"
 		goto :o4w_done
 	)
@@ -26,17 +28,72 @@ if defined QGIS_PREFIX (
 echo [RUN_QGIS_PY] o4w_env.bat not found in provided environment variables >&2
 echo [RUN_QGIS_PY] set `OSGEO4W_BIN` or `QGIS_PREFIX` in .env and restart >&2
 :o4w_done
-:o4w_done
+
+rem Normalize QGIS_PREFIX for standalone installs and export QGIS_PREFIX_PATH explicitly.
+if not defined QGIS_PREFIX (
+	if defined OSGEO4W_BIN (
+		if exist "%OSGEO4W_BIN%\..\apps\qgis" set "QGIS_PREFIX=%OSGEO4W_BIN%\..\apps\qgis"
+	)
+)
+if defined QGIS_PREFIX (
+	if exist "%QGIS_PREFIX%\apps\qgis" set "QGIS_PREFIX=%QGIS_PREFIX%\apps\qgis"
+	set "QGIS_PREFIX_PATH=%QGIS_PREFIX%"
+	set "PATH=%QGIS_PREFIX%\bin;%PATH%"
+	if exist "%QGIS_PREFIX%\python" set "PYTHONPATH=%QGIS_PREFIX%\python;%QGIS_PREFIX%\python\plugins;%PYTHONPATH%"
+)
 
 rem Finally, run python — prefer explicit PYTHON_EXE if provided
 if defined PYTHON_EXE (
 	if exist "%PYTHON_EXE%" (
-		echo [RUN_QGIS_PY] using PYTHON_EXE: %PYTHON_EXE%
-		"%PYTHON_EXE%" %*
-		goto :eof
+		echo [RUN_QGIS_PY] using PYTHON_EXE: %PYTHON_EXE% >&2
+		"%PYTHON_EXE%" -c "import qgis" >nul 2>&1
+		if not errorlevel 1 (
+			"%PYTHON_EXE%" %*
+			goto :eof
+		) else (
+			echo [RUN_QGIS_PY] PYTHON_EXE cannot import qgis, trying fallbacks... >&2
+		)
 	) else (
 		echo [RUN_QGIS_PY] PYTHON_EXE is defined but not found: %PYTHON_EXE% >&2
 	)
 )
-echo [RUN_QGIS_PY] No usable PYTHON_EXE found; ensure `PYTHON_EXE` is set in .env and points to a valid python executable >&2
+
+rem Prefer direct python.exe from OSGEO4W bin before wrapper bat files.
+if defined OSGEO4W_BIN (
+	if exist "%OSGEO4W_BIN%\python.exe" (
+		echo [RUN_QGIS_PY] trying %OSGEO4W_BIN%\python.exe >&2
+		"%OSGEO4W_BIN%\python.exe" -c "import qgis" >nul 2>&1
+		if not errorlevel 1 (
+			"%OSGEO4W_BIN%\python.exe" %*
+			goto :eof
+		)
+	)
+)
+
+rem Try common OSGeo4W wrapper launchers first
+if defined OSGEO4W_BIN (
+	if exist "%OSGEO4W_BIN%\python-qgis-ltr.bat" (
+		echo [RUN_QGIS_PY] using %OSGEO4W_BIN%\python-qgis-ltr.bat >&2
+		call "%OSGEO4W_BIN%\python-qgis-ltr.bat" %*
+		goto :eof
+	)
+	if exist "%OSGEO4W_BIN%\python-qgis.bat" (
+		echo [RUN_QGIS_PY] using %OSGEO4W_BIN%\python-qgis.bat >&2
+		call "%OSGEO4W_BIN%\python-qgis.bat" %*
+		goto :eof
+	)
+)
+
+rem Fallback to python from PATH (after o4w_env it should be QGIS Python)
+where python >nul 2>&1
+if not errorlevel 1 (
+	echo [RUN_QGIS_PY] using python from PATH >&2
+	python -c "import qgis" >nul 2>&1
+	if not errorlevel 1 (
+		python %*
+		goto :eof
+	)
+)
+
+echo [RUN_QGIS_PY] No usable QGIS Python found. Configure OSGEO4W_BIN and/or PYTHON_EXE to a QGIS-enabled Python interpreter. >&2
 exit /b 2

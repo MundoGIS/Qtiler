@@ -2,6 +2,10 @@
 node_modules/
 PLUGINS.md
 
+# Environment files
+.env
+
+
 # Logs
 logs/
 *.log
@@ -12,6 +16,11 @@ cache/
 # Temporary files
 temp_uploads/
 temp_zip/
+temp_zip_qrigo/
+temp_zip_vectortiles/
+temp_zip_wmscache/
+temp_zip_qtilerauth/
+temp_zip_projectsearch/
 
 # Build and extras
 dist/
@@ -23,7 +32,9 @@ daemon/
 data/auth-config.json
 data/auth-users.json
 data/project-access.json
+data/licenses.json
 data/auth/
+tools/licenses/
 
 
 
@@ -43,9 +54,15 @@ tools/generate-qtilerauth-license.js
 tools/package-plugin.ps1
 plugins/QtilerAuth/LICENSE_QtilerAuth.txt
 package-qtilerauth.bat
-tools/generate-qtilerauth-license.js
 tools/inspect_png_q.py
 tools/inspect_png_raw.py
 tools/set-admin-password.mjs
 tools/package-auth-plugin.mjs
+tools/package-qrigo-plugin.mjs
+tools/package-projectsearch-plugin.mjs
+tools/package-vectortiles-plugin.mjs
+tools/package-wmscache-plugin.mjs
+tools/generate-license.mjs
+tools/generate-license-ui.mjs
+
 public/Thirdparty
