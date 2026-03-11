@@ -5600,6 +5600,66 @@
         });
       }
 
+      function confirmActionModal({ title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', isDanger = false } = {}) {
+        return new Promise((resolve) => {
+          const backdrop = document.createElement('div');
+          backdrop.className = 'schedule-backdrop';
+          backdrop.dataset.open = '1';
+
+          const dialog = document.createElement('div');
+          dialog.className = 'schedule-dialog';
+          dialog.style.maxWidth = '520px';
+
+          const titleEl = document.createElement('h3');
+          titleEl.textContent = String(title || 'Confirm action');
+          titleEl.style.marginBottom = '8px';
+
+          const messageEl = document.createElement('p');
+          messageEl.className = 'dialog-description';
+          messageEl.style.whiteSpace = 'pre-line';
+          messageEl.textContent = String(message || '');
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.gap = '10px';
+          actions.style.marginTop = '14px';
+          actions.style.justifyContent = 'flex-end';
+
+          const btnCancel = document.createElement('button');
+          btnCancel.type = 'button';
+          btnCancel.className = 'btn btn-secondary';
+          btnCancel.textContent = String(cancelLabel || 'Cancel');
+
+          const btnConfirm = document.createElement('button');
+          btnConfirm.type = 'button';
+          btnConfirm.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+          btnConfirm.textContent = String(confirmLabel || 'Confirm');
+
+          actions.append(btnCancel, btnConfirm);
+          dialog.append(titleEl, messageEl, actions);
+          backdrop.appendChild(dialog);
+          document.body.appendChild(backdrop);
+
+          const cleanup = (value) => {
+            try { document.removeEventListener('keydown', onKeyDown); } catch {}
+            try { backdrop.remove(); } catch {}
+            resolve(value === true);
+          };
+
+          const onKeyDown = (event) => {
+            if (event.key === 'Escape') cleanup(false);
+          };
+
+          backdrop.addEventListener('click', (event) => {
+            if (event.target === backdrop) cleanup(false);
+          });
+          btnCancel.addEventListener('click', () => cleanup(false));
+          btnConfirm.addEventListener('click', () => cleanup(true));
+          document.addEventListener('keydown', onKeyDown);
+          btnConfirm.focus();
+        });
+      }
+
       async function deleteCache(btn, projectId, layerName) {
         const cacheType = await chooseCacheDeleteType();
         if (!cacheType) return;
@@ -5645,7 +5705,14 @@
       async function deleteProject(btn, project) {
         if (!project || !project.id) return;
         const message = `Delete project "${project.name || project.id}"? This also removes cached tiles.`;
-        if (!window.confirm(message)) return;
+        const confirmedDelete = await confirmActionModal({
+          title: tr('Delete project'),
+          message,
+          confirmLabel: tr('Delete project'),
+          cancelLabel: tr('Cancel'),
+          isDanger: true
+        });
+        if (!confirmedDelete) return;
         const initialDisabled = btn.disabled;
         const originalHtml = btn.innerHTML;
         const originalTitle = btn.title;
@@ -5661,8 +5728,41 @@
         btn.setAttribute('aria-busy', 'true');
         showStatus('Deleting project: ' + (project.name || project.id));
         try {
-          const res = await fetch('/projects/' + encodeURIComponent(project.id), { method: 'DELETE' });
-          const data = await res.json().catch(() => null);
+          const requestDelete = async (retry = false) => {
+            const suffix = retry ? '?retry=1' : '';
+            const response = await fetch('/projects/' + encodeURIComponent(project.id) + suffix, { method: 'DELETE' });
+            const payload = await response.json().catch(() => null);
+            return { response, payload };
+          };
+
+          let { response: res, payload: data } = await requestDelete(false);
+
+          if (!res.ok && data?.error === 'project_delete_partial') {
+            const paths = Array.isArray(data?.remainingPaths) ? data.remainingPaths : [];
+            const errSummary = Array.isArray(data?.cleanupErrors)
+              ? data.cleanupErrors.map((item) => `${item.scope}: ${item.message}`).join('\n')
+              : '';
+            const detailText = [
+              'No se pudo eliminar completamente el proyecto.',
+              paths.length ? `Pendiente:\n- ${paths.join('\n- ')}` : '',
+              errSummary ? `Errores:\n${errSummary}` : '',
+              '',
+              'Quieres reintentar ahora?'
+            ].filter(Boolean).join('\n\n');
+
+            showStatus('Project deleted partially. Some files are still present.', true);
+            const confirmedRetry = await confirmActionModal({
+              title: 'Partial delete',
+              message: detailText,
+              confirmLabel: 'Retry delete',
+              cancelLabel: tr('Cancel'),
+              isDanger: true
+            });
+            if (confirmedRetry) {
+              ({ response: res, payload: data } = await requestDelete(true));
+            }
+          }
+
           if (!res.ok) {
             const detail = data?.error || data?.details || res.statusText;
             showStatus('Delete project failed: ' + detail, true);

@@ -9,6 +9,7 @@ import os from "os";
 import path from "path";
 import yauzl from "yauzl";
 import { pipeline } from "stream/promises";
+import { spawnSync } from "child_process";
 
 const redactSecrets = (value) => {
   const input = value == null ? "" : String(value);
@@ -173,8 +174,33 @@ export const registerProjectRoutes = ({
     const projectDirExists = isDirectory(projectDirCandidate);
     const inProjectDir = projFileResolved.toLowerCase().startsWith(projectDirResolved.toLowerCase() + path.sep);
 
+    const abortProjectTileRenders = (projectId, reason = 'project_replace') => {
+      const pid = String(projectId || '').trim();
+      if (!pid) return { cancelledQueued: 0, abortedRunning: 0 };
+      try {
+        if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+          return tileRendererPool.abortMatching((params) => {
+            try {
+              if (!params || typeof params !== 'object') return false;
+              if (String(params.project || '') === pid) return true;
+              const projectPath = String(params.project_path || '').replace(/\\/g, '/').toLowerCase();
+              if (!projectPath) return false;
+              return projectPath.includes(`/qgisprojects/${pid.toLowerCase()}/`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgz`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgs`);
+            } catch {
+              return false;
+            }
+          }, { reason });
+        }
+      } catch {}
+
+      try {
+        tileRendererPool?.abortAll?.({ reason });
+      } catch {}
+      return { cancelledQueued: 0, abortedRunning: 0 };
+    };
+
     try {
-      tileRendererPool?.abortAll?.({ reason: 'project_replace' });
+      abortProjectTileRenders(proj.id, 'project_replace');
     } catch {}
 
     if (projectDirExists && inProjectDir && projectDirResolved.toLowerCase().startsWith(projectsRootResolved + path.sep)) {
@@ -228,6 +254,53 @@ export const registerProjectRoutes = ({
       await fs.promises.rm(projectConfigPath, { force: true });
       projectConfigCache.delete(projectId);
     }
+  };
+
+  const abortProjectScopedPoolWork = (projectId, reason = 'project_upload_cleanup') => {
+    const pid = String(projectId || '').trim();
+    if (!pid) return;
+    try {
+      if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+        tileRendererPool.abortMatching((params) => {
+          try {
+            if (!params || typeof params !== 'object') return false;
+            if (String(params.project || '') === pid) return true;
+            const projectPath = String(params.project_path || '').replace(/\\/g, '/').toLowerCase();
+            if (!projectPath) return false;
+            return projectPath.includes(`/qgisprojects/${pid.toLowerCase()}/`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgz`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgs`);
+          } catch {
+            return false;
+          }
+        }, { reason });
+        return;
+      }
+    } catch {}
+    try { tileRendererPool?.abortAll?.({ reason }); } catch {}
+  };
+
+  const clearZipTargetDirectory = async (projectId, targetDir) => {
+    if (!targetDir) return;
+    const attempts = 14;
+    let lastErr = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        abortProjectScopedPoolWork(projectId, 'zip_target_cleanup');
+      } catch {}
+      try {
+        await fs.promises.rm(targetDir, { recursive: true, force: true });
+        return;
+      } catch (err) {
+        lastErr = err;
+        const code = String(err?.code || '');
+        if (code === 'ENOENT') return;
+        if (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES') {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (lastErr) throw lastErr;
   };
 
   // listar proyectos
@@ -461,6 +534,20 @@ export const registerProjectRoutes = ({
           const relProjectPosix = path.posix.normalize(String(projectEntry.name || '').replace(/^\/+/, ''));
           const projectParts = relProjectPosix.split('/').filter(Boolean);
 
+          // Ensure we never extract on top of stale leftovers from a partial/locked delete.
+          // This prevents mixed old/new data (e.g. lingering .dbf/.shp) and upload conflicts.
+          try {
+            if (fs.existsSync(targetDir)) {
+              await clearZipTargetDirectory(projectId, targetDir);
+            }
+          } catch (cleanupErr) {
+            return res.status(423).json({
+              error: 'project_target_locked',
+              message: 'Project upload target is locked by another process. Retry in a few seconds.',
+              details: redactSecrets(String(cleanupErr?.message || cleanupErr))
+            });
+          }
+
           await fs.promises.mkdir(targetDir, { recursive: true });
           const targetRootResolved = path.resolve(targetDir);
           const targetRootLower = targetRootResolved.toLowerCase();
@@ -658,7 +745,114 @@ export const registerProjectRoutes = ({
     return false;
   };
 
-  const removeWithWorkerReset = async (targetPath, { isDir = false } = {}) => {
+  const escapePowerShellSingleQuote = (value) => String(value || '').replace(/'/g, "''");
+
+  const findWindowsLockingPids = ({ needles = [] } = {}) => {
+    if (process.platform !== 'win32') return [];
+    const cleanNeedles = (Array.isArray(needles) ? needles : [needles])
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (!cleanNeedles.length) return [];
+
+    const psNeedles = cleanNeedles.map((entry) => `'${escapePowerShellSingleQuote(entry)}'`).join(', ');
+    const script = [
+      `$needles = @(${psNeedles})`,
+      "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {",
+      "  $_.Name -in @('qgis-bin.exe','qgis.exe','python.exe','pythonw.exe','cmd.exe')",
+      "}",
+      "$ids = @()",
+      "foreach($proc in $p){",
+      "  $cmd = [string]$proc.CommandLine",
+      "  if([string]::IsNullOrWhiteSpace($cmd)){ continue }",
+      "  foreach($n in $needles){",
+      "    if($cmd -like \"*$n*\"){ $ids += [int]$proc.ProcessId; break }",
+      "  }",
+      "}",
+      "$ids | Sort-Object -Unique | ForEach-Object { $_ }"
+    ].join('; ');
+
+    try {
+      const out = spawnSync('powershell', ['-NoProfile', '-Command', script], {
+        windowsHide: true,
+        encoding: 'utf8'
+      });
+      const text = String(out?.stdout || '');
+      return text
+        .split(/\r?\n/)
+        .map((line) => Number(String(line || '').trim()))
+        .filter((pid) => Number.isFinite(pid) && pid > 0);
+    } catch {
+      return [];
+    }
+  };
+
+  const forceKillWindowsPids = (pids = []) => {
+    if (process.platform !== 'win32') return;
+    const list = [...new Set((Array.isArray(pids) ? pids : [pids])
+      .map((pid) => Number(pid))
+      .filter((pid) => Number.isFinite(pid) && pid > 0))];
+    list.forEach((pid) => {
+      try {
+        spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore'
+        });
+      } catch {
+        // best effort
+      }
+    });
+  };
+
+  const forceKillWindowsByImageNames = (names = []) => {
+    if (process.platform !== 'win32') return;
+    const list = [...new Set((Array.isArray(names) ? names : [names])
+      .map((name) => String(name || '').trim())
+      .filter(Boolean))];
+    list.forEach((imageName) => {
+      try {
+        spawnSync('taskkill', ['/IM', imageName, '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore'
+        });
+      } catch {
+        // best effort
+      }
+    });
+  };
+
+  const releaseProjectLocks = async ({ targetPath = '', projectId = '' } = {}) => {
+    if (process.platform !== 'win32') return;
+    const target = String(targetPath || '').trim();
+    const project = String(projectId || '').trim();
+    const candidates = [];
+
+    if (target) {
+      const resolved = path.resolve(target);
+      candidates.push(resolved);
+      candidates.push(path.dirname(resolved));
+    }
+    if (project) {
+      candidates.push(path.join(projectsDir, project));
+      candidates.push(`\\qgisprojects\\${project}`);
+      candidates.push(`/${project}`);
+    }
+
+    const pids = findWindowsLockingPids({ needles: candidates });
+    if (pids.length) {
+      forceKillWindowsPids(pids);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      return;
+    }
+
+    // Fallback: some Windows locks (e.g. shapefile sidecars like .dbf/.shx)
+    // are not discoverable from process command lines. In that case, do a
+    // best-effort kill of likely render processes before retrying delete.
+    forceKillWindowsByImageNames(['qgis-bin.exe', 'qgis.exe', 'python.exe', 'pythonw.exe', 'cmd.exe']);
+    await new Promise((resolve) => setTimeout(resolve, 650));
+  };
+
+  const removeWithWorkerReset = async (targetPath, { isDir = false, projectId = '' } = {}) => {
     try {
       return await removePathWithRetries(targetPath, { isDir });
     } catch (err) {
@@ -667,6 +861,7 @@ export const registerProjectRoutes = ({
         try {
           tileRendererPool?.abortAll?.({ reason: 'project_delete' });
         } catch {}
+        await releaseProjectLocks({ targetPath, projectId });
         await new Promise((resolve) => setTimeout(resolve, 500));
         return await removePathWithRetries(targetPath, { isDir });
       }
@@ -674,14 +869,165 @@ export const registerProjectRoutes = ({
     }
   };
 
+  const abortProjectTileRenders = (projectId, reason = 'project_delete') => {
+    const pid = String(projectId || '').trim();
+    if (!pid) return { cancelledQueued: 0, abortedRunning: 0 };
+    try {
+      if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+        return tileRendererPool.abortMatching((params) => {
+          try {
+            if (!params || typeof params !== 'object') return false;
+            if (String(params.project || '') === pid) return true;
+            const projectPath = String(params.project_path || '').replace(/\\/g, '/').toLowerCase();
+            if (!projectPath) return false;
+            return projectPath.includes(`/qgisprojects/${pid.toLowerCase()}/`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgz`) || projectPath.endsWith(`/${pid.toLowerCase()}.qgs`);
+          } catch {
+            return false;
+          }
+        }, { reason });
+      }
+    } catch {}
+
+    try {
+      tileRendererPool?.abortAll?.({ reason });
+    } catch {}
+    return { cancelledQueued: 0, abortedRunning: 0 };
+  };
+
+  const vectorTilesStorePath = path.join(process.cwd(), 'data', 'VectorTiles', 'tilesets.json');
+  const pendingBackgroundProjectCleanup = new Set();
+  const removeVectorTilesRegistryEntries = async (projectIds = []) => {
+    const ids = [...new Set((Array.isArray(projectIds) ? projectIds : [projectIds])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean))];
+    if (!ids.length) return { updated: false };
+    if (!fs.existsSync(vectorTilesStorePath)) return { updated: false };
+
+    const raw = await fs.promises.readFile(vectorTilesStorePath, 'utf8');
+    const parsed = JSON.parse(raw || '{}');
+    const items = parsed && parsed.items && typeof parsed.items === 'object' ? { ...parsed.items } : {};
+    let changed = false;
+    ids.forEach((id) => {
+      if (Object.prototype.hasOwnProperty.call(items, id)) {
+        delete items[id];
+        changed = true;
+      }
+    });
+    if (!changed) return { updated: false };
+
+    await fs.promises.mkdir(path.dirname(vectorTilesStorePath), { recursive: true });
+    await fs.promises.writeFile(vectorTilesStorePath, JSON.stringify({ ...parsed, items }, null, 2), 'utf8');
+    return { updated: true };
+  };
+
+  const startBackgroundProjectCleanup = (projectId, paths = []) => {
+    const id = String(projectId || '').trim();
+    if (!id || pendingBackgroundProjectCleanup.has(id)) return;
+    pendingBackgroundProjectCleanup.add(id);
+
+    setTimeout(async () => {
+      try {
+        const uniquePaths = [...new Set((Array.isArray(paths) ? paths : [paths])
+          .map((p) => String(p || '').trim())
+          .filter(Boolean))];
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          try {
+            tileRendererPool?.abortAll?.({ reason: 'project_delete_background_cleanup' });
+          } catch {}
+
+          for (const targetPath of uniquePaths) {
+            try {
+              if (!fs.existsSync(targetPath)) continue;
+              let isDir = false;
+              try {
+                isDir = fs.statSync(targetPath).isDirectory();
+              } catch {
+                isDir = targetPath.toLowerCase().includes(`${path.sep}qgisprojects${path.sep}`) || targetPath.toLowerCase().includes(`${path.sep}cache${path.sep}`);
+              }
+              await removeWithWorkerReset(targetPath, { isDir, projectId: id });
+            } catch {
+              // keep retrying
+            }
+          }
+
+          try {
+            await removeVectorTilesRegistryEntries([id]);
+          } catch {}
+
+          const stillThere = uniquePaths.some((p) => {
+            try {
+              return fs.existsSync(p);
+            } catch {
+              return false;
+            }
+          });
+          if (!stillThere) break;
+          await new Promise((resolve) => setTimeout(resolve, 1250));
+        }
+      } finally {
+        pendingBackgroundProjectCleanup.delete(id);
+      }
+    }, 100);
+  };
+
   app.delete("/projects/:id", requireAdmin, async (req, res) => {
     const projectId = req.params.id;
     if (!projectId) {
       return res.status(400).json({ error: "project_id_required" });
     }
+    const retryCleanup = String(req.query?.retry || '') === '1';
     const proj = findProjectById(projectId);
-    if (!proj) {
+    if (!proj && !retryCleanup) {
       return res.status(404).json({ error: "project_not_found" });
+    }
+
+    const cleanupErrors = [];
+    const addCleanupError = (scope, err) => {
+      cleanupErrors.push({
+        scope,
+        message: String(err?.message || err || 'unknown_error')
+      });
+    };
+
+    const vectorTilesCacheDir = path.join(process.cwd(), 'cache', 'vector-tiles', projectId);
+    const knownProjectDir = path.join(projectsDir, projectId);
+    const bestEffortRemove = async (targetPath, { isDir = false, scope = 'cleanup' } = {}) => {
+      if (!targetPath) return;
+      try {
+        if (!fs.existsSync(targetPath)) return;
+        await removeWithWorkerReset(targetPath, { isDir, projectId });
+      } catch (err) {
+        addCleanupError(scope, err);
+      }
+    };
+
+    if (!proj && retryCleanup) {
+      try { abortProjectTileRenders(projectId, 'project_delete_retry'); } catch {}
+      await bestEffortRemove(knownProjectDir, { isDir: true, scope: 'project_dir' });
+      await bestEffortRemove(path.join(cacheDir, projectId), { isDir: true, scope: 'cache_dir' });
+      await bestEffortRemove(vectorTilesCacheDir, { isDir: true, scope: 'vectortiles_cache_dir' });
+      try {
+        await removeVectorTilesRegistryEntries([projectId]);
+      } catch (err) {
+        addCleanupError('vectortiles_registry', err);
+      }
+
+      const remainingPaths = [knownProjectDir, path.join(cacheDir, projectId), vectorTilesCacheDir]
+        .filter((p) => fs.existsSync(p));
+      if (cleanupErrors.length || remainingPaths.length) {
+        startBackgroundProjectCleanup(projectId, remainingPaths);
+        return res.json({
+          status: 'cleanup_retry_pending',
+          id: projectId,
+          retryable: true,
+          cleanupErrors,
+          remainingPaths,
+          details: 'Project metadata is already gone. Locked files are being removed in the background.'
+        });
+      }
+
+      return res.json({ status: 'cleanup_retry_done', id: projectId, cacheRemoved: true });
     }
 
     for (const [jobId, job] of runningJobs.entries()) {
@@ -701,6 +1047,8 @@ export const registerProjectRoutes = ({
       }
     }
 
+    try { abortProjectTileRenders(proj.id, 'project_delete'); } catch {}
+
     let removedProjectDir = false;
     try {
       const projectDirCandidate = path.join(projectsDir, proj.id);
@@ -711,23 +1059,26 @@ export const registerProjectRoutes = ({
       const inProjectDir = projFileResolved.toLowerCase().startsWith(projectDirResolved.toLowerCase() + path.sep);
 
       if (projectDirExists && inProjectDir && projectDirResolved.toLowerCase().startsWith(projectsRootResolved.toLowerCase() + path.sep)) {
-        await removeWithWorkerReset(projectDirCandidate, { isDir: true });
+        await removeWithWorkerReset(projectDirCandidate, { isDir: true, projectId: proj.id });
         removedProjectDir = true;
       } else {
-        await removeWithWorkerReset(proj.file, { isDir: false });
+        await removeWithWorkerReset(proj.file, { isDir: false, projectId: proj.id });
       }
 
       // If the project file is inside a folder under projectsDir, remove that folder as well.
       if (!removedProjectDir) {
         const parentDir = path.dirname(projFileResolved);
         if (parentDir.toLowerCase().startsWith(projectsRootResolved.toLowerCase() + path.sep)) {
-          await removeWithWorkerReset(parentDir, { isDir: true });
+          await removeWithWorkerReset(parentDir, { isDir: true, projectId: proj.id });
           removedProjectDir = true;
         }
       }
     } catch (err) {
-      return res.status(500).json({ error: "delete_failed", details: String(err) });
+      addCleanupError('project_files', err);
     }
+
+    // Remove stale id-folder even when project file was outside it.
+    await bestEffortRemove(path.join(projectsDir, proj.id), { isDir: true, scope: 'project_dir_stale' });
 
     cancelProjectTimer(proj.id);
     projectConfigCache.delete(proj.id);
@@ -774,10 +1125,10 @@ export const registerProjectRoutes = ({
             console.warn(`[cleanup] Failed to read index.json for preset cleanup:`, indexErr);
           }
         }
-        await removeWithWorkerReset(projectCacheDir, { isDir: true });
+        await removeWithWorkerReset(projectCacheDir, { isDir: true, projectId: proj.id });
         cacheRemoved = true;
       } catch (err) {
-        return res.status(500).json({ error: "cache_delete_failed", details: String(err) });
+        addCleanupError('cache_dir', err);
       }
     }
 
@@ -787,32 +1138,95 @@ export const registerProjectRoutes = ({
       if (fileBase && fileBase !== proj.id) {
         const altCacheDir = path.join(cacheDir, fileBase);
         if (fs.existsSync(altCacheDir)) {
-          await removeWithWorkerReset(altCacheDir, { isDir: true });
+          await removeWithWorkerReset(altCacheDir, { isDir: true, projectId: proj.id });
         }
       }
     } catch (err) {
-      return res.status(500).json({ error: "cache_delete_failed", details: String(err) });
+      addCleanupError('cache_dir_alt', err);
+    }
+
+    // Also cleanup VectorTiles cache for this project when present.
+    await bestEffortRemove(path.join(process.cwd(), 'cache', 'vector-tiles', proj.id), { isDir: true, scope: 'vectortiles_cache_dir' });
+    try {
+      const fileBaseId = path.basename(proj.file).replace(/\.(qgz|qgs)$/i, '');
+      await removeVectorTilesRegistryEntries([proj.id, fileBaseId]);
+    } catch (err) {
+      addCleanupError('vectortiles_registry', err);
     }
 
     try {
       removeProjectAccessEntry(proj.id);
     } catch (err) {
       console.error("Failed to remove project access entry", proj.id, err);
-      return res.status(500).json({ error: "project_access_cleanup_failed", details: String(err?.message || err) });
+      addCleanupError('project_access_cleanup', err);
     }
 
     try {
       purgeProjectFromAuthUsers(proj.id);
     } catch (err) {
       console.error("Failed to purge project assignment", proj.id, err);
-      return res.status(500).json({ error: "project_auth_cleanup_failed", details: String(err?.message || err) });
+      addCleanupError('project_auth_cleanup', err);
     }
 
     try {
       removeProjectLogs(proj.id);
     } catch (err) {
       console.error("Failed to remove project logs", proj.id, err);
-      return res.status(500).json({ error: "project_log_cleanup_failed", details: String(err?.message || err) });
+      addCleanupError('project_log_cleanup', err);
+    }
+
+    let remainingPaths = [
+      path.join(projectsDir, proj.id),
+      proj.file,
+      path.join(cacheDir, proj.id),
+      path.join(process.cwd(), 'cache', 'vector-tiles', proj.id),
+      path.join(cacheDir, path.basename(proj.file).replace(/\.(qgz|qgs)$/i, ''))
+    ].filter((candidate, index, arr) => {
+      if (!candidate) return false;
+      if (arr.indexOf(candidate) !== index) return false;
+      try {
+        return fs.existsSync(candidate);
+      } catch {
+        return false;
+      }
+    });
+
+    if (remainingPaths.length) {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try { abortProjectTileRenders(proj.id, 'project_delete_final_sweep'); } catch {}
+        for (const targetPath of [...remainingPaths]) {
+          try {
+            let isDir = false;
+            try {
+              isDir = fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+            } catch {
+              isDir = targetPath.toLowerCase().includes(`${path.sep}qgisprojects${path.sep}`) || targetPath.toLowerCase().includes(`${path.sep}cache${path.sep}`);
+            }
+            await removeWithWorkerReset(targetPath, { isDir, projectId: proj.id });
+          } catch {
+            // keep retrying paths that remain
+          }
+        }
+
+        remainingPaths = remainingPaths.filter((candidate) => {
+          try { return fs.existsSync(candidate); } catch { return false; }
+        });
+        if (!remainingPaths.length) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    if (cleanupErrors.length || remainingPaths.length) {
+      startBackgroundProjectCleanup(proj.id, remainingPaths);
+      return res.json({
+        status: 'deleted_partial',
+        id: proj.id,
+        retryable: true,
+        cacheRemoved,
+        cleanupErrors,
+        remainingPaths,
+        details: 'Project was removed from the listing. Locked files are being removed in the background.'
+      });
     }
 
     return res.json({ status: "deleted", id: proj.id, cacheRemoved });

@@ -1,0 +1,1133 @@
+{
+  "id": "SCALES_EPSG_3006_bakgrunder",
+  "title": "Project scales for EPSG:3006 (bakgrunder)",
+  "supported_crs": [
+    "EPSG:3006"
+  ],
+  "coordinateReferenceSystem": "EPSG:3006",
+  "tile_width": 256,
+  "tile_height": 256,
+  "axis_order": "xy",
+  "top_left_corner": [
+    -1587706.6148621012,
+    7801041.355615949
+  ],
+  "topLeftCorner": [
+    -1587706.6148621012,
+    7801041.355615949
+  ],
+  "matrices": [
+    {
+      "identifier": "0",
+      "id": "0",
+      "z": 0,
+      "source_level": 0,
+      "resolution": 16980.068448818693,
+      "scale_denominator": 60643101.60292391,
+      "matrix_width": 1,
+      "matrix_height": 1,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "1",
+      "id": "1",
+      "z": 1,
+      "source_level": 1,
+      "resolution": 3359.9999999999995,
+      "scale_denominator": 12000000,
+      "matrix_width": 6,
+      "matrix_height": 3,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "2",
+      "id": "2",
+      "z": 2,
+      "source_level": 2,
+      "resolution": 2799.9999999999995,
+      "scale_denominator": 10000000,
+      "matrix_width": 7,
+      "matrix_height": 3,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "3",
+      "id": "3",
+      "z": 3,
+      "source_level": 3,
+      "resolution": 1399.9999999999998,
+      "scale_denominator": 5000000,
+      "matrix_width": 13,
+      "matrix_height": 5,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "4",
+      "id": "4",
+      "z": 4,
+      "source_level": 4,
+      "resolution": 839.9999999999999,
+      "scale_denominator": 3000000,
+      "matrix_width": 21,
+      "matrix_height": 9,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "5",
+      "id": "5",
+      "z": 5,
+      "source_level": 5,
+      "resolution": 280,
+      "scale_denominator": 1000000.0000000001,
+      "matrix_width": 61,
+      "matrix_height": 25,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "6",
+      "id": "6",
+      "z": 6,
+      "source_level": 6,
+      "resolution": 209.99999999999997,
+      "scale_denominator": 750000,
+      "matrix_width": 81,
+      "matrix_height": 34,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "7",
+      "id": "7",
+      "z": 7,
+      "source_level": 7,
+      "resolution": 140,
+      "scale_denominator": 500000.00000000006,
+      "matrix_width": 122,
+      "matrix_height": 50,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "8",
+      "id": "8",
+      "z": 8,
+      "source_level": 8,
+      "resolution": 70,
+      "scale_denominator": 250000.00000000003,
+      "matrix_width": 243,
+      "matrix_height": 100,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "9",
+      "id": "9",
+      "z": 9,
+      "source_level": 9,
+      "resolution": 55.99999999999999,
+      "scale_denominator": 200000,
+      "matrix_width": 304,
+      "matrix_height": 125,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "10",
+      "id": "10",
+      "z": 10,
+      "source_level": 10,
+      "resolution": 41.99999999999999,
+      "scale_denominator": 150000,
+      "matrix_width": 405,
+      "matrix_height": 166,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "11",
+      "id": "11",
+      "z": 11,
+      "source_level": 11,
+      "resolution": 27.999999999999996,
+      "scale_denominator": 100000,
+      "matrix_width": 607,
+      "matrix_height": 249,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "12",
+      "id": "12",
+      "z": 12,
+      "source_level": 12,
+      "resolution": 20.999999999999996,
+      "scale_denominator": 75000,
+      "matrix_width": 809,
+      "matrix_height": 332,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "13",
+      "id": "13",
+      "z": 13,
+      "source_level": 13,
+      "resolution": 13.999999999999998,
+      "scale_denominator": 50000,
+      "matrix_width": 1213,
+      "matrix_height": 497,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "14",
+      "id": "14",
+      "z": 14,
+      "source_level": 14,
+      "resolution": 6.999999999999999,
+      "scale_denominator": 25000,
+      "matrix_width": 2426,
+      "matrix_height": 994,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "15",
+      "id": "15",
+      "z": 15,
+      "source_level": 15,
+      "resolution": 5.6,
+      "scale_denominator": 20000,
+      "matrix_width": 3033,
+      "matrix_height": 1243,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "16",
+      "id": "16",
+      "z": 16,
+      "source_level": 16,
+      "resolution": 4.199999999999999,
+      "scale_denominator": 14999.999999999998,
+      "matrix_width": 4043,
+      "matrix_height": 1657,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "17",
+      "id": "17",
+      "z": 17,
+      "source_level": 17,
+      "resolution": 2.8,
+      "scale_denominator": 10000,
+      "matrix_width": 6065,
+      "matrix_height": 2485,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "18",
+      "id": "18",
+      "z": 18,
+      "source_level": 18,
+      "resolution": 2.0999999999999996,
+      "scale_denominator": 7499.999999999999,
+      "matrix_width": 8086,
+      "matrix_height": 3314,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "19",
+      "id": "19",
+      "z": 19,
+      "source_level": 19,
+      "resolution": 1.4,
+      "scale_denominator": 5000,
+      "matrix_width": 12129,
+      "matrix_height": 4970,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "20",
+      "id": "20",
+      "z": 20,
+      "source_level": 20,
+      "resolution": 0.7,
+      "scale_denominator": 2500,
+      "matrix_width": 24258,
+      "matrix_height": 9940,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "21",
+      "id": "21",
+      "z": 21,
+      "source_level": 21,
+      "resolution": 0.5599999999999999,
+      "scale_denominator": 2000,
+      "matrix_width": 30322,
+      "matrix_height": 12425,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "22",
+      "id": "22",
+      "z": 22,
+      "source_level": 22,
+      "resolution": 0.42,
+      "scale_denominator": 1500,
+      "matrix_width": 40429,
+      "matrix_height": 16566,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "23",
+      "id": "23",
+      "z": 23,
+      "source_level": 23,
+      "resolution": 0.27999999999999997,
+      "scale_denominator": 1000,
+      "matrix_width": 60644,
+      "matrix_height": 24849,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "24",
+      "id": "24",
+      "z": 24,
+      "source_level": 24,
+      "resolution": 0.21,
+      "scale_denominator": 750,
+      "matrix_width": 80858,
+      "matrix_height": 33132,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "25",
+      "id": "25",
+      "z": 25,
+      "source_level": 25,
+      "resolution": 0.13999999999999999,
+      "scale_denominator": 500,
+      "matrix_width": 121287,
+      "matrix_height": 49698,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "26",
+      "id": "26",
+      "z": 26,
+      "source_level": 26,
+      "resolution": 0.055999999999999994,
+      "scale_denominator": 200,
+      "matrix_width": 303216,
+      "matrix_height": 124245,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    }
+  ],
+  "matrixSet": [
+    {
+      "identifier": "0",
+      "id": "0",
+      "z": 0,
+      "source_level": 0,
+      "resolution": 16980.068448818693,
+      "scale_denominator": 60643101.60292391,
+      "matrix_width": 1,
+      "matrix_height": 1,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "1",
+      "id": "1",
+      "z": 1,
+      "source_level": 1,
+      "resolution": 3359.9999999999995,
+      "scale_denominator": 12000000,
+      "matrix_width": 6,
+      "matrix_height": 3,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "2",
+      "id": "2",
+      "z": 2,
+      "source_level": 2,
+      "resolution": 2799.9999999999995,
+      "scale_denominator": 10000000,
+      "matrix_width": 7,
+      "matrix_height": 3,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "3",
+      "id": "3",
+      "z": 3,
+      "source_level": 3,
+      "resolution": 1399.9999999999998,
+      "scale_denominator": 5000000,
+      "matrix_width": 13,
+      "matrix_height": 5,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "4",
+      "id": "4",
+      "z": 4,
+      "source_level": 4,
+      "resolution": 839.9999999999999,
+      "scale_denominator": 3000000,
+      "matrix_width": 21,
+      "matrix_height": 9,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "5",
+      "id": "5",
+      "z": 5,
+      "source_level": 5,
+      "resolution": 280,
+      "scale_denominator": 1000000.0000000001,
+      "matrix_width": 61,
+      "matrix_height": 25,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "6",
+      "id": "6",
+      "z": 6,
+      "source_level": 6,
+      "resolution": 209.99999999999997,
+      "scale_denominator": 750000,
+      "matrix_width": 81,
+      "matrix_height": 34,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "7",
+      "id": "7",
+      "z": 7,
+      "source_level": 7,
+      "resolution": 140,
+      "scale_denominator": 500000.00000000006,
+      "matrix_width": 122,
+      "matrix_height": 50,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "8",
+      "id": "8",
+      "z": 8,
+      "source_level": 8,
+      "resolution": 70,
+      "scale_denominator": 250000.00000000003,
+      "matrix_width": 243,
+      "matrix_height": 100,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "9",
+      "id": "9",
+      "z": 9,
+      "source_level": 9,
+      "resolution": 55.99999999999999,
+      "scale_denominator": 200000,
+      "matrix_width": 304,
+      "matrix_height": 125,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "10",
+      "id": "10",
+      "z": 10,
+      "source_level": 10,
+      "resolution": 41.99999999999999,
+      "scale_denominator": 150000,
+      "matrix_width": 405,
+      "matrix_height": 166,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "11",
+      "id": "11",
+      "z": 11,
+      "source_level": 11,
+      "resolution": 27.999999999999996,
+      "scale_denominator": 100000,
+      "matrix_width": 607,
+      "matrix_height": 249,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "12",
+      "id": "12",
+      "z": 12,
+      "source_level": 12,
+      "resolution": 20.999999999999996,
+      "scale_denominator": 75000,
+      "matrix_width": 809,
+      "matrix_height": 332,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "13",
+      "id": "13",
+      "z": 13,
+      "source_level": 13,
+      "resolution": 13.999999999999998,
+      "scale_denominator": 50000,
+      "matrix_width": 1213,
+      "matrix_height": 497,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "14",
+      "id": "14",
+      "z": 14,
+      "source_level": 14,
+      "resolution": 6.999999999999999,
+      "scale_denominator": 25000,
+      "matrix_width": 2426,
+      "matrix_height": 994,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "15",
+      "id": "15",
+      "z": 15,
+      "source_level": 15,
+      "resolution": 5.6,
+      "scale_denominator": 20000,
+      "matrix_width": 3033,
+      "matrix_height": 1243,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "16",
+      "id": "16",
+      "z": 16,
+      "source_level": 16,
+      "resolution": 4.199999999999999,
+      "scale_denominator": 14999.999999999998,
+      "matrix_width": 4043,
+      "matrix_height": 1657,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "17",
+      "id": "17",
+      "z": 17,
+      "source_level": 17,
+      "resolution": 2.8,
+      "scale_denominator": 10000,
+      "matrix_width": 6065,
+      "matrix_height": 2485,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "18",
+      "id": "18",
+      "z": 18,
+      "source_level": 18,
+      "resolution": 2.0999999999999996,
+      "scale_denominator": 7499.999999999999,
+      "matrix_width": 8086,
+      "matrix_height": 3314,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "19",
+      "id": "19",
+      "z": 19,
+      "source_level": 19,
+      "resolution": 1.4,
+      "scale_denominator": 5000,
+      "matrix_width": 12129,
+      "matrix_height": 4970,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "20",
+      "id": "20",
+      "z": 20,
+      "source_level": 20,
+      "resolution": 0.7,
+      "scale_denominator": 2500,
+      "matrix_width": 24258,
+      "matrix_height": 9940,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "21",
+      "id": "21",
+      "z": 21,
+      "source_level": 21,
+      "resolution": 0.5599999999999999,
+      "scale_denominator": 2000,
+      "matrix_width": 30322,
+      "matrix_height": 12425,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "22",
+      "id": "22",
+      "z": 22,
+      "source_level": 22,
+      "resolution": 0.42,
+      "scale_denominator": 1500,
+      "matrix_width": 40429,
+      "matrix_height": 16566,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "23",
+      "id": "23",
+      "z": 23,
+      "source_level": 23,
+      "resolution": 0.27999999999999997,
+      "scale_denominator": 1000,
+      "matrix_width": 60644,
+      "matrix_height": 24849,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "24",
+      "id": "24",
+      "z": 24,
+      "source_level": 24,
+      "resolution": 0.21,
+      "scale_denominator": 750,
+      "matrix_width": 80858,
+      "matrix_height": 33132,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "25",
+      "id": "25",
+      "z": 25,
+      "source_level": 25,
+      "resolution": 0.13999999999999999,
+      "scale_denominator": 500,
+      "matrix_width": 121287,
+      "matrix_height": 49698,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    },
+    {
+      "identifier": "26",
+      "id": "26",
+      "z": 26,
+      "source_level": 26,
+      "resolution": 0.055999999999999994,
+      "scale_denominator": 200,
+      "matrix_width": 303216,
+      "matrix_height": 124245,
+      "tileWidth": 256,
+      "tileHeight": 256,
+      "topLeftCorner": [
+        -1587706.6148621012,
+        7801041.355615949
+      ],
+      "top_left": [
+        -1587706.6148621012,
+        7801041.355615949
+      ]
+    }
+  ],
+  "project_id": "bakgrunder",
+  "scale_denominators": [
+    12000000,
+    10000000,
+    5000000,
+    3000000,
+    1000000,
+    750000,
+    500000,
+    250000,
+    200000,
+    150000,
+    100000,
+    75000,
+    50000,
+    25000,
+    20000,
+    15000,
+    10000,
+    7500,
+    5000,
+    2500,
+    2000,
+    1500,
+    1000,
+    750,
+    500,
+    200
+  ],
+  "derived_from": "project_scales"
+}

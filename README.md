@@ -29,6 +29,23 @@ Qtiler supports optional commercial plugins. Current bundled versions:
 - Qrigo: `0.1.0`
 - VectorTiles: `0.1.1`
 
+## VectorTiles auth in QGIS (protected projects)
+If your project is protected by QtilerAuth, avoid shared URLs and use user-based credentials.
+
+1. API key (recommended for service-style access)
+   - In QGIS, add a Vector Tile layer using:
+   - `/plugins/VectorTiles/style/<project>.json?api_key=<YOUR_API_KEY>`
+   - Layer-specific style example:
+   - `/plugins/VectorTiles/style/<project>/<layer>.json?layers=<layer>&api_key=<YOUR_API_KEY>`
+2. Username/password (HTTP Basic auth)
+   - Configure credentials in QGIS Authentication Manager.
+   - Use style URL without key:
+   - `/plugins/VectorTiles/style/<project>.json`
+
+Notes:
+- `?token=...` URLs are best for short-lived sharing, not as a common credential for all users.
+- QtilerAuth also accepts API key in header `x-api-key`, but query `api_key` is usually simpler in GIS clients.
+
 ## System Requirements
 - Windows 10/11 or Windows Server 2019+ (64-bit).
 - [OSGeo4W](https://trac.osgeo.org/osgeo4w/) or a standalone QGIS install (supplies Python + QGIS libraries).

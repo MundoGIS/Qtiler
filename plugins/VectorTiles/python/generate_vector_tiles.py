@@ -10,6 +10,16 @@ def out(payload, code=0):
     return code
 
 
+def emit_progress(percent, message=''):
+    try:
+        pct = int(float(percent))
+    except Exception:
+        pct = 0
+    pct = max(0, min(100, pct))
+    msg = str(message or '').replace('\n', ' ').replace('\r', ' ').strip()
+    print(f"QTILER_PROGRESS:{pct}:{msg}", flush=True)
+
+
 def normalize_extent(value):
     if not value:
       return None
@@ -72,7 +82,8 @@ def main():
             QgsWkbTypes,
             QgsCoordinateReferenceSystem,
             QgsCoordinateTransform,
-            QgsCoordinateTransformContext
+            QgsCoordinateTransformContext,
+            QgsProcessingFeedback
         )
         import processing
         from processing.core.Processing import Processing
@@ -89,6 +100,40 @@ def main():
     qgs.initQgis()
 
     try:
+        class ProgressFeedback(QgsProcessingFeedback):
+            def __init__(self, start_percent=30, end_percent=99):
+                super().__init__()
+                self._start = max(0, min(100, int(start_percent)))
+                self._end = max(self._start, min(100, int(end_percent)))
+                self._current = self._start
+
+            def _map_progress(self, progress):
+                try:
+                    raw = float(progress)
+                except Exception:
+                    raw = 0.0
+                raw = max(0.0, min(100.0, raw))
+                mapped = self._start + ((self._end - self._start) * (raw / 100.0))
+                return int(max(self._start, min(self._end, round(mapped))))
+
+            def setProgress(self, progress):
+                mapped = self._map_progress(progress)
+                if mapped < self._current:
+                    mapped = self._current
+                self._current = mapped
+                emit_progress(mapped, 'processing')
+                try:
+                    super().setProgress(progress)
+                except Exception:
+                    pass
+
+            def setProgressText(self, text):
+                emit_progress(self._current, text)
+                try:
+                    super().setProgressText(text)
+                except Exception:
+                    pass
+
         Processing.initialize()
         try:
             registry = QgsApplication.processingRegistry()
@@ -102,6 +147,8 @@ def main():
         ok = project.read(str(project_path))
         if not ok:
             return out({"error": "project_load_failed", "project": str(project_path)}, 1)
+
+        emit_progress(2, 'project_loaded')
 
         layers = []
         layer_styles = []
@@ -333,8 +380,12 @@ def main():
 
             return None
 
-        for layer in project.mapLayers().values():
+        all_layers = list(project.mapLayers().values())
+        layer_count = max(1, len(all_layers))
+
+        for index, layer in enumerate(all_layers):
             try:
+                emit_progress(3 + int((index / layer_count) * 22), 'reading_layers')
                 if not layer or not layer.isValid():
                     continue
                 if layer.type() != layer.VectorLayer:
@@ -463,8 +514,11 @@ def main():
             "LAYERS": writer_layers
         }
 
+        emit_progress(30, 'writing_tiles')
+        feedback = ProgressFeedback(30, 99)
+
         try:
-            result = processing.run(selected_alg, params)
+            result = processing.run(selected_alg, params, feedback=feedback)
         except Exception as first_err:
             fallback_params = {
                 "OUTPUT": str(output_mbtiles),
@@ -481,7 +535,7 @@ def main():
                 ]
             }
             try:
-                result = processing.run(selected_alg, fallback_params)
+                result = processing.run(selected_alg, fallback_params, feedback=feedback)
             except Exception as second_err:
                 return out({
                     "error": "vector_tile_generation_failed",
@@ -492,6 +546,8 @@ def main():
 
         if not output_mbtiles.exists():
             return out({"error": "output_missing", "algorithm": selected_alg, "result": result}, 1)
+
+        emit_progress(100, 'done')
 
         bounds = bounds_wgs84
         if not bounds and extent and extent.isFinite():

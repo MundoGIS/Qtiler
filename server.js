@@ -7647,17 +7647,24 @@ const abortOnDemandSession = (sid) => {
   }
   onDemandPollersBySession.delete(sessionId);
 
-  // Cancel queued (not yet started) tasks in the persistent Python pool.
+  // Cancel queued and running tasks in the persistent Python pool.
   let cancelledQueued = 0;
+  let abortedRunning = 0;
   try {
-    if (tileRendererPool && typeof tileRendererPool.cancelQueued === 'function') {
+    if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+      const poolResult = tileRendererPool.abortMatching((params) => {
+        try { return params && params._sid && String(params._sid) === sessionId; } catch { return false; }
+      }, { reason: 'session_aborted' });
+      cancelledQueued = Number(poolResult?.cancelledQueued || 0);
+      abortedRunning = Number(poolResult?.abortedRunning || 0);
+    } else if (tileRendererPool && typeof tileRendererPool.cancelQueued === 'function') {
       cancelledQueued = tileRendererPool.cancelQueued((params) => {
         try { return params && params._sid && String(params._sid) === sessionId; } catch { return false; }
       });
     }
   } catch {}
 
-  return { ok: true, sid: sessionId, cancelledQueued, clearedPollers };
+  return { ok: true, sid: sessionId, cancelledQueued, abortedRunning, clearedPollers };
 };
 
 // Public endpoint used by the viewer when closing.
@@ -9068,7 +9075,8 @@ async function handleWmsGetMap(req, res) {
     const clampedY = Math.max(0, Math.min(tileY, matrixHeight - 1));
 
     // Redirect to tile endpoint (which handles on-demand rendering)
-    const tileUrl = `/wmts/${project}/${layer}/${bestZoom}/${clampedX}/${clampedY}.png`;
+    const sid = normalizeViewerSessionId(findQ('sid'));
+    const tileUrl = `/wmts/${project}/${layer}/${bestZoom}/${clampedX}/${clampedY}.png${sid ? `?sid=${encodeURIComponent(sid)}` : ''}`;
     
     // Instead of redirect, proxy the request to maintain WMS compatibility
     return res.redirect(tileUrl);

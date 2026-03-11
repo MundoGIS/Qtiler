@@ -1,20 +1,20 @@
 {
-  "id": "EPSG_3011_demo3011",
-  "title": "Auto-generated for EPSG:3011 (demo3011)",
+  "id": "EPSG_3006_demo2",
+  "title": "Auto-generated for EPSG:3006 (demo2)",
   "supported_crs": [
-    "EPSG:3011"
+    "EPSG:3006"
   ],
-  "coordinateReferenceSystem": "EPSG:3011",
+  "coordinateReferenceSystem": "EPSG:3006",
   "tile_width": 256,
   "tile_height": 256,
   "axis_order": "xy",
   "top_left_corner": [
-    152216.469712291,
-    6578420.1351387
+    630000,
+    6630000
   ],
   "topLeftCorner": [
-    152216.469712291,
-    6578420.1351387
+    630000,
+    6630000
   ],
   "matrices": [
     {
@@ -22,19 +22,19 @@
       "id": "0",
       "z": 0,
       "source_level": 0,
-      "resolution": 30.147012260546035,
-      "scale_denominator": 107667.90093052156,
+      "resolution": 429.6875,
+      "scale_denominator": 1534598.2142857143,
       "matrix_width": 1,
       "matrix_height": 1,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -42,19 +42,19 @@
       "id": "1",
       "z": 1,
       "source_level": 1,
-      "resolution": 15.073506130273017,
-      "scale_denominator": 53833.95046526078,
+      "resolution": 214.84375,
+      "scale_denominator": 767299.1071428572,
       "matrix_width": 2,
       "matrix_height": 2,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -62,19 +62,19 @@
       "id": "2",
       "z": 2,
       "source_level": 2,
-      "resolution": 7.536753065136509,
-      "scale_denominator": 26916.97523263039,
+      "resolution": 107.421875,
+      "scale_denominator": 383649.5535714286,
       "matrix_width": 4,
       "matrix_height": 4,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -82,19 +82,19 @@
       "id": "3",
       "z": 3,
       "source_level": 3,
-      "resolution": 3.7683765325682543,
-      "scale_denominator": 13458.487616315195,
+      "resolution": 53.7109375,
+      "scale_denominator": 191824.7767857143,
       "matrix_width": 8,
       "matrix_height": 8,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -102,19 +102,19 @@
       "id": "4",
       "z": 4,
       "source_level": 4,
-      "resolution": 1.8841882662841272,
-      "scale_denominator": 6729.243808157597,
+      "resolution": 26.85546875,
+      "scale_denominator": 95912.38839285714,
       "matrix_width": 16,
       "matrix_height": 16,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -122,19 +122,19 @@
       "id": "5",
       "z": 5,
       "source_level": 5,
-      "resolution": 0.9420941331420636,
-      "scale_denominator": 3364.6219040787987,
+      "resolution": 13.427734375,
+      "scale_denominator": 47956.19419642857,
       "matrix_width": 32,
       "matrix_height": 32,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -142,19 +142,19 @@
       "id": "6",
       "z": 6,
       "source_level": 6,
-      "resolution": 0.4710470665710318,
-      "scale_denominator": 1682.3109520393994,
+      "resolution": 6.7138671875,
+      "scale_denominator": 23978.097098214286,
       "matrix_width": 64,
       "matrix_height": 64,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -162,19 +162,19 @@
       "id": "7",
       "z": 7,
       "source_level": 7,
-      "resolution": 0.2355235332855159,
-      "scale_denominator": 841.1554760196997,
+      "resolution": 3.35693359375,
+      "scale_denominator": 11989.048549107143,
       "matrix_width": 128,
       "matrix_height": 128,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -182,19 +182,19 @@
       "id": "8",
       "z": 8,
       "source_level": 8,
-      "resolution": 0.11776176664275795,
-      "scale_denominator": 420.57773800984984,
+      "resolution": 1.678466796875,
+      "scale_denominator": 5994.524274553572,
       "matrix_width": 256,
       "matrix_height": 256,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -202,19 +202,19 @@
       "id": "9",
       "z": 9,
       "source_level": 9,
-      "resolution": 0.058880883321378974,
-      "scale_denominator": 210.28886900492492,
+      "resolution": 0.8392333984375,
+      "scale_denominator": 2997.262137276786,
       "matrix_width": 512,
       "matrix_height": 512,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -222,19 +222,19 @@
       "id": "10",
       "z": 10,
       "source_level": 10,
-      "resolution": 0.029440441660689487,
-      "scale_denominator": 105.14443450246246,
+      "resolution": 0.41961669921875,
+      "scale_denominator": 1498.631068638393,
       "matrix_width": 1024,
       "matrix_height": 1024,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -242,19 +242,19 @@
       "id": "11",
       "z": 11,
       "source_level": 11,
-      "resolution": 0.014720220830344743,
-      "scale_denominator": 52.57221725123123,
+      "resolution": 0.209808349609375,
+      "scale_denominator": 749.3155343191964,
       "matrix_width": 2048,
       "matrix_height": 2048,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -262,19 +262,19 @@
       "id": "12",
       "z": 12,
       "source_level": 12,
-      "resolution": 0.007360110415172372,
-      "scale_denominator": 26.286108625615615,
+      "resolution": 0.1049041748046875,
+      "scale_denominator": 374.6577671595982,
       "matrix_width": 4096,
       "matrix_height": 4096,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -282,19 +282,19 @@
       "id": "13",
       "z": 13,
       "source_level": 13,
-      "resolution": 0.003680055207586186,
-      "scale_denominator": 13.143054312807807,
+      "resolution": 0.05245208740234375,
+      "scale_denominator": 187.3288835797991,
       "matrix_width": 8192,
       "matrix_height": 8192,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -302,19 +302,19 @@
       "id": "14",
       "z": 14,
       "source_level": 14,
-      "resolution": 0.001840027603793093,
-      "scale_denominator": 6.571527156403904,
+      "resolution": 0.026226043701171875,
+      "scale_denominator": 93.66444178989956,
       "matrix_width": 16384,
       "matrix_height": 16384,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -322,19 +322,19 @@
       "id": "15",
       "z": 15,
       "source_level": 15,
-      "resolution": 0.0009200138018965465,
-      "scale_denominator": 3.285763578201952,
+      "resolution": 0.013113021850585938,
+      "scale_denominator": 46.83222089494978,
       "matrix_width": 32768,
       "matrix_height": 32768,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -342,19 +342,19 @@
       "id": "16",
       "z": 16,
       "source_level": 16,
-      "resolution": 0.00046000690094827323,
-      "scale_denominator": 1.642881789100976,
+      "resolution": 0.006556510925292969,
+      "scale_denominator": 23.41611044747489,
       "matrix_width": 65536,
       "matrix_height": 65536,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -362,19 +362,19 @@
       "id": "17",
       "z": 17,
       "source_level": 17,
-      "resolution": 0.00023000345047413662,
-      "scale_denominator": 0.821440894550488,
+      "resolution": 0.0032782554626464844,
+      "scale_denominator": 11.708055223737444,
       "matrix_width": 131072,
       "matrix_height": 131072,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -382,19 +382,19 @@
       "id": "18",
       "z": 18,
       "source_level": 18,
-      "resolution": 0.00011500172523706831,
-      "scale_denominator": 0.410720447275244,
+      "resolution": 0.0016391277313232422,
+      "scale_denominator": 5.854027611868722,
       "matrix_width": 262144,
       "matrix_height": 262144,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -402,19 +402,19 @@
       "id": "19",
       "z": 19,
       "source_level": 19,
-      "resolution": 0.000057500862618534154,
-      "scale_denominator": 0.205360223637622,
+      "resolution": 0.0008195638656616211,
+      "scale_denominator": 2.927013805934361,
       "matrix_width": 524288,
       "matrix_height": 524288,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -422,19 +422,19 @@
       "id": "20",
       "z": 20,
       "source_level": 20,
-      "resolution": 0.000028750431309267077,
-      "scale_denominator": 0.102680111818811,
+      "resolution": 0.00040978193283081055,
+      "scale_denominator": 1.4635069029671806,
       "matrix_width": 1048576,
       "matrix_height": 1048576,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -442,19 +442,19 @@
       "id": "21",
       "z": 21,
       "source_level": 21,
-      "resolution": 0.000014375215654633539,
-      "scale_denominator": 0.0513400559094055,
+      "resolution": 0.00020489096641540527,
+      "scale_denominator": 0.7317534514835903,
       "matrix_width": 2097152,
       "matrix_height": 2097152,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -462,19 +462,19 @@
       "id": "22",
       "z": 22,
       "source_level": 22,
-      "resolution": 0.000007187607827316769,
-      "scale_denominator": 0.02567002795470275,
+      "resolution": 0.00010244548320770264,
+      "scale_denominator": 0.36587672574179514,
       "matrix_width": 4194304,
       "matrix_height": 4194304,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     }
   ],
@@ -484,19 +484,19 @@
       "id": "0",
       "z": 0,
       "source_level": 0,
-      "resolution": 30.147012260546035,
-      "scale_denominator": 107667.90093052156,
+      "resolution": 429.6875,
+      "scale_denominator": 1534598.2142857143,
       "matrix_width": 1,
       "matrix_height": 1,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -504,19 +504,19 @@
       "id": "1",
       "z": 1,
       "source_level": 1,
-      "resolution": 15.073506130273017,
-      "scale_denominator": 53833.95046526078,
+      "resolution": 214.84375,
+      "scale_denominator": 767299.1071428572,
       "matrix_width": 2,
       "matrix_height": 2,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -524,19 +524,19 @@
       "id": "2",
       "z": 2,
       "source_level": 2,
-      "resolution": 7.536753065136509,
-      "scale_denominator": 26916.97523263039,
+      "resolution": 107.421875,
+      "scale_denominator": 383649.5535714286,
       "matrix_width": 4,
       "matrix_height": 4,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -544,19 +544,19 @@
       "id": "3",
       "z": 3,
       "source_level": 3,
-      "resolution": 3.7683765325682543,
-      "scale_denominator": 13458.487616315195,
+      "resolution": 53.7109375,
+      "scale_denominator": 191824.7767857143,
       "matrix_width": 8,
       "matrix_height": 8,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -564,19 +564,19 @@
       "id": "4",
       "z": 4,
       "source_level": 4,
-      "resolution": 1.8841882662841272,
-      "scale_denominator": 6729.243808157597,
+      "resolution": 26.85546875,
+      "scale_denominator": 95912.38839285714,
       "matrix_width": 16,
       "matrix_height": 16,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -584,19 +584,19 @@
       "id": "5",
       "z": 5,
       "source_level": 5,
-      "resolution": 0.9420941331420636,
-      "scale_denominator": 3364.6219040787987,
+      "resolution": 13.427734375,
+      "scale_denominator": 47956.19419642857,
       "matrix_width": 32,
       "matrix_height": 32,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -604,19 +604,19 @@
       "id": "6",
       "z": 6,
       "source_level": 6,
-      "resolution": 0.4710470665710318,
-      "scale_denominator": 1682.3109520393994,
+      "resolution": 6.7138671875,
+      "scale_denominator": 23978.097098214286,
       "matrix_width": 64,
       "matrix_height": 64,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -624,19 +624,19 @@
       "id": "7",
       "z": 7,
       "source_level": 7,
-      "resolution": 0.2355235332855159,
-      "scale_denominator": 841.1554760196997,
+      "resolution": 3.35693359375,
+      "scale_denominator": 11989.048549107143,
       "matrix_width": 128,
       "matrix_height": 128,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -644,19 +644,19 @@
       "id": "8",
       "z": 8,
       "source_level": 8,
-      "resolution": 0.11776176664275795,
-      "scale_denominator": 420.57773800984984,
+      "resolution": 1.678466796875,
+      "scale_denominator": 5994.524274553572,
       "matrix_width": 256,
       "matrix_height": 256,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -664,19 +664,19 @@
       "id": "9",
       "z": 9,
       "source_level": 9,
-      "resolution": 0.058880883321378974,
-      "scale_denominator": 210.28886900492492,
+      "resolution": 0.8392333984375,
+      "scale_denominator": 2997.262137276786,
       "matrix_width": 512,
       "matrix_height": 512,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -684,19 +684,19 @@
       "id": "10",
       "z": 10,
       "source_level": 10,
-      "resolution": 0.029440441660689487,
-      "scale_denominator": 105.14443450246246,
+      "resolution": 0.41961669921875,
+      "scale_denominator": 1498.631068638393,
       "matrix_width": 1024,
       "matrix_height": 1024,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -704,19 +704,19 @@
       "id": "11",
       "z": 11,
       "source_level": 11,
-      "resolution": 0.014720220830344743,
-      "scale_denominator": 52.57221725123123,
+      "resolution": 0.209808349609375,
+      "scale_denominator": 749.3155343191964,
       "matrix_width": 2048,
       "matrix_height": 2048,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -724,19 +724,19 @@
       "id": "12",
       "z": 12,
       "source_level": 12,
-      "resolution": 0.007360110415172372,
-      "scale_denominator": 26.286108625615615,
+      "resolution": 0.1049041748046875,
+      "scale_denominator": 374.6577671595982,
       "matrix_width": 4096,
       "matrix_height": 4096,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -744,19 +744,19 @@
       "id": "13",
       "z": 13,
       "source_level": 13,
-      "resolution": 0.003680055207586186,
-      "scale_denominator": 13.143054312807807,
+      "resolution": 0.05245208740234375,
+      "scale_denominator": 187.3288835797991,
       "matrix_width": 8192,
       "matrix_height": 8192,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -764,19 +764,19 @@
       "id": "14",
       "z": 14,
       "source_level": 14,
-      "resolution": 0.001840027603793093,
-      "scale_denominator": 6.571527156403904,
+      "resolution": 0.026226043701171875,
+      "scale_denominator": 93.66444178989956,
       "matrix_width": 16384,
       "matrix_height": 16384,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -784,19 +784,19 @@
       "id": "15",
       "z": 15,
       "source_level": 15,
-      "resolution": 0.0009200138018965465,
-      "scale_denominator": 3.285763578201952,
+      "resolution": 0.013113021850585938,
+      "scale_denominator": 46.83222089494978,
       "matrix_width": 32768,
       "matrix_height": 32768,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -804,19 +804,19 @@
       "id": "16",
       "z": 16,
       "source_level": 16,
-      "resolution": 0.00046000690094827323,
-      "scale_denominator": 1.642881789100976,
+      "resolution": 0.006556510925292969,
+      "scale_denominator": 23.41611044747489,
       "matrix_width": 65536,
       "matrix_height": 65536,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -824,19 +824,19 @@
       "id": "17",
       "z": 17,
       "source_level": 17,
-      "resolution": 0.00023000345047413662,
-      "scale_denominator": 0.821440894550488,
+      "resolution": 0.0032782554626464844,
+      "scale_denominator": 11.708055223737444,
       "matrix_width": 131072,
       "matrix_height": 131072,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -844,19 +844,19 @@
       "id": "18",
       "z": 18,
       "source_level": 18,
-      "resolution": 0.00011500172523706831,
-      "scale_denominator": 0.410720447275244,
+      "resolution": 0.0016391277313232422,
+      "scale_denominator": 5.854027611868722,
       "matrix_width": 262144,
       "matrix_height": 262144,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -864,19 +864,19 @@
       "id": "19",
       "z": 19,
       "source_level": 19,
-      "resolution": 0.000057500862618534154,
-      "scale_denominator": 0.205360223637622,
+      "resolution": 0.0008195638656616211,
+      "scale_denominator": 2.927013805934361,
       "matrix_width": 524288,
       "matrix_height": 524288,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -884,19 +884,19 @@
       "id": "20",
       "z": 20,
       "source_level": 20,
-      "resolution": 0.000028750431309267077,
-      "scale_denominator": 0.102680111818811,
+      "resolution": 0.00040978193283081055,
+      "scale_denominator": 1.4635069029671806,
       "matrix_width": 1048576,
       "matrix_height": 1048576,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -904,19 +904,19 @@
       "id": "21",
       "z": 21,
       "source_level": 21,
-      "resolution": 0.000014375215654633539,
-      "scale_denominator": 0.0513400559094055,
+      "resolution": 0.00020489096641540527,
+      "scale_denominator": 0.7317534514835903,
       "matrix_width": 2097152,
       "matrix_height": 2097152,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     },
     {
@@ -924,22 +924,22 @@
       "id": "22",
       "z": 22,
       "source_level": 22,
-      "resolution": 0.000007187607827316769,
-      "scale_denominator": 0.02567002795470275,
+      "resolution": 0.00010244548320770264,
+      "scale_denominator": 0.36587672574179514,
       "matrix_width": 4194304,
       "matrix_height": 4194304,
       "tileWidth": 256,
       "tileHeight": 256,
       "topLeftCorner": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ],
       "top_left": [
-        152216.469712291,
-        6578420.1351387
+        630000,
+        6630000
       ]
     }
   ],
   "auto_generated": true,
-  "project_id": "demo3011"
+  "project_id": "demo2"
 }

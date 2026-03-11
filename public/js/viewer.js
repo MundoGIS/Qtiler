@@ -80,9 +80,14 @@
           : (viewerState.theme
             ? `/wmts/${encodeURIComponent(viewerState.project || '')}/themes/${encodeURIComponent(viewerState.theme || '')}/{z}/{x}/{y}.png`
             : `/wmts/${encodeURIComponent(viewerState.project || '')}/${encodeURIComponent(viewerState.layer || '')}/{z}/{x}/{y}.png`)));
-    const tileTemplate = (isWmsMode || isWfsMode)
+    const appendSidToUrl = (url) => {
+      if (!url) return url;
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}sid=${encodeURIComponent(viewerSessionId)}`;
+    };
+    const tileTemplate = isWfsMode
       ? tileTemplateBase
-      : `${tileTemplateBase}?sid=${encodeURIComponent(viewerSessionId)}`;
+      : appendSidToUrl(tileTemplateBase);
     const tileTemplateLabel = isExternalSource
       ? `${window.location.origin}${tileTemplateBase}${isWmsMode ? `&LAYERS=${encodeURIComponent(viewerState.layer || '')}` : ''}`
       : (isWfsMode

@@ -2,6 +2,7 @@
   const API_BASE = '/plugins/VectorTiles/api';
   const BTN_CLASS = 'qtiler-vectortiles-btn';
   const BADGE_CLASS = 'qtiler-vectortiles-badge';
+  const PROGRESS_WRAP_CLASS = 'qtiler-vectortiles-progress-wrap';
   const JOB_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
   const JOB_REFRESH_INTERVAL_MS = 4000;
 
@@ -32,9 +33,15 @@
       copy: 'Copy',
       snippets: 'Client snippets',
       snippetQgis: 'QGIS data source URI',
+      snippetQgisApiKey: 'QGIS (API key in URL)',
+      snippetQgisBasic: 'QGIS (HTTP Basic auth)',
       snippetArcgis: 'ArcGIS JS layer config',
       snippetOrigo: 'Origo layer config',
       snippetHajk: 'Hajk layer config',
+      authHint: 'Protected projects: use your own API key (?api_key=...) or your own username/password via HTTP Basic auth.',
+      tileJsonApiKey: 'TileJSON URL (API key)',
+      templateApiKey: 'MVT template URL (API key)',
+      layerStyleUrlApiKey: 'Layer style URL (API key)',
       confirmOverwrite: 'A vector tile cache already exists for this project. Overwrite it?',
       layerStyleUrl: 'Layer style URL',
       generationModalTitle: 'Generate VectorTiles',
@@ -81,9 +88,15 @@
       copy: 'Copiar',
       snippets: 'Snippets de cliente',
       snippetQgis: 'URI de origen para QGIS',
+      snippetQgisApiKey: 'QGIS (API key en URL)',
+      snippetQgisBasic: 'QGIS (autenticación Basic HTTP)',
       snippetArcgis: 'Configuración de capa ArcGIS JS',
       snippetOrigo: 'Configuración de capa Origo',
       snippetHajk: 'Configuración de capa Hajk',
+      authHint: 'Proyectos protegidos: usa tu propia API key (?api_key=...) o tu propio usuario/contraseña con autenticación Basic HTTP.',
+      tileJsonApiKey: 'URL TileJSON (API key)',
+      templateApiKey: 'URL plantilla MVT (API key)',
+      layerStyleUrlApiKey: 'URL de estilo por capa (API key)',
       confirmOverwrite: 'Ya existe una caché vector tile para este proyecto. ¿Deseas sobrescribirla?',
       layerStyleUrl: 'URL de estilo por capa',
       generationModalTitle: 'Generar VectorTiles',
@@ -130,9 +143,15 @@
       copy: 'Kopiera',
       snippets: 'Klientsnippets',
       snippetQgis: 'QGIS datakälla URI',
+      snippetQgisApiKey: 'QGIS (API-nyckel i URL)',
+      snippetQgisBasic: 'QGIS (HTTP Basic auth)',
       snippetArcgis: 'ArcGIS JS lagerkonfig',
       snippetOrigo: 'Origo lagerkonfig',
       snippetHajk: 'Hajk lagerkonfig',
+      authHint: 'Skyddade projekt: använd din egen API-nyckel (?api_key=...) eller ditt eget användarnamn/lösenord via HTTP Basic auth.',
+      tileJsonApiKey: 'TileJSON-URL (API-nyckel)',
+      templateApiKey: 'MVT mall-URL (API-nyckel)',
+      layerStyleUrlApiKey: 'Lager-specifik stil-URL (API-nyckel)',
       confirmOverwrite: 'Det finns redan en vector tile-cache för projektet. Vill du skriva över den?',
       layerStyleUrl: 'Lager-specifik stil-URL',
       generationModalTitle: 'Generera VectorTiles',
@@ -246,17 +265,60 @@
   };
 
   const tileJsonUrl = (projectId) => `/plugins/VectorTiles/tilejson/${encodeURIComponent(projectId)}.json`;
-  const tileTemplateUrl = (projectId) => `${window.location.origin}/plugins/VectorTiles/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
+  const tileTemplateUrl = (projectId) => `/plugins/VectorTiles/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
   const layerStyleUrl = (projectId, layerName) => {
     const slug = layerSlug(layerName);
-    const base = `${window.location.origin}/plugins/VectorTiles/style/${encodeURIComponent(projectId)}/${encodeURIComponent(slug)}.json`;
+    const base = `/plugins/VectorTiles/style/${encodeURIComponent(projectId)}/${encodeURIComponent(slug)}.json`;
     return `${base}?layers=${encodeURIComponent(String(layerName || ''))}`;
+  };
+
+  const toAbsoluteUrl = (url) => {
+    const safe = String(url || '').trim();
+    if (!safe) return safe;
+    if (/^https?:\/\//i.test(safe)) return safe;
+    return `${window.location.origin}${safe.startsWith('/') ? '' : '/'}${safe}`;
   };
 
   const loadProjectLayers = async (projectId) => {
     if (!projectId) return [];
     const payload = await api(`${API_BASE}/projects/${encodeURIComponent(projectId)}/layers`);
     return Array.isArray(payload?.layers) ? payload.layers : [];
+  };
+
+  const projectVectorLayersCache = new Map();
+  const getProjectVectorLayers = async (projectId) => {
+    const key = String(projectId || '').trim();
+    if (!key) return [];
+    if (!projectVectorLayersCache.has(key)) {
+      projectVectorLayersCache.set(key, loadProjectLayers(key).catch(() => []));
+    }
+    const layers = await projectVectorLayersCache.get(key);
+    return Array.isArray(layers) ? layers : [];
+  };
+
+  const appendApiKeyPlaceholder = (url) => {
+    const safe = String(url || '').trim();
+    if (!safe) return safe;
+    try {
+      const parsed = new URL(safe);
+      parsed.searchParams.set('api_key', '');
+      return parsed.toString();
+    } catch {
+      return safe.includes('?') ? `${safe}&api_key=` : `${safe}?api_key=`;
+    }
+  };
+
+  const appendBasicAuthPlaceholder = (url) => {
+    const safe = String(url || '').trim();
+    if (!safe) return safe;
+    try {
+      const parsed = new URL(safe);
+      parsed.username = '<USERNAME>';
+      parsed.password = '<PASSWORD>';
+      return parsed.toString();
+    } catch {
+      return safe;
+    }
   };
 
   const askLayerSelection = async (projectId) => {
@@ -518,31 +580,36 @@
     }
   };
 
-  const pollJobUntilDone = async (jobId, projectId, { timeoutMs = JOB_WAIT_TIMEOUT_MS, intervalMs = 1500 } = {}) => {
+  const pollJobUntilDone = async (jobId, projectId, { timeoutMs = JOB_WAIT_TIMEOUT_MS, intervalMs = 1500, onProgress = null } = {}) => {
     let currentJobId = String(jobId || '').trim();
+    let pollByProjectOnly = false;
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
       let payload = null;
       let keepWaitingAfterMissing = false;
-      try {
-        payload = await api(`${API_BASE}/jobs/${encodeURIComponent(currentJobId)}`);
-      } catch (err) {
-        const msg = String(err?.message || '');
-        if (msg === 'job_not_found') {
-          const jobs = await fetchJobs().catch(() => []);
-          const active = projectActiveJob(jobs, projectId);
-          const activeId = String(active?.id || '').trim();
-          if (activeId && activeId !== currentJobId) {
-            currentJobId = activeId;
-            continue;
+      if (!pollByProjectOnly && currentJobId) {
+        try {
+          payload = await api(`${API_BASE}/jobs/${encodeURIComponent(currentJobId)}`);
+        } catch (err) {
+          const msg = String(err?.message || '');
+          if (msg === 'job_not_found') {
+            pollByProjectOnly = true;
+            const jobs = await fetchJobs().catch(() => []);
+            const active = projectActiveJob(jobs, projectId);
+            const activeId = String(active?.id || '').trim();
+            if (activeId) {
+              currentJobId = activeId;
+              pollByProjectOnly = false;
+              continue;
+            }
+            if (await hasReadyTileset(projectId)) {
+              return { id: currentJobId, status: 'completed', projectId };
+            }
+            keepWaitingAfterMissing = true;
           }
-          if (await hasReadyTileset(projectId)) {
-            return { id: currentJobId, status: 'completed', projectId };
+          if (!keepWaitingAfterMissing) {
+            throw err;
           }
-          keepWaitingAfterMissing = true;
-        }
-        if (!keepWaitingAfterMissing) {
-          throw err;
         }
       }
       if (keepWaitingAfterMissing) {
@@ -555,8 +622,9 @@
         const jobs = await fetchJobs().catch(() => []);
         const active = projectActiveJob(jobs, projectId);
         const activeId = String(active?.id || '').trim();
-        if (activeId && activeId !== currentJobId) {
+        if (activeId) {
           currentJobId = activeId;
+          pollByProjectOnly = false;
           continue;
         }
         if (await hasReadyTileset(projectId)) {
@@ -569,6 +637,7 @@
       if (job.status === 'completed') return job;
       if (job.status === 'cancelled') throw new Error(t('cancelled'));
       if (job.status === 'error') throw new Error(job.error || 'vector_tile_generation_failed');
+      if (typeof onProgress === 'function') onProgress(job);
       if (job.status === 'running') {
         showStatus(`${t('running')}: ${job.projectId}`);
       }
@@ -587,6 +656,83 @@
     const running = jobs.find((j) => j && j.projectId === projectId && j.status === 'running');
     if (running) return running;
     return jobs.find((j) => j && j.projectId === projectId && j.status === 'queued') || null;
+  };
+
+  const getJobProgressPercent = (job) => {
+    const raw = Number(job?.progress);
+    if (Number.isFinite(raw)) return Math.max(0, Math.min(100, Math.floor(raw)));
+    if (job?.status === 'completed') return 100;
+    if (job?.status === 'running') return 1;
+    return 0;
+  };
+
+  const ensureGenerateProgressUi = (btn) => {
+    if (!btn) return null;
+    let owner = btn.parentElement;
+    if (!owner || !owner.classList.contains('qtiler-vectortiles-generate-wrap')) {
+      const wrap = document.createElement('div');
+      wrap.className = 'qtiler-vectortiles-generate-wrap';
+      wrap.style.display = 'inline-flex';
+      wrap.style.flexDirection = 'column';
+      wrap.style.gap = '4px';
+      wrap.style.minWidth = '150px';
+      btn.parentNode?.insertBefore(wrap, btn);
+      wrap.appendChild(btn);
+      owner = wrap;
+    }
+
+    let progressWrap = owner.querySelector(`.${PROGRESS_WRAP_CLASS}`);
+    if (!progressWrap) {
+      progressWrap = document.createElement('div');
+      progressWrap.className = PROGRESS_WRAP_CLASS;
+      progressWrap.style.display = 'none';
+      progressWrap.style.gap = '3px';
+
+      const track = document.createElement('div');
+      track.style.height = '6px';
+      track.style.borderRadius = '999px';
+      track.style.background = '#dbe7f2';
+      track.style.overflow = 'hidden';
+
+      const fill = document.createElement('div');
+      fill.setAttribute('data-vt-progress-fill', '1');
+      fill.style.height = '100%';
+      fill.style.width = '0%';
+      fill.style.background = 'linear-gradient(90deg, #2563eb, #0ea5e9)';
+      fill.style.transition = 'width .25s ease';
+
+      const label = document.createElement('div');
+      label.setAttribute('data-vt-progress-label', '1');
+      label.style.fontSize = '11px';
+      label.style.color = 'var(--text-muted, #475467)';
+      label.textContent = '0%';
+
+      track.appendChild(fill);
+      progressWrap.append(track, label);
+      owner.appendChild(progressWrap);
+    }
+
+    return {
+      wrap: progressWrap,
+      fill: progressWrap.querySelector('[data-vt-progress-fill]'),
+      label: progressWrap.querySelector('[data-vt-progress-label]')
+    };
+  };
+
+  const renderGenerateProgress = (btn, job) => {
+    const ui = ensureGenerateProgressUi(btn);
+    if (!ui || !ui.fill || !ui.label) return;
+    if (!job) {
+      ui.wrap.style.display = 'none';
+      ui.fill.style.width = '0%';
+      ui.label.textContent = '0%';
+      return;
+    }
+    const pct = getJobProgressPercent(job);
+    const msgRaw = String(job?.progressMessage || '').trim().replace(/_/g, ' ');
+    ui.wrap.style.display = 'grid';
+    ui.fill.style.width = `${pct}%`;
+    ui.label.textContent = msgRaw ? `${pct}% · ${msgRaw}` : `${pct}%`;
   };
 
   const setGenerateBtnMode = (btn, mode, { jobId = '' } = {}) => {
@@ -619,8 +765,10 @@
       const active = projectActiveJob(jobs, pid);
       if (active) {
         setGenerateBtnMode(btn, 'generating', { jobId: active.id || '' });
+        renderGenerateProgress(btn, active);
       } else {
         setGenerateBtnMode(btn, 'idle');
+        renderGenerateProgress(btn, null);
       }
     });
   };
@@ -673,9 +821,14 @@
 
         const tilejson = tileJsonUrl(projectId);
         const template = tileTemplateUrl(projectId);
-        const tilejsonAbs = `${window.location.origin}${tilejson}`;
+        const tilejsonAbs = toAbsoluteUrl(tilejson);
         const currentLayerName = String(layerData?.name || '').trim();
         const layerStyle = currentLayerName ? layerStyleUrl(projectId, currentLayerName) : '';
+        const layerStyleAbs = layerStyle ? toAbsoluteUrl(layerStyle) : '';
+        const templateAbs = toAbsoluteUrl(template);
+        const tilejsonApiKey = appendApiKeyPlaceholder(tilejsonAbs);
+        const templateApiKey = appendApiKeyPlaceholder(templateAbs);
+        const layerStyleApiKey = appendApiKeyPlaceholder(layerStyleAbs);
         const tileMeta = await loadTileJsonMetadata(projectId);
         const minzoom = tileMeta.minzoom;
         const maxzoom = tileMeta.maxzoom;
@@ -727,9 +880,12 @@
         };
 
         root.appendChild(makeUrlRow(t('infoTileJson'), tilejsonAbs, tilejsonAbs));
-        root.appendChild(makeUrlRow(t('infoTemplate'), template, template));
-        if (layerStyle) {
-          root.appendChild(makeUrlRow(t('layerStyleUrl'), layerStyle, layerStyle));
+        root.appendChild(makeUrlRow(t('tileJsonApiKey'), tilejsonApiKey, tilejsonApiKey));
+        root.appendChild(makeUrlRow(t('infoTemplate'), templateAbs, templateAbs));
+        root.appendChild(makeUrlRow(t('templateApiKey'), templateApiKey, templateApiKey));
+        if (layerStyleAbs) {
+          root.appendChild(makeUrlRow(t('layerStyleUrl'), layerStyleAbs, layerStyleAbs));
+          root.appendChild(makeUrlRow(t('layerStyleUrlApiKey'), layerStyleApiKey, layerStyleApiKey));
         }
 
         const statusRow = document.createElement('div');
@@ -750,6 +906,12 @@
         useRow.textContent = t('infoUseIn');
         root.appendChild(useRow);
 
+        const authRow = document.createElement('div');
+        authRow.className = 'meta';
+        authRow.style.marginTop = '4px';
+        authRow.textContent = t('authHint');
+        root.appendChild(authRow);
+
         const snippetsTitle = document.createElement('div');
         snippetsTitle.className = 'meta';
         snippetsTitle.style.marginTop = '12px';
@@ -759,8 +921,12 @@
 
         const snippetRows = [
           {
-            label: t('snippetQgis'),
-            value: template
+            label: t('snippetQgisApiKey'),
+            value: layerStyleApiKey || templateApiKey
+          },
+          {
+            label: t('snippetQgisBasic'),
+            value: appendBasicAuthPlaceholder(tilejsonAbs)
           },
           {
             label: t('snippetArcgis'),
@@ -778,7 +944,7 @@
               id: `${projectId}-vectortiles`,
               name: `${projectId} vector`,
               type: 'MVT',
-              url: template,
+              url: templateAbs,
               minZoom: minzoom,
               maxZoom: maxzoom,
               visible: true
@@ -789,7 +955,7 @@
             value: JSON.stringify({
               type: 'vectorTiles',
               title: `${projectId} vector tiles`,
-              url: template,
+              url: templateAbs,
               minZoom: minzoom,
               maxZoom: maxzoom,
               bbox: bounds
@@ -806,7 +972,7 @@
     });
   };
 
-  const addProjectActions = (wrap) => {
+  const addProjectActions = async (wrap) => {
     if (!wrap || wrap.classList.contains('external-wms-block')) return;
     const projectId = wrap.getAttribute('data-project-id');
     if (!projectId) return;
@@ -824,11 +990,25 @@
       heading.appendChild(actions);
     }
 
+    const vectorLayers = await getProjectVectorLayers(projectId);
+    const hasVectorData = Array.isArray(vectorLayers) && vectorLayers.length > 0;
+    wrap.dataset.vtHasVectors = hasVectorData ? '1' : '0';
+    if (!hasVectorData) {
+      const existingBtn = actions.querySelector(`.${BTN_CLASS}`);
+      if (existingBtn) {
+        const btnWrap = existingBtn.closest('.qtiler-vectortiles-generate-wrap');
+        if (btnWrap && btnWrap.parentNode) btnWrap.parentNode.removeChild(btnWrap);
+        else existingBtn.remove();
+      }
+      return;
+    }
+
     if (!actions.querySelector(`.${BTN_CLASS}`)) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `btn btn-secondary ${BTN_CLASS}`;
       setGenerateBtnMode(btn, 'idle');
+      ensureGenerateProgressUi(btn);
       btn.addEventListener('click', async () => {
         const mode = btn.dataset.mode || 'idle';
         if (mode === 'generating') {
@@ -865,6 +1045,7 @@
         }
         const { minZoom, maxZoom, selectedLayerIds } = selection;
         setGenerateBtnMode(btn, 'generating');
+        renderGenerateProgress(btn, { status: 'queued', progress: 0, progressMessage: 'queued' });
         try {
           let queued = null;
           try {
@@ -878,6 +1059,7 @@
               const jobs = await fetchJobs();
               const active = projectActiveJob(jobs, projectId);
               setGenerateBtnMode(btn, 'generating', { jobId: active?.id || '' });
+              renderGenerateProgress(btn, active || { status: 'running', progress: 1, progressMessage: 'running' });
               showStatus(`${t('running')}: ${projectId}`);
               return;
             }
@@ -893,9 +1075,12 @@
           }
           const jobId = queued?.job?.id;
           setGenerateBtnMode(btn, 'generating', { jobId: jobId || '' });
+          renderGenerateProgress(btn, queued?.job || { status: 'queued', progress: 0, progressMessage: 'queued' });
           showStatus(`${t('queued')}: ${projectId}`);
           if (jobId) {
-            await pollJobUntilDone(jobId, projectId);
+            await pollJobUntilDone(jobId, projectId, {
+              onProgress: (job) => renderGenerateProgress(btn, job)
+            });
           }
           showStatus(`${t('ready')}: ${projectId}`);
           upsertReadyControls(wrap, projectId);
@@ -968,7 +1153,7 @@
       copyBtn.textContent = t('copyTileUrl');
       copyBtn.addEventListener('click', async () => {
         try {
-          await copyText(tileTemplateUrl(projectId));
+          await copyText(toAbsoluteUrl(tileTemplateUrl(projectId)));
           showStatus(t('copyOk'));
         } catch {
           showStatus(t('copyError'), true);
@@ -983,7 +1168,7 @@
     const arr = Array.isArray(payload?.tilesets) ? payload.tilesets : [];
     const byProject = new Set(arr.map((item) => item.projectId));
     document.querySelectorAll('.project-block[data-project-id]').forEach((wrap) => {
-      addProjectActions(wrap);
+      Promise.resolve(addProjectActions(wrap)).catch(() => {});
       const pid = wrap.getAttribute('data-project-id');
       if (pid && byProject.has(pid)) {
         upsertReadyControls(wrap, pid);
@@ -996,7 +1181,9 @@
     const layers = document.getElementById('layers');
     if (!layers) return;
     const observer = new MutationObserver(() => {
-      document.querySelectorAll('.project-block[data-project-id]').forEach(addProjectActions);
+      document.querySelectorAll('.project-block[data-project-id]').forEach((wrap) => {
+        Promise.resolve(addProjectActions(wrap)).catch(() => {});
+      });
     });
     observer.observe(layers, { childList: true, subtree: true });
     await refreshExistingTilesets();
