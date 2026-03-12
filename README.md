@@ -6,7 +6,7 @@ Copyright (C) 2025 MundoGIS.
 
 # Qtiler
 
-Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. Qtiler also produces WMS and WFS-T endpoints, supporting full OGC workflows (read and transactional vector editing). The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
+Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches and Vector Tiles from QGIS projects on Windows. Qtiler also produces WMS and WFS-T endpoints, supporting full OGC workflows (read and transactional vector editing). The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
 
 ![Qtiler](https://github.com/MundoGIS/Qtiler/blob/master/public/css/images/Qtiler.png)
 
@@ -73,6 +73,15 @@ git clone https://github.com/<your-account>/<your-repo>.git Qtiler
 cd Qtiler
 npm install
 ```
+
+## Initial admin login (required after install)
+After installation, sign in with the default admin account:
+
+- Username: `admin`
+- Password: `admin2026`
+
+For security, change this password immediately after your first login.
+Do this from the backend admin interface (`/admin`) in the authentication/user management section.
 
 ### Repository layout
 ```
