@@ -1,39 +1,9 @@
 VectorTiles Commercial License
-Version 1.0 · December 3, 2025
 
-1. Grant of License
-MundoGIS AB ("Licensor") grants the purchasing customer ("Licensee") a non-exclusive, non-transferable, royalty-free license to install and use the VectorTiles plugin ("Software") solely within a single Qtiler deployment operated by the Licensee or its wholly owned subsidiaries.
+Copyright (C) MundoGIS.
+All rights reserved.
 
-2. Permitted Use
-Licensee may:
-  a. Run the Software on production and staging instances that belong to the same deployment environment.
-  b. Modify configuration files delivered with the Software when necessary for integration with Licensee infrastructure.
-  c. Make a reasonable number of backup copies for disaster recovery, provided all proprietary notices remain intact.
+This plugin may be installed and used only with a valid Qtiler license and
+subject to the commercial agreement between MundoGIS and the licensee.
 
-3. Restrictions
-Licensee may not:
-  a. Distribute, sublicense, lease, sell, or otherwise transfer the Software to any third party without prior written approval from Licensor.
-  b. Publish or disclose the source code, license keys, or proprietary implementation details to any third party.
-  c. Use the Software to provide commercial hosting or "software as a service" offerings for unaffiliated third parties.
-  d. Remove or obscure copyright notices or references to this License.
-
-4. Ownership
-Licensor retains all right, title, and interest in and to the Software, including all intellectual property rights. This License conveys only the limited rights expressly stated herein.
-
-5. Support & Updates
-Unless covered by a separate support agreement, Licensor provides the Software "as is" without obligation to deliver updates, patches, or new features. Licensee may purchase premium maintenance directly from Licensor.
-
-6. Limited Warranty
-Licensor warrants that it has the right to grant this License. To the maximum extent permitted by law, the Software is provided "as is" without warranties of merchantability or fitness for a particular purpose.
-
-7. Limitation of Liability
-In no event shall Licensor be liable for any indirect, special, incidental, or consequential damages arising out of the use of or inability to use the Software. Licensor's aggregate liability shall not exceed the amount paid by Licensee for the Software.
-
-8. Termination
-This License remains in effect until terminated. Licensor may terminate the License if Licensee materially breaches its terms and fails to cure within 15 days of written notice. Upon termination, Licensee must cease all use of the Software and destroy all copies in its possession.
-
-9. Governing Law & Dispute Resolution
-This License is governed by the laws of Sweden, without regard to conflict-of-law principles. Any dispute shall be submitted to the competent courts of Gothenburg, Sweden.
-
-10. Contact
-For licensing questions, contact MundoGIS AB · support@mundogis.se.
+For licensing and renewals, contact: support@mundogis.se

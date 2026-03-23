@@ -422,6 +422,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Prevent browsers from caching HTML pages that contain authentication-dependent UI.
+// This reduces cases where the browser restores a cached page (bfcache) showing
+// stale 'logged in' UI after logout. Only apply to HTML requests / main entry paths.
+app.use((req, res, next) => {
+  try {
+    const urlPath = String(req.path || '').toLowerCase();
+    const wantsHtml = req.accepts && req.accepts('html');
+    const isHtmlPath = urlPath === '/' || urlPath.endsWith('.html') || urlPath === '/index.html' || urlPath === '/login';
+    if (wantsHtml || isHtmlPath) {
+      // Conservative header to prevent caching of sensitive UI
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  } catch (e) {}
+  return next();
+});
+
 // add: servir carpeta pública (sin index automático)
 const publicDir = path.join(__dirname, "public");
 const serviceMetadataPath = path.join(__dirname, "config", "service-metadata.json");
@@ -1476,6 +1494,45 @@ const hasVectorTilesCacheForProject = (projectId) => {
   } catch {
     return false;
   }
+};
+
+const hasQuantizedMeshCacheForProject = (projectId) => {
+  if (!projectId) return false;
+  const qmProjectDir = path.join(cacheDir, 'quantized-mesh', projectId);
+  if (!fs.existsSync(qmProjectDir)) return false;
+  try {
+    const queue = [qmProjectDir];
+    let dirsScanned = 0;
+    let filesScanned = 0;
+    const maxDirs = 1200;
+    const maxFiles = 25000;
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current) continue;
+      dirsScanned += 1;
+      if (dirsScanned > maxDirs) return true;
+
+      let entries = [];
+      try {
+        entries = fs.readdirSync(current, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          queue.push(path.join(current, entry.name));
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        filesScanned += 1;
+        if (filesScanned > maxFiles) return true;
+        if (/\.(terrain|json)$/i.test(entry.name)) return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
 };
 
 const pruneZoomDirectories = (baseDir, { minZoom = null, maxZoom = null } = {}) => {
@@ -7249,6 +7306,7 @@ app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.projec
 
     const targetLayers = layerNames.length ? layerNames : Array.from(indexByName.keys());
     const vectorTiles = hasVectorTilesCacheForProject(projectId);
+    const quantizedMesh = hasQuantizedMeshCacheForProject(projectId);
     const layers = {};
 
     for (const layerName of targetLayers) {
@@ -7269,13 +7327,15 @@ app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.projec
         wmts,
         wms,
         vectortiles: vectorTiles,
-        any: wmts || wms || vectorTiles
+        mesh: quantizedMesh,
+        any: wmts || wms || vectorTiles || quantizedMesh
       };
     }
 
     return res.json({
       project: projectId,
       vectorTiles,
+      quantizedMesh,
       layers
     });
   } catch (err) {

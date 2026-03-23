@@ -10,13 +10,12 @@ const asTrimmed = (value, fallback = '') => {
 };
 
 const sanitizeProjectId = (value) => asTrimmed(value).replace(/[^a-zA-Z0-9._-]/g, '');
-const runtimeTokenSecret = crypto.randomBytes(32).toString('hex');
 const getTokenSecret = () => asTrimmed(
   process.env.VECTOR_TILES_TOKEN_SECRET
   || process.env.QTILER_TOKEN_SECRET
   || process.env.SESSION_SECRET
   || process.env.JWT_SECRET
-  || runtimeTokenSecret
+  || 'qtiler-vector-tiles-secret'
 );
 const base64UrlEncode = (value) => Buffer.from(String(value), 'utf8').toString('base64url');
 const base64UrlDecode = (value) => Buffer.from(String(value), 'base64url').toString('utf8');
@@ -53,42 +52,6 @@ const verifyProjectToken = ({ token, projectId }) => {
     return false;
   }
 };
-
-const isProduction = () => String(process.env.NODE_ENV || '').toLowerCase() === 'production';
-
-const sendSafeJsonError = (res, status, errorCode, details = '') => {
-  const payload = { error: errorCode };
-  if (!isProduction()) {
-    const text = String(details || '').trim();
-    if (text) payload.details = text;
-  }
-  return res.status(status).json(payload);
-};
-
-const createRateLimiter = ({ windowMs = 60_000, max = 60 } = {}) => {
-  const hits = new Map();
-  return (req, res, next) => {
-    const now = Date.now();
-    const ip = String(req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown');
-    const userId = String(req.user?.id || 'anon');
-    const key = `${userId}:${ip}`;
-
-    const prev = hits.get(key);
-    if (!prev || now - prev.start >= windowMs) {
-      hits.set(key, { start: now, count: 1 });
-      return next();
-    }
-
-    prev.count += 1;
-    if (prev.count > max) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - (now - prev.start)) / 1000));
-      res.setHeader('Retry-After', String(retryAfterSeconds));
-      return res.status(429).json({ error: 'rate_limited' });
-    }
-
-    return next();
-  };
-};
 const normalizeSelectedLayerIds = (value) => {
   if (!Array.isArray(value)) return [];
   const out = [];
@@ -103,14 +66,7 @@ const normalizeSelectedLayerIds = (value) => {
 };
 const layerSlug = (value) => asTrimmed(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-const isAdmin = (req, security) => {
-  const authEnabled = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
-  if (authEnabled) {
-    return !!req.user && req.user.role === 'admin';
-  }
-  // Keep backward-compatible behavior when auth plugin is disabled.
-  return !req.user || req.user.role === 'admin';
-};
+const isAdmin = (req) => !req.user || req.user.role === 'admin';
 
 const listQgisProjects = (projectsDir) => {
   const out = [];
@@ -189,7 +145,7 @@ const ensureDir = async (dir) => {
   await fs.promises.mkdir(dir, { recursive: true });
 };
 
-const spawnWithWrapper = ({ scriptPath, args = [], cwd, onSpawn, onStdout, onStderr }) => new Promise((resolve, reject) => {
+const spawnWithWrapper = ({ scriptPath, args = [], cwd, onSpawn }) => new Promise((resolve, reject) => {
   const wrapper = path.join(process.cwd(), 'tools', 'run_qgis_python.bat');
   const comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe';
   const childArgs = ['/c', wrapper, scriptPath, ...args.map((x) => String(x))];
@@ -206,20 +162,8 @@ const spawnWithWrapper = ({ scriptPath, args = [], cwd, onSpawn, onStdout, onStd
     if (typeof onSpawn === 'function') onSpawn(proc);
   } catch {}
 
-  proc.stdout.on('data', (chunk) => {
-    const data = Buffer.from(chunk);
-    stdoutParts.push(data);
-    try {
-      if (typeof onStdout === 'function') onStdout(data);
-    } catch {}
-  });
-  proc.stderr.on('data', (chunk) => {
-    const data = Buffer.from(chunk);
-    stderrParts.push(data);
-    try {
-      if (typeof onStderr === 'function') onStderr(data);
-    } catch {}
-  });
+  proc.stdout.on('data', (chunk) => stdoutParts.push(Buffer.from(chunk)));
+  proc.stderr.on('data', (chunk) => stderrParts.push(Buffer.from(chunk)));
   proc.on('error', (err) => reject(err));
   proc.on('close', (code) => {
     resolve({
@@ -229,29 +173,6 @@ const spawnWithWrapper = ({ scriptPath, args = [], cwd, onSpawn, onStdout, onStd
     });
   });
 });
-
-const killProcessTree = async (proc) => {
-  const pid = Number(proc?.pid);
-  if (!Number.isFinite(pid) || pid <= 0) return false;
-
-  // On Windows the wrapper runs under cmd.exe; kill the full tree so Python/QGIS child processes stop too.
-  if (process.platform === 'win32') {
-    try {
-      await new Promise((resolve) => {
-        const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
-        killer.on('error', () => resolve());
-        killer.on('close', () => resolve());
-      });
-      return true;
-    } catch {}
-  }
-
-  try {
-    proc.kill('SIGTERM');
-    return true;
-  } catch {}
-  return false;
-};
 
 const parseJsonOutput = (buffer) => {
   const text = String(buffer || '').trim();
@@ -264,33 +185,6 @@ const parseJsonOutput = (buffer) => {
     } catch {}
   }
   return null;
-};
-
-const parseBasicAuthFromRequest = (req) => {
-  try {
-    const header = String(req.get('authorization') || '');
-    const parts = header.split(' ');
-    if (parts.length !== 2 || String(parts[0]).toLowerCase() !== 'basic') return null;
-    const decoded = Buffer.from(parts[1], 'base64').toString('utf-8');
-    const colonIdx = decoded.indexOf(':');
-    if (colonIdx <= 0) return null;
-    const username = decoded.substring(0, colonIdx);
-    const password = decoded.substring(colonIdx + 1);
-    if (!username) return null;
-    return { username, password };
-  } catch {
-    return null;
-  }
-};
-
-const parseProgressLine = (line) => {
-  const raw = String(line || '').trim();
-  const match = /^QTILER_PROGRESS:(\d{1,3})(?::(.*))?$/i.exec(raw);
-  if (!match) return null;
-  const progressRaw = Number(match[1]);
-  const progress = Number.isFinite(progressRaw) ? Math.max(0, Math.min(100, Math.floor(progressRaw))) : 0;
-  const message = asTrimmed(match[2] || '');
-  return { progress, message: message || null };
 };
 
 const enforceProjectAccess = async ({ req, res, security, projectId }) => {
@@ -338,8 +232,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
   const pyReadMetadata = path.join(baseDir, 'python', 'read_mbtiles_metadata.py');
   const pyIdentify = path.join(baseDir, 'python', 'identify_vector_feature.py');
   const clientDir = path.join(baseDir, 'client');
-  const adminMutationLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
-  const adminPollingLimiter = createRateLimiter({ windowMs: 60_000, max: 300 });
 
   const tilesetStore = registerStore('tilesets.json', { items: {} });
   const jobs = [];
@@ -365,8 +257,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     retries: Number.isFinite(job.retries) ? job.retries : 0,
     error: job.error || null,
     cancelRequested: job.cancelRequested === true,
-    progress: Number.isFinite(job.progress) ? Math.max(0, Math.min(100, Math.floor(job.progress))) : 0,
-    progressMessage: job.progressMessage || null,
     output: job.output || null,
     tileset: job.tileset || null
   });
@@ -376,14 +266,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     jobs.splice(0, jobs.length - MAX_JOB_HISTORY);
   };
 
-  const buildDerivedTokenForBasicRequest = ({ req, projectId, existingToken = '', apiKey = '' }) => {
-    if (asTrimmed(existingToken) || asTrimmed(apiKey)) return '';
-    const basicCreds = parseBasicAuthFromRequest(req);
-    if (!basicCreds) return '';
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    return createProjectToken({ projectId, expiresAt });
-  };
-
   const findJob = (jobId) => jobs.find((job) => job && job.id === jobId) || null;
 
   const hasPendingForProject = (projectId) => {
@@ -391,7 +273,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return jobs.some((job) => job.projectId === projectId && (job.status === 'queued' || job.status === 'running'));
   };
 
-  const executeGenerate = async ({ projectId, minZoom, maxZoom, selectedLayerIds = [], job = null }) => {
+  const executeGenerate = async ({ projectId, minZoom, maxZoom, selectedLayerIds = [] }) => {
     const projectPath = resolveProjectPath(projectsDir, projectId);
     if (!projectPath) {
       throw new Error('project_not_found');
@@ -400,33 +282,14 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     const outputFile = path.join(outputDir, 'tiles.mbtiles');
     await ensureDir(outputDir);
 
-    let stdoutTail = '';
-    const handleProgressChunk = (chunk) => {
-      if (!job) return;
-      const text = `${stdoutTail}${String(chunk || '')}`;
-      const lines = text.split(/\r?\n/);
-      stdoutTail = lines.pop() || '';
-      for (const line of lines) {
-        const parsedProgress = parseProgressLine(line);
-        if (!parsedProgress) continue;
-        job.progress = parsedProgress.progress;
-        job.progressMessage = parsedProgress.message;
-      }
-    };
-
     const run = await spawnWithWrapper({
       scriptPath: pyGenerate,
       args: [projectPath, outputFile, String(minZoom), String(maxZoom), JSON.stringify(selectedLayerIds)],
       cwd: process.cwd(),
       onSpawn: (proc) => {
         runningJobProc = proc;
-      },
-      onStdout: handleProgressChunk
+      }
     });
-
-    // Flush a trailing progress line if the stream did not end with newline.
-    handleProgressChunk('\n');
-
     const parsed = parseJsonOutput(run.stdout);
     if (run.code !== 0 || !parsed?.ok) {
       const details = parsed?.details || String(run.stderr || '').trim() || 'vector_tile_generation_failed';
@@ -480,8 +343,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
         job.status = 'running';
         job.startedAt = new Date().toISOString();
         job.error = null;
-        job.progress = Math.max(1, Number(job.progress) || 0);
-        job.progressMessage = 'running';
         job.output = null;
         runningJobId = job.id;
         runningJobProc = null;
@@ -491,17 +352,13 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
             projectId: job.projectId,
             minZoom: job.minZoom,
             maxZoom: job.maxZoom,
-            selectedLayerIds: Array.isArray(job.selectedLayerIds) ? job.selectedLayerIds : [],
-            job
+            selectedLayerIds: Array.isArray(job.selectedLayerIds) ? job.selectedLayerIds : []
           });
           if (job.cancelRequested) {
             job.status = 'cancelled';
             job.error = 'job_cancelled';
-            job.progressMessage = 'cancelled';
           } else {
             job.status = 'completed';
-            job.progress = 100;
-            job.progressMessage = 'done';
           }
           job.endedAt = new Date().toISOString();
           job.tileset = result.metadata;
@@ -512,7 +369,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
           job.error = job.cancelRequested
             ? 'job_cancelled'
             : String(err?.message || err || 'vector_tile_generation_failed');
-          job.progressMessage = job.cancelRequested ? 'cancelled' : 'error';
         } finally {
           runningJobId = null;
           runningJobProc = null;
@@ -532,8 +388,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       maxZoom,
       selectedLayerIds: Array.isArray(selectedLayerIds) ? selectedLayerIds : [],
       status: 'queued',
-      progress: 0,
-      progressMessage: 'queued',
       createdAt: new Date().toISOString(),
       startedAt: null,
       endedAt: null,
@@ -579,47 +433,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     }
   };
 
-  const defaultMbtilesPathForProject = (projectId) => path.join(cacheRoot, projectId, 'tiles.mbtiles');
-
-  const resolveTilesetFromStoreOrDisk = async (projectId) => {
-    const snapshot = await tilesetStore.read();
-    const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
-    const fromStore = items[projectId];
-    if (fromStore && fromStore.mbtilesPath && fs.existsSync(fromStore.mbtilesPath)) {
-      return {
-        tile: fromStore,
-        fromStore: true,
-        sourceLayers: Array.isArray(fromStore.sourceLayers) ? fromStore.sourceLayers : []
-      };
-    }
-
-    const mbtilesPath = defaultMbtilesPathForProject(projectId);
-    if (!fs.existsSync(mbtilesPath)) {
-      return { tile: null, fromStore: false, sourceLayers: [] };
-    }
-
-    const vectorLayers = await loadMbtilesVectorLayers(mbtilesPath);
-    const sourceLayers = vectorLayers.map((row) => asTrimmed(row?.id || '')).filter(Boolean);
-    const fallback = {
-      projectId,
-      mbtilesPath,
-      minZoom: Number.isFinite(Number(fromStore?.minZoom)) ? Number(fromStore.minZoom) : 0,
-      maxZoom: Number.isFinite(Number(fromStore?.maxZoom)) ? Number(fromStore.maxZoom) : 14,
-      selectedLayerIds: Array.isArray(fromStore?.selectedLayerIds) ? fromStore.selectedLayerIds : [],
-      sourceLayerMeta: Array.isArray(fromStore?.sourceLayerMeta) ? fromStore.sourceLayerMeta : vectorLayers,
-      sourceLayers,
-      layerStyles: Array.isArray(fromStore?.layerStyles) ? fromStore.layerStyles : [],
-      bounds: Array.isArray(fromStore?.bounds) ? fromStore.bounds : null,
-      updatedAt: fromStore?.updatedAt || new Date().toISOString(),
-      discovered: true
-    };
-    return {
-      tile: fallback,
-      fromStore: false,
-      sourceLayers
-    };
-  };
-
   const buildStyleLinks = ({ base, projectId, token = '', sourceLayers = [] }) => {
     const layers = Array.isArray(sourceLayers) ? sourceLayers.map((x) => asTrimmed(x)).filter(Boolean) : [];
     if (!layers.length) return { combined: null, perLayer: [] };
@@ -655,26 +468,6 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     || String(req.headers?.authorization || '').replace(/^Bearer\s+/i, '')
   );
 
-  const requestApiKey = (req) => asTrimmed(
-    req.query?.api_key
-    || req.query?.apikey
-    || req.query?.apiKey
-    || req.headers?.['x-api-key']
-    || req.headers?.['x-qtiler-key']
-    || req.headers?.['x-api_key']
-  );
-
-  const requestApiKeyRobust = (req) => {
-    const direct = requestApiKey(req);
-    if (direct) return direct;
-    try {
-      const raw = String(req.originalUrl || req.url || '');
-      const m = /[?&]api_key=([^&#]+)/i.exec(raw);
-      if (m && m[1]) return decodeURIComponent(m[1]);
-    } catch {}
-    return '';
-  };
-
   const hasTokenAccess = (req, projectId) => {
     const token = requestToken(req);
     if (!token) return false;
@@ -688,46 +481,14 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return `${url}${separator}token=${encodeURIComponent(tk)}`;
   };
 
-  const withApiKey = (url, apiKey) => {
-    const key = asTrimmed(apiKey);
-    if (!key) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}api_key=${encodeURIComponent(key)}`;
-  };
-
-  const withBasicCredentials = (url, req) => {
-    const creds = parseBasicAuthFromRequest(req);
-    if (!creds) return url;
-    try {
-      const parsed = new URL(url);
-      // Preserve caller's credentials through style/tilejson into tile source URLs for QGIS clients.
-      parsed.username = creds.username;
-      parsed.password = creds.password;
-      return parsed.toString();
-    } catch {
-      return url;
-    }
-  };
-
-  const withRequestAuth = (url, req, { token = '', apiKey = '' } = {}) => {
-    const tk = asTrimmed(token);
-    const key = asTrimmed(apiKey);
-    if (tk) return withToken(url, tk);
-    if (key) return withApiKey(url, key);
-    return withBasicCredentials(url, req);
-  };
-
   app.use(`/plugins/${pluginName}/client`, express.static(clientDir, { index: false }));
 
-  app.get(`/plugins/${pluginName}/admin`, (req, res) => {
-    if (!isAdmin(req, security)) {
-      return res.status(403).json({ error: 'admin_required' });
-    }
+  app.get(`/plugins/${pluginName}/admin`, (_req, res) => {
     res.sendFile(path.join(clientDir, 'admin.html'));
   });
 
   app.get(`/plugins/${pluginName}/api/projects`, async (req, res) => {
-    if (!isAdmin(req, security)) {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const projects = listQgisProjects(projectsDir).map((p) => ({ id: p.id, name: p.name }));
@@ -735,7 +496,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
   });
 
   app.get(`/plugins/${pluginName}/api/projects/:projectId/layers`, async (req, res) => {
-    if (!isAdmin(req, security)) {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
 
@@ -757,50 +518,27 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       });
       const parsed = parseJsonOutput(run.stdout);
       if (run.code !== 0 || !parsed?.ok) {
-        return sendSafeJsonError(
-          res,
-          500,
-          parsed?.error || 'layer_list_failed',
-          parsed?.details || String(run.stderr || '').trim() || 'layer_list_failed'
-        );
+        return res.status(500).json({
+          error: parsed?.error || 'layer_list_failed',
+          details: parsed?.details || String(run.stderr || '').trim() || 'layer_list_failed'
+        });
       }
       return res.json({
         projectId,
         layers: Array.isArray(parsed.layers) ? parsed.layers : []
       });
     } catch (err) {
-      return sendSafeJsonError(res, 500, 'layer_list_failed', String(err?.message || err || ''));
+      return res.status(500).json({ error: 'layer_list_failed', details: String(err?.message || err || '') });
     }
   });
 
   app.get(`/plugins/${pluginName}/api/tilesets`, async (req, res) => {
-    if (!isAdmin(req, security)) {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const snapshot = await tilesetStore.read();
     const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
     const base = `${req.protocol}://${req.get('host')}`;
-    const projects = listQgisProjects(projectsDir).map((p) => p.id);
-    for (const projectId of projects) {
-      if (items[projectId] && items[projectId].mbtilesPath && fs.existsSync(items[projectId].mbtilesPath)) continue;
-      const mbtilesPath = defaultMbtilesPathForProject(projectId);
-      if (!fs.existsSync(mbtilesPath)) continue;
-      const vectorLayers = await loadMbtilesVectorLayers(mbtilesPath);
-      items[projectId] = {
-        projectId,
-        mbtilesPath,
-        minZoom: 0,
-        maxZoom: 14,
-        selectedLayerIds: [],
-        sourceLayerMeta: vectorLayers,
-        sourceLayers: vectorLayers.map((row) => asTrimmed(row?.id || '')).filter(Boolean),
-        layerStyles: [],
-        bounds: null,
-        updatedAt: new Date().toISOString(),
-        discovered: true
-      };
-    }
-
     const listRaw = Object.values(items).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     const list = await Promise.all(listRaw.map(async (item) => {
       const sourceLayers = Array.isArray(item?.sourceLayers) && item.sourceLayers.length
@@ -812,8 +550,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.json({ tilesets: list });
   });
 
-  app.post(`/plugins/${pluginName}/api/access-token`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/access-token`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
 
@@ -854,8 +592,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     });
   });
 
-  app.post(`/plugins/${pluginName}/api/generate`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/generate`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
 
@@ -889,8 +627,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.status(202).json({ status: 'queued', job: serializeJob(job) });
   });
 
-  app.get(`/plugins/${pluginName}/api/jobs`, adminPollingLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.get(`/plugins/${pluginName}/api/jobs`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const ordered = jobs.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
@@ -906,8 +644,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     });
   });
 
-  app.get(`/plugins/${pluginName}/api/jobs/:jobId`, adminPollingLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.get(`/plugins/${pluginName}/api/jobs/:jobId`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const jobId = asTrimmed(req.params?.jobId || '');
@@ -917,8 +655,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.json({ job: serializeJob(job) });
   });
 
-  app.post(`/plugins/${pluginName}/api/jobs/:jobId/retry`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/jobs/:jobId/retry`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const jobId = asTrimmed(req.params?.jobId || '');
@@ -942,8 +680,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.status(202).json({ status: 'queued', job: serializeJob(job) });
   });
 
-  app.post(`/plugins/${pluginName}/api/jobs/:jobId/cancel`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/jobs/:jobId/cancel`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const jobId = asTrimmed(req.params?.jobId || '');
@@ -966,16 +704,12 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     }
 
     if (job.status === 'running' && runningJobId === job.id && runningJobProc) {
-      await killProcessTree(runningJobProc);
+      try {
+        runningJobProc.kill('SIGTERM');
+      } catch {}
       setTimeout(() => {
         try {
-          if (runningJobProc && !runningJobProc.killed) {
-            if (process.platform === 'win32') {
-              spawn('taskkill', ['/PID', String(runningJobProc.pid), '/T', '/F'], { stdio: 'ignore' });
-            } else {
-              runningJobProc.kill('SIGKILL');
-            }
-          }
+          if (runningJobProc && !runningJobProc.killed) runningJobProc.kill('SIGKILL');
         } catch {}
       }, 2000);
     }
@@ -983,8 +717,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.json({ status: 'cancelling', job: serializeJob(job) });
   });
 
-  app.post(`/plugins/${pluginName}/api/jobs/:jobId/prioritize`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/jobs/:jobId/prioritize`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const jobId = asTrimmed(req.params?.jobId || '');
@@ -1002,8 +736,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     return res.json({ status: 'prioritized', job: serializeJob(job) });
   });
 
-  app.post(`/plugins/${pluginName}/api/jobs/prioritize-project/:projectId`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.post(`/plugins/${pluginName}/api/jobs/prioritize-project/:projectId`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const projectId = sanitizeProjectId(req.params?.projectId || '');
@@ -1030,8 +764,8 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     });
   });
 
-  app.delete(`/plugins/${pluginName}/api/tilesets/:projectId`, adminMutationLimiter, async (req, res) => {
-    if (!isAdmin(req, security)) {
+  app.delete(`/plugins/${pluginName}/api/tilesets/:projectId`, async (req, res) => {
+    if (!isAdmin(req)) {
       return res.status(403).json({ error: 'admin_required' });
     }
     const projectId = sanitizeProjectId(req.params?.projectId || '');
@@ -1058,25 +792,23 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     if (!projectId) return res.status(400).json({ error: 'project_id_required' });
 
     const token = requestToken(req);
-    const apiKey = requestApiKeyRobust(req);
     if (!hasTokenAccess(req, projectId)) {
       const allowed = await enforceProjectAccess({ req, res, security, projectId });
       if (!allowed) return;
     }
 
-    const resolved = await resolveTilesetFromStoreOrDisk(projectId);
-    const tile = resolved.tile;
+    const snapshot = await tilesetStore.read();
+    const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
+    const tile = items[projectId];
     if (!tile || !tile.mbtilesPath || !fs.existsSync(tile.mbtilesPath)) {
       return res.status(404).json({ error: 'tileset_not_found' });
     }
 
-    const derivedToken = buildDerivedTokenForBasicRequest({ req, projectId, existingToken: token, apiKey });
-    const authTokenForLinks = asTrimmed(token) || derivedToken;
-
-    const urlRaw = `/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
-    const url = withRequestAuth(urlRaw, req, { token: authTokenForLinks, apiKey });
-    const styleRaw = `/plugins/${pluginName}/style/${encodeURIComponent(projectId)}.json`;
-    const style = withRequestAuth(styleRaw, req, { token: authTokenForLinks, apiKey });
+    const base = `${req.protocol}://${req.get('host')}`;
+    const urlRaw = `${base}/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
+    const url = withToken(urlRaw, token);
+    const styleRaw = `${base}/plugins/${pluginName}/style/${encodeURIComponent(projectId)}.json`;
+    const style = withToken(styleRaw, token);
     const vectorLayersRaw = (Array.isArray(tile.sourceLayerMeta) && tile.sourceLayerMeta.length)
       ? tile.sourceLayerMeta
       : (Array.isArray(tile.sourceLayers) && tile.sourceLayers.length
@@ -1114,22 +846,21 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     if (!projectId) return res.status(400).json({ error: 'project_id_required' });
 
     const token = requestToken(req);
-    const apiKey = requestApiKeyRobust(req);
     if (!hasTokenAccess(req, projectId)) {
       const allowed = await enforceProjectAccess({ req, res, security, projectId });
       if (!allowed) return;
     }
 
-    const resolved = await resolveTilesetFromStoreOrDisk(projectId);
-    const tile = resolved.tile;
+    const snapshot = await tilesetStore.read();
+    const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
+    const tile = items[projectId];
     if (!tile || !tile.mbtilesPath || !fs.existsSync(tile.mbtilesPath)) {
       return res.status(404).json({ error: 'tileset_not_found' });
     }
 
-    const derivedToken = buildDerivedTokenForBasicRequest({ req, projectId, existingToken: token, apiKey });
-    const authTokenForLinks = asTrimmed(token) || derivedToken;
-    const tilesUrlRaw = `/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
-    const tilesUrl = withRequestAuth(tilesUrlRaw, req, { token: authTokenForLinks, apiKey });
+    const base = `${req.protocol}://${req.get('host')}`;
+    const tilesUrlRaw = `${base}/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
+    const tilesUrl = withToken(tilesUrlRaw, token);
     const minZoom = Number.isFinite(Number(tile.minZoom)) ? Number(tile.minZoom) : 0;
     const maxZoom = Number.isFinite(Number(tile.maxZoom)) ? Number(tile.maxZoom) : 14;
 
@@ -1150,10 +881,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
 
     const requestedRaw = asTrimmed(req.query?.layers || '');
     const requested = requestedRaw
-      ? requestedRaw
-        .split(',')
-        .map((x) => asTrimmed(String(x || '').split('?')[0]))
-        .filter(Boolean)
+      ? requestedRaw.split(',').map((x) => asTrimmed(x)).filter(Boolean)
       : [];
     const selectedSourceLayers = requested.length
       ? sourceLayers.filter((name) => requested.includes(name))
@@ -1357,16 +1085,14 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       });
       const parsed = parseJsonOutput(run.stdout);
       if (run.code !== 0 || !parsed?.ok) {
-        return sendSafeJsonError(
-          res,
-          400,
-          parsed?.error || 'identify_failed',
-          parsed?.details || String(run.stderr || '').trim() || 'identify_failed'
-        );
+        return res.status(400).json({
+          error: parsed?.error || 'identify_failed',
+          details: parsed?.details || String(run.stderr || '').trim() || 'identify_failed'
+        });
       }
       return res.json(parsed);
     } catch (err) {
-      return sendSafeJsonError(res, 500, 'identify_failed', String(err?.message || err || ''));
+      return res.status(500).json({ error: 'identify_failed', details: String(err?.message || err || '') });
     }
   });
 
@@ -1386,8 +1112,9 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       return res.status(400).send('invalid_tile_coordinates');
     }
 
-    const resolved = await resolveTilesetFromStoreOrDisk(projectId);
-    const tile = resolved.tile;
+    const snapshot = await tilesetStore.read();
+    const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
+    const tile = items[projectId];
     if (!tile || !tile.mbtilesPath || !fs.existsSync(tile.mbtilesPath)) {
       return res.status(404).send('tileset_not_found');
     }
@@ -1405,7 +1132,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       if (run.stdout && run.stdout.length > 2 && run.stdout[0] === 0x1f && run.stdout[1] === 0x8b) {
         res.setHeader('Content-Encoding', 'gzip');
       }
-      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.status(200).send(run.stdout);
     } catch {
       return res.status(500).send('tile_read_failed');

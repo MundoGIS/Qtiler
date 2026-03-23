@@ -2,7 +2,7 @@ Qrigo Commercial License
 Version 1.0 · December 3, 2025
 
 1. Grant of License
-MundoGIS AB ("Licensor") grants the purchasing customer ("Licensee") a non-exclusive, non-transferable, royalty-free license to install and use the Qrigo plugin ("Software") solely within a single Qtiler deployment operated by the Licensee or its wholly owned subsidiaries.
+MundoGIS AB ("Licensor") grants the purchasing customer ("Licensee") a non-exclusive, non-transferable, royalty-free license to install and use the QtilerAuth plugin ("Software") solely within a single Qtiler deployment operated by the Licensee or its wholly owned subsidiaries.
 
 2. Permitted Use
 Licensee may:
@@ -36,4 +36,4 @@ This License remains in effect until terminated. Licensor may terminate the Lice
 This License is governed by the laws of Sweden, without regard to conflict-of-law principles. Any dispute shall be submitted to the competent courts of Gothenburg, Sweden.
 
 10. Contact
-For licensing questions, contact MundoGIS AB · support@mundogis.se.
+For licensing questions, contact MundoGIS AB · abel.gonzalez@mundogis.se.

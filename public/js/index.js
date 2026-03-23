@@ -31,6 +31,23 @@
       // Start monitoring after user is authenticated
       let inactivityMonitorActive = false;
 
+      // Ensure clicking the brand/logo leads to a fresh navigation (avoid bfcache stale UI).
+      document.addEventListener('click', (evt) => {
+        try {
+          const link = evt.target && evt.target.closest ? evt.target.closest('a.brand-logo, a.nav-link') : null;
+          if (!link || !(link instanceof HTMLAnchorElement)) return;
+          const href = link.getAttribute('href') || link.href;
+          if (!href) return;
+          const url = new URL(href, location.href);
+          if (url.origin !== location.origin) return;
+          if (url.pathname === '/' || url.pathname === '/index.html') {
+            evt.preventDefault();
+            const sep = url.search ? '&' : '?';
+            location.href = url.pathname + url.search + sep + '_cb=' + Date.now();
+          }
+        } catch (e) {}
+      }, true);
+
       const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
         ? window.qtilerLang.SUPPORTED_LANGS
         : ["en", "es", "sv"];
@@ -218,6 +235,18 @@
         }
       };
 
+        // Reload page when restored from back/forward cache to ensure auth state is fresh.
+        // Some browsers restore DOM from bfcache without re-running scripts; on pageshow
+        // with event.persisted we force a reload so UI reflects current login state.
+        window.addEventListener('pageshow', (event) => {
+          try {
+            if (event && event.persisted) {
+              console.log('pageshow persisted - reloading to refresh auth state');
+              window.location.reload();
+            }
+          } catch (e) {}
+        });
+
       const setLanguage = (lang) => {
         if (window.qtilerLang?.set) {
           window.qtilerLang.set(lang);
@@ -282,6 +311,9 @@
           }
           if (enabled.includes('VectorTiles')) {
             await loadPluginClientScript('/plugins/VectorTiles/client/vectortiles-dashboard.js');
+          }
+          if (enabled.includes('QuantizedMesh')) {
+            await loadPluginClientScript('/plugins/QuantizedMesh/client/quantizedmesh-project.js');
           }
         } catch {}
       };
@@ -4253,18 +4285,24 @@
           }
           showStatus('Project uploaded: ' + (projectId || file.name));
           try {
-            const currProjects = await fetch('/projects').then((r) => r.json()).catch(() => []);
-            const matching = projectId && Array.isArray(currProjects)
-              ? currProjects.find((p) => p && (p.id === projectId || p.name === projectId))
-              : null;
-            if (matching) {
-              await ensureProjectBlock(matching.id, { projectMeta: matching });
+            if (projectId) {
+              await ensureProjectBlock(projectId, {
+                projectMeta: {
+                  id: projectId,
+                  name: projectId
+                },
+                forceConfigReload: true
+              });
             } else {
               loadLayers({ forceConfigReload: true });
             }
           } catch (refreshErr) {
-            console.warn('Partial refresh failed, falling back to full reload', refreshErr);
-            loadLayers({ forceConfigReload: true });
+            console.warn('Targeted refresh failed after upload', refreshErr);
+            if (projectId) {
+              scheduleProjectRefresh(projectId, { delayMs: 900, forceConfigReload: true });
+            } else {
+              loadLayers({ forceConfigReload: true });
+            }
           }
         } catch (err) {
           showStatus('Network error: ' + err, true);
@@ -4742,6 +4780,7 @@
         } catch {}
         const cachePresenceByLayer = new Map();
         let hasVectorTilesProjectCache = false;
+        let hasQuantizedMeshProjectCache = false;
         if (isAdmin) {
           try {
             const params = new URLSearchParams();
@@ -4752,6 +4791,7 @@
             if (statusRes.ok) {
               const statusJson = await statusRes.json().catch(() => null);
               hasVectorTilesProjectCache = !!statusJson?.vectorTiles;
+              hasQuantizedMeshProjectCache = !!statusJson?.quantizedMesh;
               const layerStatus = statusJson?.layers && typeof statusJson.layers === 'object' ? statusJson.layers : {};
               for (const [layerName, state] of Object.entries(layerStatus)) {
                 if (!layerName) continue;
@@ -4796,7 +4836,8 @@
           const cachePresence = cachePresenceByLayer.get(l.name) || null;
           const hasWmsCache = !!cachePresence?.wms;
           const hasVectorTilesCache = !!cachePresence?.vectortiles || hasVectorTilesProjectCache;
-          const hasAnyCacheForDelete = hasCachedTiles || hasWmsCache || hasVectorTilesCache;
+          const hasMeshCache = !!cachePresence?.mesh || hasQuantizedMeshProjectCache;
+          const hasAnyCacheForDelete = hasCachedTiles || hasWmsCache || hasVectorTilesCache || hasMeshCache;
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
           const scheduleSummary = describeSchedule(scheduleObj);
@@ -5043,7 +5084,7 @@
 
             if (hasAnyCacheForDelete) {
               const delBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
-              delBtn.addEventListener('click', () => deleteCache(delBtn, project.id, l.name));
+              delBtn.addEventListener('click', () => deleteCache(delBtn, project.id, l.name, { hasMeshCache }));
               const delWrap = document.createElement('span');
               delWrap.className = 'delete-cache-container has-cache';
               delWrap.appendChild(delBtn);
@@ -5406,131 +5447,156 @@
               console.debug('generate-cache request body:', JSON.parse(JSON.stringify(body)));
             }
           } catch (e) {}
-          const res = await fetch('/generate-cache', {
+
+          // --- NUEVO FLUJO: intentar generar, si ya existe mesh, preguntar si reemplazar ---
+          let res = await fetch('/generate-cache', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
           });
+          let data = await res.json().catch(()=>null);
+          if (!res.ok && (data?.error === 'mesh_exists' || data?.error === 'tileset_exists' || data?.details?.includes('already exists'))) {
+            const confirmed = await confirmActionModal({
+              title: 'Mesh existente',
+              message: 'Ya existe un mesh generado para este proyecto/capa. ¿Deseas reemplazarlo?',
+              confirmLabel: 'Reemplazar',
+              cancelLabel: 'Cancelar',
+              isDanger: true
+            });
+            if (!confirmed) {
+              restoreButton();
+              return;
+            }
+            // reintentar con overwrite
+            body.overwrite = true;
+            res = await fetch('/generate-cache', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            data = await res.json().catch(()=>null);
+          }
           if (res.status === 401) {
             window.location.href = '/login?reason=session_expired';
             return;
           }
-          const data = await res.json().catch(()=>null);
           if (!res.ok) {
             showStatus('Error: ' + (data?.details || res.statusText || JSON.stringify(data)), true);
             restoreButton();
-          } else {
-            showStatus((recache ? 'Recache' : 'Generation') + ' started for ' + targetLabel + ': job id ' + data.id);
-            // crear botón detener junto al botón original
-            const stopBtn = document.createElement('button');
-            stopBtn.className = 'btn btn-danger';
-            stopBtn.textContent = 'Abort';
-            stopBtn.onclick = async () => {
+            return;
+          }
+
+          showStatus((recache ? 'Recache' : 'Generation') + ' started for ' + targetLabel + ': job id ' + data.id);
+          // crear botón detener junto al botón original
+          const stopBtn = document.createElement('button');
+          stopBtn.className = 'btn btn-danger';
+          stopBtn.textContent = 'Abort';
+          stopBtn.onclick = async () => {
+            stopBtn.disabled = true;
+            showStatus('Aborting job ' + data.id);
+            try {
+              const r = await fetch('/generate-cache/' + encodeURIComponent(data.id), { method: 'DELETE' });
+              const resjson = await r.json().catch(()=>null);
+              if (!r.ok) {
+                showStatus('Abort failed: ' + (resjson?.error || r.statusText), true);
+              } else {
+                showStatus('Job abortado: ' + data.id);
+              }
+            } catch (err) {
+              showStatus('Network error while aborting: ' + err, true);
+            } finally {
+              // dejamos que el polling detecte el estado y cierre UI
               stopBtn.disabled = true;
-              showStatus('Aborting job ' + data.id);
-              try {
-                const r = await fetch('/generate-cache/' + encodeURIComponent(data.id), { method: 'DELETE' });
-                const resjson = await r.json().catch(()=>null);
-                if (!r.ok) {
-                  showStatus('Abort failed: ' + (resjson?.error || r.statusText), true);
-                } else {
-                  showStatus('Job abortado: ' + data.id);
-                }
-              } catch (err) {
-                showStatus('Network error while aborting: ' + err, true);
-              } finally {
-                // dejamos que el polling detecte el estado y cierre UI
-                stopBtn.disabled = true;
+            }
+          };
+          // insertar stopBtn después del botón que inició la generación
+          btn.parentNode && btn.parentNode.appendChild(stopBtn);
+
+          // crear indicador de progreso
+          const progressEl = document.createElement('span');
+          progressEl.className = 'progress-pill';
+          const bar = document.createElement('span');
+          bar.className = 'progress-bar';
+          const barInner = document.createElement('i');
+          bar.appendChild(barInner);
+          const txt = document.createElement('span');
+          txt.textContent = '0%';
+          progressEl.appendChild(bar);
+          progressEl.appendChild(txt);
+          btn.parentNode && btn.parentNode.appendChild(progressEl);
+
+          // polling de estado
+          let polling = true;
+          const parseProgress = (stdout) => {
+            if (!stdout) return null;
+            const lines = stdout.split(/\r?\n/).filter(Boolean);
+            let last = null;
+            for (const line of lines) {
+              const start = line.indexOf('{');
+              const end = line.lastIndexOf('}');
+              if (start !== -1 && end !== -1 && end > start) {
+                try {
+                  const obj = JSON.parse(line.slice(start, end+1));
+                  if (obj && (obj.progress || obj.status || obj.debug)) last = obj;
+                } catch {}
               }
-            };
-            // insertar stopBtn después del botón que inició la generación
-            btn.parentNode && btn.parentNode.appendChild(stopBtn);
+            }
+            return last;
+          };
 
-            // crear indicador de progreso
-            const progressEl = document.createElement('span');
-            progressEl.className = 'progress-pill';
-            const bar = document.createElement('span');
-            bar.className = 'progress-bar';
-            const barInner = document.createElement('i');
-            bar.appendChild(barInner);
-            const txt = document.createElement('span');
-            txt.textContent = '0%';
-            progressEl.appendChild(bar);
-            progressEl.appendChild(txt);
-            btn.parentNode && btn.parentNode.appendChild(progressEl);
-
-            // polling de estado
-            let polling = true;
-            const parseProgress = (stdout) => {
-              if (!stdout) return null;
-              const lines = stdout.split(/\r?\n/).filter(Boolean);
-              let last = null;
-              for (const line of lines) {
-                const start = line.indexOf('{');
-                const end = line.lastIndexOf('}');
-                if (start !== -1 && end !== -1 && end > start) {
-                  try {
-                    const obj = JSON.parse(line.slice(start, end+1));
-                    if (obj && (obj.progress || obj.status || obj.debug)) last = obj;
-                  } catch {}
-                }
-              }
-              return last;
-            };
-
-            let lastPct = 0;
-            const clamp = (v) => Math.max(0, Math.min(100, Number(v)));
-            const timer = setInterval(async () => {
-              if (!polling) return;
-              try {
-                const r = await fetch('/generate-cache/' + encodeURIComponent(data.id) + '?tail=50000');
-                if (!r.ok) {
-                  // si 404, es probable que el job haya expirado/limpiado
-                  if (r.status === 404) {
-                    txt.textContent = 'not found';
-                    clearInterval(timer);
-                    polling = false;
-                    restoreButton();
-                  }
-                  return;
-                }
-                const j = await r.json().catch(()=>null);
-                const last = parseProgress(j?.stdout || '');
-                if (last?.percent != null) {
-                  lastPct = clamp(last.percent);
-                  barInner.style.width = lastPct + '%';
-                  txt.textContent = lastPct + '%';
-                }
-                if (j?.status && ["completed","error","aborted"].includes(j.status)) {
-                  if (j.status === 'completed' && lastPct < 100) {
-                    lastPct = 100;
-                    barInner.style.width = '100%';
-                    txt.textContent = '100%';
-                  }
-                  txt.textContent += ` · ${j.status}`;
+          let lastPct = 0;
+          const clamp = (v) => Math.max(0, Math.min(100, Number(v)));
+          const timer = setInterval(async () => {
+            if (!polling) return;
+            try {
+              const r = await fetch('/generate-cache/' + encodeURIComponent(data.id) + '?tail=50000');
+              if (!r.ok) {
+                // si 404, es probable que el job haya expirado/limpiado
+                if (r.status === 404) {
+                  txt.textContent = 'not found';
                   clearInterval(timer);
                   polling = false;
-                  // limpiar UI y reactivar botón
-                  try { stopBtn.remove(); } catch {}
                   restoreButton();
-                  // refresh layer list after foreground job completes
-                  scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true });
                 }
-              } catch (e) {
-                // ignorar fallos de red puntuales
+                return;
               }
-            }, 1000);
+              const j = await r.json().catch(()=>null);
+              const last = parseProgress(j?.stdout || '');
+              if (last?.percent != null) {
+                lastPct = clamp(last.percent);
+                barInner.style.width = lastPct + '%';
+                txt.textContent = lastPct + '%';
+              }
+              if (j?.status && ["completed","error","aborted"].includes(j.status)) {
+                if (j.status === 'completed' && lastPct < 100) {
+                  lastPct = 100;
+                  barInner.style.width = '100%';
+                  txt.textContent = '100%';
+                }
+                txt.textContent += ` · ${j.status}`;
+                clearInterval(timer);
+                polling = false;
+                // limpiar UI y reactivar botón
+                try { stopBtn.remove(); } catch {}
+                restoreButton();
+                // refresh layer list after foreground job completes
+                scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true });
+              }
+            } catch (e) {
+              // ignorar fallos de red puntuales
+            }
+          }, 1000);
 
-            // al salir de la página o recargar, limpiar el polling
-            window.addEventListener('beforeunload', () => { try { clearInterval(timer); } catch {} });
-          }
+          // al salir de la página o recargar, limpiar el polling
+          window.addEventListener('beforeunload', () => { try { clearInterval(timer); } catch {} });
+          // --- FIN NUEVO FLUJO ---
         } catch (err) {
           showStatus('Network error: ' + err, true);
           restoreButton();
         }
       }
 
-      function chooseCacheDeleteType() {
+      function chooseCacheDeleteType({ allowMesh = false } = {}) {
         return new Promise((resolve) => {
           const backdrop = document.createElement('div');
           backdrop.className = 'schedule-backdrop';
@@ -5569,12 +5635,19 @@
           btnVector.className = 'btn btn-secondary';
           btnVector.textContent = tr('Delete VectorTiles cache');
 
+          const btnMesh = document.createElement('button');
+          btnMesh.type = 'button';
+          btnMesh.className = 'btn btn-secondary';
+          btnMesh.textContent = tr('Delete Mesh cache');
+
           const btnCancel = document.createElement('button');
           btnCancel.type = 'button';
           btnCancel.className = 'btn btn-primary';
           btnCancel.textContent = tr('Cancel');
 
-          actions.append(btnWmts, btnWms, btnVector, btnCancel);
+          actions.append(btnWmts, btnWms, btnVector);
+          if (allowMesh) actions.appendChild(btnMesh);
+          actions.appendChild(btnCancel);
           dialog.append(title, subtitle, actions);
           backdrop.appendChild(dialog);
           document.body.appendChild(backdrop);
@@ -5596,6 +5669,7 @@
           btnWmts.addEventListener('click', () => cleanup('wmts'));
           btnWms.addEventListener('click', () => cleanup('wms'));
           btnVector.addEventListener('click', () => cleanup('vectortiles'));
+          btnMesh.addEventListener('click', () => cleanup('mesh'));
           document.addEventListener('keydown', onKeyDown);
         });
       }
@@ -5660,8 +5734,9 @@
         });
       }
 
-      async function deleteCache(btn, projectId, layerName) {
-        const cacheType = await chooseCacheDeleteType();
+      async function deleteCache(btn, projectId, layerName, options = {}) {
+        const allowMesh = !!options?.hasMeshCache || (Array.isArray(window.qtilerPluginsEnabled) && window.qtilerPluginsEnabled.includes('QuantizedMesh'));
+        const cacheType = await chooseCacheDeleteType({ allowMesh });
         if (!cacheType) return;
 
         const initialDisabled = btn.disabled;
@@ -5680,7 +5755,9 @@
         try {
           const endpoint = cacheType === 'vectortiles'
             ? '/plugins/VectorTiles/api/tilesets/' + encodeURIComponent(projectId)
-            : '/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1&type=' + encodeURIComponent(cacheType);
+            : (cacheType === 'mesh'
+              ? '/plugins/QuantizedMesh/api/terrains/' + encodeURIComponent(projectId)
+              : '/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1&type=' + encodeURIComponent(cacheType));
           const res = await fetch(endpoint, { method: 'DELETE' });
           const data = await res.json().catch(()=>null);
           if (!res.ok) {
@@ -5689,6 +5766,8 @@
           } else {
             if (cacheType === 'vectortiles') {
               showStatus(tr('VectorTiles cache deleted for project: {projectId}', { projectId }));
+            } else if (cacheType === 'mesh') {
+              showStatus(tr('Mesh cache deleted for project: {projectId}', { projectId }));
             } else {
               showStatus(tr('{type} cache deleted: {layer}', { type: cacheType.toUpperCase(), layer: layerName }));
             }

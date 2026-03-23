@@ -32,6 +32,7 @@ export const registerPluginRoutes = ({
       const pricing = {
     ProjectSearch: { price: 50, currency: 'USD', period: 'year' },
     Qrigo: { price: 150, currency: 'EUR', period: 'year' },
+        QuantizedMesh: { price: 300, currency: 'EUR', period: 'year' },
     QtilerAuth: { price: 200, currency: 'EUR', period: 'year' },
     VectorTiles: { price: 150, currency: 'EUR', period: 'year' },
     WmsCache: { price: 100, currency: 'EUR', period: 'year' },

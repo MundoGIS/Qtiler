@@ -15,8 +15,8 @@ const ROLE_AUTH = 'authenticated';
 const VALID_ROLES = new Set([ROLE_ADMIN, ROLE_AUTH]);
 const COOKIE_NAME = 'qtiler_token';
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 3600;
-const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'admin2026';
-const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['admin2026'];
+const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'adminnuevo321';
+const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo123'];
 
 const nowIso = () => new Date().toISOString();
 const normalizeUsername = (value) => String(value || '').trim().toLowerCase();

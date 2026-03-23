@@ -16,18 +16,12 @@ All public endpoints honor project access rules.
 
 - If project is public in QtilerAuth: no token required.
 - If protected: provide either
-   - API key for the current user (`?api_key=...`), or
-   - authenticated user (session or HTTP Basic auth).
-   - temporary token (`?token=...`) only for short-lived sharing.
+  - token (`?token=...`), or
+  - authenticated user (session/basic auth depending deployment).
 
 Create token:
 
 - `POST /plugins/VectorTiles/api/access-token`
-
-API key formats accepted by QtilerAuth:
-
-- Query string: `?api_key=<YOUR_API_KEY>`
-- Header: `x-api-key: <YOUR_API_KEY>`
 
 ## Generated Metadata
 
@@ -47,15 +41,9 @@ Recommended setup:
 
 1. Add vector tiles source using style URL:
    - `/plugins/VectorTiles/style/<project>.json`
-2. For protected projects, prefer per-user auth:
-   - API key in URL: `/plugins/VectorTiles/style/<project>.json?api_key=<YOUR_API_KEY>`
-   - or HTTP Basic auth in QGIS Auth Manager (username/password).
+2. For protected projects, use tokenized style URL.
 3. For layer-specific style:
-   - `/plugins/VectorTiles/style/<project>/<layer>.json?layers=<layer>&api_key=<YOUR_API_KEY>`
-
-Optional short-lived sharing URL:
-
-- Generate a temporary tokenized URL via `POST /plugins/VectorTiles/api/access-token`.
+   - `/plugins/VectorTiles/style/<project>/<layer>.json?layers=<layer>`
 
 ## Identify (Info Click)
 

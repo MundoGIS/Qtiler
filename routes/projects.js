@@ -895,6 +895,8 @@ export const registerProjectRoutes = ({
   };
 
   const vectorTilesStorePath = path.join(process.cwd(), 'data', 'VectorTiles', 'tilesets.json');
+  const quantizedMeshStorePath = path.join(process.cwd(), 'data', 'QuantizedMesh', 'terrains.json');
+  const quantizedMeshCacheRoot = path.join(process.cwd(), 'cache', 'quantized-mesh');
   const pendingBackgroundProjectCleanup = new Set();
   const removeVectorTilesRegistryEntries = async (projectIds = []) => {
     const ids = [...new Set((Array.isArray(projectIds) ? projectIds : [projectIds])
@@ -917,6 +919,30 @@ export const registerProjectRoutes = ({
 
     await fs.promises.mkdir(path.dirname(vectorTilesStorePath), { recursive: true });
     await fs.promises.writeFile(vectorTilesStorePath, JSON.stringify({ ...parsed, items }, null, 2), 'utf8');
+    return { updated: true };
+  };
+
+  const removeQuantizedMeshRegistryEntries = async (projectIds = []) => {
+    const ids = [...new Set((Array.isArray(projectIds) ? projectIds : [projectIds])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean))];
+    if (!ids.length) return { updated: false };
+    if (!fs.existsSync(quantizedMeshStorePath)) return { updated: false };
+
+    const raw = await fs.promises.readFile(quantizedMeshStorePath, 'utf8');
+    const parsed = JSON.parse(raw || '{}');
+    const items = parsed && parsed.items && typeof parsed.items === 'object' ? { ...parsed.items } : {};
+    let changed = false;
+    ids.forEach((id) => {
+      if (Object.prototype.hasOwnProperty.call(items, id)) {
+        delete items[id];
+        changed = true;
+      }
+    });
+    if (!changed) return { updated: false };
+
+    await fs.promises.mkdir(path.dirname(quantizedMeshStorePath), { recursive: true });
+    await fs.promises.writeFile(quantizedMeshStorePath, JSON.stringify({ ...parsed, items }, null, 2), 'utf8');
     return { updated: true };
   };
 
@@ -953,6 +979,9 @@ export const registerProjectRoutes = ({
 
           try {
             await removeVectorTilesRegistryEntries([id]);
+          } catch {}
+          try {
+            await removeQuantizedMeshRegistryEntries([id]);
           } catch {}
 
           const stillThere = uniquePaths.some((p) => {
@@ -991,6 +1020,7 @@ export const registerProjectRoutes = ({
     };
 
     const vectorTilesCacheDir = path.join(process.cwd(), 'cache', 'vector-tiles', projectId);
+    const quantizedMeshCacheDir = path.join(quantizedMeshCacheRoot, projectId);
     const knownProjectDir = path.join(projectsDir, projectId);
     const bestEffortRemove = async (targetPath, { isDir = false, scope = 'cleanup' } = {}) => {
       if (!targetPath) return;
@@ -1007,13 +1037,19 @@ export const registerProjectRoutes = ({
       await bestEffortRemove(knownProjectDir, { isDir: true, scope: 'project_dir' });
       await bestEffortRemove(path.join(cacheDir, projectId), { isDir: true, scope: 'cache_dir' });
       await bestEffortRemove(vectorTilesCacheDir, { isDir: true, scope: 'vectortiles_cache_dir' });
+      await bestEffortRemove(quantizedMeshCacheDir, { isDir: true, scope: 'quantizedmesh_cache_dir' });
       try {
         await removeVectorTilesRegistryEntries([projectId]);
       } catch (err) {
         addCleanupError('vectortiles_registry', err);
       }
+      try {
+        await removeQuantizedMeshRegistryEntries([projectId]);
+      } catch (err) {
+        addCleanupError('quantizedmesh_registry', err);
+      }
 
-      const remainingPaths = [knownProjectDir, path.join(cacheDir, projectId), vectorTilesCacheDir]
+      const remainingPaths = [knownProjectDir, path.join(cacheDir, projectId), vectorTilesCacheDir, quantizedMeshCacheDir]
         .filter((p) => fs.existsSync(p));
       if (cleanupErrors.length || remainingPaths.length) {
         startBackgroundProjectCleanup(projectId, remainingPaths);
@@ -1133,8 +1169,8 @@ export const registerProjectRoutes = ({
     }
 
     // Also remove cache by file-based id if it differs (e.g., zip uploads with inner demo.qgz)
+    const fileBase = path.basename(proj.file).replace(/\.(qgz|qgs)$/i, '');
     try {
-      const fileBase = path.basename(proj.file).replace(/\.(qgz|qgs)$/i, "");
       if (fileBase && fileBase !== proj.id) {
         const altCacheDir = path.join(cacheDir, fileBase);
         if (fs.existsSync(altCacheDir)) {
@@ -1148,10 +1184,23 @@ export const registerProjectRoutes = ({
     // Also cleanup VectorTiles cache for this project when present.
     await bestEffortRemove(path.join(process.cwd(), 'cache', 'vector-tiles', proj.id), { isDir: true, scope: 'vectortiles_cache_dir' });
     try {
-      const fileBaseId = path.basename(proj.file).replace(/\.(qgz|qgs)$/i, '');
-      await removeVectorTilesRegistryEntries([proj.id, fileBaseId]);
+      await removeVectorTilesRegistryEntries([proj.id, fileBase]);
     } catch (err) {
       addCleanupError('vectortiles_registry', err);
+    }
+
+    await bestEffortRemove(path.join(quantizedMeshCacheRoot, proj.id), { isDir: true, scope: 'quantizedmesh_cache_dir' });
+    try {
+      if (fileBase && fileBase !== proj.id) {
+        await bestEffortRemove(path.join(quantizedMeshCacheRoot, fileBase), { isDir: true, scope: 'quantizedmesh_cache_dir_alt' });
+      }
+    } catch (err) {
+      addCleanupError('quantizedmesh_cache_dir_alt', err);
+    }
+    try {
+      await removeQuantizedMeshRegistryEntries([proj.id, fileBase]);
+    } catch (err) {
+      addCleanupError('quantizedmesh_registry', err);
     }
 
     try {
@@ -1180,7 +1229,9 @@ export const registerProjectRoutes = ({
       proj.file,
       path.join(cacheDir, proj.id),
       path.join(process.cwd(), 'cache', 'vector-tiles', proj.id),
-      path.join(cacheDir, path.basename(proj.file).replace(/\.(qgz|qgs)$/i, ''))
+      path.join(cacheDir, fileBase),
+      path.join(quantizedMeshCacheRoot, proj.id),
+      path.join(quantizedMeshCacheRoot, fileBase)
     ].filter((candidate, index, arr) => {
       if (!candidate) return false;
       if (arr.indexOf(candidate) !== index) return false;

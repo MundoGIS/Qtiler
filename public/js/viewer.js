@@ -394,6 +394,46 @@
     viewerData.themeMeta = metaContext?.themeEntry || null;
     viewerData.loading = false;
     viewerData.messages = [];
+    // Recompute tile template in case `getLayerContext` adjusted project/theme/layer
+    try {
+      const recomputeTileTemplate = () => {
+        const base = isExternalSource
+          ? (isWmsMode
+            ? `/plugins/WmsCache/wms?source=${encodeURIComponent(viewerData.externalSource || '')}${viewerData.externalApiKey ? `&api_key=${encodeURIComponent(viewerData.externalApiKey)}` : ''}`
+            : `/plugins/WmsCache/wmts/${encodeURIComponent(viewerData.externalSource || '')}/${encodeURIComponent(viewerData.layer || '')}/{z}/{x}/{y}.png${viewerData.externalApiKey ? `?api_key=${encodeURIComponent(viewerData.externalApiKey)}` : ''}`)
+          : (isWfsMode
+            ? `/wfs?project=${encodeURIComponent(viewerData.project || '')}`
+            : (isWmsMode
+              ? `/wms?project=${encodeURIComponent(viewerData.project || '')}`
+              : (viewerData.theme
+                ? `/wmts/${encodeURIComponent(viewerData.project || '')}/themes/${encodeURIComponent(viewerData.theme || '')}/{z}/{x}/{y}.png`
+                : `/wmts/${encodeURIComponent(viewerData.project || '')}/${encodeURIComponent(viewerData.layer || '')}/{z}/{x}/{y}.png`)));
+
+        const appendSid = (url) => {
+          if (!url) return url;
+          const sep = url.includes('?') ? '&' : '?';
+          return `${url}${sep}sid=${encodeURIComponent(viewerSessionId)}`;
+        };
+
+        const newTpl = isWfsMode ? base : appendSid(base);
+        viewerData.tileTemplate = newTpl;
+
+        const newLabel = isExternalSource
+          ? `${window.location.origin}${base}${isWmsMode ? `&LAYERS=${encodeURIComponent(viewerData.layer || '')}` : ''}`
+          : (isWfsMode
+            ? `${window.location.origin}${base}&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${encodeURIComponent(viewerData.layer || '')}&outputFormat=application/json`
+            : (isWmsMode
+              ? `${window.location.origin}${base}&LAYERS=${encodeURIComponent(viewerData.layer || '')}`
+              : newTpl.replace('{z}', '{z}')));
+
+        viewerData.tileTemplateLabel = newLabel;
+      };
+      recomputeTileTemplate();
+    } catch (e) {
+      // Non-fatal: keep original template if recompute fails
+    }
+    // Expose for debugging/inspection in the browser console (temporary)
+    try { window.__qtiler_viewerData = viewerData; } catch (e) {}
     if (!viewerData.cacheMeta && viewerData.showCache) {
       viewerData.messages.push({ type: 'warn', key: 'viewer.info.noCache' });
     }
@@ -931,6 +971,7 @@
     }
 
     const map = L.map('map', mapOptions);
+    try { window.__qtiler_map = map; } catch (e) {}
     // Prefer project extent (WGS84) for initial view if available, otherwise fall back to grid bounds
     const projectBounds = (meta && Array.isArray(meta.extent_wgs84))
         ? L.latLngBounds(
@@ -1395,16 +1436,23 @@
             // Always construct the URL. If it's outside bounds, the server will try to generate it
             // or return 404/500, which standard Leaflet handles gracefully.
             const tpl = this._url || viewerData.tileTemplate;
-            if (!tpl) return L.Util.emptyImageUrl;
+            if (!tpl) {
+              try {
+                if (window && window.console && typeof window.console.debug === 'function') {
+                  console.debug('[viewer.debug] missing tile template', { coords, hasThisUrl: !!this._url, viewerTemplateExists: !!(viewerData && viewerData.tileTemplate) });
+                }
+              } catch (e) {}
+              return L.Util.emptyImageUrl;
+            }
             const url = tpl
               .replace('{z}', String(coords.z))
               .replace('{x}', String(coords.x))
               .replace('{y}', String(coords.y));
-              
-             // Debug output in console to verify coords are finite
-            if (window && window.console && typeof window.console.debug === 'function') {
-               // console.debug('[viewer] request', coords.z, coords.x, coords.y);
-            }
+            try {
+              if (window && window.console && typeof window.console.debug === 'function') {
+                console.debug('[viewer.debug] tile url', { coords, url });
+              }
+            } catch (e) {}
             return url;
           } catch (e) {
             return L.Util.emptyImageUrl;
@@ -1422,4 +1470,31 @@
 
     tiles.addTo(map);
     renderInfo();
+    
+    // If page is restored from back/forward cache, reload to refresh auth/session state.
+    window.addEventListener('pageshow', (event) => {
+      try {
+        if (event && event.persisted) {
+          console.log('pageshow persisted (viewer) - reloading to refresh auth state');
+          window.location.reload();
+        }
+      } catch (e) {}
+    });
+
+    // Ensure clicking the brand/logo goes to a fresh page (prevent bfcache stale UI)
+    document.addEventListener('click', (evt) => {
+      try {
+        const link = evt.target && evt.target.closest ? evt.target.closest('a.brand-logo, a.nav-link') : null;
+        if (!link || !(link instanceof HTMLAnchorElement)) return;
+        const href = link.getAttribute('href') || link.href;
+        if (!href) return;
+        const url = new URL(href, location.href);
+        if (url.origin !== location.origin) return;
+        if (url.pathname === '/' || url.pathname === '/index.html') {
+          evt.preventDefault();
+          const sep = url.search ? '&' : '?';
+          location.href = url.pathname + url.search + sep + '_cb=' + Date.now();
+        }
+      } catch (e) {}
+    }, true);
 })();

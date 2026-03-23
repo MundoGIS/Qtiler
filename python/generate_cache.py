@@ -4,11 +4,20 @@ If a copy of the MPL was not distributed with this file, You can obtain one at h
 Copyright (C) 2025 MundoGIS.
 """
 
+
 import sys
 import os
 import json
 import datetime
 import time
+
+# --- GDAL/OGR: activar excepciones para evitar warning ---
+try:
+    from osgeo import gdal, ogr
+    gdal.UseExceptions()
+    ogr.UseExceptions()
+except Exception:
+    pass
 
 
 import argparse

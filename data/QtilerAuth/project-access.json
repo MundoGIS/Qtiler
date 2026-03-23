@@ -1,7 +1,7 @@
 {
   "projects": {
-    "demo2": {
-      "public": false
+    "qgis-terrain": {
+      "public": true
     }
   }
 }

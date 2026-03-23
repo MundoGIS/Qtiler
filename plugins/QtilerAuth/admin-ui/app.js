@@ -27,7 +27,7 @@ const userFormReset = document.getElementById('user-form-reset');
 
 const goDashboardButton = document.getElementById('go-dashboard');
 
-const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'admin2026';
+const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'adminnuevo321';
 const urlParams = new URLSearchParams(window.location.search);
 const justInstalledFlag = urlParams.has('justInstalled');
 if (justInstalledFlag && typeof window !== 'undefined' && window.history?.replaceState) {

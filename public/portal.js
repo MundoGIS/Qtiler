@@ -874,3 +874,30 @@ const bootstrap = async () => {
 };
 
 bootstrap();
+
+// If page is restored from back/forward cache, reload to refresh auth/session state.
+window.addEventListener('pageshow', (event) => {
+  try {
+    if (event && event.persisted) {
+      console.log('pageshow persisted (portal) - reloading to refresh auth state');
+      window.location.reload();
+    }
+  } catch (e) {}
+});
+
+// Clicking the brand/logo should perform a full reload to avoid showing cached auth UI.
+document.addEventListener('click', (evt) => {
+  try {
+    const link = evt.target && evt.target.closest ? evt.target.closest('a.brand-logo, a.nav-link') : null;
+    if (!link || !(link instanceof HTMLAnchorElement)) return;
+    const href = link.getAttribute('href') || link.href;
+    if (!href) return;
+    const url = new URL(href, location.href);
+    if (url.origin !== location.origin) return;
+    if (url.pathname === '/' || url.pathname === '/index.html') {
+      evt.preventDefault();
+      const sep = url.search ? '&' : '?';
+      location.href = url.pathname + url.search + sep + '_cb=' + Date.now();
+    }
+  } catch (e) {}
+}, true);
