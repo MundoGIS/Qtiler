@@ -23,9 +23,12 @@ except Exception:
 import argparse
 import math
 import signal
+import threading
 from pathlib import Path
 
 _terminate = {"flag": False}
+_abort_marker_path = None
+_abort_marker_reported = {"flag": False}
 
 def handle_abort(signum, frame):
     _terminate["flag"] = True
@@ -34,6 +37,36 @@ def handle_abort(signum, frame):
 
 signal.signal(signal.SIGTERM, handle_abort)
 signal.signal(signal.SIGINT, handle_abort)
+
+
+def _start_abort_marker_watcher():
+    if not _abort_marker_path:
+        return
+
+    def _watch_loop():
+        while not _terminate["flag"]:
+            try:
+                if _abort_marker_path and os.path.exists(_abort_marker_path):
+                    _terminate["flag"] = True
+                    if not _abort_marker_reported["flag"]:
+                        _abort_marker_reported["flag"] = True
+                        try:
+                            sys.stderr.write(json.dumps({"info": "abort_marker_detected", "path": str(_abort_marker_path)}) + "\n")
+                            sys.stderr.flush()
+                        except Exception:
+                            pass
+                    break
+            except Exception:
+                pass
+            try:
+                time.sleep(0.1)
+            except Exception:
+                break
+
+    try:
+        threading.Thread(target=_watch_loop, daemon=True).start()
+    except Exception:
+        pass
 
 
 # --- Cargar .env (intenta python-dotenv, fallback manual) ---
@@ -961,6 +994,15 @@ parser.add_argument("--z", type=int, default=None, help="Zoom de la tile a rende
 parser.add_argument("--x", type=int, default=None, help="Columna de la tile a renderizar")
 parser.add_argument("--y", type=int, default=None, help="Fila de la tile a renderizar")
 args = parser.parse_args()
+
+if args.job_id:
+    try:
+        abort_dir = REPO_ROOT / "data" / "job-aborts"
+        abort_dir.mkdir(parents=True, exist_ok=True)
+        _abort_marker_path = abort_dir / f"{args.job_id}.abort"
+    except Exception:
+        _abort_marker_path = None
+_start_abort_marker_watcher()
 
 tile_matrix_preset_name = args.tile_matrix_preset or os.environ.get("TILE_MATRIX_PRESET")
 tile_matrix_preset_raw = _load_tile_matrix_preset(tile_matrix_preset_name) if tile_matrix_preset_name else None

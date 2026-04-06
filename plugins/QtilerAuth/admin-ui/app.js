@@ -6,7 +6,10 @@
 const state = {
   users: [],
   projects: [],
-  permissions: {}
+  permissions: {},
+  searchableByProject: {},
+  layersByProject: {},
+  layerAttributesByProject: {}
 };
 
 const messagesEl = document.getElementById('messages');
@@ -26,6 +29,62 @@ const userFormSubmit = document.getElementById('user-form-submit');
 const userFormReset = document.getElementById('user-form-reset');
 
 const goDashboardButton = document.getElementById('go-dashboard');
+
+/* ── Collapsible sections ── */
+const initCollapsible = () => {
+  document.querySelectorAll('[data-collapse]').forEach((header) => {
+    const targetId = header.getAttribute('data-collapse');
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const toggleBtn = header.querySelector('.collapse-toggle');
+
+    const toggle = () => {
+      const isCollapsed = target.classList.toggle('collapsed');
+      if (toggleBtn) toggleBtn.classList.toggle('collapsed', isCollapsed);
+    };
+
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('button:not(.collapse-toggle)') || e.target.closest('a')) return;
+      toggle();
+    });
+  });
+};
+
+const expandFormPanel = () => {
+  const inner = document.getElementById('user-form-inner');
+  const header = document.querySelector('.form-panel-header[data-collapse="user-form-inner"]');
+  if (inner && inner.classList.contains('collapsed')) {
+    inner.classList.remove('collapsed');
+    if (header) {
+      const btn = header.querySelector('.collapse-toggle');
+      if (btn) btn.classList.remove('collapsed');
+    }
+  }
+  const usersBody = document.getElementById('users-body');
+  const usersHeader = document.querySelector('[data-collapse="users-body"]');
+  if (usersBody && usersBody.classList.contains('collapsed')) {
+    usersBody.classList.remove('collapsed');
+    if (usersHeader) {
+      const btn = usersHeader.querySelector('.collapse-toggle');
+      if (btn) btn.classList.remove('collapsed');
+    }
+  }
+};
+
+initCollapsible();
+
+/* Start Projects and License sections collapsed */
+['projects-body', 'license-body'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.add('collapsed');
+    const header = document.querySelector(`[data-collapse="${id}"]`);
+    if (header) {
+      const btn = header.querySelector('.collapse-toggle');
+      if (btn) btn.classList.add('collapsed');
+    }
+  }
+});
 
 const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'adminnuevo321';
 const urlParams = new URLSearchParams(window.location.search);
@@ -55,6 +114,147 @@ const clearSessionPassword = (user) => {
   if (user.id) sessionPasswords.delete(user.id);
   if (user.username) sessionPasswords.delete(`username:${user.username}`);
 };
+
+const safeXmlName = (value) => {
+  let s = String(value || '').trim();
+  if (!s) return '_';
+  s = s.replace(/[^A-Za-z0-9_.-]+/g, '_');
+  if (!/^[A-Za-z_]/.test(s)) s = `_${s}`;
+  if (/^xml/i.test(s)) s = `_${s}`;
+  return s;
+};
+
+const looksLikeGeometryName = (value) => {
+  const n = String(value || '').trim().toLowerCase();
+  if (!n) return false;
+  return /^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geom|geometry|wkb|wkt)/.test(n);
+};
+
+const pickPreferredAttribute = (candidates, fallbackList, hardFallback = '') => {
+  const list = Array.isArray(fallbackList) ? fallbackList : [];
+  for (const candidate of candidates || []) {
+    if (candidate && list.includes(candidate)) return candidate;
+  }
+  return list[0] || hardFallback;
+};
+
+const extractAttributeMetadata = (attributes) => {
+  const rows = Array.isArray(attributes) ? attributes : [];
+  const normalized = rows
+    .map((attr) => {
+      if (typeof attr === 'string') return { name: attr, type: '' };
+      if (attr && typeof attr === 'object') {
+        return {
+          name: String(attr.name || attr.field || attr.attribute || '').trim(),
+          type: String(attr.type || attr.dataType || '').trim()
+        };
+      }
+      return { name: '', type: '' };
+    })
+    .filter((attr) => attr.name);
+
+  const nonGeometry = normalized.filter((attr) => {
+    const n = attr.name.toLowerCase();
+    const t = attr.type.toLowerCase();
+    return !(/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+  });
+
+  const geometry = normalized.filter((attr) => {
+    const n = attr.name.toLowerCase();
+    const t = attr.type.toLowerCase();
+    return (/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+  });
+
+  const unique = (arr) => Array.from(new Set(arr.filter(Boolean)));
+
+  return {
+    all: unique(normalized.map((attr) => attr.name)),
+    nonGeometry: unique((nonGeometry.length ? nonGeometry : normalized).map((attr) => attr.name)),
+    geometry: unique(geometry.map((attr) => attr.name))
+  };
+};
+
+const detectGeometryAttribute = (layer, layerMeta, configuredGeometry = '') => {
+  const all = Array.isArray(layerMeta?.all) ? layerMeta.all : [];
+  const explicitGeometryCols = Array.isArray(layerMeta?.geometry) ? layerMeta.geometry : [];
+  const namedGeometryCols = all.filter((name) => looksLikeGeometryName(name));
+  const geometryCols = explicitGeometryCols.length ? explicitGeometryCols : (namedGeometryCols.length ? namedGeometryCols : []);
+  const safeConfigured = looksLikeGeometryName(configuredGeometry) ? configuredGeometry : '';
+  return pickPreferredAttribute(
+    [
+      safeConfigured,
+      layer?.geometryAttribute,
+      layer?.geometry_attribute,
+      layer?.geometryName,
+      layer?.geometry_name,
+      'GEOM',
+      'geom',
+      'the_geom',
+      'geometry',
+      'wkb_geometry'
+    ],
+    geometryCols,
+    namedGeometryCols[0] || ''
+  );
+};
+
+async function fetchLayerAttributes(projectId, layerName) {
+  const candidates = Array.from(new Set([String(layerName || '').trim(), safeXmlName(layerName)])).filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      const payload = await api(`/origo/wfs-attributes?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(candidate)}`);
+      return extractAttributeMetadata(payload?.attributes);
+    } catch (_err) {
+      // Try next candidate
+    }
+  }
+  return { all: [], nonGeometry: [], geometry: [] };
+}
+
+async function loadSearchableCatalog() {
+  const projects = Array.isArray(state.projects) ? state.projects : [];
+  const results = await Promise.all(projects.map(async (project) => {
+    const projectId = String(project?.id || '').trim();
+    if (!projectId) return null;
+    try {
+      const [layersResponse, searchableResponse] = await Promise.all([
+        api(`/projects/${encodeURIComponent(projectId)}/layers`),
+        api(`/projects/${encodeURIComponent(projectId)}/searchable`)
+      ]);
+      const allLayers = Array.isArray(layersResponse?.layers) ? layersResponse.layers : [];
+      const vectorLayers = allLayers.filter((l) => l.type === 'WFS' || l.kind === 'vector' || !!l.geometry_type);
+      const attributeEntries = await Promise.all(vectorLayers.map(async (layer) => {
+        const metadata = await fetchLayerAttributes(projectId, layer.name);
+        return [layer.name, metadata];
+      }));
+      return {
+        projectId,
+        layers: vectorLayers,
+        searchable: Array.isArray(searchableResponse) ? searchableResponse : [],
+        attributes: Object.fromEntries(attributeEntries)
+      };
+    } catch (_err) {
+      return {
+        projectId,
+        layers: [],
+        searchable: [],
+        attributes: {}
+      };
+    }
+  }));
+
+  const searchableByProject = {};
+  const layersByProject = {};
+  const layerAttributesByProject = {};
+  results.filter(Boolean).forEach((entry) => {
+    searchableByProject[entry.projectId] = entry.searchable;
+    layersByProject[entry.projectId] = entry.layers;
+    layerAttributesByProject[entry.projectId] = entry.attributes;
+  });
+  state.searchableByProject = searchableByProject;
+  state.layersByProject = layersByProject;
+  state.layerAttributesByProject = layerAttributesByProject;
+}
 
 const getRandomInt = (max) => {
   if (max <= 0) return 0;
@@ -222,6 +422,7 @@ function resetUserForm() {
 }
 
 function populateUserForm(user) {
+  expandFormPanel();
   userIdInput.value = user.id;
   usernameInput.value = user.username;
   usernameInput.disabled = true;
@@ -233,6 +434,8 @@ function populateUserForm(user) {
   setPasswordVisibility(false);
   userFormTitle.textContent = `Edit ${user.username}`;
   userFormSubmit.textContent = 'Update';
+  const panel = document.getElementById('user-form-panel');
+  if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderUsers() {
@@ -240,7 +443,7 @@ function renderUsers() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 8;
     cell.textContent = 'No users found.';
     row.appendChild(cell);
     usersTableBody.appendChild(row);
@@ -250,22 +453,25 @@ function renderUsers() {
     const row = document.createElement('tr');
 
     const usernameCell = document.createElement('td');
+    usernameCell.className = 'col-user';
     usernameCell.textContent = user.username;
 
     const roleCell = document.createElement('td');
+    roleCell.className = 'col-role';
     const roleTag = document.createElement('span');
     roleTag.className = `tag role-${user.role}`;
     roleTag.textContent = user.role === 'admin' ? 'Administrator' : 'User';
     roleCell.appendChild(roleTag);
 
     const statusCell = document.createElement('td');
+    statusCell.className = 'col-status';
     const statusTag = document.createElement('span');
     statusTag.className = `tag status-${user.status || 'active'}`;
     statusTag.textContent = user.status === 'disabled' ? 'Suspended' : 'Active';
     statusCell.appendChild(statusTag);
 
     const apiKeyCell = document.createElement('td');
-    apiKeyCell.className = 'api-key-cell';
+    apiKeyCell.className = 'api-key-cell col-api';
     const apiKeyValue = user.apiKey || '';
     const apiKeyInput = document.createElement('input');
     apiKeyInput.type = 'text';
@@ -300,42 +506,23 @@ function renderUsers() {
       }
     });
 
-    apiKeyCell.append(apiKeyInput, copyBtn, rotateBtn);
-
-    const passwordCell = document.createElement('td');
-    passwordCell.className = 'password-cell';
-    const sessionPassword = getSessionPassword(user);
-    if (sessionPassword) {
-      const passwordField = document.createElement('input');
-      passwordField.type = 'password';
-      passwordField.readOnly = true;
-      passwordField.value = sessionPassword;
-      passwordField.className = 'password-input';
-      passwordField.title = 'Temporary password (session only)';
-
-      const toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.textContent = 'Show';
-      toggleBtn.addEventListener('click', () => {
-        const visible = passwordField.type === 'password';
-        passwordField.type = visible ? 'text' : 'password';
-        toggleBtn.textContent = visible ? 'Hide' : 'Show';
-      });
-
-      passwordCell.append(passwordField, toggleBtn);
-    } else {
-      passwordCell.textContent = '—';
-    }
+    const apiKeyActions = document.createElement('div');
+    apiKeyActions.className = 'api-key-actions';
+    apiKeyActions.append(copyBtn, rotateBtn);
+    apiKeyCell.append(apiKeyInput, apiKeyActions);
 
     const projectsCell = document.createElement('td');
+    projectsCell.className = 'col-projects';
     projectsCell.textContent = Array.isArray(user.projects) && user.projects.length
       ? user.projects.join(', ')
       : '—';
 
     const createdCell = document.createElement('td');
+    createdCell.className = 'col-created';
     createdCell.textContent = user.createdAt ? new Date(user.createdAt).toLocaleString() : '—';
 
     const updatedCell = document.createElement('td');
+    updatedCell.className = 'col-updated';
     updatedCell.textContent = user.updatedAt ? new Date(user.updatedAt).toLocaleString() : '—';
 
     const actionsCell = document.createElement('td');
@@ -364,10 +551,10 @@ function renderUsers() {
     if (user.username !== 'admin') {
       actionsCell.append(editBtn, deleteBtn);
     } else {
-      actionsCell.appendChild(editBtn);
+      actionsCell.append(editBtn);
     }
 
-    row.append(usernameCell, roleCell, statusCell, apiKeyCell, passwordCell, projectsCell, createdCell, updatedCell, actionsCell);
+    row.append(usernameCell, roleCell, statusCell, apiKeyCell, projectsCell, createdCell, updatedCell, actionsCell);
     usersTableBody.appendChild(row);
   });
 }
@@ -375,28 +562,38 @@ function renderUsers() {
 function renderPublicProjects() {
   const container = document.getElementById('public-projects-list');
   if (!container) return;
-  
+
   container.innerHTML = '';
-  
+
   const projectList = state.projects || [];
-  
+
   if (!projectList.length) {
     container.textContent = 'No projects available.';
     return;
   }
-  
+
   projectList.forEach((project) => {
     const projectId = project.id;
     const access = state.permissions[projectId] || {};
-    
-    const label = document.createElement('label');
-    label.className = 'public-project-toggle';
-    
+    const searchableEntries = Array.isArray(state.searchableByProject?.[projectId]) ? state.searchableByProject[projectId] : [];
+    const projectLayers = Array.isArray(state.layersByProject?.[projectId]) ? state.layersByProject[projectId] : [];
+    const layerAttributes = state.layerAttributesByProject?.[projectId] || {};
+
+    const card = document.createElement('article');
+    card.className = 'project-card searchable-project-card';
+    card.dataset.projectId = projectId;
+
+    const header = document.createElement('header');
+    const heading = document.createElement('h3');
+    heading.textContent = project.name || projectId;
+
+    const toggleWrap = document.createElement('label');
+    toggleWrap.className = 'public-project-toggle';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = access.public === true;
     checkbox.dataset.projectId = projectId;
-    
+
     checkbox.addEventListener('change', async () => {
       try {
         await api(`/auth-admin/projects/${projectId}`, {
@@ -410,9 +607,155 @@ function renderPublicProjects() {
         checkbox.checked = !checkbox.checked;
       }
     });
-    
-    label.append(checkbox, document.createTextNode(` ${project.name || projectId}`));
-    container.appendChild(label);
+
+    const toggleText = document.createElement('span');
+    toggleText.textContent = 'Public';
+    toggleWrap.append(checkbox, toggleText);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'secondary-button';
+    saveBtn.textContent = 'Save searchable';
+
+    header.append(heading, toggleWrap, saveBtn);
+    card.appendChild(header);
+
+    const searchableIntro = document.createElement('p');
+    searchableIntro.className = 'help';
+    searchableIntro.textContent = 'Sokbara lager for this project:';
+    card.appendChild(searchableIntro);
+
+    const list = document.createElement('div');
+    list.className = 'project-searchable-list';
+
+    if (!projectLayers.length) {
+      const empty = document.createElement('p');
+      empty.className = 'help';
+      empty.textContent = 'No searchable vector layers found.';
+      list.appendChild(empty);
+    } else {
+      projectLayers.forEach((layer) => {
+        const config = searchableEntries.find((entry) => String(entry?.name || '') === String(layer.name || '')) || {};
+        const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
+        const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
+          ? layerMeta.nonGeometry
+          : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
+        const enabled = !!config.name;
+        const selectedSearch = pickPreferredAttribute(
+          [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
+          availableColumns
+        );
+        const selectedId = pickPreferredAttribute(
+          [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
+          availableColumns
+        );
+        const selectedGeom = detectGeometryAttribute(layer, layerMeta, config.geometryAttribute);
+        const hintText = String(config.hintText || '').trim() || 'Search...';
+
+        const row = document.createElement('div');
+        row.className = 'searchable-layer-row';
+        row.dataset.layerName = layer.name;
+        row.dataset.geometryAttribute = selectedGeom;
+
+        const head = document.createElement('div');
+        head.className = 'searchable-layer-head';
+        const onOff = document.createElement('label');
+        onOff.className = 'public-project-toggle';
+        const layerCheck = document.createElement('input');
+        layerCheck.type = 'checkbox';
+        layerCheck.checked = enabled;
+        const layerLabel = document.createElement('span');
+        layerLabel.textContent = layer.title || layer.name;
+        onOff.append(layerCheck, layerLabel);
+        head.appendChild(onOff);
+
+        const body = document.createElement('div');
+        body.className = `searchable-layer-controls${enabled ? '' : ' is-hidden'}`;
+
+        const searchField = document.createElement('label');
+        searchField.className = 'mini-field';
+        searchField.innerHTML = '<span>searchAttribute</span>';
+        const searchSelect = document.createElement('select');
+        searchSelect.className = 'search-select';
+        searchSelect.innerHTML = availableColumns.map((col) => {
+          const sel = selectedSearch === col ? ' selected' : '';
+          return `<option value="${col}"${sel}>${col}</option>`;
+        }).join('');
+        searchField.appendChild(searchSelect);
+
+        const idField = document.createElement('label');
+        idField.className = 'mini-field';
+        idField.innerHTML = '<span>idAttribute</span>';
+        const idSelect = document.createElement('select');
+        idSelect.className = 'id-select';
+        idSelect.innerHTML = availableColumns.map((col) => {
+          const sel = selectedId === col ? ' selected' : '';
+          return `<option value="${col}"${sel}>${col}</option>`;
+        }).join('');
+        idField.appendChild(idSelect);
+
+        const hintField = document.createElement('label');
+        hintField.className = 'mini-field';
+        hintField.innerHTML = '<span>hintText</span>';
+        const hintInput = document.createElement('input');
+        hintInput.type = 'text';
+        hintInput.className = 'hint-input';
+        hintInput.value = hintText;
+        hintInput.placeholder = 'Search...';
+        hintField.appendChild(hintInput);
+
+        const geomField = document.createElement('div');
+        geomField.className = 'mini-field';
+        geomField.innerHTML = `<span>geometryAttribute</span><div class="searchable-geometry-auto">${selectedGeom || 'not detected'}</div>`;
+
+        layerCheck.addEventListener('change', () => {
+          body.classList.toggle('is-hidden', !layerCheck.checked);
+        });
+
+        body.append(searchField, idField, hintField, geomField);
+        row.append(head, body);
+        list.appendChild(row);
+      });
+    }
+
+    saveBtn.addEventListener('click', async () => {
+      const rows = Array.from(list.querySelectorAll('.searchable-layer-row'));
+      const payload = rows
+        .map((row) => {
+          const layerName = String(row.dataset.layerName || '');
+          const checked = !!row.querySelector('input[type="checkbox"]')?.checked;
+          if (!checked) return null;
+          const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
+          const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
+          const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
+          const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
+          if (!layerName || !searchAttribute || !idAttribute) return null;
+          return {
+            name: layerName,
+            idAttribute,
+            searchAttribute,
+            geometryAttribute,
+            hintText: hint,
+            fields: [searchAttribute],
+            titleField: searchAttribute
+          };
+        })
+        .filter(Boolean);
+
+      try {
+        await api(`/projects/${encodeURIComponent(projectId)}/searchable`, {
+          method: 'POST',
+          body: payload
+        });
+        state.searchableByProject[projectId] = payload;
+        showMessage('success', `Searchable layers saved for ${project.name || projectId}.`);
+      } catch (err) {
+        showMessage('error', parseError(err, 'Unable to save searchable layers.'));
+      }
+    });
+
+    card.appendChild(list);
+    container.appendChild(card);
   });
 }
 
@@ -523,6 +866,7 @@ async function loadProjects(showFeedback = false) {
         : [];
     state.projects = normalizedProjects;
     state.permissions = accessList?.projects || {};
+    await loadSearchableCatalog();
     renderProjects();
     if (showFeedback) showMessage('success', 'Permissions refreshed.');
   } catch (err) {

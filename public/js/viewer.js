@@ -99,7 +99,7 @@
 
     const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
       ? window.qtilerLang.SUPPORTED_LANGS
-      : ['en', 'es', 'sv'];
+      : ['en', 'es', 'sv', 'no'];
     const normalizeLang = window.qtilerLang?.normalize || ((value) => {
       const raw = String(value || '').toLowerCase();
       if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -289,6 +289,174 @@
       });
     }
 
+    // ----------- Vector Tiles (OpenLayers) viewer mode -----------
+    const vtProjectId = params.get('vectortiles');
+    if (vtProjectId) {
+      viewerData.loading = false;
+      viewerData.project = vtProjectId;
+      viewerData.modeLabelKey = 'viewer.mode.vectortiles';
+      const mapEl = document.getElementById('map');
+      const infoPanel = document.getElementById('info');
+      if (infoPanel) infoPanel.innerHTML = '<span>Loading Vector Tiles viewer…</span>';
+
+      // Hide controls not relevant for VT mode
+      const cacheBtn = document.getElementById('viewer_cache_btn');
+      if (cacheBtn) cacheBtn.style.display = 'none';
+      const extentBtn = document.getElementById('viewer_extent_btn');
+      if (extentBtn) extentBtn.style.display = 'none';
+      const osmBtn = document.getElementById('viewer_osm_btn');
+      if (osmBtn) osmBtn.style.display = 'none';
+
+      try {
+        const ol = window.ol;
+        const olms = window.olms;
+        const view = new ol.View({ center: ol.proj.fromLonLat([0, 0]), zoom: 3 });
+        const osmLayer = new ol.layer.Tile({ source: new ol.source.OSM() });
+        const map = new ol.Map({ target: 'map', view: view, layers: [osmLayer] });
+        requestAnimationFrame(() => { map.updateSize(); setTimeout(() => map.updateSize(), 100); });
+
+        // Fetch TileJSON to determine bounds
+        let tileJsonData = null;
+        try {
+          const tjRes = await fetch('/plugins/VectorTiles/tilejson/' + encodeURIComponent(vtProjectId) + '.json', { credentials: 'include' });
+          if (tjRes.ok) tileJsonData = await tjRes.json();
+        } catch (e) { console.warn('TileJSON fetch failed', e); }
+
+        // Zoom to project extent — try tilejson bounds first, fall back to project config extent
+        let didFitExtent = false;
+        if (tileJsonData && Array.isArray(tileJsonData.bounds) && tileJsonData.bounds.length === 4) {
+          const b = tileJsonData.bounds;
+          if (b.every(function(v) { return Number.isFinite(Number(v)); })) {
+            var extent = ol.proj.transformExtent([Number(b[0]), Number(b[1]), Number(b[2]), Number(b[3])], 'EPSG:4326', 'EPSG:3857');
+            view.fit(extent, { padding: [40, 40, 40, 40], maxZoom: 18 });
+            didFitExtent = true;
+          }
+        }
+        if (!didFitExtent) {
+          try {
+            var projRes = await fetch('/projects/' + encodeURIComponent(vtProjectId), { credentials: 'include' });
+            if (projRes.ok) {
+              var projData = await projRes.json();
+              var ext = projData && projData.extent_wgs84;
+              if (!ext) ext = projData && projData.extent && projData.extent.bbox_wgs84;
+              if (!ext) ext = projData && projData.config && projData.config.extent && projData.config.extent.bbox_wgs84;
+              if (Array.isArray(ext) && ext.length === 4 && ext.every(function(v) { return Number.isFinite(Number(v)); })) {
+                var projExtent = ol.proj.transformExtent([Number(ext[0]), Number(ext[1]), Number(ext[2]), Number(ext[3])], 'EPSG:4326', 'EPSG:3857');
+                view.fit(projExtent, { padding: [40, 40, 40, 40], maxZoom: 18 });
+                didFitExtent = true;
+              }
+            }
+          } catch (e) { console.warn('Project extent fetch failed', e); }
+        }
+
+        // Add MVT layer — the tile endpoint waits for on-demand generation,
+        // so tiles are generated automatically when OL requests them.
+        const vtTileUrl = '/plugins/VectorTiles/tiles/' + encodeURIComponent(vtProjectId) + '/{z}/{x}/{y}.pbf';
+        const vtMaxZoom = (tileJsonData && Number.isFinite(tileJsonData.maxzoom)) ? tileJsonData.maxzoom : 20;
+        const vtSource = new ol.source.VectorTile({
+          format: new ol.format.MVT(),
+          url: vtTileUrl,
+          maxZoom: vtMaxZoom
+        });
+        let vtRetryTimer = null;
+        let vtRetryCount = 0;
+        vtSource.on('tileloaderror', function () {
+          if (vtRetryTimer || vtRetryCount >= 20) return;
+          vtRetryCount += 1;
+          vtRetryTimer = setTimeout(function () {
+            vtRetryTimer = null;
+            vtSource.refresh();
+          }, 3000);
+        });
+        vtSource.on('tileloadend', function () {
+          vtRetryCount = 0;
+        });
+        const vtLayer = new ol.layer.VectorTile({
+          source: vtSource,
+          declutter: true
+        });
+        map.addLayer(vtLayer);
+
+        // Apply Mapbox GL style from the project's style endpoint using olms
+        const styleUrl = '/plugins/VectorTiles/style/' + encodeURIComponent(vtProjectId) + '.json';
+        let styleApplied = false;
+        if (olms && typeof olms.applyStyle === 'function') {
+          try {
+            const styleRes = await fetch(styleUrl, { credentials: 'include' });
+            if (styleRes.ok) {
+              const styleJson = await styleRes.json();
+              // Rewrite tile URLs to relative path (avoid CORS/absolute issues)
+              if (styleJson && styleJson.sources) {
+                for (var srcKey in styleJson.sources) {
+                  if (styleJson.sources[srcKey] && styleJson.sources[srcKey].tiles) {
+                    styleJson.sources[srcKey].tiles = [window.location.origin + vtTileUrl];
+                  }
+                }
+              }
+              var sourceId = Object.keys(styleJson.sources || {})[0] || 'qtiler';
+              await olms.applyStyle(vtLayer, styleJson, sourceId);
+              styleApplied = true;
+            }
+          } catch (styleErr) {
+            console.warn('Failed to apply VT style via olms', styleErr);
+          }
+        }
+        if (!styleApplied) {
+          vtLayer.setStyle(new ol.style.Style({
+            fill: new ol.style.Fill({ color: 'rgba(49,130,206,0.25)' }),
+            stroke: new ol.style.Stroke({ color: '#3182ce', width: 1.5 }),
+            image: new ol.style.Circle({ radius: 4, fill: new ol.style.Fill({ color: '#3182ce' }) })
+          }));
+        }
+
+        // Info panel
+        if (infoPanel) {
+          const parts = [];
+          parts.push('<div style="width:100%">');
+          parts.push('<div style="font-weight:600">Project: ' + escapeHtml(vtProjectId) + '</div>');
+          parts.push('<div>Mode: Vector Tiles (MVT · on-demand)</div>');
+          if (tileJsonData) {
+            if (Number.isFinite(tileJsonData.minzoom) && Number.isFinite(tileJsonData.maxzoom)) {
+              parts.push('<div>Zoom: ' + tileJsonData.minzoom + ' – ' + tileJsonData.maxzoom + '</div>');
+            }
+            if (Array.isArray(tileJsonData.vector_layers)) {
+              parts.push('<div>Source layers: ' + tileJsonData.vector_layers.map(function(l){ return escapeHtml(l.id || l); }).join(', ') + '</div>');
+            }
+          }
+          parts.push('</div>');
+          infoPanel.innerHTML = parts.join('');
+        }
+
+        // Refresh button — forces re-fetch of all tiles (shows newly generated ones)
+        const controlsWrap = document.querySelector('.viewer-controls');
+        if (controlsWrap) {
+          controlsWrap.innerHTML = '';
+          var refreshBtn = document.createElement('button');
+          refreshBtn.type = 'button';
+          refreshBtn.className = 'viewer-control-btn';
+          refreshBtn.textContent = 'Refresh tiles';
+          refreshBtn.addEventListener('click', function () {
+            vtSource.refresh();
+          });
+          controlsWrap.appendChild(refreshBtn);
+        }
+
+        // Zoom display
+        const zoomDisplay = document.getElementById('zoom_display');
+        if (zoomDisplay) {
+          const updateZoom = () => { zoomDisplay.textContent = 'Zoom: ' + (Math.round(view.getZoom() * 10) / 10); };
+          view.on('change:resolution', updateZoom);
+          updateZoom();
+        }
+
+      } catch (err) {
+        console.error('VectorTiles viewer init failed', err);
+        if (infoPanel) infoPanel.innerHTML = '<span style="color:#f66">Failed to load Vector Tiles viewer: ' + escapeHtml(err.message) + '</span>';
+      }
+      return; // Skip normal Leaflet viewer
+    }
+    // ----------- End Vector Tiles viewer mode -----------
+
     const missingLayerOrTheme = !viewerData.layer && !viewerData.theme;
     const missingProject = !viewerData.project && !isExternalSource;
 
@@ -439,44 +607,28 @@
     }
     renderInfo();
 
-    if (typeof L === 'undefined') {
+    if (!window.ol) {
       viewerData.messages.push({ type: 'error', key: 'viewer.error.leafletMissing' });
       renderInfo();
       return;
     }
 
     if (isWfsMode) {
-      const map = L.map('map', { preferCanvas: true, zoomControl: true });
-      // Default view: try to fit the layer's WGS84 extent if available.
+      const olView = new ol.View({ center: [0, 0], zoom: 2 });
+      const map = new ol.Map({ target: 'map', view: olView, layers: [] });
+      try { window.__qtiler_map = map; } catch (e) {}
+      requestAnimationFrame(() => map.updateSize());
+
+      // Fit to layer extent if available
       try {
         const e = viewerData.meta && Array.isArray(viewerData.meta.extent_wgs84) ? viewerData.meta.extent_wgs84 : null;
         if (e && e.length === 4 && e.every((v) => Number.isFinite(Number(v)))) {
-          const b = L.latLngBounds([e[1], e[0]], [e[3], e[2]]);
-          map.fitBounds(b.pad(0.05));
-        } else {
-          map.setView([0, 0], 2);
+          const ext = ol.proj.transformExtent([Number(e[0]), Number(e[1]), Number(e[2]), Number(e[3])], 'EPSG:4326', 'EPSG:3857');
+          requestAnimationFrame(() => { map.updateSize(); olView.fit(ext, { padding: [20, 20, 20, 20] }); });
         }
-      } catch {
-        map.setView([0, 0], 2);
-      }
+      } catch {}
 
-      const extentBtn = document.getElementById('viewer_extent_btn');
-      if (extentBtn) {
-        extentBtn.disabled = true;
-        extentBtn.setAttribute('aria-disabled', 'true');
-      }
-      const cacheBtn = document.getElementById('viewer_cache_btn');
-      const cacheStatusEl = document.getElementById('viewer_cache_status');
-      if (cacheBtn) {
-        cacheBtn.disabled = true;
-        cacheBtn.setAttribute('aria-disabled', 'true');
-        cacheBtn.style.display = 'none';
-      }
-      if (cacheStatusEl) {
-        cacheStatusEl.textContent = '';
-        cacheStatusEl.style.display = 'none';
-      }
-
+      // OSM overlay
       const osmBtn = document.getElementById('viewer_osm_btn');
       let osmLayer = null;
       let osmVisible = false;
@@ -486,28 +638,26 @@
         osmBtn.textContent = tr(key);
         osmBtn.classList.toggle('is-active', osmVisible);
       };
-      const ensureOsm = () => {
-        if (osmLayer) return osmLayer;
-        osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
-          maxZoom: 19,
-          opacity: 0.6
-        });
-        return osmLayer;
+      const setOsmVisibility = (visible) => {
+        osmVisible = !!visible;
+        if (!osmLayer) { osmLayer = new ol.layer.Tile({ source: new ol.source.OSM(), opacity: 0.6 }); }
+        if (osmVisible) {
+          if (!map.getLayers().getArray().includes(osmLayer)) map.getLayers().insertAt(0, osmLayer);
+        } else {
+          map.removeLayer(osmLayer);
+        }
+        refreshOsmLabel();
       };
       if (osmBtn) {
-        osmBtn.addEventListener('click', () => {
-          osmVisible = !osmVisible;
-          const layer = ensureOsm();
-          if (osmVisible) {
-            if (!map.hasLayer(layer)) layer.addTo(map);
-          } else if (map.hasLayer(layer)) {
-            map.removeLayer(layer);
-          }
-          refreshOsmLabel();
-        });
-        refreshOsmLabel();
+        osmBtn.addEventListener('click', () => setOsmVisibility(!osmVisible));
+        setOsmVisibility(true);
       }
+
+      // Hide cache controls for WFS mode
+      const cacheBtn = document.getElementById('viewer_cache_btn');
+      if (cacheBtn) { cacheBtn.style.display = 'none'; }
+      const cacheStatusEl = document.getElementById('viewer_cache_status');
+      if (cacheStatusEl) { cacheStatusEl.style.display = 'none'; }
 
       const typeName = viewerData.layer ? String(viewerData.layer) : '';
       if (!viewerData.project || !typeName) {
@@ -516,42 +666,50 @@
         return;
       }
 
-      // NOTE:
-      // Previously we did a single request with MAXFEATURES=2000.
-      // That truncates layers with >2000 features and looks like "it loads one group then stops".
-      // Use WFS 2.0 paging (COUNT/STARTINDEX) to keep requesting until complete.
-      // WFS strategy for very large layers (millions of points):
-      // - Load by current view extent (BBOX) so the request stays bounded.
-      // - Page with WFS 2.0 (COUNT/STARTINDEX) to fetch the full visible set.
-      // - Cancel and reload on pan/zoom.
+      // WFS paging/BBOX strategy (same logic as before, adapted for OL)
       const baseUrl = `/wfs?project=${encodeURIComponent(viewerData.project)}`
         + `&SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAME=${encodeURIComponent(typeName)}`
         + `&outputFormat=application/json&SRSNAME=EPSG:4326`;
 
       const PAGE_SIZE = 5000;
-      const MAX_FEATURES_PER_VIEW = 100000;
-      const LOAD_DEBOUNCE_MS = 250;
 
-      const wfsLayer = L.geoJSON(null, {
-        style: () => ({ weight: 2 }),
-        pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 5, weight: 2, fillOpacity: 0.2 }),
-        onEachFeature: (feature, layer) => {
-          try {
-            const props = feature && feature.properties ? feature.properties : {};
-            const keys = Object.keys(props);
-            if (!keys.length) return;
-            const rows = keys.slice(0, 30).map((k) => `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(props[k])}</div>`).join('');
-            layer.bindPopup(rows);
-          } catch {}
-        }
-      }).addTo(map);
+      const geojsonFormat = new ol.format.GeoJSON();
+      const wfsSource = new ol.source.Vector();
+      const wfsLayer = new ol.layer.Vector({
+        source: wfsSource,
+        style: new ol.style.Style({
+          stroke: new ol.style.Stroke({ color: '#3182ce', width: 2 }),
+          fill: new ol.style.Fill({ color: 'rgba(49,130,206,0.25)' }),
+          image: new ol.style.Circle({
+            radius: 5,
+            fill: new ol.style.Fill({ color: 'rgba(49,130,206,0.25)' }),
+            stroke: new ol.style.Stroke({ color: '#3182ce', width: 2 })
+          })
+        })
+      });
+      map.addLayer(wfsLayer);
+
+      // Popup overlay for feature info
+      const popupEl = document.createElement('div');
+      popupEl.style.cssText = 'background:rgba(15,23,42,0.95);color:#f8fafc;padding:12px 14px;border-radius:10px;max-width:320px;max-height:220px;overflow:auto;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);line-height:1.5';
+      const popup = new ol.Overlay({ element: popupEl, positioning: 'bottom-center', offset: [0, -12], autoPan: { animation: { duration: 150 } } });
+      map.addOverlay(popup);
+      map.on('singleclick', (evt) => {
+        const feature = map.forEachFeatureAtPixel(evt.pixel, (f) => f);
+        if (!feature) { popup.setPosition(undefined); return; }
+        const props = feature.getProperties();
+        const keys = Object.keys(props).filter((k) => k !== 'geometry');
+        if (!keys.length) { popup.setPosition(undefined); return; }
+        const rows = keys.slice(0, 30).map((k) => `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(props[k])}</div>`).join('');
+        popupEl.innerHTML = rows;
+        popup.setPosition(evt.coordinate);
+      });
 
       let activeAbort = null;
       let loadSeq = 0;
-      let debounceTimer = null;
 
       const clearWfsNotices = () => {
-        viewerData.messages = (viewerData.messages || []).filter((m) => m && m.key !== 'viewer.notice.wfsTruncated');
+        viewerData.messages = (viewerData.messages || []).filter((m) => m && m.key !== 'viewer.notice.wfsAllLoaded');
       };
 
       const fetchJson = async (url, abortController) => {
@@ -560,106 +718,112 @@
         return res.json();
       };
 
-      const loadVisibleWfs = async () => {
+      /* Load all features progressively using WFS paging (COUNT/STARTINDEX). */
+      const loadAllWfs = async () => {
         const mySeq = ++loadSeq;
-
-        if (activeAbort) {
-          try { activeAbort.abort(); } catch {}
-        }
+        if (activeAbort) { try { activeAbort.abort(); } catch {} }
         activeAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-
         clearWfsNotices();
         renderInfo();
+        wfsSource.clear();
 
-        try {
-          wfsLayer.clearLayers();
-        } catch {}
-
-        const b = map.getBounds();
-        if (!b || !b.isValid || !b.isValid()) return;
-
-        const west = b.getWest();
-        const south = b.getSouth();
-        const east = b.getEast();
-        const north = b.getNorth();
-        if (![west, south, east, north].every((v) => Number.isFinite(v))) return;
-
-        // Our server expects minx,miny,maxx,maxy in XY order.
-        const bbox = `${west},${south},${east},${north},EPSG:4326`;
-
-        let totalLoaded = 0;
         let startIndex = 0;
+        const seenIds = new Set();
+        let requiresFullFallback = false;
 
         try {
           while (true) {
-            if (mySeq !== loadSeq) return; // superseded by a newer view
-
-            if (totalLoaded >= MAX_FEATURES_PER_VIEW) {
-              viewerData.messages.push({
-                type: 'warn',
-                key: 'viewer.notice.wfsTruncated',
-                params: { count: escapeHtml(String(MAX_FEATURES_PER_VIEW)) }
-              });
-              renderInfo();
-              break;
-            }
-
+            if (mySeq !== loadSeq) return;
             const url = baseUrl
-              + `&BBOX=${encodeURIComponent(bbox)}`
               + `&COUNT=${encodeURIComponent(String(PAGE_SIZE))}`
               + `&STARTINDEX=${encodeURIComponent(String(startIndex))}`;
-
             const geo = await fetchJson(url, activeAbort);
             const features = Array.isArray(geo?.features) ? geo.features : [];
             if (!features.length) break;
 
-            wfsLayer.addData(geo);
-            totalLoaded += features.length;
+            // If provider ignores STARTINDEX and repeats pages, stop to avoid endless loop.
+            let dupeCount = 0;
+            for (const f of features) {
+              if (f.id != null && seenIds.has(f.id)) dupeCount++;
+              if (f.id != null) seenIds.add(f.id);
+            }
+            if (dupeCount > features.length * 0.5) {
+              requiresFullFallback = true;
+              break;
+            }
+
+            const olFeatures = geojsonFormat.readFeatures(geo, { featureProjection: 'EPSG:3857' });
+            wfsSource.addFeatures(olFeatures);
             startIndex += features.length;
-
             if (features.length < PAGE_SIZE) break;
-
-            // Yield to the UI thread so the browser stays responsive.
             await new Promise((r) => setTimeout(r, 0));
           }
+
+          if (requiresFullFallback) {
+            const fallbackGeo = await fetchJson(baseUrl, activeAbort);
+            const fallbackFeatures = Array.isArray(fallbackGeo?.features) ? fallbackGeo.features : [];
+            wfsSource.clear();
+            if (fallbackFeatures.length) {
+              const fallbackOlFeatures = geojsonFormat.readFeatures(fallbackGeo, { featureProjection: 'EPSG:3857' });
+              wfsSource.addFeatures(fallbackOlFeatures);
+            }
+          }
         } catch (err) {
-          // Ignore aborts; report real failures.
           const isAbort = err && (err.name === 'AbortError' || String(err).toLowerCase().includes('abort'));
           if (!isAbort && mySeq === loadSeq) {
             viewerData.messages.push({ type: 'error', key: 'viewer.error.wfsLoadFailed' });
             renderInfo();
           }
+          return;
+        }
+
+        // Fit map to loaded features
+        const featExtent = wfsSource.getExtent();
+        if (featExtent && featExtent.every((v) => Number.isFinite(v)) && (featExtent[2] - featExtent[0]) > 0) {
+          olView.fit(featExtent, { padding: [40, 40, 40, 40], maxZoom: 18 });
         }
       };
 
-      const scheduleLoad = () => {
-        if (debounceTimer) {
-          try { clearTimeout(debounceTimer); } catch {}
+      // Start by loading all features immediately.
+      loadAllWfs();
+
+      // Zoom display
+      const zoomDisplayEl = document.getElementById('zoom_display');
+      const updateZoomDisplay = () => {
+        if (zoomDisplayEl) {
+          const z = olView.getZoom();
+          zoomDisplayEl.textContent = 'Zoom: ' + (Math.round(z * 100) / 100).toFixed(2);
         }
-        debounceTimer = setTimeout(() => {
-          debounceTimer = null;
-          loadVisibleWfs();
-        }, LOAD_DEBOUNCE_MS);
       };
+      olView.on('change:resolution', updateZoomDisplay);
+      updateZoomDisplay();
 
-      map.on('moveend zoomend', scheduleLoad);
-      // Initial load for the starting view.
-      scheduleLoad();
-
-      try {
-        const b = wfsLayer.getBounds();
-        if (b && b.isValid && b.isValid()) {
-          map.fitBounds(b.pad(0.05));
-        }
-      } catch {}
+      // Extent button
+      const extentBtn = document.getElementById('viewer_extent_btn');
+      if (extentBtn) {
+        extentBtn.addEventListener('click', () => {
+          const e = viewerData.meta && Array.isArray(viewerData.meta.extent_wgs84) ? viewerData.meta.extent_wgs84 : null;
+          if (e && e.length === 4) {
+            olView.fit(ol.proj.transformExtent([Number(e[0]), Number(e[1]), Number(e[2]), Number(e[3])], 'EPSG:4326', 'EPSG:3857'), { padding: [20, 20, 20, 20] });
+          }
+        });
+      }
 
       renderInfo();
       return;
     }
 
+    // ===== WMTS / WMS mode (OpenLayers) =====
+    const meta = viewerData.meta;
+
+    // --- Register proj4 with OpenLayers ---
+    if (typeof proj4 !== 'undefined' && ol.proj && ol.proj.proj4 && typeof ol.proj.proj4.register === 'function') {
+      ol.proj.proj4.register(proj4);
+    }
+
     // --- Configuration for Zoom/Overzoom ---
-    const OVERZOOM_DEFAULT = 10; // Allow generous overzoom by default to trigger on-demand
-    const MAX_ALLOWED_ZOOM_DEFAULT = 28; // Hard cap for Leaflet
+    const OVERZOOM_DEFAULT = 10;
+    const MAX_ALLOWED_ZOOM_DEFAULT = 28;
     let extraZoom = OVERZOOM_DEFAULT;
     let maxAllowedZoom = MAX_ALLOWED_ZOOM_DEFAULT;
     const overzoomParam = params.get('overzoom');
@@ -671,81 +835,52 @@
     const EXTRA_ZOOMS = extraZoom;
     const MAX_ALLOWED_ZOOM = maxAllowedZoom;
 
-    const mapOptions = {
-      preferCanvas: true,
-      zoomControl: true,
-      maxZoom: 18 // Fallback, will be overridden below
-    };
-    const meta = viewerData.meta;
-    if (meta) {
-      if (Number.isFinite(meta.zoom_min)) mapOptions.minZoom = meta.zoom_min;
-      if (Number.isFinite(meta.zoom_max)) {
-        // Allow zooming past the cache limit
-        mapOptions.maxZoom = Math.min(meta.zoom_max + EXTRA_ZOOMS, MAX_ALLOWED_ZOOM);
-      }
-    }
-
-    let crs = null;
-    let extentLatLngBounds = null;
+    // --- Determine CRS & TileGrid ---
     const rawTileCrs = (meta && meta.tile_crs) ? meta.tile_crs : (viewerData.layerMeta && viewerData.layerMeta.crs ? viewerData.layerMeta.crs : null);
     const normalizedTileCrs = typeof rawTileCrs === 'string' ? rawTileCrs.trim().toUpperCase() : null;
     const targetTileCrs = normalizedTileCrs || rawTileCrs || null;
     const targetTileCrsLabel = rawTileCrs || targetTileCrs;
-    const hasCustomCrs = targetTileCrs && targetTileCrs !== 'EPSG:3857';
-    let invalidBoundsWarned = false;
-    const warnInvalidBounds = () => {
-      if (invalidBoundsWarned) return;
-      invalidBoundsWarned = true;
-      viewerData.messages.push({ type: 'warn', key: 'viewer.notice.invalidCustomBounds', params: { crs: escapeHtml(targetTileCrsLabel || 'EPSG:3857') } });
-    };
+    const hasCustomCrs = !!(targetTileCrs && targetTileCrs !== 'EPSG:3857');
 
-    const trySetLatLngBounds = (candidateCrs, lowerPoint, upperPoint) => {
-      if (!candidateCrs || !lowerPoint || !upperPoint) return;
-      try {
-        const sw = candidateCrs.unproject(lowerPoint);
-        const ne = candidateCrs.unproject(upperPoint);
-        if (isFiniteLatLng(sw) && isFiniteLatLng(ne)) {
-          extentLatLngBounds = L.latLngBounds(sw, ne);
-          return;
-        }
-      } catch {}
-      warnInvalidBounds();
-    };
+    let viewProjectionCode = 'EPSG:3857';
+    let tileGrid = null;
+    let customCrsApplied = false;
 
-    if (hasCustomCrs && typeof proj4 !== 'undefined' && typeof L.Proj !== 'undefined') {
+    if (hasCustomCrs && typeof proj4 !== 'undefined') {
       let def = null;
       if (ensureProj4Definition(targetTileCrs)) {
         def = proj4.defs(targetTileCrs) || proj4.defs(targetTileCrs?.toUpperCase());
       }
 
-      if (!def) {
-        viewerData.messages.push({ type: 'warn', key: 'viewer.notice.noProjDefinition' });
-      } else {
-        let customApplied = false;
+      if (def) {
+        // Re-register proj4 after adding new definitions
+        if (ol.proj.proj4 && typeof ol.proj.proj4.register === 'function') {
+          ol.proj.proj4.register(proj4);
+        }
 
-        if (meta && meta.tile_matrix_set && meta.tile_matrix_set.top_left_corner && Array.isArray(meta.tile_matrix_set.matrices)) {
-          const origin = meta.tile_matrix_set.top_left_corner;
-          const matrices = Array.isArray(meta.tile_matrix_set.matrices) ? meta.tile_matrix_set.matrices : [];
-          if (!Array.isArray(origin) || origin.length !== 2 || matrices.length === 0) {
-            viewerData.messages.push({ type: 'warn', key: 'viewer.notice.noMatrix' });
-          } else {
-            const matrixZooms = matrices
-              .map((m) => {
-                if (!m) return null;
-                if (typeof m.z === 'number') return m.z;
-                if (typeof m.source_level === 'number') return m.source_level;
-                const idNum = parseInt(m.identifier, 10);
-                return Number.isFinite(idNum) ? idNum : null;
-              })
-              .filter((z) => Number.isFinite(z));
+        const customProj = ol.proj.get(targetTileCrs);
+        if (customProj) {
+          viewProjectionCode = targetTileCrs;
+
+          // Primary path: tile_matrix_set with matrices
+          if (meta && meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices) && meta.tile_matrix_set.matrices.length > 0) {
+            const matrices = meta.tile_matrix_set.matrices;
+            const matrixZooms = matrices.map((m) => {
+              if (!m) return null;
+              if (typeof m.z === 'number') return m.z;
+              if (typeof m.source_level === 'number') return m.source_level;
+              const idNum = parseInt(m.identifier, 10);
+              return Number.isFinite(idNum) ? idNum : null;
+            }).filter((z) => Number.isFinite(z));
+
             const highestZoom = Number.isFinite(meta.zoom_max)
               ? meta.zoom_max
               : (matrixZooms.length ? Math.max(...matrixZooms) : (Number.isFinite(meta.zoom_min) ? meta.zoom_min : 0));
             const lowestZoom = Number.isFinite(meta.zoom_min)
               ? meta.zoom_min
               : (matrixZooms.length ? Math.min(...matrixZooms) : 0);
-
             const desiredMaxZoom = Math.min(highestZoom + EXTRA_ZOOMS, MAX_ALLOWED_ZOOM);
+
             const resolutions = new Array(Math.max(desiredMaxZoom, lowestZoom) + 1).fill(null);
             const matricesByZoom = new Map();
 
@@ -754,277 +889,212 @@
               let z = m.z;
               if (typeof z !== 'number') {
                 if (typeof m.source_level === 'number') z = m.source_level;
-                else {
-                  const idNum = parseInt(m.identifier, 10);
-                  if (Number.isFinite(idNum)) z = idNum;
-                }
+                else { const idNum = parseInt(m.identifier, 10); if (Number.isFinite(idNum)) z = idNum; }
               }
               if (typeof z !== 'number') return;
-
               matricesByZoom.set(z, m);
               let r = null;
-              if (Number.isFinite(m.resolution)) {
-                r = m.resolution;
-              } else if (Number.isFinite(m.scale_denominator)) {
-                r = m.scale_denominator * 0.00028;
-              }
-              if (Number.isFinite(r)) {
-                resolutions[z] = r;
-              }
+              if (Number.isFinite(m.resolution)) r = m.resolution;
+              else if (Number.isFinite(m.scale_denominator)) r = m.scale_denominator * 0.00028;
+              if (Number.isFinite(r)) resolutions[z] = r;
             });
 
+            // Fill gaps by doubling/halving
             for (let z = resolutions.length - 2; z >= 0; z--) {
-              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) {
-                resolutions[z] = resolutions[z + 1] * 2;
-              }
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) resolutions[z] = resolutions[z + 1] * 2;
             }
             for (let z = 1; z < resolutions.length; z++) {
-              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) {
-                resolutions[z] = resolutions[z - 1] / 2;
-              }
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) resolutions[z] = resolutions[z - 1] / 2;
             }
-
             const filledResolutions = resolutions.map((r) => (Number.isFinite(r) ? r : 1));
 
+            const origin = meta.tile_matrix_set.top_left_corner;
             const tileWidth = meta.tile_matrix_set.tile_width || 256;
             const tileHeight = meta.tile_matrix_set.tile_height || 256;
-            // Coordinates in index.json are already normalized to [x, y] by generate_cache.py
-            const originX = origin[0];
-            const originY = origin[1];
+            let originX, originY;
+            if (Array.isArray(origin) && origin.length === 2 && Number.isFinite(origin[0]) && Number.isFinite(origin[1])) {
+              originX = origin[0];
+              originY = origin[1];
+            } else if (meta.extent && meta.extent.length === 4) {
+              originX = meta.extent[0];
+              originY = meta.extent[3];
+            } else {
+              originX = 0;
+              originY = 0;
+            }
 
-            // IMPORTANT:
-            // The WMTS matrix set can have non power-of-two scale steps.
-            // That means `matrix_width * resolution` isn't guaranteed to be constant across zooms.
-            // If we derive bounds from a single reference zoom, Leaflet can mis-compute the global
-            // tile range at other zooms (symptoms: tiles shifted, disappear when zooming in).
-            // So compute projected bounds that cover *all* matrices.
-            let maxx = originX;
-            let miny = originY;
+            // Compute projected extent from all matrices
+            let extMaxX = originX;
+            let extMinY = originY;
             for (const m of matrices) {
               if (!m) continue;
               const mw = Number(m.matrix_width ?? m.matrixWidth);
               const mh = Number(m.matrix_height ?? m.matrixHeight);
               if (!Number.isFinite(mw) || mw <= 0 || !Number.isFinite(mh) || mh <= 0) continue;
-
               let mZoom = m.z;
               if (typeof mZoom !== 'number') {
                 if (typeof m.source_level === 'number') mZoom = m.source_level;
-                else {
-                  const idNum = parseInt(m.identifier, 10);
-                  if (Number.isFinite(idNum)) mZoom = idNum;
-                }
+                else { const idNum = parseInt(m.identifier, 10); if (Number.isFinite(idNum)) mZoom = idNum; }
               }
-
               let res = null;
-              if (Number.isFinite(m.resolution)) {
-                res = m.resolution;
-              } else if (Number.isFinite(m.scale_denominator)) {
-                res = m.scale_denominator * 0.00028;
-              } else if (typeof mZoom === 'number' && Number.isFinite(filledResolutions[mZoom])) {
-                res = filledResolutions[mZoom];
-              }
+              if (Number.isFinite(m.resolution)) res = m.resolution;
+              else if (Number.isFinite(m.scale_denominator)) res = m.scale_denominator * 0.00028;
+              else if (typeof mZoom === 'number' && Number.isFinite(filledResolutions[mZoom])) res = filledResolutions[mZoom];
               if (!Number.isFinite(res) || res <= 0) continue;
-
               const spanX = mw * tileWidth * res;
               const spanY = mh * tileHeight * res;
               const candMaxX = originX + spanX;
               const candMinY = originY - spanY;
-              if (Number.isFinite(candMaxX) && candMaxX > maxx) maxx = candMaxX;
-              if (Number.isFinite(candMinY) && candMinY < miny) miny = candMinY;
+              if (Number.isFinite(candMaxX) && candMaxX > extMaxX) extMaxX = candMaxX;
+              if (Number.isFinite(candMinY) && candMinY < extMinY) extMinY = candMinY;
             }
 
-            const minx = originX;
-            const maxy = originY;
+            customProj.setExtent([originX, extMinY, extMaxX, originY]);
 
-            const projectedBounds = L.bounds(L.point(minx, miny), L.point(maxx, maxy));
-            const crsOptions = {
+            tileGrid = new ol.tilegrid.TileGrid({
               resolutions: filledResolutions,
               origin: [originX, originY],
-              bounds: projectedBounds
-            };
+              tileSize: [tileWidth, tileHeight]
+            });
 
-            try {
-              crs = new L.Proj.CRS(targetTileCrs, def, crsOptions);
-              mapOptions.crs = crs;
-              customApplied = true;
-              trySetLatLngBounds(crs, L.point(minx, miny), L.point(maxx, maxy));
-              viewerData.messages.push({ type: 'info', key: 'viewer.notice.customMatrix', params: { crs: escapeHtml(targetTileCrsLabel || targetTileCrs || 'EPSG:3857') } });
-            } catch {
-              customApplied = false;
-            }
+            customCrsApplied = true;
+            viewerData.messages.push({ type: 'info', key: 'viewer.notice.customMatrix', params: { crs: escapeHtml(targetTileCrsLabel || targetTileCrs || 'EPSG:3857') } });
           }
-        }
 
-        if (!customApplied && meta && meta.extent && meta.extent.length === 4) {
-          const matrices = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) ? meta.tile_matrix_set.matrices : [];
-          const matrixZooms = matrices.map((m) => {
-            if (!m) return null;
-            if (typeof m.z === 'number') return m.z;
-            if (typeof m.source_level === 'number') return m.source_level;
-            const idNum = parseInt(m.identifier, 10);
-            return Number.isFinite(idNum) ? idNum : null;
-          }).filter((z) => Number.isFinite(z));
+          // Fallback: use meta.extent without full matrix top_left_corner
+          if (!customCrsApplied && meta && meta.extent && meta.extent.length === 4) {
+            const matrices = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) ? meta.tile_matrix_set.matrices : [];
+            const matrixZooms = matrices.map((m) => {
+              if (!m) return null;
+              if (typeof m.z === 'number') return m.z;
+              if (typeof m.source_level === 'number') return m.source_level;
+              const idNum = parseInt(m.identifier, 10);
+              return Number.isFinite(idNum) ? idNum : null;
+            }).filter((z) => Number.isFinite(z));
 
-          const highestZoom = Number.isFinite(meta.zoom_max) ? meta.zoom_max : (matrixZooms.length ? Math.max(...matrixZooms) : (Number.isFinite(meta.zoom_min) ? meta.zoom_min : 0));
-          const desiredMaxZoom = Math.min(highestZoom + EXTRA_ZOOMS, MAX_ALLOWED_ZOOM);
-          const resolutions = new Array(Math.max(0, desiredMaxZoom) + 1).fill(null);
+            const highestZoom = Number.isFinite(meta.zoom_max) ? meta.zoom_max : (matrixZooms.length ? Math.max(...matrixZooms) : 0);
+            const desiredMaxZoom = Math.min(highestZoom + EXTRA_ZOOMS, MAX_ALLOWED_ZOOM);
+            const resolutions = new Array(Math.max(0, desiredMaxZoom) + 1).fill(null);
 
-          matrices.forEach((m) => {
-            let z = m.z;
-            if (typeof z !== 'number') {
-              if (typeof m.source_level === 'number') z = m.source_level;
-              else {
-                const idNum = parseInt(m.identifier, 10);
-                if (Number.isFinite(idNum)) z = idNum;
+            matrices.forEach((m) => {
+              let z = m.z;
+              if (typeof z !== 'number') {
+                if (typeof m.source_level === 'number') z = m.source_level;
+                else { const idNum = parseInt(m.identifier, 10); if (Number.isFinite(idNum)) z = idNum; }
               }
+              if (typeof z === 'number') {
+                let r = null;
+                if (Number.isFinite(m.resolution)) r = m.resolution;
+                else if (Number.isFinite(m.scale_denominator)) r = m.scale_denominator * 0.00028;
+                if (Number.isFinite(r)) resolutions[z] = r;
+              }
+            });
+            for (let z = resolutions.length - 2; z >= 0; z--) {
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) resolutions[z] = resolutions[z + 1] * 2;
             }
-            if (typeof z === 'number' && Number.isFinite(m.resolution)) resolutions[z] = m.resolution;
-          });
-          for (let z = resolutions.length - 2; z >= 0; z--) {
-            if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z + 1])) resolutions[z] = resolutions[z + 1] * 2;
-          }
-          for (let z = 1; z < resolutions.length; z++) {
-            if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) resolutions[z] = resolutions[z - 1] / 2;
-          }
-          const filledResolutions = resolutions.map((r) => (Number.isFinite(r) ? r : 1));
+            for (let z = 1; z < resolutions.length; z++) {
+              if (!Number.isFinite(resolutions[z]) && Number.isFinite(resolutions[z - 1])) resolutions[z] = resolutions[z - 1] / 2;
+            }
+            const filledResolutions = resolutions.map((r) => (Number.isFinite(r) ? r : 1));
 
-          const origin = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.top_left_corner)) ? meta.tile_matrix_set.top_left_corner : null;
-          const [minx, miny, maxx, maxy] = meta.extent;
-          // Coordinates in index.json are already normalized to [x, y] by generate_cache.py
-          const originX = (origin && origin.length === 2) ? origin[0] : minx;
-          const originY = (origin && origin.length === 2) ? origin[1] : maxy;
+            const [minx, miny, maxx, maxy] = meta.extent;
+            const origin = (meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.top_left_corner)) ? meta.tile_matrix_set.top_left_corner : null;
+            const originX = (origin && origin.length === 2) ? origin[0] : minx;
+            const originY = (origin && origin.length === 2) ? origin[1] : maxy;
 
-          const crsOptions = {
-            resolutions: filledResolutions,
-            origin: [originX, originY]
-          };
-          const projectedBounds = L.bounds(L.point(minx, miny), L.point(maxx, maxy));
-          crsOptions.bounds = projectedBounds;
+            customProj.setExtent([minx, miny, maxx, maxy]);
 
-          try {
-            crs = new L.Proj.CRS(targetTileCrs, def, crsOptions);
-            mapOptions.crs = crs;
-            customApplied = true;
-            trySetLatLngBounds(crs, L.point(projectedBounds.min.x, projectedBounds.min.y), L.point(projectedBounds.max.x, projectedBounds.max.y));
+            tileGrid = new ol.tilegrid.TileGrid({
+              resolutions: filledResolutions,
+              origin: [originX, originY],
+              tileSize: 256
+            });
+
+            customCrsApplied = true;
             viewerData.messages.push({ type: 'info', key: 'viewer.notice.customExtent', params: { crs: escapeHtml(targetTileCrsLabel || targetTileCrs || 'EPSG:3857') } });
-          } catch {
-            customApplied = false;
+          }
+
+          if (!customCrsApplied) {
+            viewerData.messages.push({ type: 'warn', key: 'viewer.notice.noMatrix' });
+            viewProjectionCode = 'EPSG:3857';
           }
         }
-
-        if (!customApplied) {
-          viewerData.messages.push({ type: 'warn', key: 'viewer.notice.noMatrix' });
-        }
+      } else {
+        viewerData.messages.push({ type: 'warn', key: 'viewer.notice.noProjDefinition' });
       }
     }
 
-    // Leaflet's GridLayer assumes that for a non-infinite CRS (`!crs.infinite`),
-    // Map.getPixelWorldBounds() returns a bounds object. If it doesn't, Leaflet 1.9.4
-    // can throw in GridLayer._isValidTile when it tries to access `_globalTileRange.min`.
-    //
-    // This can happen with some custom CRS/projection setups (notably large extents like
-    // EPSG:3006 Sweden) on certain deployments. If we detect missing projected bounds at
-    // any relevant zoom, switch CRS to "infinite" mode. Tile requests remain constrained
-    // by `layerOptions.bounds` + `noWrap`.
-    if (mapOptions.crs && !mapOptions.crs.infinite) {
+    // --- Compute zoom limits ---
+    let minZoom = meta ? (meta.zoom_min || 0) : 0;
+    let maxZoom = meta && Number.isFinite(meta.zoom_max) ? Math.min(meta.zoom_max + EXTRA_ZOOMS, MAX_ALLOWED_ZOOM) : 18;
+    if (tileGrid) {
+      maxZoom = tileGrid.getResolutions().length - 1;
+    }
+
+    // --- Project extent in view CRS ---
+    let projectExtent = null;
+    if (meta && Array.isArray(meta.extent_wgs84) && meta.extent_wgs84.length === 4) {
       try {
-        const crsCandidate = mapOptions.crs;
-        const zoomCandidates = [];
-        const pushZoom = (z) => {
-          if (!Number.isFinite(z)) return;
-          const zi = Math.max(0, Math.round(z));
-          if (!zoomCandidates.includes(zi)) zoomCandidates.push(zi);
-        };
-        pushZoom(0);
-        if (meta) {
-          pushZoom(meta.zoom_min);
-          pushZoom(meta.zoom_max);
-        }
-        pushZoom(mapOptions.maxZoom);
-
-        let hasProjectedBounds = true;
-        if (typeof crsCandidate.getProjectedBounds !== 'function') {
-          hasProjectedBounds = false;
-        } else {
-          for (const z of zoomCandidates) {
-            try {
-              const projected = crsCandidate.getProjectedBounds(z);
-              if (!projected || !projected.min || !projected.max) {
-                hasProjectedBounds = false;
-                break;
-              }
-            } catch {
-              hasProjectedBounds = false;
-              break;
-            }
-          }
-        }
-
-        if (!hasProjectedBounds) {
-          mapOptions.crs.infinite = true;
-          warnInvalidBounds();
-        }
-      } catch {
-        mapOptions.crs.infinite = true;
-        warnInvalidBounds();
-      }
+        projectExtent = ol.proj.transformExtent(
+          [Number(meta.extent_wgs84[0]), Number(meta.extent_wgs84[1]), Number(meta.extent_wgs84[2]), Number(meta.extent_wgs84[3])],
+          'EPSG:4326', viewProjectionCode
+        );
+      } catch {}
+    }
+    if (!projectExtent && meta && meta.extent && meta.extent.length === 4) {
+      projectExtent = [meta.extent[0], meta.extent[1], meta.extent[2], meta.extent[3]];
     }
 
-    const map = L.map('map', mapOptions);
-    try { window.__qtiler_map = map; } catch (e) {}
-    // Prefer project extent (WGS84) for initial view if available, otherwise fall back to grid bounds
-    const projectBounds = (meta && Array.isArray(meta.extent_wgs84))
-        ? L.latLngBounds(
-            [meta.extent_wgs84[1], meta.extent_wgs84[0]],
-            [meta.extent_wgs84[3], meta.extent_wgs84[2]]
-          )
-        : extentLatLngBounds;
+    // --- Create OL View & Map ---
+    const olView = new ol.View({
+      projection: viewProjectionCode,
+      zoom: meta ? (meta.zoom_min || 0) : 0,
+      minZoom: minZoom,
+      maxZoom: maxZoom
+    });
 
-    const fallbackCenter = meta && meta.extent && meta.extent.length === 4
-      ? [(meta.extent[1] + meta.extent[3]) / 2, (meta.extent[0] + meta.extent[2]) / 2]
-      : [0, 0];
-    const fallbackZoom = meta ? (meta.zoom_min || 0) : 0;
+    if (projectExtent && projectExtent.every((v) => Number.isFinite(v))) {
+      olView.setCenter([(projectExtent[0] + projectExtent[2]) / 2, (projectExtent[1] + projectExtent[3]) / 2]);
+    } else {
+      olView.setCenter(hasCustomCrs ? [0, 0] : ol.proj.fromLonLat([0, 0]));
+    }
+
+    const map = new ol.Map({ target: 'map', view: olView, layers: [] });
+    try { window.__qtiler_map = map; } catch (e) {}
 
     const focusProjectExtent = () => {
       let preferredZoom = null;
       if (meta) {
-        // Prefer cached_zoom_min (coverage), then last_zoom_min (last run), then zoom_min
         if (Number.isFinite(meta.cached_zoom_min)) preferredZoom = meta.cached_zoom_min;
         else if (Number.isFinite(meta.last_zoom_min)) preferredZoom = meta.last_zoom_min;
       }
-
-      if (projectBounds) {
-        map.fitBounds(projectBounds);
-        // Only set maxBounds if we have a custom grid extent (extentLatLngBounds)
-        // otherwise we might restrict panning too much if projectBounds is small
-        if (extentLatLngBounds) {
-          try {
-            map.setMaxBounds(extentLatLngBounds.pad(0.1));
-          } catch {
-            map.setMaxBounds(extentLatLngBounds);
-          }
-        }
-        // If we have a specific start zoom (e.g. 11) and fitBounds gave us something smaller (e.g. 5),
-        // zoom in to the content.
-        if (preferredZoom != null && map.getZoom() < preferredZoom) {
-          map.setZoom(preferredZoom);
+      if (projectExtent && projectExtent.every((v) => Number.isFinite(v))) {
+        olView.fit(projectExtent, { size: map.getSize() || [800, 600], padding: [20, 20, 20, 20] });
+        if (preferredZoom != null && olView.getZoom() < preferredZoom) {
+          olView.setZoom(preferredZoom);
         }
         return true;
       }
       if (meta && meta.extent && meta.extent.length === 4) {
-        map.setView(fallbackCenter, preferredZoom != null ? preferredZoom : fallbackZoom);
+        const center = [(meta.extent[0] + meta.extent[2]) / 2, (meta.extent[1] + meta.extent[3]) / 2];
+        olView.setCenter(center);
+        if (preferredZoom != null) olView.setZoom(preferredZoom);
         return true;
       }
-      map.setView([0, 0], preferredZoom != null ? preferredZoom : fallbackZoom);
+      olView.setCenter(hasCustomCrs ? [0, 0] : ol.proj.fromLonLat([0, 0]));
+      if (preferredZoom != null) olView.setZoom(preferredZoom);
       return false;
     };
 
-    focusProjectExtent();
+    requestAnimationFrame(() => {
+      map.updateSize();
+      focusProjectExtent();
+    });
 
     const extentBtn = document.getElementById('viewer_extent_btn');
     if (extentBtn) {
       extentBtn.addEventListener('click', () => focusProjectExtent());
-      if (!projectBounds && !(meta && meta.extent && meta.extent.length === 4)) {
+      if (!projectExtent && !(meta && meta.extent && meta.extent.length === 4)) {
         extentBtn.disabled = true;
         extentBtn.setAttribute('aria-disabled', 'true');
       }
@@ -1032,6 +1102,7 @@
 
     const cacheBtn = document.getElementById('viewer_cache_btn');
     const cacheStatusEl = document.getElementById('viewer_cache_status');
+    const manualOnDemandControlEnabled = false;
     const osmBtn = document.getElementById('viewer_osm_btn');
     let autoCacheActive = false;
     let cacheRequestPromise = null;
@@ -1042,6 +1113,7 @@
     let osmLayer = null;
     let osmVisible = false;
     const allowOsmOverlay = !hasCustomCrs;
+
     if (!allowOsmOverlay && targetTileCrsLabel) {
       viewerData.messages.push({
         type: 'warn',
@@ -1052,27 +1124,21 @@
     }
 
     refreshCacheControlLabel = () => {
-      if (!cacheBtn) return;
+      if (!cacheBtn || !manualOnDemandControlEnabled) return;
       if (isWmsMode) return;
       cacheBtn.textContent = tr(autoCacheActive ? 'viewer.control.cacheStop' : 'viewer.control.cacheStart');
       cacheBtn.classList.toggle('is-active', autoCacheActive);
     };
 
     const setCacheBusy = (busy) => {
-      if (!cacheBtn) return;
-      if (busy) {
-        cacheBtn.setAttribute('aria-busy', 'true');
-      } else {
-        cacheBtn.removeAttribute('aria-busy');
-      }
+      if (!cacheBtn || !manualOnDemandControlEnabled) return;
+      if (busy) cacheBtn.setAttribute('aria-busy', 'true');
+      else cacheBtn.removeAttribute('aria-busy');
     };
 
     const setCacheStatus = (state, params = {}) => {
-      if (!cacheStatusEl) return;
-      if (isWmsMode) {
-        cacheStatusEl.textContent = '';
-        return;
-      }
+      if (!cacheStatusEl || !manualOnDemandControlEnabled) return;
+      if (isWmsMode) { cacheStatusEl.textContent = ''; return; }
       let key = null;
       if (state === 'busy') key = 'viewer.control.cacheBusy';
       else if (state === 'done') key = 'viewer.control.cacheDone';
@@ -1081,7 +1147,7 @@
       cacheStatusEl.textContent = key ? tr(key, params) : '';
     };
 
-    if (isWmsMode) {
+    if (!manualOnDemandControlEnabled || isWmsMode) {
       if (cacheBtn) {
         cacheBtn.disabled = true;
         cacheBtn.setAttribute('aria-disabled', 'true');
@@ -1110,7 +1176,7 @@
           method: 'POST',
           keepalive: true,
           headers: { 'Content-Type': 'application/json' },
-          body: '{}' // keepalive can require a body in some browsers
+          body: '{}'
         }).catch(() => null);
       } catch {}
     };
@@ -1129,16 +1195,11 @@
           method: 'POST',
           keepalive: true,
           headers: { 'Content-Type': 'application/json' },
-          body: '{}' // keepalive requires a body for some browsers when POST
+          body: '{}'
         }).catch(() => null);
       } catch {}
     };
 
-    // When the viewer is closed/navigated away, stop any running cache job.
-    // IMPORTANT: Avoid aborting when the page is put into the Back/Forward Cache (BFCache).
-    // If we abort on `pagehide` with `event.persisted === true`, then navigating back can
-    // restore the same JS state (same sid) and the server will reject on-demand renders
-    // for that sid for a few minutes.
     let closeAbortSent = false;
     const handleCloseAbort = () => {
       if (closeAbortSent) return;
@@ -1159,16 +1220,6 @@
       osmBtn.classList.toggle('is-active', osmVisible);
     };
 
-    const ensureOsmLayer = () => {
-      if (osmLayer) return osmLayer;
-      osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19,
-        opacity: 0.6
-      });
-      return osmLayer;
-    };
-
     const setOsmVisibility = (visible) => {
       if (!allowOsmOverlay) {
         osmVisible = false;
@@ -1176,41 +1227,24 @@
         return;
       }
       osmVisible = !!visible;
-      const layer = ensureOsmLayer();
+      if (!osmLayer) {
+        osmLayer = new ol.layer.Tile({ source: new ol.source.OSM(), opacity: 0.6 });
+      }
       if (osmVisible) {
-        if (!map.hasLayer(layer)) layer.addTo(map);
-      } else if (map.hasLayer(layer)) {
-        map.removeLayer(layer);
+        if (!map.getLayers().getArray().includes(osmLayer)) map.getLayers().insertAt(0, osmLayer);
+      } else {
+        map.removeLayer(osmLayer);
       }
       refreshOsmControlLabel();
     };
 
-    const projectLatLngToTile = (latlng) => {
-      try {
-        if (map?.options?.crs && typeof map.options.crs.project === 'function') {
-          const projected = map.options.crs.project(latlng);
-          if (projected && Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
-            return [projected.x, projected.y];
-          }
-        }
-      } catch {}
-      return [latlng.lng, latlng.lat];
-    };
-
     const buildCachePayload = () => {
       if (!viewerData.project || !(viewerData.layer || viewerData.theme)) return null;
-      const bounds = map.getBounds();
-      if (!bounds) return null;
-      const zoom = Math.round(map.getZoom());
+      const zoom = Math.round(olView.getZoom());
       if (!Number.isFinite(zoom)) return null;
-      const sw = bounds.getSouthWest();
-      const ne = bounds.getNorthEast();
-      const swProj = projectLatLngToTile(L.latLng(sw.lat, sw.lng));
-      const neProj = projectLatLngToTile(L.latLng(ne.lat, ne.lng));
-      const minx = Math.min(swProj[0], neProj[0]);
-      const maxx = Math.max(swProj[0], neProj[0]);
-      const miny = Math.min(swProj[1], neProj[1]);
-      const maxy = Math.max(swProj[1], neProj[1]);
+      const viewExtent = olView.calculateExtent(map.getSize());
+      if (!viewExtent || viewExtent.some((v) => !Number.isFinite(v))) return null;
+      const [minx, miny, maxx, maxy] = viewExtent;
       const precisionCoords = [minx, miny, maxx, maxy].map((value) => Number(value.toFixed(3)));
       const extentString = precisionCoords.join(',');
       const body = {
@@ -1247,41 +1281,29 @@
       while (Date.now() - started < timeoutMs) {
         await delay(intervalMs);
         const res = await fetch('/generate-cache/' + encodeURIComponent(jobId) + '?tail=4000');
-        if (res.status === 404) {
-          return { status: 'unknown' };
-        }
+        if (res.status === 404) return { status: 'unknown' };
         const payload = await res.json().catch(() => null);
-        if (!res.ok) {
-          throw new Error(payload?.details || res.statusText || 'cache_status_failed');
-        }
-        if (payload?.status && payload.status !== 'running') {
-          return payload;
-        }
+        if (!res.ok) throw new Error(payload?.details || res.statusText || 'cache_status_failed');
+        if (payload?.status && payload.status !== 'running') return payload;
       }
       return { status: 'timeout' };
     };
 
     const scheduleAutoCache = ({ immediate = false } = {}) => {
       if (!autoCacheActive) return;
-      if (autoCacheTimer) {
-        clearTimeout(autoCacheTimer);
-      }
-      autoCacheTimer = setTimeout(() => {
-        triggerCacheForCurrentView('auto');
-      }, immediate ? 0 : 500);
+      if (autoCacheTimer) clearTimeout(autoCacheTimer);
+      autoCacheTimer = setTimeout(() => { triggerCacheForCurrentView('auto'); }, immediate ? 0 : 500);
     };
+
+    let tileSource = null;
 
     const triggerCacheForCurrentView = async (reason = 'manual') => {
       const payload = buildCachePayload();
       if (!payload) {
-        if (reason === 'manual') {
-          setCacheStatus('error', { message: 'missing_extent' });
-        }
+        if (reason === 'manual') setCacheStatus('error', { message: 'missing_extent' });
         return;
       }
-      if (reason === 'auto' && payload.extentKey === lastAutoCacheKey) {
-        return;
-      }
+      if (reason === 'auto' && payload.extentKey === lastAutoCacheKey) return;
       lastAutoCacheKey = payload.extentKey;
       if (cacheRequestPromise) {
         queuedAutoRun = reason === 'auto' || queuedAutoRun;
@@ -1296,18 +1318,12 @@
           body: JSON.stringify(payload.body)
         });
         const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.id) {
-          throw new Error(data?.details || res.statusText || 'cache_request_failed');
-        }
+        if (!res.ok || !data?.id) throw new Error(data?.details || res.statusText || 'cache_request_failed');
         const jobId = data.id;
         currentCacheJobId = jobId;
         const result = await pollJobUntilDone(jobId);
-        if (result.status !== 'completed') {
-          throw new Error(result.status || 'cache_failed');
-        }
-        if (tiles && typeof tiles.redraw === 'function') {
-          tiles.redraw();
-        }
+        if (result.status !== 'completed') throw new Error(result.status || 'cache_failed');
+        if (tileSource && typeof tileSource.refresh === 'function') tileSource.refresh();
         setCacheStatus('done', { zoom: payload.zoom });
       })();
       try {
@@ -1327,7 +1343,7 @@
       }
     };
 
-    if (cacheBtn && !isWmsMode) {
+    if (cacheBtn && manualOnDemandControlEnabled && !isWmsMode) {
       cacheBtn.addEventListener('click', () => {
         autoCacheActive = !autoCacheActive;
         refreshCacheControlLabel();
@@ -1355,47 +1371,22 @@
 
     const zoomDisplayEl = document.getElementById('zoom_display');
     const updateZoomDisplay = () => {
-      if (zoomDisplayEl && map) {
-        const z = map.getZoom();
+      if (zoomDisplayEl) {
+        const z = olView.getZoom();
         zoomDisplayEl.textContent = 'Zoom: ' + (Math.round(z * 100) / 100).toFixed(2);
       }
     };
-
-    map.on('zoomend moveend', () => {
+    olView.on('change:resolution', () => {
       updateZoomDisplay();
-      if (!isWmsMode && autoCacheActive) {
-        scheduleAutoCache();
-      }
+      if (!isWmsMode && autoCacheActive) scheduleAutoCache();
+    });
+    map.on('moveend', () => {
+      if (!isWmsMode && autoCacheActive) scheduleAutoCache();
     });
     updateZoomDisplay();
-
     refreshCacheControlLabel();
 
-    const layerOptions = {
-      maxZoom: mapOptions.maxZoom,
-      minZoom: meta ? meta.zoom_min : 0,
-      tileSize: 256,
-      errorTileUrl: '',
-      attribution: 'Local cache',
-      noWrap: true,
-      keepBuffer: 2 // Keep more tiles to reduce flickering
-    };
-    if (extentLatLngBounds) {
-      layerOptions.bounds = extentLatLngBounds;
-    } else if (meta && Array.isArray(meta.extent_wgs84) && meta.extent_wgs84.length === 4) {
-      // Fallback bounds for custom CRS when unprojected grid bounds are not usable.
-      // Still helps constrain tile requests when CRS is forced to infinite mode.
-      layerOptions.bounds = L.latLngBounds(
-        [meta.extent_wgs84[1], meta.extent_wgs84[0]],
-        [meta.extent_wgs84[3], meta.extent_wgs84[2]]
-      );
-    }
-    if (!crs) {
-      layerOptions.detectRetina = false;
-    }
-
-    let tiles = null;
-
+    // --- Create tile layer ---
     if (isWmsMode) {
       const wmsBaseUrl = viewerData.tileTemplate;
       const wmsLayers = viewerData.layer ? String(viewerData.layer) : '';
@@ -1404,84 +1395,41 @@
         renderInfo();
         return;
       }
-      tiles = L.tileLayer.wms(wmsBaseUrl, {
-        ...layerOptions,
-        layers: wmsLayers,
-        format: 'image/png',
-        transparent: true,
-        version: '1.3.0',
-        styles: '',
-        uppercase: true,
-        noWrap: true
+      tileSource = new ol.source.TileWMS({
+        url: wmsBaseUrl,
+        params: {
+          'LAYERS': wmsLayers,
+          'FORMAT': 'image/png',
+          'TRANSPARENT': 'true',
+          'VERSION': '1.3.0',
+          'STYLES': ''
+        },
+        projection: viewProjectionCode,
+        tileGrid: tileGrid || undefined
       });
     } else {
-      const cacheEnabled = showCache && viewerData.cacheMeta;
-      if (cacheEnabled) {
-      const matricesByZoom = new Map();
-      if (meta && meta.tile_matrix_set && Array.isArray(meta.tile_matrix_set.matrices)) {
-        meta.tile_matrix_set.matrices.forEach((m) => {
-          if (m && typeof m.z === 'number') matricesByZoom.set(m.z, m);
-        });
-      }
-      const layerOptionsFinal = {
-        ...layerOptions,
-        noWrap: true,
-        bounds: extentLatLngBounds || layerOptions.bounds
+      const sourceOptions = {
+        url: viewerData.tileTemplate,
+        projection: viewProjectionCode,
+        maxZoom: maxZoom
       };
-      
-      // --- MODIFIED CustomTileLayer (Simplified for Server-Side Waiting) ---
-      const CustomTileLayer = L.TileLayer.extend({
-        getTileUrl(coords) {
-          try {
-            // Always construct the URL. If it's outside bounds, the server will try to generate it
-            // or return 404/500, which standard Leaflet handles gracefully.
-            const tpl = this._url || viewerData.tileTemplate;
-            if (!tpl) {
-              try {
-                if (window && window.console && typeof window.console.debug === 'function') {
-                  console.debug('[viewer.debug] missing tile template', { coords, hasThisUrl: !!this._url, viewerTemplateExists: !!(viewerData && viewerData.tileTemplate) });
-                }
-              } catch (e) {}
-              return L.Util.emptyImageUrl;
-            }
-            const url = tpl
-              .replace('{z}', String(coords.z))
-              .replace('{x}', String(coords.x))
-              .replace('{y}', String(coords.y));
-            try {
-              if (window && window.console && typeof window.console.debug === 'function') {
-                console.debug('[viewer.debug] tile url', { coords, url });
-              }
-            } catch (e) {}
-            return url;
-          } catch (e) {
-            return L.Util.emptyImageUrl;
-          }
-        },
-        // REMOVED custom createTile. 
-        // We now rely on Leaflet's native <img> loading which handles long-running requests (pending state) perfectly.
-      });
-      
-      tiles = new CustomTileLayer(viewerData.tileTemplate, layerOptionsFinal);
-      } else {
-        tiles = L.tileLayer(viewerData.tileTemplate, layerOptions);
-      }
+      if (tileGrid) sourceOptions.tileGrid = tileGrid;
+      tileSource = new ol.source.XYZ(sourceOptions);
     }
 
-    tiles.addTo(map);
+    const tileLayer = new ol.layer.Tile({ source: tileSource });
+    map.addLayer(tileLayer);
     renderInfo();
-    
-    // If page is restored from back/forward cache, reload to refresh auth/session state.
+
+    // BFCache handlers
     window.addEventListener('pageshow', (event) => {
       try {
         if (event && event.persisted) {
-          console.log('pageshow persisted (viewer) - reloading to refresh auth state');
           window.location.reload();
         }
       } catch (e) {}
     });
 
-    // Ensure clicking the brand/logo goes to a fresh page (prevent bfcache stale UI)
     document.addEventListener('click', (evt) => {
       try {
         const link = evt.target && evt.target.closest ? evt.target.closest('a.brand-logo, a.nav-link') : null;

@@ -223,7 +223,7 @@ def _find_vector_layer_by_typename(project, type_name):
     return None
 
 
-def _geometry_to_gml_fragment(geom, srs_name=None, precision=17):
+def _geometry_to_gml_fragment(geom, srs_name=None, precision=17, use_gml32=False):
     """Return a GML geometry element as a string.
 
     NOTE: In QGIS 3.34 Python bindings, QgsGeometry does not expose asGml/asGml2/asGml3.
@@ -233,7 +233,11 @@ def _geometry_to_gml_fragment(geom, srs_name=None, precision=17):
         return None
     try:
         doc = QDomDocument()
-        gml_version = getattr(QgsOgcUtils, 'GML_3_1_0', None)  # best match for WFS 1.1.0
+        gml_version = None
+        if use_gml32:
+            gml_version = getattr(QgsOgcUtils, 'GML_3_2_1', None)
+        if gml_version is None:
+            gml_version = getattr(QgsOgcUtils, 'GML_3_1_0', None)  # best match for WFS 1.1.0
         if gml_version is None:
             # Fallback to whatever version exists.
             gml_version = getattr(QgsOgcUtils, 'GML_3_2_1', None) or getattr(QgsOgcUtils, 'GML_2_1_2', None)
@@ -917,6 +921,8 @@ def process_task(params):
         if action in ('wfs_describe', 'wfs_describefeaturetype'):
             type_name = params.get('type_name') or params.get('typename')
             output_file = params.get('output_file')
+            req_version = str(params.get('version') or '').strip()
+            is_wfs20 = req_version.startswith('2.0')
             if not type_name:
                 return { 'status': 'error', 'code': 'MissingParameterValue', 'message': 'Missing type_name' }
             if not output_file:
@@ -950,11 +956,14 @@ def process_task(params):
             xsd_parts = []
             xsd_parts.append('<?xml version="1.0" encoding="UTF-8"?>')
             xsd_parts.append('<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"')
-            xsd_parts.append(' xmlns:gml="http://www.opengis.net/gml"')
+            xsd_parts.append(' xmlns:gml="' + ('http://www.opengis.net/gml/3.2' if is_wfs20 else 'http://www.opengis.net/gml') + '"')
             xsd_parts.append(' targetNamespace="' + tns + '"')
             xsd_parts.append(' xmlns:tns="' + tns + '"')
             xsd_parts.append(' elementFormDefault="qualified" attributeFormDefault="unqualified">')
-            xsd_parts.append('<xsd:import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/3.1.1/base/gml.xsd"/>')
+            if is_wfs20:
+                xsd_parts.append('<xsd:import namespace="http://www.opengis.net/gml/3.2" schemaLocation="http://schemas.opengis.net/gml/3.2.1/gml.xsd"/>')
+            else:
+                xsd_parts.append('<xsd:import namespace="http://www.opengis.net/gml" schemaLocation="http://schemas.opengis.net/gml/3.1.1/base/gml.xsd"/>')
             # Feature type element
             xsd_parts.append('<xsd:element name="' + str(safe_type) + '" type="tns:' + str(safe_type) + 'Type" substitutionGroup="gml:_Feature"/>')
             xsd_parts.append('<xsd:complexType name="' + str(safe_type) + 'Type">')
@@ -983,6 +992,8 @@ def process_task(params):
         if action in ('wfs_get_feature', 'wfs_getfeature'):
             type_name = params.get('type_name') or params.get('typename')
             output_file = params.get('output_file')
+            req_version = str(params.get('version') or '').strip()
+            is_wfs20 = req_version.startswith('2.0')
             if not type_name:
                 return { 'status': 'error', 'code': 'MissingParameterValue', 'message': 'Missing type_name' }
             if not output_file:
@@ -1019,16 +1030,16 @@ def process_task(params):
                     auto_expand = True
 
             try:
-                hard_limit = int(env_hard_limit) if env_hard_limit is not None else 50000
+                hard_limit = int(env_hard_limit) if env_hard_limit is not None else 5000000
             except Exception:
-                hard_limit = 50000
+                hard_limit = 5000000
             if hard_limit < 1:
                 hard_limit = 1
 
             try:
-                absolute_limit = int(env_absolute_limit) if env_absolute_limit is not None else 250000
+                absolute_limit = int(env_absolute_limit) if env_absolute_limit is not None else 10000000
             except Exception:
-                absolute_limit = 250000
+                absolute_limit = 10000000
             if absolute_limit < 1:
                 absolute_limit = 1
 
@@ -1047,14 +1058,17 @@ def process_task(params):
                 default_max = 1
             if default_max > hard_limit:
                 default_max = hard_limit
-            try:
-                max_features = int(max_features) if max_features is not None else default_max
-            except Exception:
-                max_features = default_max
-            if max_features < 1:
-                max_features = 1
-            if max_features > hard_limit:
-                max_features = hard_limit
+            if max_features is None or str(max_features).strip() == '':
+                max_features = None
+            else:
+                try:
+                    max_features = int(max_features)
+                except Exception:
+                    max_features = default_max
+                if max_features < 1:
+                    max_features = 1
+                if max_features > hard_limit:
+                    max_features = hard_limit
             try:
                 start_index = int(start_index) if start_index is not None else 0
             except Exception:
@@ -1097,10 +1111,11 @@ def process_task(params):
             req = QgsFeatureRequest()
             if rect is not None:
                 req = req.setFilterRect(rect)
-            try:
-                req = req.setLimit(max_features)
-            except Exception:
-                pass
+            if max_features is not None:
+                try:
+                    req = req.setLimit(max_features)
+                except Exception:
+                    pass
             try:
                 req = req.setOffset(start_index)
             except Exception:
@@ -1173,11 +1188,14 @@ def process_task(params):
             parts = []
             parts.append('<?xml version="1.0" encoding="UTF-8"?>')
             parts.append('<wfs:FeatureCollection')
-            parts.append(' xmlns:wfs="http://www.opengis.net/wfs"')
-            parts.append(' xmlns:gml="http://www.opengis.net/gml"')
+            parts.append(' xmlns:wfs="' + ('http://www.opengis.net/wfs/2.0' if is_wfs20 else 'http://www.opengis.net/wfs') + '"')
+            parts.append(' xmlns:gml="' + ('http://www.opengis.net/gml/3.2' if is_wfs20 else 'http://www.opengis.net/gml') + '"')
             parts.append(' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"')
             parts.append(' xmlns:' + prefix + '="' + ns + '"')
+            if is_wfs20:
+                parts.append(' numberMatched="unknown"')
             parts.append('>')
+            feature_count = 0
             for feat in lyr.getFeatures(req):
                 try:
                     fid = None
@@ -1186,7 +1204,7 @@ def process_task(params):
                     except Exception:
                         fid = None
                     gml_id = f"{safe_type}.{fid}" if fid is not None else None
-                    parts.append('<gml:featureMember>')
+                    parts.append('<' + ('wfs:member' if is_wfs20 else 'gml:featureMember') + '>')
                     parts.append(f'<{prefix}:{safe_type}' + (f' gml:id="{gml_id}"' if gml_id else '') + '>')
                     # geometry
                     try:
@@ -1198,7 +1216,7 @@ def process_task(params):
                                     geom.transform(geom_trf)
                                 except Exception:
                                     geom = feat.geometry()
-                            gml = _geometry_to_gml_fragment(geom, srs_name=srs_name, precision=17)
+                            gml = _geometry_to_gml_fragment(geom, srs_name=srs_name, precision=17, use_gml32=is_wfs20)
                             if gml:
                                 parts.append('<' + prefix + ':geometry>')
                                 parts.append(gml)
@@ -1217,9 +1235,12 @@ def process_task(params):
                     except Exception:
                         pass
                     parts.append(f'</{prefix}:{safe_type}>')
-                    parts.append('</gml:featureMember>')
+                    parts.append('</' + ('wfs:member' if is_wfs20 else 'gml:featureMember') + '>')
+                    feature_count += 1
                 except Exception:
                     continue
+            if is_wfs20:
+                parts[1] = parts[1] + f' numberReturned="{feature_count}"'
             parts.append('</wfs:FeatureCollection>')
 
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -1744,12 +1765,6 @@ def process_task(params):
                             ok = lyr.addFeature(feat)
                             if ok:
                                 inserted += 1
-                                try:
-                                    new_id = feat.id()
-                                    if new_id is not None:
-                                        inserted_fids.append(f"{safe_xml_name(local_type)}.{int(new_id)}")
-                                except Exception:
-                                    pass
                             else:
                                 dbg = _layer_debug_info(lyr)
                                 extra = _layer_commit_error_details(lyr)
@@ -1771,6 +1786,31 @@ def process_task(params):
                             errors.append(msg)
                             try:
                                 lyr.rollBack()
+                            except Exception:
+                                pass
+                        else:
+                            # Collect real FIDs after successful commit.
+                            # The provider now has the definitive IDs.
+                            try:
+                                safe_type = safe_xml_name(local_type)
+                                fc = lyr.featureCount()
+                                if fc > 0:
+                                    req = QgsFeatureRequest()
+                                    req.setFlags(QgsFeatureRequest.NoGeometry)
+                                    req.setLimit(inserted)
+                                    # Sort descending by fid to get the latest inserted features
+                                    try:
+                                        req.addOrderBy('$id', False)
+                                    except Exception:
+                                        pass
+                                    count = 0
+                                    for f in lyr.getFeatures(req):
+                                        fid = f.id()
+                                        if fid is not None and int(fid) >= 0:
+                                            inserted_fids.append(f"{safe_type}.{int(fid)}")
+                                            count += 1
+                                            if count >= inserted:
+                                                break
                             except Exception:
                                 pass
                     except Exception as e:

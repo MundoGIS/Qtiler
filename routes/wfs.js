@@ -225,16 +225,14 @@ export const registerWfsRoutes = ({
     const v = String(version || '').trim();
     if (v) return v;
     const accepts = parseCsv(acceptVersions).map((x) => String(x || '').trim()).filter(Boolean);
-    
-    // CAMBIO 1: Ponemos 1.1.0 primero en la lista de soportados
-    const supported = ['1.1.0', '2.0.0']; 
-    
+
+    const supported = ['2.0.0', '1.1.0'];
+
     for (const candidate of supported) {
       if (accepts.some((a) => a === candidate || a.startsWith(candidate))) return candidate;
     }
-    
-    // CAMBIO 2: El fallback por defecto ahora es 1.1.0
-    return process.env.WFS_CAPABILITIES_DEFAULT_VERSION || '1.1.0';
+
+    return process.env.WFS_CAPABILITIES_DEFAULT_VERSION || '2.0.0';
   };
 
   const logTx = (projectId, message, level = 'info') => {
@@ -255,6 +253,7 @@ export const registerWfsRoutes = ({
     }
 
     const request = String(getQueryCI(req, 'REQUEST') || 'GetCapabilities').trim();
+    const requestedVersion = String(getQueryCI(req, 'VERSION') || getQueryCI(req, 'version') || '').trim();
     const requestUpper = request.toUpperCase();
 
     const projectId = String(getQueryCI(req, 'project') || '').trim();
@@ -300,11 +299,12 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'VERSION') || getQueryCI(req, 'version'),
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
-        const serviceUrl = `${req.protocol}://${req.get('host')}/wfs?project=${encodeURIComponent(projectId)}`;
+        const reqApiKey = String(getQueryCI(req, 'api_key') || '').trim();
+        const serviceUrl = `${req.protocol}://${req.get('host')}/wfs?project=${encodeURIComponent(projectId)}${reqApiKey ? `&api_key=${encodeURIComponent(reqApiKey)}` : ''}`;
         // Advertise the same default cap used by GetFeature to avoid client-side truncation surprises.
-        const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '50000', 10) || 50000;
+        const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10) || 5000000;
         const countDefault = Number.parseInt(
-          process.env.WFS_CAPABILITIES_COUNT_DEFAULT || process.env.WFS_DEFAULT_MAX_FEATURES || String(hardLimit),
+          process.env.WFS_CAPABILITIES_COUNT_DEFAULT || '10000',
           10
         ) || hardLimit;
         const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault });
@@ -330,7 +330,8 @@ export const registerWfsRoutes = ({
           action: 'wfs_describe',
           project_path: project.file,
           type_name: typeName,
-          output_file: outFile
+          output_file: outFile,
+          version: requestedVersion || null
         });
         if (!result || result.status !== 'success') {
           const msg = result?.message || result?.error || 'describe_failed';
@@ -363,20 +364,19 @@ export const registerWfsRoutes = ({
       const bboxCrs = normalizeSrsName(bboxParsed?.crs) || null;
       const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || bboxCrs;
       const requestedCountRaw = getQueryCI(req, 'MAXFEATURES') ?? getQueryCI(req, 'COUNT');
+      const hasExplicitCount = requestedCountRaw != null && String(requestedCountRaw).trim() !== '';
       const requestedCount = clampInt(requestedCountRaw, { min: 1, max: 10_000_000, fallback: null });
-      const wfsMaxHardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '50000', 10);
-      const hardLimit = Number.isFinite(wfsMaxHardLimit) && wfsMaxHardLimit > 0 ? wfsMaxHardLimit : 50000;
-      const wfsAbsoluteLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_ABSOLUTE_LIMIT || '250000', 10);
-      const absoluteLimit = Number.isFinite(wfsAbsoluteLimit) && wfsAbsoluteLimit > 0 ? wfsAbsoluteLimit : 250000;
+      const wfsMaxHardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10);
+      const hardLimit = Number.isFinite(wfsMaxHardLimit) && wfsMaxHardLimit > 0 ? wfsMaxHardLimit : 5000000;
+      const wfsAbsoluteLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_ABSOLUTE_LIMIT || '10000000', 10);
+      const absoluteLimit = Number.isFinite(wfsAbsoluteLimit) && wfsAbsoluteLimit > 0 ? wfsAbsoluteLimit : 10000000;
       const autoExpand = envFlag(process.env.WFS_AUTO_EXPAND_LIMIT, true);
       const effectiveHardLimit = autoExpand && requestedCount != null && requestedCount > hardLimit
         ? Math.min(requestedCount, Math.max(hardLimit, absoluteLimit))
         : hardLimit;
-      const wfsDefaultMax = Number.parseInt(process.env.WFS_DEFAULT_MAX_FEATURES || String(hardLimit), 10);
-      const fallback = Number.isFinite(wfsDefaultMax) && wfsDefaultMax > 0
-        ? Math.min(wfsDefaultMax, effectiveHardLimit)
-        : effectiveHardLimit;
-      const maxFeatures = clampInt(requestedCountRaw, { min: 1, max: effectiveHardLimit, fallback });
+      const maxFeatures = hasExplicitCount
+        ? clampInt(requestedCountRaw, { min: 1, max: effectiveHardLimit, fallback: effectiveHardLimit })
+        : null;
       const startIndex = clampInt(getQueryCI(req, 'STARTINDEX'), { min: 0, max: 10_000_000, fallback: 0 });
       const outputFormatRaw = String(getQueryCI(req, 'OUTPUTFORMAT') || '').trim();
       const outputFormat = outputFormatRaw ? outputFormatRaw.split(';')[0].trim().toLowerCase() : '';
@@ -395,10 +395,11 @@ export const registerWfsRoutes = ({
           project_path: project.file,
           type_name: typeName,
           output_file: outFile,
+          version: requestedVersion || null,
           bbox,
           srs_name: srsName,
           max_features: maxFeatures,
-          hard_limit_override: effectiveHardLimit,
+          hard_limit_override: hasExplicitCount ? effectiveHardLimit : null,
           start_index: startIndex,
           output_format: asJson ? 'application/json' : 'application/gml+xml'
         });

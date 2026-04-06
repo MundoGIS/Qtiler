@@ -293,6 +293,35 @@
   color: #b45309;
 }
 
+.plugin-card__docs {
+  display: grid;
+  gap: 8px;
+}
+
+.plugin-card__description {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.plugin-card__readme-title {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.plugin-card__readme-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 5px;
+  color: #334155;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 .plugin-card__note {
   margin: 0;
   color: var(--muted);

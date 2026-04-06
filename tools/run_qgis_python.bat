@@ -7,7 +7,7 @@ REM
 REM Wrapper to run QGIS Python with a flexible o4w environment.
 REM It prefers the OSGEO4W_BIN env var if present, otherwise falls back to C:\QGIS\bin.
 
-setlocal
+setlocal enabledelayedexpansion
 
 rem Build a list of candidate o4w_env.bat locations and call the first that exists
 if defined OSGEO4W_BIN (
@@ -42,14 +42,16 @@ if defined QGIS_PREFIX (
 	if exist "%QGIS_PREFIX%\python" set "PYTHONPATH=%QGIS_PREFIX%\python;%QGIS_PREFIX%\python\plugins;%PYTHONPATH%"
 )
 
+set "_QTILER_PYEXE="
+
 rem Finally, run python — prefer explicit PYTHON_EXE if provided
 if defined PYTHON_EXE (
 	if exist "%PYTHON_EXE%" (
 		echo [RUN_QGIS_PY] using PYTHON_EXE: %PYTHON_EXE% >&2
 		"%PYTHON_EXE%" -c "import qgis" >nul 2>&1
 		if not errorlevel 1 (
-			"%PYTHON_EXE%" %*
-			goto :eof
+			set "_QTILER_PYEXE=%PYTHON_EXE%"
+			goto :run_python
 		) else (
 			echo [RUN_QGIS_PY] PYTHON_EXE cannot import qgis, trying fallbacks... >&2
 		)
@@ -64,8 +66,8 @@ if defined OSGEO4W_BIN (
 		echo [RUN_QGIS_PY] trying %OSGEO4W_BIN%\python.exe >&2
 		"%OSGEO4W_BIN%\python.exe" -c "import qgis" >nul 2>&1
 		if not errorlevel 1 (
-			"%OSGEO4W_BIN%\python.exe" %*
-			goto :eof
+			set "_QTILER_PYEXE=%OSGEO4W_BIN%\python.exe"
+			goto :run_python
 		)
 	)
 )
@@ -75,12 +77,12 @@ if defined OSGEO4W_BIN (
 	if exist "%OSGEO4W_BIN%\python-qgis-ltr.bat" (
 		echo [RUN_QGIS_PY] using %OSGEO4W_BIN%\python-qgis-ltr.bat >&2
 		call "%OSGEO4W_BIN%\python-qgis-ltr.bat" %*
-		goto :eof
+		exit /b !ERRORLEVEL!
 	)
 	if exist "%OSGEO4W_BIN%\python-qgis.bat" (
 		echo [RUN_QGIS_PY] using %OSGEO4W_BIN%\python-qgis.bat >&2
 		call "%OSGEO4W_BIN%\python-qgis.bat" %*
-		goto :eof
+		exit /b !ERRORLEVEL!
 	)
 )
 
@@ -90,10 +92,14 @@ if not errorlevel 1 (
 	echo [RUN_QGIS_PY] using python from PATH >&2
 	python -c "import qgis" >nul 2>&1
 	if not errorlevel 1 (
-		python %*
-		goto :eof
+		set "_QTILER_PYEXE=python"
+		goto :run_python
 	)
 )
 
 echo [RUN_QGIS_PY] No usable QGIS Python found. Configure OSGEO4W_BIN and/or PYTHON_EXE to a QGIS-enabled Python interpreter. >&2
 exit /b 2
+
+:run_python
+"!_QTILER_PYEXE!" %*
+exit /b !ERRORLEVEL!

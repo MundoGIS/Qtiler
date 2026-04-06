@@ -39,6 +39,32 @@ def main():
         except Exception:
             selected_layer_ids = []
 
+    # Optional bounding box (WGS84) to restrict generation: JSON array [minx,miny,maxx,maxy] or comma string
+    bbox_wgs84 = None
+    if len(sys.argv) > 6 and sys.argv[6]:
+        raw = sys.argv[6]
+        try:
+            parsed = None
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                # try comma-separated
+                parts = [p.strip() for p in str(raw).split(',') if p.strip()]
+                if len(parts) == 4:
+                    parsed = [float(p) for p in parts]
+            if isinstance(parsed, (list, tuple)) and len(parsed) == 4:
+                bbox_wgs84 = [float(parsed[0]), float(parsed[1]), float(parsed[2]), float(parsed[3])]
+        except Exception:
+            bbox_wgs84 = None
+
+    # Optional merge target: if provided, treat output_mbtiles as temp and merge into merge_into
+    merge_into = None
+    if len(sys.argv) > 7 and sys.argv[7]:
+        try:
+            merge_into = Path(sys.argv[7]).resolve()
+        except Exception:
+            merge_into = None
+
     if not project_path.exists():
         return out({"error": "project_not_found", "project": str(project_path)}, 1)
     if output_mbtiles is None:
@@ -416,14 +442,16 @@ def main():
             return out({"error": "no_vector_layers", "project": str(project_path)}, 1)
 
         output_mbtiles.parent.mkdir(parents=True, exist_ok=True)
-        if output_mbtiles.exists():
-            try:
-                output_mbtiles.unlink()
-            except Exception:
-                return out({
-                    "error": "output_locked",
-                    "details": f"Cannot overwrite existing output: {str(output_mbtiles)}"
-                }, 1)
+        # If merging into an existing mbtiles, do NOT unlink the main file here. The output_mbtiles is treated as temp.
+        if not merge_into:
+            if output_mbtiles.exists():
+                try:
+                    output_mbtiles.unlink()
+                except Exception:
+                    return out({
+                        "error": "output_locked",
+                        "details": f"Cannot overwrite existing output: {str(output_mbtiles)}"
+                    }, 1)
 
         alg_candidates = [
             "native:writevectortiles_mbtiles",
@@ -463,6 +491,29 @@ def main():
             "LAYERS": writer_layers
         }
 
+        # If a WGS84 bbox was provided, transform to project CRS and pass as EXTENT.
+        # The EXTENT string MUST include the CRS suffix (e.g. [EPSG:3006]) for QGIS
+        # processing to handle the coordinate system correctly.
+        if bbox_wgs84:
+            try:
+                from qgis.core import QgsRectangle
+                bbox_rect_wgs84 = QgsRectangle(float(bbox_wgs84[0]), float(bbox_wgs84[1]), float(bbox_wgs84[2]), float(bbox_wgs84[3]))
+                proj_crs = project.crs() if hasattr(project, 'crs') else None
+                if proj_crs and proj_crs.isValid():
+                    tr = QgsCoordinateTransform(wgs84, proj_crs, transform_context)
+                    try:
+                        bbox_proj = tr.transformBoundingBox(bbox_rect_wgs84)
+                        params['EXTENT'] = f"{bbox_proj.xMinimum()},{bbox_proj.yMinimum()},{bbox_proj.xMaximum()},{bbox_proj.yMaximum()} [{proj_crs.authid()}]"
+                    except Exception:
+                        params['EXTENT'] = f"{bbox_wgs84[0]},{bbox_wgs84[1]},{bbox_wgs84[2]},{bbox_wgs84[3]} [EPSG:4326]"
+                else:
+                    params['EXTENT'] = f"{bbox_wgs84[0]},{bbox_wgs84[1]},{bbox_wgs84[2]},{bbox_wgs84[3]} [EPSG:4326]"
+            except Exception:
+                try:
+                    params['EXTENT'] = f"{bbox_wgs84[0]},{bbox_wgs84[1]},{bbox_wgs84[2]},{bbox_wgs84[3]} [EPSG:4326]"
+                except Exception:
+                    pass
+
         try:
             result = processing.run(selected_alg, params)
         except Exception as first_err:
@@ -497,6 +548,62 @@ def main():
         if not bounds and extent and extent.isFinite():
             bounds = [extent.xMinimum(), extent.yMinimum(), extent.xMaximum(), extent.yMaximum()]
 
+        # If merge target was provided, merge generated tiles into target MBTiles
+        merge_count = 0
+        merge_error = None
+        if merge_into:
+            try:
+                import sqlite3
+                target = str(merge_into)
+                src = str(output_mbtiles)
+                if not os.path.exists(target):
+                    # If target doesn't exist, move temp to target
+                    try:
+                        os.replace(src, target)
+                    except Exception:
+                        try:
+                            os.rename(src, target)
+                        except Exception as mv_err:
+                            merge_error = f"move_failed: {mv_err}"
+                else:
+                    # Attach and copy tiles/metadata
+                    conn = sqlite3.connect(target)
+                    cur = conn.cursor()
+                    try:
+                        cur.execute("ATTACH ? AS src", (src,))
+                        # count tiles in source before merging
+                        try:
+                            cur.execute("SELECT COUNT(*) FROM src.tiles")
+                            merge_count = cur.fetchone()[0]
+                        except Exception:
+                            merge_count = 0
+                        # copy tiles
+                        cur.execute("INSERT OR REPLACE INTO tiles(zoom_level, tile_column, tile_row, tile_data) SELECT zoom_level, tile_column, tile_row, tile_data FROM src.tiles")
+                        # copy/merge metadata
+                        try:
+                            cur.execute("SELECT name, value FROM src.metadata")
+                            rows = cur.fetchall()
+                            for name, value in rows:
+                                cur.execute("INSERT OR REPLACE INTO metadata(name, value) VALUES(?,?)", (name, value))
+                        except Exception:
+                            pass
+                        conn.commit()
+                    except Exception as merge_exc:
+                        merge_error = str(merge_exc)
+                    finally:
+                        try:
+                            cur.execute("DETACH src")
+                        except Exception:
+                            pass
+                        cur.close()
+                        conn.close()
+                    try:
+                        os.remove(src)
+                    except Exception:
+                        pass
+            except Exception as outer_err:
+                merge_error = str(outer_err)
+
         return out({
             "ok": True,
             "algorithm": selected_alg,
@@ -510,7 +617,9 @@ def main():
             "layerStyles": layer_styles,
             "sourceLayerMeta": source_layer_meta,
             "bounds": bounds,
-            "boundsCrs": "EPSG:4326"
+            "boundsCrs": "EPSG:4326",
+            "mergeCount": merge_count if merge_into else None,
+            "mergeError": merge_error
         }, 0)
     except Exception as err:
         return out({"error": "unexpected_failure", "details": str(err), "trace": traceback.format_exc()}, 1)

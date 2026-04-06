@@ -31,38 +31,28 @@
           </div>
         </div>
         <div class="main-layout">
-          <aside class="control-panel">
-          <div class="control-toolbar">
-            <div class="control-actions">
-              <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
-              <input id="project_upload_input" type="file" accept=".qgz,.qgs,.zip" style="display:none" />
-              <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
-            </div>
-            <div class="meta" style="margin-top:8px" data-i18n="Upload bundle hint">If your QGIS project uses file-based layers, upload a .zip that includes exactly one .qgz/.qgs plus the data files, keeping the folder structure.</div>
-          </div>
-          <div class="control-grid">
-            <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" class="input-number" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
-            <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" class="input-number" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
-            <!-- <div class="field"><span data-i18n="Mode:">Mode:</span>
-              <select id="cache_mode" class="input-select">
-                <option value="wmts" selected data-i18n="WMTS automatic (native CRS)">WMTS automatic (native CRS)</option>
-              </select>
-            </div> -->
-            <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
-              <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="AUTO" disabled data-i18n-placeholder="Tile CRS" />
-            </div>
-            <!-- <div class="field field-remote">
-              <label class="checkbox">
-                <input id="allow_remote" type="checkbox" checked disabled>
-                <span data-i18n="Allow remote (WMS/XYZ)">Allow remote (WMS/XYZ)</span>
-              </label>
-              <input id="throttle_ms" class="input-number" type="number" min="300" value="300" placeholder="throttle ms" title="Delay between tiles (ms) for remote services" data-i18n-placeholder="Delay between tiles (ms)" />
-            </div> -->
-          </div>
-          </aside>
-
           <section class="content-panel">
-            <div id="status"></div>
+            <div id="project_upload_toolbar" class="project-upload-card" role="group" aria-label="Project actions">
+              <div class="control-actions">
+                <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
+                <input id="project_upload_input" type="file" accept=".qgz,.qgs,.zip" style="display:none" />
+                <button id="reload" class="btn btn-secondary" data-i18n="Reload layers">Reload layers</button>
+              </div>
+              <div class="meta project-upload-hint" data-i18n="Upload bundle hint">If your QGIS project uses file-based layers, upload a .zip that includes exactly one .qgz/.qgs plus the data files, keeping the folder structure.</div>
+            </div>
+
+            <div id="project_settings_card" class="project-settings-card" hidden>
+              <div class="panel-title" data-i18n="Project settings">Project settings</div>
+              <div class="control-grid project-settings-grid">
+                <div class="field"><span data-i18n="Min zoom:">Min zoom:</span> <input id="zoom_min" class="input-number" type="number" value="0" data-i18n-placeholder="Min zoom"></div>
+                <div class="field"><span data-i18n="Max zoom:">Max zoom:</span> <input id="zoom_max" class="input-number" type="number" value="0" data-i18n-placeholder="Max zoom"></div>
+                <div class="field"><span data-i18n="Tile CRS:">Tile CRS:</span>
+                  <input id="tile_crs" class="input-text" type="text" placeholder="auto" value="AUTO" disabled data-i18n-placeholder="Tile CRS" />
+                </div>
+              </div>
+              <div id="project_settings_status" class="meta project-settings-status" aria-live="polite"></div>
+            </div>
+
             <div id="jobs" class="jobs" style="display:none">
               <div class="jobs-heading" data-i18n="Running tasks">Running tasks</div>
               <div id="jobsList" class="list"></div>
@@ -96,7 +86,7 @@
       </footer>
     </div>
 
-   <script src="/js/index.js"></script>
+   <script src="/js/index.js?v=<%= encodeURIComponent(assetVersion || '') %>" data-qtiler-asset-version="<%= assetVersion || '' %>"></script>
    <script>
      document.addEventListener('DOMContentLoaded', () => {
        const layersList = document.getElementById('layersList');

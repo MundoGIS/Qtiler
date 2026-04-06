@@ -1,10 +1,42 @@
 {
   "name": "VectorTiles",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "displayName": "VectorTiles · QGIS project vector tile generation",
   "description": "Generate MBTiles vector tiles from QGIS projects and expose HTTP endpoints for clients.",
+  "docs": {
+    "en": {
+      "description": "Generates vector tiles from QGIS projects and exposes style, tilejson, and tile endpoints.",
+      "readme": [
+        "Build vector-tile caches from selected project layers.",
+        "Use style and tilejson URLs directly in QGIS, Origo, MapLibre, or OpenLayers.",
+        "On-demand mode can generate missing tiles when uncached z/x/y is requested.",
+        "For production, pre-generate key zoom ranges to reduce first-request latency."
+      ]
+    },
+    "es": {
+      "description": "Genera vector tiles desde proyectos QGIS y expone endpoints de style, tilejson y tiles.",
+      "readme": [
+        "Construye cache de vector tiles desde capas seleccionadas del proyecto.",
+        "Usa URLs de style y tilejson en QGIS, Origo, MapLibre u OpenLayers.",
+        "El modo on-demand puede generar tiles faltantes al pedir z/x/y no cacheado.",
+        "Para produccion, pre-genera rangos de zoom clave para reducir latencia inicial."
+      ]
+    },
+    "sv": {
+      "description": "Genererar vector tiles fran QGIS-projekt och exponerar style-, tilejson- och tile-endpoints.",
+      "readme": [
+        "Bygg vector tile-cache fran valda projektlager.",
+        "Anvand style- och tilejson-URL:er direkt i QGIS, Origo, MapLibre eller OpenLayers.",
+        "On-demand-laget kan generera saknade tiles nar ocachad z/x/y begars.",
+        "I produktion: for-generera viktiga zoomintervall for lagre initial latens."
+      ]
+    }
+  },
   "autoEnable": false,
   "license": "VectorTiles Commercial License",
   "licenseFile": "LICENSE_VectorTiles.txt",
-  "supportContact": "support@mundogis.se"
+  "supportContact": "support@mundogis.se",
+  "npmDependencies": {
+    "better-sqlite3": "^11.0.0"
+  }
 }

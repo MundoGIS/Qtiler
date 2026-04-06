@@ -1,8 +1,8 @@
 {
   "enabled": [
     "QtilerAuth",
-    "VectorTiles",
+    "ProjectSearch",
     "Qrigo",
-    "ProjectSearch"
+    "VectorTiles"
   ]
 }

@@ -9,6 +9,7 @@ import os from "os";
 import path from "path";
 import AdmZip from "adm-zip";
 import crypto from "crypto";
+import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 
 export const registerPluginRoutes = ({
   app,
@@ -29,12 +30,12 @@ export const registerPluginRoutes = ({
   const licenseStorePath = path.join(dataDir, 'licenses.json');
   const licenseSecret = process.env.LICENSE_SECRET || '';
   const trialTamperWarning = 'Trial license data appears to be illegally modified. This action is illegal. The plugin will be removed. Please purchase a valid license from MundoGIS.';
-      const pricing = {
-    ProjectSearch: { price: 50, currency: 'USD', period: 'year' },
-    Qrigo: { price: 150, currency: 'EUR', period: 'year' },
-        QuantizedMesh: { price: 300, currency: 'EUR', period: 'year' },
-    QtilerAuth: { price: 200, currency: 'EUR', period: 'year' },
-    VectorTiles: { price: 150, currency: 'EUR', period: 'year' },
+    const pricing = {
+    ProjectSearch: { price: 50, currency: 'EUR', period: 'year' },
+    Qrigo: { price: 2500, currency: 'SEK', period: 'year' },
+    QtilerAuth: { price: 250, currency: 'EUR', period: 'year' },
+    QuantizedMesh: { price: 300, currency: 'EUR', period: 'year' },
+    VectorTiles: { price: 200, currency: 'EUR', period: 'year' },
     WmsCache: { price: 100, currency: 'EUR', period: 'year' },
   };
 
@@ -115,12 +116,47 @@ export const registerPluginRoutes = ({
   const ensureTrial = (store, pluginName) => {
     if (!store.plugins[pluginName]) store.plugins[pluginName] = {};
     const entry = store.plugins[pluginName];
+
+    // Check auth.db first — trials there survive uninstall/reinstall
+    try {
+      const dbTrial = getPluginTrial(dataDir, pluginName);
+      if (dbTrial) {
+        // Restore trial into the JSON store from the persistent DB record
+        if (!entry.trial || entry.trial.startedAt !== dbTrial.first_installed_at) {
+          entry.trial = {
+            startedAt: dbTrial.first_installed_at,
+            expiresAt: dbTrial.trial_expires_at,
+            sig: dbTrial.trial_sig
+          };
+          saveLicenseStore(store);
+        }
+        return entry.trial;
+      }
+    } catch (err) {
+      console.warn('[licenses] Failed to read trial from auth.db', err?.message || err);
+    }
+
     if (!entry.trial) {
       const startedAt = new Date().toISOString();
       const trialEnds = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const sig = signTrial(pluginName, store.instanceId, startedAt, trialEnds);
       entry.trial = { startedAt, expiresAt: trialEnds, sig };
       saveLicenseStore(store);
+    }
+
+    // Persist to auth.db so it survives uninstall/reinstall
+    try {
+      const existing = getPluginTrial(dataDir, pluginName);
+      if (!existing && entry.trial) {
+        upsertPluginTrial(dataDir, {
+          pluginName,
+          firstInstalledAt: entry.trial.startedAt,
+          trialExpiresAt: entry.trial.expiresAt,
+          trialSig: entry.trial.sig
+        });
+      }
+    } catch (err) {
+      console.warn('[licenses] Failed to persist trial to auth.db', err?.message || err);
     }
     return entry.trial;
   };
@@ -197,7 +233,7 @@ export const registerPluginRoutes = ({
       return { status, expiresAt: null, daysLeft, code: 'trial_tampered', warning: trialTamperWarning };
     }
 
-    const trial = entry.trial || ensureTrial(store, pluginName);
+    const trial = ensureTrial(store, pluginName);
     expiresAt = trial?.expiresAt || null;
     const expMs = expiresAt ? Date.parse(expiresAt) : null;
     if (expMs && expMs > now) {
@@ -349,6 +385,7 @@ export const registerPluginRoutes = ({
       const store = loadLicenseStore();
       ensureInstanceId(store);
       const licenses = {};
+      const meta = {};
       for (const name of installed) {
         if (!pricing[name]) continue;
         const status = getLicenseStatus(store, name);
@@ -360,7 +397,25 @@ export const registerPluginRoutes = ({
           pricing: pricing[name]
         };
       }
-      res.json({ installed, enabled: pluginManager.listEnabled(), licenses, instanceId: store.instanceId, securityWarnings: store.securityWarnings || [] });
+
+      for (const name of installed) {
+        try {
+          const pluginJsonPath = path.join(pluginsDir, name, 'plugin.json');
+          if (!fs.existsSync(pluginJsonPath)) continue;
+          const raw = await fs.promises.readFile(pluginJsonPath, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') continue;
+          meta[name] = {
+            displayName: String(parsed.displayName || name),
+            description: String(parsed.description || ''),
+            docs: parsed.docs && typeof parsed.docs === 'object' ? parsed.docs : null
+          };
+        } catch {
+          // Non-fatal: plugin list should still load even if one manifest is malformed.
+        }
+      }
+
+      res.json({ installed, enabled: pluginManager.listEnabled(), licenses, instanceId: store.instanceId, securityWarnings: store.securityWarnings || [], meta });
     } catch (err) {
       res.status(500).json({ error: "plugin_list_failed", details: String(err) });
     }

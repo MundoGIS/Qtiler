@@ -82,6 +82,7 @@ export const registerProjectRoutes = ({
   getProjectConfigPath,
   deleteLayerCacheInternal,
   updateProjectBatchRun,
+  abortProjectBatchRunInternal,
   runRecacheForProject,
   tileRendererPool,
   logProjectEvent,
@@ -366,6 +367,29 @@ export const registerProjectRoutes = ({
     }
   });
 
+  // proyectos asignados al usuario autenticado (cookie / API key)
+  app.get("/public/my-projects", (req, res) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+    try {
+      const allProjects = listProjects();
+      const snapshot = readProjectAccessSnapshot();
+      const visible = [];
+      for (const project of allProjects) {
+        const accessInfo = deriveProjectAccess(snapshot, user, project.id);
+        if (!accessInfo.allowed) continue;
+        const descriptor = buildProjectDescriptor(project, { snapshot, access: accessInfo });
+        if (descriptor) visible.push(descriptor);
+      }
+      return res.json({ projects: visible, generatedAt: new Date().toISOString() });
+    } catch (err) {
+      console.error("Failed to build user projects listing", err);
+      return res.status(500).json({ error: "user_projects_failed" });
+    }
+  });
+
   // obtener un proyecto público por id (sin autenticación)
   app.get("/public/projects/:id", (req, res) => {
     const raw = req.params?.id ? String(req.params.id) : "";
@@ -519,7 +543,7 @@ export const registerProjectRoutes = ({
           if (projectEntries.length === 0) {
             return res.status(400).json({
               error: 'zip_missing_project',
-              message: 'Zip archive must contain exactly one QGIS project (.qgz or .qgs). None found.'
+              message: 'Your Zip file does not have any QGIS project.'
             });
           }
           if (projectEntries.length > 1) {
@@ -846,10 +870,40 @@ export const registerProjectRoutes = ({
     }
 
     // Fallback: some Windows locks (e.g. shapefile sidecars like .dbf/.shx)
-    // are not discoverable from process command lines. In that case, do a
-    // best-effort kill of likely render processes before retrying delete.
-    forceKillWindowsByImageNames(['qgis-bin.exe', 'qgis.exe', 'python.exe', 'pythonw.exe', 'cmd.exe']);
-    await new Promise((resolve) => setTimeout(resolve, 650));
+    // are not discoverable from process command lines. Avoid repeatedly
+    // killing QGIS worker processes (which causes restart loops). Implement
+    // a short cooldown per project and attempt a graceful pool abort first.
+    try {
+      if (project) {
+        if (typeof global.__qtiler_recent_fallback_kills === 'undefined') global.__qtiler_recent_fallback_kills = new Map();
+        const last = Number(global.__qtiler_recent_fallback_kills.get(project) || 0);
+        const now = Date.now();
+        const COOLDOWN = Number(process.env.PROJECT_LOCK_FALLBACK_COOLDOWN_MS || String(60 * 1000));
+        if (now - last < COOLDOWN) {
+          console.warn('[releaseProjectLocks] Skipping aggressive fallback kill (recent attempt) for', project);
+          return;
+        }
+        // Ask the pool to abort matching tasks as a graceful measure
+        try {
+          if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+            tileRendererPool.abortMatching((params) => {
+              try { return String(params?.project || '') === String(project); } catch { return false; }
+            }, { reason: 'project_delete_lock_fallback' });
+          } else if (tileRendererPool && typeof tileRendererPool.abortAll === 'function') {
+            tileRendererPool.abortAll({ reason: 'project_delete_lock_fallback' });
+          }
+        } catch (e) {
+          console.warn('[releaseProjectLocks] pool abortMatching failed:', String(e?.message || e));
+        }
+        console.warn('[releaseProjectLocks] Fallback: killing QGIS binaries only (safer)');
+        forceKillWindowsByImageNames(['qgis-bin.exe', 'qgis.exe', 'pythonw.exe']);
+        global.__qtiler_recent_fallback_kills.set(project, now);
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+    } catch (e) {
+      // best-effort; ignore
+      console.warn('[releaseProjectLocks] Fallback error:', String(e?.message || e));
+    }
   };
 
   const removeWithWorkerReset = async (targetPath, { isDir = false, projectId = '' } = {}) => {
@@ -971,9 +1025,34 @@ export const registerProjectRoutes = ({
               } catch {
                 isDir = targetPath.toLowerCase().includes(`${path.sep}qgisprojects${path.sep}`) || targetPath.toLowerCase().includes(`${path.sep}cache${path.sep}`);
               }
-              await removeWithWorkerReset(targetPath, { isDir, projectId: id });
-            } catch {
-              // keep retrying
+              try {
+                await removeWithWorkerReset(targetPath, { isDir, projectId: id });
+              } catch (remErr) {
+                // Log diagnostic info about the path and possible locking PIDs
+                try {
+                  console.warn(`[background-cleanup] Failed to remove ${targetPath}: ${String(remErr?.message || remErr)}`);
+                  const pids = findWindowsLockingPids({ needles: [targetPath] });
+                  if (Array.isArray(pids) && pids.length) {
+                    console.warn(`[background-cleanup] Processes holding handles for ${targetPath}: ${pids.join(', ')}`);
+                    if (String(process.env.PROJECT_LOCK_FORCE_KILL || '').toLowerCase() === '1') {
+                      try {
+                        console.warn('[background-cleanup] FORCE_KILL enabled: killing locking PIDs for', targetPath);
+                        forceKillWindowsPids(pids);
+                      } catch (killErr) {
+                        console.warn('[background-cleanup] Failed to kill locking PIDs:', String(killErr?.message || killErr));
+                      }
+                    }
+                  } else {
+                    // As a last resort attempt releaseProjectLocks for diagnostics
+                    try { await releaseProjectLocks({ targetPath, projectId: id }); } catch (e) { /* ignore */ }
+                  }
+                } catch (diagErr) {
+                  console.warn('[background-cleanup] Diagnostic failure while handling remove error:', String(diagErr?.message || diagErr));
+                }
+                // keep retrying
+              }
+            } catch (e) {
+              // keep retrying other paths
             }
           }
 
@@ -1001,15 +1080,70 @@ export const registerProjectRoutes = ({
   };
 
   app.delete("/projects/:id", requireAdmin, async (req, res) => {
-    const projectId = req.params.id;
-    if (!projectId) {
-      return res.status(400).json({ error: "project_id_required" });
-    }
-    const retryCleanup = String(req.query?.retry || '') === '1';
-    const proj = findProjectById(projectId);
-    if (!proj && !retryCleanup) {
-      return res.status(404).json({ error: "project_not_found" });
-    }
+    try {
+      const projectId = req.params.id;
+      if (!projectId) {
+        return res.status(400).json({ error: "project_id_required" });
+      }
+      // Suspend the pool to prevent workers auto-restarting while we abort tasks
+      try {
+        if (tileRendererPool && typeof tileRendererPool.suspend === 'function') {
+          console.log(`[projects.delete] Suspending tileRendererPool for project ${projectId}`);
+          tileRendererPool.suspend();
+        }
+      } catch (e) {
+        console.warn('[projects.delete] Failed to suspend pool:', String(e?.message || e));
+      }
+
+      // Ensure any queued or running tile-render tasks for this project are aborted
+      try {
+        if (tileRendererPool && typeof tileRendererPool.abortMatching === 'function') {
+          console.log(`[projects.delete] Aborting tileRendererPool tasks for project ${projectId}`);
+          tileRendererPool.abortMatching((params) => {
+            try { return String(params?.project || '') === String(projectId); } catch { return false; }
+          }, { reason: 'project_delete' });
+        } else if (tileRendererPool && typeof tileRendererPool.cancelQueued === 'function') {
+          tileRendererPool.cancelQueued((params) => {
+            try { return String(params?.project || '') === String(projectId); } catch { return false; }
+          });
+        }
+      } catch (e) {
+        console.warn('[projects.delete] Failed to abort pool tasks early:', String(e?.message || e));
+      }
+
+      // Wait a short while for worker processes and queue to settle to avoid file-lock races
+      const waitForPoolIdle = async (pid, timeoutMs = 12000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          try {
+            // Check queued items
+            const queueHas = Array.isArray(tileRendererPool?.queue) && tileRendererPool.queue.some((it) => {
+              try { return String(it?.params?.project || '') === String(pid); } catch { return false; }
+            });
+            // Check running workers
+            const runningHas = Array.isArray(tileRendererPool?.workers) && tileRendererPool.workers.some((w) => {
+              try { return !!w?.busy && String(w?.currentTask?.project || '') === String(pid); } catch { return false; }
+            });
+            if (!queueHas && !runningHas) return true;
+          } catch (e) {
+            // ignore inspection errors
+          }
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        return false;
+      };
+
+      try {
+        const ok = await waitForPoolIdle(projectId, 12000);
+        if (!ok) console.warn(`[projects.delete] pool did not drain within timeout for project ${projectId}`);
+      } catch (e) {
+        console.warn('[projects.delete] waitForPoolIdle failed:', String(e?.message || e));
+      }
+      const retryCleanup = String(req.query?.retry || '') === '1';
+      const proj = findProjectById(projectId);
+      if (!proj && !retryCleanup) {
+        return res.status(404).json({ error: "project_not_found" });
+      }
 
     const cleanupErrors = [];
     const addCleanupError = (scope, err) => {
@@ -1084,6 +1218,47 @@ export const registerProjectRoutes = ({
     }
 
     try { abortProjectTileRenders(proj.id, 'project_delete'); } catch {}
+
+    // Attempt to cancel any VectorTiles jobs and delete tileset via plugin API
+    const attemptCancelVectorTiles = async (projectId) => {
+      try {
+        const base = `${req.protocol}://${req.get('host')}`;
+        // Fetch jobs
+        let jobsPayload = null;
+        try {
+          const r = await fetch(`${base}/plugins/VectorTiles/api/jobs`, { credentials: 'include' });
+          if (r.ok) jobsPayload = await r.json();
+        } catch (e) {
+          // ignore network errors
+          return;
+        }
+        const jobs = Array.isArray(jobsPayload?.jobs) ? jobsPayload.jobs : [];
+        for (const job of jobs) {
+          try {
+            if (!job || String(job.projectId || '') !== String(projectId)) continue;
+            if (job.status === 'queued' || job.status === 'running') {
+              // cancel job
+              try {
+                await fetch(`${base}/plugins/VectorTiles/api/jobs/${encodeURIComponent(job.id)}/cancel`, { method: 'POST', credentials: 'include' });
+              } catch {}
+            }
+          } catch {}
+        }
+
+        // Attempt to delete tileset registry and files
+        try {
+          await fetch(`${base}/plugins/VectorTiles/api/tilesets/${encodeURIComponent(projectId)}`, { method: 'DELETE', credentials: 'include' });
+        } catch {}
+      } catch (err) {
+        // propagate nothing; best-effort
+      }
+    };
+
+    try {
+      await attemptCancelVectorTiles(proj.id);
+    } catch (e) {
+      // ignore; best effort
+    }
 
     let removedProjectDir = false;
     try {
@@ -1224,6 +1399,42 @@ export const registerProjectRoutes = ({
       addCleanupError('project_log_cleanup', err);
     }
 
+    // Also remove any tile-grid presets that were auto-generated for this project
+    try {
+      if (tileGridDir && fs.existsSync(tileGridDir)) {
+        const entries = fs.readdirSync(tileGridDir).filter((f) => f.toLowerCase().endsWith('.json'));
+        for (const entry of entries) {
+          const full = path.join(tileGridDir, entry);
+          try {
+            const raw = fs.readFileSync(full, 'utf8');
+            let parsed = null;
+            try { parsed = JSON.parse(raw); } catch { parsed = null; }
+            const filenameLower = String(entry || '').toLowerCase();
+            const projectTag = String(proj.id || '').toLowerCase();
+            const shouldRemove = (
+              (parsed && parsed.project_id && String(parsed.project_id) === proj.id) ||
+              (parsed && parsed.auto_generated === true && parsed.project_id === proj.id) ||
+              filenameLower.includes(`_${projectTag}`)
+            );
+            if (shouldRemove) {
+              try {
+                fs.unlinkSync(full);
+                console.log(`[cleanup] Removed tile-grid preset file for project ${proj.id}: ${entry}`);
+                try { invalidateTileGridCaches(); } catch {}
+              } catch (unlinkErr) {
+                console.warn(`[cleanup] Failed to unlink tile-grid file ${full}:`, unlinkErr?.message || unlinkErr);
+              }
+            }
+          } catch (e) {
+            // ignore per-file errors
+            continue;
+          }
+        }
+      }
+    } catch (err) {
+      addCleanupError('tile_grids_cleanup', err);
+    }
+
     let remainingPaths = [
       path.join(projectsDir, proj.id),
       proj.file,
@@ -1269,6 +1480,11 @@ export const registerProjectRoutes = ({
 
     if (cleanupErrors.length || remainingPaths.length) {
       startBackgroundProjectCleanup(proj.id, remainingPaths);
+      try {
+        if (tileRendererPool && typeof tileRendererPool.resume === 'function') {
+          tileRendererPool.resume();
+        }
+      } catch {}
       return res.json({
         status: 'deleted_partial',
         id: proj.id,
@@ -1280,7 +1496,31 @@ export const registerProjectRoutes = ({
       });
     }
 
+    // Ensure top-level project folder under projectsDir is removed if still present
+    try {
+      const topLevelProjectDir = path.join(projectsDir, proj.id);
+      if (fs.existsSync(topLevelProjectDir)) {
+        try {
+          await removeWithWorkerReset(topLevelProjectDir, { isDir: true, projectId: proj.id });
+        } catch (e) {
+          // non-fatal, will be retried by background cleanup if required
+          console.warn(`[cleanup] Failed to remove top-level project dir ${topLevelProjectDir}:`, String(e?.message || e));
+        }
+      }
+    } catch (e) {
+      // ignore errors here
+    }
+
+    try {
+      if (tileRendererPool && typeof tileRendererPool.resume === 'function') {
+        tileRendererPool.resume();
+      }
+    } catch {}
     return res.json({ status: "deleted", id: proj.id, cacheRemoved });
+    } catch (err) {
+      console.error('[projects.delete] Unexpected error while deleting project', String(err?.message || err));
+      return res.status(500).json({ error: 'project_delete_failed', details: String(err?.message || err) });
+    }
   });
 
   // capas por proyecto
@@ -1435,6 +1675,21 @@ export const registerProjectRoutes = ({
     return res.json({ current, last });
   });
 
+  app.delete("/projects/:id/cache/project", requireAdmin, async (req, res) => {
+    const projectId = req.params.id;
+    const proj = findProjectById(projectId);
+    if (!proj) return res.status(404).json({ error: "project_not_found" });
+    try {
+      const result = await abortProjectBatchRunInternal(projectId, { reason: "user_abort" });
+      if (!result?.ok) {
+        return res.status(result?.status || 500).json(result?.payload || { error: "batch_abort_failed" });
+      }
+      return res.status(result.status).json(result.payload);
+    } catch (err) {
+      return res.status(500).json({ error: "batch_abort_failed", details: String(err?.message || err) });
+    }
+  });
+
   app.post("/projects/:id/cache/project", requireAdmin, (req, res) => {
     const projectId = req.params.id;
     const proj = findProjectById(projectId);
@@ -1480,13 +1735,29 @@ export const registerProjectRoutes = ({
     res.json({ status: "queued", runId, project: projectId, layers: layerNames.length });
     setImmediate(async () => {
       try {
-        updateProjectBatchRun(projectId, { status: "running", startedAt: Date.now(), trigger: runTrigger });
+        const pendingRun = projectBatchRuns.get(projectId);
+        if (pendingRun?.id === runId && (pendingRun.abortRequested || pendingRun.status === "aborted")) {
+          logProjectEvent(projectId, `Project cache run ${runId} aborted before start.`, "warn");
+          return;
+        }
         await runRecacheForProject(projectId, "manual-project", { overrideLayers, runId, requireEnabled: false });
-        updateProjectBatchRun(projectId, { status: "completed", endedAt: Date.now(), result: "success", trigger: runTrigger });
-        logProjectEvent(projectId, `Project cache run ${runId} completed (${layerNames.length} layers).`);
+        const finalRun = projectBatchRuns.get(projectId);
+        if (finalRun?.id !== runId) return;
+        if (finalRun.status === "completed") {
+          logProjectEvent(projectId, `Project cache run ${runId} completed (${layerNames.length} layers).`);
+        } else if (finalRun.status === "aborted") {
+          logProjectEvent(projectId, `Project cache run ${runId} aborted.`, "warn");
+        }
       } catch (err) {
+        const currentRun = projectBatchRuns.get(projectId);
+        if (currentRun?.id === runId && currentRun.status === "aborted") {
+          logProjectEvent(projectId, `Project cache run ${runId} aborted.`, "warn");
+          return;
+        }
         const message = err?.message || String(err);
-        updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
+        if (!(currentRun?.id === runId && currentRun.status === "error")) {
+          updateProjectBatchRun(projectId, { status: "error", endedAt: Date.now(), error: message, result: "error", trigger: runTrigger });
+        }
         logProjectEvent(projectId, `Project cache run ${runId} failed: ${message}`, "error");
       }
     });

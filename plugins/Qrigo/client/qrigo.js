@@ -12,6 +12,22 @@
     return out;
   };
 
+  const normalizeCrsCode = (value) => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim().toUpperCase();
+    return normalized || null;
+  };
+
+  const isXyzCompatibleCrs = (value) => {
+    const normalized = normalizeCrsCode(value);
+    if (!normalized) return false;
+    return normalized === 'EPSG:3857'
+      || normalized === 'EPSG:900913'
+      || normalized === 'EPSG:102100'
+      || normalized === 'EPSG:3785'
+      || normalized === 'URN:OGC:DEF:CRS:EPSG::3857';
+  };
+
   const isVectorLayer = (layer) => {
     if (!layer) return false;
     return !!(layer.kind === 'vector' || layer.kind === 'VectorLayer' || layer.geometry_type);
@@ -35,6 +51,14 @@
       resolutions
     };
   };
+
+  const isFiniteNumber = (value) => Number.isFinite(Number(value));
+
+  const validArray = (value, length) => (
+    Array.isArray(value)
+    && value.length === length
+    && value.every(isFiniteNumber)
+  ) ? value.map((entry) => Number(entry)) : null;
 
   const makeSection = (title, payload, container) => {
     if (!payload) return;
@@ -97,11 +121,152 @@
     }
   };
 
-  hooks.layerInfoTabs.push({
+  const registerUniqueHook = (arr, hook) => {
+    if (!Array.isArray(arr) || !hook || !hook.id) return;
+    if (arr.some((h) => h && h.id === hook.id)) return;
+    arr.push(hook);
+  };
+
+  const openServiceModal = ({ hasWfs, hasVectorTiles, tr, onConfirm }) => {
+    const available = [
+      { key: 'wmts', label: 'WMTS' },
+      { key: 'wms', label: 'WMS' }
+    ];
+    if (hasWfs) available.push({ key: 'wfs', label: 'WFS' });
+
+    const ensureModalStyles = () => {
+      if (document.getElementById('qrigo-service-modal-style')) return;
+      const style = document.createElement('style');
+      style.id = 'qrigo-service-modal-style';
+      style.textContent = `
+        .qrigo-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:10050;padding:16px}
+        .qrigo-modal.modal.is-active{display:flex}
+        .qrigo-modal .modal-background{position:absolute;inset:0;background:rgba(10,10,10,.45)}
+        .qrigo-modal .modal-card{position:relative;max-width:460px;width:min(460px,calc(100vw - 32px));max-height:80vh;overflow:auto;margin:0;background:#ffffff;border:1px solid #d7dde7;border-radius:12px;box-shadow:0 16px 42px rgba(15,23,42,.3)}
+        .qrigo-modal .modal-card-head,.qrigo-modal .modal-card-body,.qrigo-modal .modal-card-foot{background:#ffffff;color:#1f2937}
+        .qrigo-modal .modal-card-head{border-bottom:1px solid #e5e7eb;padding:1rem 1.2rem}
+        .qrigo-modal .modal-card-foot{border-top:1px solid #e5e7eb;padding:1rem 1.2rem}
+        .qrigo-modal .modal-card-title{font-size:1.05rem;font-weight:700}
+        .qrigo-modal .modal-card-body{display:grid;gap:.85rem;padding:1.15rem 1.2rem}
+        .qrigo-service-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+        .qrigo-service-option{border:1px solid #dbe1ea;border-radius:8px;padding:.55rem .65rem;display:flex;gap:.45rem;align-items:center}
+        .qrigo-modal .qrigo-btn{border:1px solid #cbd5e1;background:#fff;color:#1f2937;border-radius:8px;padding:.45rem .9rem;font-weight:600;cursor:pointer}
+        .qrigo-modal .qrigo-btn:hover{background:#f8fafc}
+        .qrigo-modal .qrigo-btn-primary{border-color:#0369a1;background:#0369a1;color:#fff}
+        .qrigo-modal .qrigo-btn-primary:hover{background:#075985}
+        @media (max-width:640px){.qrigo-service-grid{grid-template-columns:1fr}}
+      `;
+      document.head.appendChild(style);
+    };
+
+    ensureModalStyles();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal is-active qrigo-modal';
+    modal.innerHTML = `
+      <div class="modal-background"></div>
+      <div class="modal-card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">${escapeHtml(tr ? tr('Open in Origo') : 'Open in Origo')}</p>
+          <button class="delete" aria-label="close"></button>
+        </header>
+        <section class="modal-card-body">
+          <p>${escapeHtml(tr ? tr('Choose services to open') : 'Choose services to open')}</p>
+          <label class="qrigo-service-option"><input type="checkbox" data-all="1"> <strong>All available services</strong></label>
+          <div class="qrigo-service-grid"></div>
+        </section>
+        <footer class="modal-card-foot" style="justify-content:flex-end">
+          <button class="qrigo-btn" data-cancel="1">${escapeHtml(tr ? tr('Cancel') : 'Cancel')}</button>
+          <button class="qrigo-btn qrigo-btn-primary" data-open="1">${escapeHtml(tr ? tr('Open in Origo') : 'Open in Origo')}</button>
+        </footer>
+      </div>
+    `;
+
+    const grid = modal.querySelector('.qrigo-service-grid');
+    const allCheck = modal.querySelector('input[data-all="1"]');
+    const openBtn = modal.querySelector('button[data-open="1"]');
+    const cancelBtn = modal.querySelector('button[data-cancel="1"]');
+    const closeBtn = modal.querySelector('.delete');
+    const bg = modal.querySelector('.modal-background');
+
+    const serviceChecks = [];
+    for (const svc of available) {
+      const label = document.createElement('label');
+      label.className = 'qrigo-service-option';
+      label.innerHTML = `<input type="checkbox" data-service="${escapeHtml(svc.key)}"> <span>${escapeHtml(svc.label)}</span>`;
+      grid.appendChild(label);
+      serviceChecks.push(label.querySelector('input'));
+    }
+
+    const close = () => {
+      try { modal.remove(); } catch {}
+    };
+
+    allCheck.addEventListener('change', () => {
+      const checked = !!allCheck.checked;
+      serviceChecks.forEach((cb) => { cb.checked = checked; });
+    });
+    serviceChecks.forEach((cb) => cb.addEventListener('change', () => {
+      if (!cb.checked && allCheck.checked) allCheck.checked = false;
+      if (serviceChecks.every((s) => s.checked)) allCheck.checked = true;
+    }));
+
+    openBtn.addEventListener('click', () => {
+      const selected = serviceChecks.filter((cb) => cb.checked).map((cb) => cb.getAttribute('data-service'));
+      if (!selected.length) return;
+      if (typeof onConfirm === 'function') onConfirm(selected);
+      close();
+    });
+
+    [cancelBtn, closeBtn, bg].forEach((el) => {
+      if (el) el.addEventListener('click', close);
+    });
+
+    document.body.appendChild(modal);
+  };
+
+  // Reuse the same Origo service picker from other dashboard contexts (e.g. theme actions).
+  try {
+    window.qtilerOpenOrigoServiceModal = openServiceModal;
+  } catch {}
+
+  /* ── "Open in Origo" button for the layer actions row ─────────── */
+  if (!Array.isArray(hooks.layerActionButtons)) hooks.layerActionButtons = [];
+  registerUniqueHook(hooks.layerActionButtons, {
+    id: 'qrigo-preview',
+    shouldShow: () => true,
+    create: ({ layerData, projectId, makeLabeledIconButton, tr }) => {
+      return makeLabeledIconButton(
+        tr ? tr('Open in Origo') : 'Open in Origo',
+        'map',
+        'Origo',
+        () => {
+          openServiceModal({
+            hasWfs: isVectorLayer(layerData),
+            hasVectorTiles: !!(Array.isArray(window.qtilerPluginsEnabled) && window.qtilerPluginsEnabled.includes('VectorTiles')),
+            tr,
+            onConfirm: (selectedServices) => {
+              const selected = Array.isArray(selectedServices) ? selectedServices : [];
+              if (!selected.length) return;
+              const url = '/qrigo/preview2?project=' + encodeURIComponent(projectId)
+                + '&layer=' + encodeURIComponent(layerData.name)
+                + '&service=' + encodeURIComponent(selected.join(','))
+                + '&_ts=' + encodeURIComponent(String(Date.now()));
+              window.open(url, '_blank', 'noopener');
+            }
+          });
+        }
+      );
+    }
+  });
+
+  if (!Array.isArray(hooks.layerInfoTabs)) hooks.layerInfoTabs = [];
+  registerUniqueHook(hooks.layerInfoTabs, {
     id: 'qrigo',
     title: 'Origo',
     shouldShow: (ctx) => !!ctx?.layerData?.name,
     render: async ({ container, projectId, layerData, projectMeta, tileMatrixSet, configLayer, output }) => {
+      const MAX_ORIGO_ZOOM = 17;
       const origin = window.location.origin;
       const layerName = layerData?.name || 'layer';
       const layerTitle = layerData?.title || layerName;
@@ -110,6 +275,7 @@
       const group = projectId || 'qtiler';
       const projection = projectMeta?.crs || layerData?.crs || null;
       const attribution = layerData?.attribution || undefined;
+      const xyzCompatible = isXyzCompatibleCrs(projection);
 
       const apiNote = document.createElement('div');
       apiNote.className = 'meta';
@@ -117,10 +283,143 @@
       apiNote.textContent = 'If the layer is private, replace the empty api_key with the user\'s API key.';
       container.appendChild(apiNote);
 
-      const xyzUrl = `${origin}/wmts/${encodeURIComponent(projectId)}/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`;
-      const tileGrid = buildTileGrid(tileMatrixSet, output);
+      const noneSourceName = `Qtiler_${projectKey}_NONE`;
+      makeSection('Background (OSM + No background)', {
+        source: {
+          [noneSourceName]: {
+            type: 'XYZ',
+            url: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
+          }
+        },
+        layers: [
+          {
+            name: 'background_none',
+            title: 'No background',
+            group: 'background',
+            source: noneSourceName,
+            type: 'XYZ',
+            visible: false,
+            queryable: false
+          },
+          {
+            name: 'osm',
+            title: 'OpenStreetMap',
+            group: 'background',
+            visible: false,
+            type: 'OSM',
+            style: 'osm',
+            maxZoom: MAX_ORIGO_ZOOM,
+            queryable: false,
+            attribution: '© OpenStreetMap contributors'
+          }
+        ]
+      }, container);
 
-      if (tileGrid) {
+      const tileGrid = buildTileGrid(tileMatrixSet, output);
+      const outputExtent = validArray(output?.extent, 4);
+      const outputCenter = validArray(output?.center, 2);
+      const outputProjectionExtent = validArray(output?.projectionExtent, 4);
+      const outputResolutions = Array.isArray(output?.resolutions)
+        ? output.resolutions.map((entry) => Number(entry)).filter(Number.isFinite)
+        : [];
+
+      // Project-level search snippet (shared by all searchable layers in the project)
+      const searchableConfig = await fetchSearchableConfig(projectId);
+      const projectSearchableLayers = Array.isArray(searchableConfig)
+        ? searchableConfig.filter((entry) => entry && entry.searchable !== false)
+        : [];
+      const projectConfig = await fetchProjectConfig(projectId);
+      const configLayers = projectConfig && typeof projectConfig.layers === 'object' ? projectConfig.layers : {};
+      const configSearchableLayers = Object.entries(configLayers)
+        .filter(([, cfg]) => cfg && cfg.wfsSearchable === true)
+        .map(([name]) => ({ name }));
+      const mergedSearchableLayers = projectSearchableLayers.length
+        ? projectSearchableLayers
+        : configSearchableLayers;
+
+      let origoSearchSnippet = null;
+      let searchMetadata = null;
+      if (mergedSearchableLayers.length > 0) {
+        const layerSafeName = safeXmlName(layerName);
+        const searchLayerToken = layerSafeName || layerName;
+        const searchEntry = mergedSearchableLayers.find((entry) => {
+          const entryName = String(entry?.name || '').trim();
+          if (!entryName) return false;
+          return entryName === layerName || safeXmlName(entryName) === layerSafeName;
+        });
+        const fields = Array.isArray(searchEntry?.fields)
+          ? searchEntry.fields.map((f) => String(f || '').trim()).filter(Boolean)
+          : [];
+        const resolvedSearchAttribute = String(searchEntry?.searchAttribute || searchEntry?.titleField || fields[0] || '').trim();
+        const searchAttribute = resolvedSearchAttribute || 'SEARCH_VALUE';
+        const idAttribute = String(searchEntry?.idAttribute || '').trim() || 'GID';
+        const configuredGeom = String(searchEntry?.geometryAttribute || '').trim();
+        const geometryAttribute = /(geom|geometry|wkb|wkt)/i.test(configuredGeom) ? configuredGeom : 'GEOM';
+        const hintText = String(searchEntry?.hintText || '').trim() || 'Search...';
+        const hasLayerSpecificConfig = !!searchEntry;
+        const origoSearchUrl = hasLayerSpecificConfig
+          ? `${origin}/api/search?project=${encodeURIComponent(projectId)}&l=${encodeURIComponent(searchLayerToken)}&api_key=`
+          : `${origin}/api/search?project=${encodeURIComponent(projectId)}&api_key=`;
+
+        origoSearchSnippet = {
+          name: 'search',
+          options: {
+            url: origoSearchUrl,
+            searchAttribute,
+            easting: 'EASTING',
+            northing: 'NORTHING',
+            title: 'Search',
+            hintText
+          }
+        };
+
+        searchMetadata = {
+          url: origoSearchUrl,
+          layer: searchLayerToken,
+          searchAttribute,
+          idAttribute,
+          geometryAttribute,
+          hintText,
+          layerSpecific: hasLayerSpecificConfig
+        };
+      }
+
+      const recommendedControls = [
+        { name: 'mapmenu' },
+        { name: 'home' },
+        { name: 'legend', options: { expanded: true, turnOffLayersControl: true } }
+      ];
+      if (outputResolutions.length) {
+        recommendedControls.push({ name: 'scalepicker' });
+      }
+      if (origoSearchSnippet) {
+        recommendedControls.push(origoSearchSnippet);
+      }
+
+      const mapSetup = {
+        modules: recommendedControls,
+        settings: {
+          projectionCode: projection || 'EPSG:3857',
+          maxZoom: MAX_ORIGO_ZOOM
+        },
+        source: {},
+        groups: [
+          { name: 'background', title: 'Bakgrundskartor', expanded: true },
+          { name: group, title: group, expanded: true }
+        ],
+        layers: [],
+        styles: {}
+      };
+      if (outputResolutions.length) mapSetup.settings.resolutions = outputResolutions;
+      if (outputProjectionExtent) mapSetup.settings.projectionExtent = outputProjectionExtent;
+      if (outputExtent) mapSetup.settings.extent = outputExtent;
+      if (outputCenter) mapSetup.settings.center = outputCenter;
+
+      makeSection('Map setup (recommended)', mapSetup, container);
+
+      if (tileGrid || xyzCompatible) {
+        const xyzUrl = `${origin}/wmts/${encodeURIComponent(projectId)}/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`;
+
         const xyzSourceName = `Qtiler_${projectKey}_${layerKey}_XYZ`;
         const xyzSource = {
           url: xyzUrl,
@@ -130,7 +429,7 @@
 
         const xyzLayer = {
           name: layerName,
-          title: layerTitle,
+          title: `${layerTitle} [WMTS]`,
           group,
           source: xyzSourceName,
           type: 'XYZ',
@@ -138,10 +437,17 @@
           visible: false,
           style: 'add me',
           attribution,
-          tileGrid
+          maxZoom: MAX_ORIGO_ZOOM
         };
+        if (tileGrid) xyzLayer.tileGrid = tileGrid;
+        if (outputExtent) xyzLayer.extent = outputExtent;
 
         makeSection('WMTS/XYZ (Origo)', { source: { [xyzSourceName]: xyzSource }, layers: [xyzLayer] }, container);
+      } else {
+        makeSection('WMTS (non-3857)', {
+          note: 'No tile grid metadata was available for this layer. Use WMS/WFS or regenerate cache metadata before using WMTS/XYZ in Origo.',
+          wmtsGetCapabilities: `${origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`
+        }, container);
       }
 
       const wmsSourceName = `Qtiler_${projectKey}_WMS`;
@@ -152,11 +458,12 @@
       };
       const wmsLayer = {
         name: layerName,
-        title: layerTitle,
+        title: `${layerTitle} [WMS]`,
         group,
         source: wmsSourceName,
         type: 'WMS',
-        visible: false
+        visible: false,
+        maxZoom: MAX_ORIGO_ZOOM
       };
       makeSection('WMS', { source: { [wmsSourceName]: wmsSource }, layers: [wmsLayer] }, container);
 
@@ -173,14 +480,16 @@
 
         const wfsLayer = {
           name: layerName,
-          title: layerTitle,
+          title: `${layerTitle} [WFS]`,
           queryable: true,
           visible: false,
           type: 'WFS',
           group,
           attribution,
           source: wfsSourceName,
-          style: 'add me'
+          projection: projection || 'EPSG:3857',
+          style: 'add me',
+          maxZoom: MAX_ORIGO_ZOOM
         };
 
         if (editable) {
@@ -191,47 +500,16 @@
         makeSection('WFS', { source: { [wfsSourceName]: wfsSource }, layers: [wfsLayer] }, container);
       }
 
-      // Project-level search snippet (shared by all searchable layers in the project)
-      const searchableConfig = await fetchSearchableConfig(projectId);
-      const projectSearchableLayers = Array.isArray(searchableConfig)
-        ? searchableConfig.filter((entry) => entry && entry.searchable !== false)
-        : [];
-      const projectConfig = await fetchProjectConfig(projectId);
-      const configLayers = projectConfig && typeof projectConfig.layers === 'object' ? projectConfig.layers : {};
-      const configSearchableLayers = Object.entries(configLayers)
-        .filter(([, cfg]) => cfg && cfg.wfsSearchable === true)
-        .map(([name]) => ({ name }));
-      const mergedSearchableLayers = projectSearchableLayers.length
-        ? projectSearchableLayers
-        : configSearchableLayers;
-
-      if (mergedSearchableLayers.length > 0) {
-        const layerSafeName = safeXmlName(layerName);
-        const searchEntry = mergedSearchableLayers.find((entry) => {
-          const entryName = String(entry?.name || '').trim();
-          if (!entryName) return false;
-          return entryName === layerName || safeXmlName(entryName) === layerSafeName;
-        }) || mergedSearchableLayers[0];
-        const fields = Array.isArray(searchEntry?.fields)
-          ? searchEntry.fields.map((f) => String(f || '').trim()).filter(Boolean)
-          : [];
-        const searchAttribute = String(searchEntry?.titleField || fields[0] || '').trim() || 'name';
-        const origoSearchUrl = `${origin}/api/search?project=${encodeURIComponent(projectId)}&api_key=`;
-
-        const origoSearchSnippet = {
-          name: 'search',
-          options: {
-            url: origoSearchUrl,
-            layerNameAttribute: 'TYPE',
-            idAttribute: 'GID',
-            searchAttribute,
-            geometryAttribute: 'GEOM',
-            hintText: 'Sök projekt...'
-          }
-        };
-
-        makeSection('Search URL (Qtiler API)', { url: origoSearchUrl }, container);
-        makeSection('Search (Origo)', origoSearchSnippet, container);
+      if (searchMetadata) {
+        makeSection('Search URL (Qtiler API)', { url: searchMetadata.url }, container);
+        makeSection('Search (resolved backend config)', {
+          layer: searchMetadata.layer,
+          searchAttribute: searchMetadata.searchAttribute,
+          idAttribute: searchMetadata.idAttribute,
+          geometryAttribute: searchMetadata.geometryAttribute,
+          hintText: searchMetadata.hintText,
+          layerSpecific: searchMetadata.layerSpecific
+        }, container);
       }
     }
   });

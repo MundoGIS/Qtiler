@@ -57,6 +57,7 @@ const I18N = {
     selectZip: 'Select a ZIP file.',
     plugin: 'Plugin',
     operationFailed: 'Operation failed',
+    pluginReadmeLabel: 'README',
     licensePrice: 'Price: {price}',
     licenseStatus: 'Status: {status}',
     licenseStatusTrial: 'Trial',
@@ -78,7 +79,31 @@ const I18N = {
     licenseRenewModalClose: 'Close',
     licenseInstallPrompt: 'This plugin license has expired. Paste a new license key to continue the installation.',
     licenseInstallRequired: 'A valid license is required to install this plugin. Contact MundoGIS (support@mundogis.se) to renew.',
-    licenseInstallInvalid: 'This license key is not valid. Contact MundoGIS (support@mundogis.se) to renew.'
+    licenseInstallInvalid: 'This license key is not valid. Contact MundoGIS (support@mundogis.se) to renew.',
+    searchableTitle: 'Searchable layers',
+    searchableSubtitle: 'Enable searchable layers and select which columns are used for searching and labels.',
+    searchableSaveBtn: 'Save searchable config',
+    searchableNoProject: 'No project available for searchable layers.',
+    searchableNoProjectSelected: 'No project selected.',
+    searchableLoadError: 'Failed to load layer information.',
+    searchableSaveOk: 'Searchable layers configuration saved.',
+    searchableSaveError: 'Failed to save configuration.',
+    searchableColumns: 'Search columns',
+    searchableTitleField: 'Title field',
+    searchableIdAttribute: 'ID attribute',
+    searchableSearchAttribute: 'Search attribute',
+    searchableGeometryAttribute: 'Geometry attribute',
+    searchableGeometryAuto: 'Geometry attribute (auto): {value}',
+    searchableGeometryAutoMissing: 'Geometry attribute (auto): not detected',
+    searchableHintText: 'Hint text',
+    searchableHintPlaceholder: 'Search...',
+    searchableChooseColumns: 'Select one or more columns to be searchable.',
+    searchableNoColumns: 'No layer attributes detected for this layer.',
+    searchableLoadingColumns: 'Loading layer attributes...',
+    searchableConfigureTitle: 'Configure searchable columns',
+    searchableConfigureIntro: 'Select search columns and attributes for {layer}.',
+    searchableApply: 'Apply',
+    searchableCancel: 'Cancel'
   },
   es: {
     'admin.title': 'Qtiler · Consola de administración',
@@ -125,6 +150,7 @@ const I18N = {
     selectZip: 'Selecciona un archivo ZIP.',
     plugin: 'Plugin',
     operationFailed: 'Operación no completada',
+    pluginReadmeLabel: 'README',
     licensePrice: 'Precio: {price}',
     licenseStatus: 'Estado: {status}',
     licenseStatusTrial: 'Prueba',
@@ -146,7 +172,31 @@ const I18N = {
     licenseRenewModalClose: 'Cerrar',
     licenseInstallPrompt: 'La licencia de este plugin está vencida. Pega una nueva clave de licencia para continuar la instalación.',
     licenseInstallRequired: 'Se requiere una licencia válida para instalar este plugin. Contacta a MundoGIS (support@mundogis.se) para renovar.',
-    licenseInstallInvalid: 'Esta licencia no es válida. Contacta a MundoGIS (support@mundogis.se) para renovar.'
+    licenseInstallInvalid: 'Esta licencia no es válida. Contacta a MundoGIS (support@mundogis.se) para renovar.',
+    searchableTitle: 'Capas buscables',
+    searchableSubtitle: 'Activa capas buscables y selecciona qué columnas se usan para buscar y mostrar etiquetas.',
+    searchableSaveBtn: 'Guardar configuración buscable',
+    searchableNoProject: 'No hay proyecto disponible para capas buscables.',
+    searchableNoProjectSelected: 'No hay proyecto seleccionado.',
+    searchableLoadError: 'No se pudo cargar la información de capas.',
+    searchableSaveOk: 'Configuración de capas buscables guardada.',
+    searchableSaveError: 'No se pudo guardar la configuración.',
+    searchableColumns: 'Columnas de búsqueda',
+    searchableTitleField: 'Campo de título',
+    searchableIdAttribute: 'Atributo ID',
+    searchableSearchAttribute: 'Atributo de búsqueda',
+    searchableGeometryAttribute: 'Atributo geométrico',
+    searchableGeometryAuto: 'Atributo geométrico (auto): {value}',
+    searchableGeometryAutoMissing: 'Atributo geométrico (auto): no detectado',
+    searchableHintText: 'Texto de ayuda',
+    searchableHintPlaceholder: 'Search...',
+    searchableChooseColumns: 'Selecciona una o más columnas para la búsqueda.',
+    searchableNoColumns: 'No se detectaron atributos para esta capa.',
+    searchableLoadingColumns: 'Cargando atributos de la capa...',
+    searchableConfigureTitle: 'Configurar columnas buscables',
+    searchableConfigureIntro: 'Selecciona columnas de búsqueda y atributos para {layer}.',
+    searchableApply: 'Aplicar',
+    searchableCancel: 'Cancelar'
   },
   sv: {
     'admin.title': 'Qtiler · Adminpanel',
@@ -193,6 +243,7 @@ const I18N = {
     selectZip: 'Välj en ZIP-fil.',
     plugin: 'Plugin',
     operationFailed: 'Operationen misslyckades',
+    pluginReadmeLabel: 'README',
     licensePrice: 'Pris: {price}',
     licenseStatus: 'Status: {status}',
     licenseStatusTrial: 'Provperiod',
@@ -214,12 +265,174 @@ const I18N = {
     licenseRenewModalClose: 'Stäng',
     licenseInstallPrompt: 'Licensen för detta plugin har gått ut. Klistra in en ny licensnyckel för att fortsätta installationen.',
     licenseInstallRequired: 'En giltig licens krävs för att installera detta plugin. Kontakta MundoGIS (support@mundogis.se) för att förnya.',
-    licenseInstallInvalid: 'Den här licensen är ogiltig. Kontakta MundoGIS (support@mundogis.se) för att förnya.'
+    licenseInstallInvalid: 'Den här licensen är ogiltig. Kontakta MundoGIS (support@mundogis.se) för att förnya.',
+    searchableTitle: 'Sökbara lager',
+    searchableSubtitle: 'Aktivera sökbara lager och välj vilka kolumner som används för sökning och etiketter.',
+    searchableSaveBtn: 'Spara sökbar konfiguration',
+    searchableNoProject: 'Inget projekt tillgängligt för sökbara lager.',
+    searchableNoProjectSelected: 'Inget projekt valt.',
+    searchableLoadError: 'Kunde inte läsa in lagerinformation.',
+    searchableSaveOk: 'Konfiguration för sökbara lager sparades.',
+    searchableSaveError: 'Kunde inte spara konfigurationen.',
+    searchableColumns: 'Sökkolumner',
+    searchableTitleField: 'Titelfält',
+    searchableIdAttribute: 'ID-attribut',
+    searchableSearchAttribute: 'Sökattribut',
+    searchableGeometryAttribute: 'Geometriattribut',
+    searchableGeometryAuto: 'Geometriattribut (auto): {value}',
+    searchableGeometryAutoMissing: 'Geometriattribut (auto): kunde inte hittas',
+    searchableHintText: 'Hjälptext',
+    searchableHintPlaceholder: 'Search...',
+    searchableChooseColumns: 'Välj en eller flera kolumner som ska vara sökbara.',
+    searchableNoColumns: 'Inga lagerattribut hittades för detta lager.',
+    searchableLoadingColumns: 'Läser in lagerattribut...',
+    searchableConfigureTitle: 'Konfigurera sökbara kolumner',
+    searchableConfigureIntro: 'Välj sökkolumner och attribut för {layer}.',
+    searchableApply: 'Använd',
+    searchableCancel: 'Avbryt'
   }
 };
 
+const PLUGIN_DOCS = {
+  Qrigo: {
+    en: {
+      description: 'Connects Qtiler projects to Origo with guided code snippets and layer setup helpers.',
+      readme: [
+        'Open a layer in the dashboard and click the Origo button in layer details.',
+        'The Origo panel shows available layers and clearly indicates which ones are searchable and editable.',
+        'Use the Info button to copy ready-to-use code for layers, source, and search configuration in Origo.',
+        'Apply those snippets in your Origo app config, then publish and test the full flow.'
+      ]
+    },
+    es: {
+      description: 'Conecta proyectos de Qtiler con Origo usando snippets guiados y utilidades de configuración de capas.',
+      readme: [
+        'Abre una capa en el dashboard y pulsa el botón de Origo en los detalles de la capa.',
+        'El panel de Origo muestra las capas disponibles e indica claramente cuáles son buscables y editables.',
+        'Usa el botón Info para copiar el código listo de layers, source y search para Origo.',
+        'Aplica esos snippets en la configuración de tu app Origo, publica y valida el flujo completo.'
+      ]
+    },
+    sv: {
+      description: 'Kopplar Qtiler-projekt till Origo med guidande kodsnuttar och verktyg for lagerkonfiguration.',
+      readme: [
+        'Oppna ett lager i dashboarden och klicka pa Origo-knappen i lagerdetaljer.',
+        'Origo-panelen visar tillgangliga lager och markerar tydligt vilka som ar sokbara och redigerbara.',
+        'Anvand Info-knappen for att kopiera fardig kod for layers, source och search i Origo.',
+        'Klistra in kodsnuttarna i din Origo-konfiguration, publicera och testa hela flodet.'
+      ]
+    }
+  },
+  QtilerAuth: {
+    en: {
+      description: 'Adds authentication, user roles, and project access control for secure Qtiler deployments.',
+      readme: [
+        'Manage users, roles, account status, passwords, and API keys from the admin UI.',
+        'Set projects as public/private and assign private access per user.',
+        'Use session cookie, bearer token, basic auth, or api_key for external clients.',
+        'Use this plugin as the security layer for dashboard, services, and plugin endpoints.'
+      ]
+    },
+    es: {
+      description: 'Agrega autenticacion, roles de usuario y control de acceso por proyecto para despliegues seguros de Qtiler.',
+      readme: [
+        'Gestiona usuarios, roles, estado de cuenta, contrasenas y API keys desde la interfaz admin.',
+        'Define proyectos como publicos/privados y asigna acceso privado por usuario.',
+        'Usa cookie de sesion, bearer token, basic auth o api_key para clientes externos.',
+        'Utiliza este plugin como capa de seguridad para dashboard, servicios y endpoints de plugins.'
+      ]
+    },
+    sv: {
+      description: 'Lagger till autentisering, anvandarrolller och projektbehorighet for sakra Qtiler-installationer.',
+      readme: [
+        'Hantera anvandare, roller, kontostatus, losenord och API-nycklar i admin-granssnittet.',
+        'Markera projekt som publika/privata och tilldela privat atkomst per anvandare.',
+        'Anvand sessionscookie, bearer-token, basic auth eller api_key for externa klienter.',
+        'Anvand pluginet som sakerhetslager for dashboard, tjanster och plugin-endpoints.'
+      ]
+    }
+  },
+  VectorTiles: {
+    en: {
+      description: 'Generates vector tiles from QGIS projects and serves style, tilejson, and tile endpoints for clients.',
+      readme: [
+        'Create vector-tile caches from project layers and expose them via HTTP endpoints.',
+        'Use style and tilejson URLs directly in QGIS, Origo, MapLibre, or OpenLayers clients.',
+        'On-demand mode can generate missing tiles when clients request uncached zoom/x/y tiles.',
+        'For best UX, pre-generate strategic zoom levels for high-traffic areas.'
+      ]
+    },
+    es: {
+      description: 'Genera vector tiles desde proyectos QGIS y publica endpoints de style, tilejson y tiles para clientes.',
+      readme: [
+        'Crea cache de vector tiles desde capas del proyecto y exponla por endpoints HTTP.',
+        'Usa URLs de style y tilejson directamente en QGIS, Origo, MapLibre u OpenLayers.',
+        'El modo on-demand puede generar tiles faltantes cuando se solicitan zoom/x/y sin cache.',
+        'Para mejor experiencia, pre-genera niveles de zoom estrategicos en zonas de alto trafico.'
+      ]
+    },
+    sv: {
+      description: 'Genererar vector tiles fran QGIS-projekt och exponerar style-, tilejson- och tile-endpoints for klienter.',
+      readme: [
+        'Skapa vector tile-cache fran projektlager och exponera den via HTTP-endpoints.',
+        'Anvand style- och tilejson-URL:er direkt i QGIS, Origo, MapLibre eller OpenLayers.',
+        'On-demand-lage kan generera saknade tiles nar klienter begar zoom/x/y som inte finns i cache.',
+        'For bast upplevelse: for-generera strategiska zoomnivaer for hogtrafikerade omraden.'
+      ]
+    }
+  },
+  ProjectSearch: {
+    en: {
+      description: 'Adds fast project filtering in the dashboard so users can find projects quickly.',
+      readme: [
+        'Shows a search field above projects in the dashboard view.',
+        'Filters by project name and identifier while you type.',
+        'Improves navigation for deployments with many projects.',
+        'Use together with QtilerAuth to combine access rules with quick discovery.'
+      ]
+    },
+    es: {
+      description: 'Agrega filtrado rapido de proyectos en el dashboard para encontrar proyectos al instante.',
+      readme: [
+        'Muestra un campo de busqueda sobre los proyectos en el dashboard.',
+        'Filtra por nombre e identificador del proyecto mientras escribes.',
+        'Mejora la navegacion en despliegues con muchos proyectos.',
+        'Combinado con QtilerAuth, une reglas de acceso con descubrimiento rapido.'
+      ]
+    },
+    sv: {
+      description: 'Lagger till snabb projektfiltrering i dashboarden sa anvandare hittar projekt direkt.',
+      readme: [
+        'Visar ett sokfalt ovanfor projekten i dashboardvyn.',
+        'Filtrerar pa projektnamn och identifierare medan du skriver.',
+        'Forbattrar navigering i installationer med manga projekt.',
+        'Tillsammans med QtilerAuth kombineras behorighetsregler med snabb sokning.'
+      ]
+    }
+  }
+};
+
+function getPluginDocs(name) {
+  const lang = window.qtilerLang ? window.qtilerLang.get() : 'en';
+  const pluginMeta = state.plugins?.meta?.[name] || null;
+  const manifestDocs = pluginMeta && pluginMeta.docs && typeof pluginMeta.docs === 'object'
+    ? pluginMeta.docs
+    : null;
+  if (manifestDocs) {
+    const byLang = manifestDocs[lang] || manifestDocs.en || null;
+    if (byLang) return byLang;
+  }
+
+  // Fallback for older plugin packages without docs in plugin.json.
+  const fallback = PLUGIN_DOCS[name] || null;
+  if (fallback) return fallback[lang] || fallback.en || null;
+
+  const manifestDescription = String(pluginMeta?.description || '').trim();
+  return manifestDescription ? { description: manifestDescription, readme: [] } : null;
+}
+
 const state = {
-  plugins: { enabled: [], installed: [], licenses: {}, instanceId: null, securityWarnings: [] }
+  plugins: { enabled: [], installed: [], licenses: {}, instanceId: null, securityWarnings: [], meta: {} }
 };
 
 const messagesEl = document.getElementById('messages');
@@ -243,9 +456,284 @@ const hasSearchableUi = () => !!(searchableLayersSection && searchableLayersCont
 const searchableState = {
   allWfsLayers: [],
   searchable: [],
-  projectId: null
+  projectId: null,
+  layerAttributes: {},
+  loadingAttributes: false
 };
 let qrigoEnabled = false;
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeLayerId(name) {
+  return String(name || '').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+function toSafeWfsTypeName(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return '';
+  return raw.split(':').map((chunk) => {
+    let sanitized = chunk.replace(/[^A-Za-z0-9_]/g, '_');
+    if (!sanitized) sanitized = 'layer';
+    if (!/^[A-Za-z_]/.test(sanitized)) sanitized = `_${sanitized}`;
+    return sanitized;
+  }).join(':');
+}
+
+function uniqueValues(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function extractAttributeMetadata(attributes) {
+  const rows = Array.isArray(attributes) ? attributes : [];
+  const normalized = rows
+    .map((attr) => {
+      if (typeof attr === 'string') return { name: attr, type: '' };
+      if (attr && typeof attr === 'object') {
+        return {
+          name: String(attr.name || attr.field || attr.attribute || '').trim(),
+          type: String(attr.type || attr.dataType || '').trim()
+        };
+      }
+      return { name: '', type: '' };
+    })
+    .filter((attr) => attr.name);
+
+  const nonGeometry = normalized.filter((attr) => {
+    const n = attr.name.toLowerCase();
+    const t = attr.type.toLowerCase();
+    return !(/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+  });
+
+  const geometry = normalized.filter((attr) => {
+    const n = attr.name.toLowerCase();
+    const t = attr.type.toLowerCase();
+    return (/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+  });
+
+  return {
+    all: uniqueValues(normalized.map((attr) => attr.name)),
+    nonGeometry: uniqueValues((nonGeometry.length ? nonGeometry : normalized).map((attr) => attr.name)),
+    geometry: uniqueValues(geometry.map((attr) => attr.name))
+  };
+}
+
+async function fetchLayerAttributeMetadata(projectId, layerName) {
+  const candidates = uniqueValues([String(layerName || '').trim(), toSafeWfsTypeName(layerName)]);
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const payload = await api(`/origo/wfs-attributes?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(candidate)}`);
+      return extractAttributeMetadata(payload?.attributes);
+    } catch (err) {
+      console.warn('Failed to fetch layer attributes', { layerName: candidate, error: String(err?.message || err) });
+    }
+  }
+  return { all: [], nonGeometry: [], geometry: [] };
+}
+
+async function loadLayerAttributes(projectId, layers) {
+  const list = Array.isArray(layers) ? layers : [];
+  const entries = await Promise.all(list.map(async (layer) => {
+    const metadata = await fetchLayerAttributeMetadata(projectId, layer.name);
+    return [layer.name, metadata];
+  }));
+  searchableState.layerAttributes = Object.fromEntries(entries);
+}
+
+function syncDependentSelectToFields(fieldsSelect, dependentSelect, preferredValue = '') {
+  if (!fieldsSelect || !dependentSelect) return;
+  const selected = Array.from(fieldsSelect.selectedOptions).map((option) => option.value).filter(Boolean);
+  dependentSelect.innerHTML = selected
+    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
+    .join('');
+  if (!selected.length) {
+    dependentSelect.value = '';
+    dependentSelect.disabled = true;
+    return;
+  }
+  dependentSelect.disabled = false;
+  if (preferredValue && selected.includes(preferredValue)) {
+    dependentSelect.value = preferredValue;
+    return;
+  }
+  if (!selected.includes(dependentSelect.value)) {
+    dependentSelect.value = selected[0];
+  }
+}
+
+function pickPreferredAttribute(candidates, fallbackList, hardFallback = '') {
+  const list = Array.isArray(fallbackList) ? fallbackList : [];
+  for (const candidate of candidates) {
+    if (candidate && list.includes(candidate)) return candidate;
+  }
+  return list[0] || hardFallback;
+}
+
+function looksLikeGeometryName(value) {
+  const n = String(value || '').trim().toLowerCase();
+  if (!n) return false;
+  return /^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geom|geometry|wkb|wkt)/.test(n);
+}
+
+function detectGeometryAttribute(layer, layerMeta, configuredGeometry = '') {
+  const all = Array.isArray(layerMeta?.all) ? layerMeta.all : [];
+  const explicitGeometryCols = Array.isArray(layerMeta?.geometry) ? layerMeta.geometry : [];
+  const namedGeometryCols = all.filter((name) => looksLikeGeometryName(name));
+  const geometryCols = explicitGeometryCols.length
+    ? explicitGeometryCols
+    : (namedGeometryCols.length ? namedGeometryCols : []);
+  const safeConfigured = looksLikeGeometryName(configuredGeometry) ? configuredGeometry : '';
+  return pickPreferredAttribute(
+    [
+      safeConfigured,
+      layer?.geometryAttribute,
+      layer?.geometry_attribute,
+      layer?.geometryName,
+      layer?.geometry_name,
+      'GEOM',
+      'geom',
+      'the_geom',
+      'geometry',
+      'wkb_geometry'
+    ],
+    geometryCols,
+    namedGeometryCols[0] || ''
+  );
+}
+
+function openSearchableConfigModal({
+  layerTitle,
+  availableColumns,
+  initialSearchAttribute,
+  initialIdAttribute,
+  initialHintText,
+  geometryAttribute
+}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'searchable-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'searchable-modal';
+
+    const title = document.createElement('h3');
+    title.textContent = t('searchableConfigureTitle');
+
+    const intro = document.createElement('p');
+    intro.className = 'admin-hint';
+    intro.textContent = t('searchableConfigureIntro', { layer: layerTitle });
+
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'form-field';
+    const searchLabel = document.createElement('label');
+    searchLabel.textContent = t('searchableSearchAttribute');
+    const searchSelect = document.createElement('select');
+    searchSelect.className = 'searchable-modal-select';
+    searchSelect.innerHTML = availableColumns
+      .map((column) => {
+        const selected = initialSearchAttribute === column ? ' selected' : '';
+        return `<option value="${escapeHtml(column)}"${selected}>${escapeHtml(column)}</option>`;
+      })
+      .join('');
+    searchWrap.append(searchLabel, searchSelect);
+
+    const idWrap = document.createElement('div');
+    idWrap.className = 'form-field';
+    const idLabel = document.createElement('label');
+    idLabel.textContent = t('searchableIdAttribute');
+    const idSelect = document.createElement('select');
+    idSelect.className = 'searchable-modal-select';
+    idSelect.innerHTML = availableColumns
+      .map((column) => {
+        const selected = initialIdAttribute === column ? ' selected' : '';
+        return `<option value="${escapeHtml(column)}"${selected}>${escapeHtml(column)}</option>`;
+      })
+      .join('');
+    idWrap.append(idLabel, idSelect);
+
+    const hintWrap = document.createElement('div');
+    hintWrap.className = 'form-field';
+    const hintLabel = document.createElement('label');
+    hintLabel.textContent = t('searchableHintText');
+    const hintInput = document.createElement('input');
+    hintInput.type = 'text';
+    hintInput.className = 'searchable-modal-select';
+    hintInput.value = initialHintText || t('searchableHintPlaceholder');
+    hintInput.placeholder = t('searchableHintPlaceholder');
+    hintWrap.append(hintLabel, hintInput);
+
+    const geometryWrap = document.createElement('div');
+    geometryWrap.className = 'form-field';
+    const geometryLabel = document.createElement('label');
+    geometryLabel.textContent = t('searchableGeometryAttribute');
+    const geometryValue = document.createElement('div');
+    geometryValue.className = 'searchable-geometry-auto';
+    geometryValue.textContent = geometryAttribute
+      ? t('searchableGeometryAuto', { value: geometryAttribute })
+      : t('searchableGeometryAutoMissing');
+    geometryWrap.append(geometryLabel, geometryValue);
+
+    const actions = document.createElement('div');
+    actions.className = 'searchable-modal-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'button secondary';
+    cancelBtn.textContent = t('searchableCancel');
+
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'button';
+    applyBtn.textContent = t('searchableApply');
+
+    const cleanup = () => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') {
+        cleanup();
+        resolve({ confirmed: false });
+      }
+    };
+
+    cancelBtn.addEventListener('click', () => {
+      cleanup();
+      resolve({ confirmed: false });
+    });
+
+    applyBtn.addEventListener('click', () => {
+      const searchAttribute = String(searchSelect.value || '').trim();
+      const idAttribute = String(idSelect.value || '').trim();
+      const hintText = String(hintInput.value || '').trim() || t('searchableHintPlaceholder');
+      if (!searchAttribute || !idAttribute) {
+        return;
+      }
+      cleanup();
+      resolve({ confirmed: true, searchAttribute, idAttribute, hintText });
+    });
+
+    overlay.addEventListener('click', (ev) => {
+      if (ev.target === overlay) {
+        cleanup();
+        resolve({ confirmed: false });
+      }
+    });
+
+    actions.append(cancelBtn, applyBtn);
+    modal.append(title, intro, searchWrap, idWrap, hintWrap, geometryWrap, actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    document.addEventListener('keydown', onKey);
+  });
+}
 
 function t(key, params = {}) {
   const lang = window.qtilerLang ? window.qtilerLang.get() : 'en';
@@ -472,6 +960,29 @@ function renderPlugins() {
     status.textContent = isEnabled ? t('enabledStatus') : t('disabledStatus');
     meta.append(heading, status);
 
+    const docs = getPluginDocs(name);
+    const docsWrap = document.createElement('div');
+    docsWrap.className = 'plugin-card__docs';
+    if (docs && docs.description) {
+      const desc = document.createElement('p');
+      desc.className = 'plugin-card__description';
+      desc.textContent = docs.description;
+      docsWrap.appendChild(desc);
+    }
+    if (docs && Array.isArray(docs.readme) && docs.readme.length) {
+      const readmeTitle = document.createElement('h4');
+      readmeTitle.className = 'plugin-card__readme-title';
+      readmeTitle.textContent = t('pluginReadmeLabel');
+      const readmeList = document.createElement('ul');
+      readmeList.className = 'plugin-card__readme-list';
+      docs.readme.forEach((line) => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        readmeList.appendChild(li);
+      });
+      docsWrap.append(readmeTitle, readmeList);
+    }
+
     const licenseDetails = document.createElement('div');
     licenseDetails.className = 'plugin-card__license';
 
@@ -559,6 +1070,9 @@ function renderPlugins() {
     actions.appendChild(uninstallBtn);
 
     card.append(meta);
+    if (docsWrap.childElementCount) {
+      card.append(docsWrap);
+    }
     if (licenseDetails.childElementCount) {
       card.append(licenseDetails);
     }
@@ -734,6 +1248,7 @@ async function loadPlugins() {
     state.plugins.licenses = payload?.licenses || {};
     state.plugins.instanceId = payload?.instanceId || null;
     state.plugins.securityWarnings = Array.isArray(payload?.securityWarnings) ? payload.securityWarnings : [];
+    state.plugins.meta = payload?.meta && typeof payload.meta === 'object' ? payload.meta : {};
     renderPlugins();
     updatePluginSections();
     if (state.plugins.securityWarnings.length) {
@@ -929,27 +1444,74 @@ function renderSearchableLayers() {
   allWfsLayers.forEach(layer => {
     const config = searchable.find(s => s.name === layer.name) || {};
     const isSearchable = !!config.name;
+    const layerMeta = searchableState.layerAttributes?.[layer.name] || { all: [], nonGeometry: [], geometry: [] };
+    const hasAttributes = Array.isArray(layerMeta.all);
+    const isLoadingColumns = searchableState.loadingAttributes && !hasAttributes;
+    const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
+      ? layerMeta.nonGeometry
+      : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
+    const selectedSearchAttribute = pickPreferredAttribute(
+      [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
+      availableColumns
+    );
+    const selectedIdAttribute = pickPreferredAttribute(
+      [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
+      availableColumns
+    );
+    const selectedGeometryAttribute = detectGeometryAttribute(layer, layerMeta, config.geometryAttribute);
+    const selectedHintText = String(config.hintText || '').trim() || t('searchableHintPlaceholder');
 
     const layerEl = document.createElement('div');
     layerEl.className = 'searchable-layer-item';
     layerEl.dataset.layerName = layer.name;
 
+    const safeName = safeLayerId(layer.name);
+    const searchOptions = availableColumns.map((column) => {
+      const isSelected = selectedSearchAttribute === column ? ' selected' : '';
+      return `<option value="${escapeHtml(column)}"${isSelected}>${escapeHtml(column)}</option>`;
+    }).join('');
+    const idOptions = availableColumns.map((column) => {
+      const isSelected = selectedIdAttribute === column ? ' selected' : '';
+      return `<option value="${escapeHtml(column)}"${isSelected}>${escapeHtml(column)}</option>`;
+    }).join('');
+    const fieldsHiddenClass = isSearchable ? '' : ' is-hidden';
+    const helperText = isLoadingColumns
+      ? t('searchableLoadingColumns')
+      : (availableColumns.length > 0 ? t('searchableChooseColumns') : t('searchableNoColumns'));
+    const disableSelectors = isLoadingColumns || !availableColumns.length;
+    const geometryAutoText = selectedGeometryAttribute
+      ? t('searchableGeometryAuto', { value: selectedGeometryAttribute })
+      : t('searchableGeometryAutoMissing');
     layerEl.innerHTML = `
       <div class="form-field form-field-checkbox">
-        <input type="checkbox" id="searchable-${layer.name}" ${isSearchable ? 'checked' : ''}>
-        <label for="searchable-${layer.name}">${layer.title || layer.name}</label>
+        <input type="checkbox" id="searchable-${safeName}" ${isSearchable ? 'checked' : ''}>
+        <label for="searchable-${safeName}">${escapeHtml(layer.title || layer.name)}</label>
       </div>
-      <div class="searchable-layer-fields">
+      <div class="searchable-layer-fields${fieldsHiddenClass}">
         <div class="form-field">
-          <label for="fields-${layer.name}">Fields (comma-separated)</label>
-          <input type="text" id="fields-${layer.name}" value="${(config.fields || []).join(', ')}" placeholder="e.g. name, type, status">
+          <label for="searchAttribute-${safeName}">${t('searchableSearchAttribute')}</label>
+          <select id="searchAttribute-${safeName}" ${disableSelectors ? 'disabled' : ''}>
+            ${searchOptions}
+          </select>
         </div>
         <div class="form-field">
-          <label for="titleField-${layer.name}">Title Field</label>
-          <input type="text" id="titleField-${layer.name}" value="${config.titleField || ''}" placeholder="e.g. name">
+          <label for="idAttribute-${safeName}">${t('searchableIdAttribute')}</label>
+          <select id="idAttribute-${safeName}" ${disableSelectors ? 'disabled' : ''}>
+            ${idOptions}
+          </select>
         </div>
+        <div class="form-field">
+          <label for="hintText-${safeName}">${t('searchableHintText')}</label>
+          <input type="text" id="hintText-${safeName}" value="${escapeHtml(selectedHintText)}" placeholder="${escapeHtml(t('searchableHintPlaceholder'))}" ${disableSelectors ? 'disabled' : ''}>
+        </div>
+        <div class="form-field">
+          <label>${t('searchableGeometryAttribute')}</label>
+          <div class="searchable-geometry-auto">${escapeHtml(geometryAutoText)}</div>
+        </div>
+        <p class="admin-hint searchable-columns-help${isLoadingColumns ? ' is-loading' : ''}">${helperText}</p>
       </div>
     `;
+    layerEl.dataset.geometryAttribute = selectedGeometryAttribute;
     searchableLayersContainer.appendChild(layerEl);
   });
 
@@ -965,10 +1527,74 @@ function renderSearchableLayers() {
   })();
 
   searchableLayersContainer.querySelectorAll('input[type="checkbox"]').forEach((el) => {
-    el.addEventListener('change', scheduleSave);
+    el.addEventListener('change', async () => {
+      const container = el.closest('.searchable-layer-item');
+      const fieldsBlock = container?.querySelector('.searchable-layer-fields');
+      if (!container) return;
+
+      if (!el.checked) {
+        if (fieldsBlock) fieldsBlock.classList.add('is-hidden');
+        scheduleSave();
+        return;
+      }
+
+      const layerName = String(container.dataset.layerName || '');
+      const safeName = safeLayerId(layerName);
+      const searchSelect = container.querySelector(`#searchAttribute-${safeName}`);
+      const idSelect = container.querySelector(`#idAttribute-${safeName}`);
+      const hintInput = container.querySelector(`#hintText-${safeName}`);
+      const layerLabel = container.querySelector(`label[for="searchable-${safeName}"]`)?.textContent || layerName;
+      const layerInfo = searchableState.allWfsLayers.find((l) => String(l.name || '') === layerName) || {};
+      const layerMeta = searchableState.layerAttributes?.[layerName] || { all: [], nonGeometry: [], geometry: [] };
+      const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
+        ? layerMeta.nonGeometry
+        : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
+      const detectedGeometryAttribute = detectGeometryAttribute(layerInfo, layerMeta, String(container.dataset.geometryAttribute || ''));
+
+      if (!availableColumns.length) {
+        el.checked = false;
+        if (fieldsBlock) fieldsBlock.classList.add('is-hidden');
+        showMessage('error', t('searchableNoColumns'));
+        return;
+      }
+
+      const initialSearchAttribute = searchSelect ? String(searchSelect.value || '') : '';
+      const initialIdAttribute = idSelect ? String(idSelect.value || '') : '';
+      const initialHintText = hintInput ? String(hintInput.value || '') : '';
+
+      const result = await openSearchableConfigModal({
+        layerTitle: layerLabel,
+        availableColumns,
+        initialSearchAttribute: initialSearchAttribute || availableColumns[0],
+        initialIdAttribute: initialIdAttribute || pickPreferredAttribute(['GID', 'gid', 'id', 'ID', 'fid', 'FID'], availableColumns),
+        initialHintText: initialHintText || t('searchableHintPlaceholder'),
+        geometryAttribute: detectedGeometryAttribute
+      });
+
+      if (!result.confirmed) {
+        el.checked = false;
+        if (fieldsBlock) fieldsBlock.classList.add('is-hidden');
+        return;
+      }
+
+      if (searchSelect) {
+        searchSelect.value = result.searchAttribute;
+      }
+      if (idSelect) {
+        idSelect.value = result.idAttribute;
+      }
+      if (hintInput) {
+        hintInput.value = result.hintText;
+      }
+      container.dataset.geometryAttribute = detectedGeometryAttribute;
+
+      if (fieldsBlock) fieldsBlock.classList.remove('is-hidden');
+      scheduleSave();
+    });
   });
-  searchableLayersContainer.querySelectorAll('input[type="text"]').forEach((el) => {
-    el.addEventListener('input', scheduleSave);
+  searchableLayersContainer.querySelectorAll('select,input[type="text"]').forEach((el) => {
+    const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(eventName, scheduleSave);
   });
 }
 
@@ -1013,7 +1639,7 @@ async function loadSearchableLayers() {
   const projectId = await resolveSearchableProjectId();
   if (!projectId) {
     if (searchableLayersSection) searchableLayersSection.hidden = true;
-    showMessage('error', 'No project available for searchable layers.');
+    showMessage('error', t('searchableNoProject'));
     return;
   }
   try {
@@ -1023,17 +1649,22 @@ async function loadSearchableLayers() {
     ]);
 
     const allLayers = layersResponse.layers || [];
-    searchableState.allWfsLayers = allLayers.filter(l => l.type === 'WFS');
+    searchableState.allWfsLayers = allLayers.filter(l => l.type === 'WFS' || l.kind === 'vector' || !!l.geometry_type);
     searchableState.searchable = Array.isArray(searchableResponse) ? searchableResponse : [];
 
     if (searchableState.allWfsLayers.length > 0) {
       if (searchableLayersSection) searchableLayersSection.hidden = false;
+      searchableState.loadingAttributes = true;
+      renderSearchableLayers();
+      await loadLayerAttributes(projectId, searchableState.allWfsLayers);
+      searchableState.loadingAttributes = false;
       renderSearchableLayers();
     } else {
       if (searchableLayersSection) searchableLayersSection.hidden = true;
     }
   } catch (err) {
-    showMessage('error', 'Failed to load layer information.');
+    searchableState.loadingAttributes = false;
+    showMessage('error', t('searchableLoadError'));
     console.error(err);
     if (searchableLayersSection) searchableLayersSection.hidden = true;
   }
@@ -1043,7 +1674,7 @@ async function saveSearchableLayers() {
   if (!hasSearchableUi()) return;
   const projectId = await resolveSearchableProjectId();
   if (!projectId) {
-    showMessage('error', 'No project selected.');
+    showMessage('error', t('searchableNoProjectSelected'));
     return;
   }
   const payload = [];
@@ -1054,13 +1685,24 @@ async function saveSearchableLayers() {
     const isChecked = item.querySelector('input[type="checkbox"]').checked;
 
     if (isChecked) {
-      const fields = item.querySelector(`#fields-${layerName}`).value.split(',').map(f => f.trim()).filter(Boolean);
-      const titleField = item.querySelector(`#titleField-${layerName}`).value.trim();
-      if (fields.length > 0 && titleField) {
+      const safeName = safeLayerId(layerName);
+      const searchSelect = item.querySelector(`#searchAttribute-${safeName}`);
+      const idSelect = item.querySelector(`#idAttribute-${safeName}`);
+      const hintInput = item.querySelector(`#hintText-${safeName}`);
+      const searchAttribute = searchSelect ? String(searchSelect.value || '').trim() : '';
+      const idAttribute = idSelect ? String(idSelect.value || '').trim() : '';
+      const hintText = hintInput ? String(hintInput.value || '').trim() : '';
+      const geometryAttribute = String(item.dataset.geometryAttribute || '').trim();
+      if (searchAttribute && idAttribute) {
         payload.push({
           name: layerName,
-          fields: fields,
-          titleField: titleField
+          idAttribute,
+          searchAttribute,
+          geometryAttribute: geometryAttribute || '',
+          hintText: hintText || t('searchableHintPlaceholder'),
+          // Compatibility with older consumers that still read fields/titleField.
+          fields: [searchAttribute],
+          titleField: searchAttribute
         });
       }
     }
@@ -1071,9 +1713,9 @@ async function saveSearchableLayers() {
       method: 'POST',
       body: payload
     });
-    showMessage('success', 'Searchable layers configuration saved.');
+    showMessage('success', t('searchableSaveOk'));
   } catch (err) {
-    showMessage('error', 'Failed to save configuration.');
+    showMessage('error', t('searchableSaveError'));
     console.error(err);
   }
 }

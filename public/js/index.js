@@ -50,7 +50,7 @@
 
       const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
         ? window.qtilerLang.SUPPORTED_LANGS
-        : ["en", "es", "sv"];
+        : ["en", "es", "sv", "no"];
       const normalizeLang = window.qtilerLang?.normalize || ((value) => {
         const raw = (value || "").toLowerCase();
         if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -71,13 +71,14 @@
             collapsePrefsCache = {};
           } else {
             const parsed = JSON.parse(raw);
-            collapsePrefsCache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+              collapsePrefsCache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
           }
         } catch {
           collapsePrefsCache = {};
         }
         return collapsePrefsCache;
       };
+      
 
       const getStoredCollapse = (projectId) => {
         if (!projectId) return null;
@@ -150,6 +151,31 @@
       let authCheckInFlight = false;
       let authPluginMissing = false;
   let authPluginMissingMessageShown = false;
+
+      // Append api_key to a URL when user is logged in and the project is not public
+      const withApiKey = (url, project) => {
+        if (!url) return url;
+        if (!authUser || !authUser.apiKey) return url;
+        if (project && project.isPublic) return url;
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}api_key=${encodeURIComponent(authUser.apiKey)}`;
+      };
+      const normalizeCrsCode = (value) => {
+        if (typeof value !== 'string') return null;
+        const normalized = value.trim().toUpperCase();
+        return normalized || null;
+      };
+      const isXyzCompatibleCrs = (value) => {
+        const normalized = normalizeCrsCode(value);
+        if (!normalized) return false;
+        return normalized === 'EPSG:3857'
+          || normalized === 'EPSG:900913'
+          || normalized === 'EPSG:102100'
+          || normalized === 'EPSG:3785'
+          || normalized === 'URN:OGC:DEF:CRS:EPSG::3857';
+      };
+      // Expose for plugin client scripts (e.g. VectorTiles dashboard)
+      window.qtilerWithApiKey = withApiKey;
 
       /* Removed refreshAuthUi() and fetchAuthState() - functionality now handled by checkAuthPlugin() IIFE */
       /*
@@ -277,16 +303,25 @@
         footerYearEl.textContent = String(new Date().getFullYear());
       }
 
-      const qtilerPluginHooks = window.qtilerPluginHooks || { layerInfoTabs: [] };
+      const qtilerPluginHooks = window.qtilerPluginHooks || { layerInfoTabs: [], layerActionButtons: [] };
       window.qtilerPluginHooks = qtilerPluginHooks;
+      if (!Array.isArray(qtilerPluginHooks.layerActionButtons)) qtilerPluginHooks.layerActionButtons = [];
       const loadedPluginClients = new Set();
+      const currentScriptEl = document.currentScript instanceof HTMLScriptElement ? document.currentScript : null;
+      const pluginClientVersion = String(currentScriptEl?.dataset?.qtilerAssetVersion || window.qtilerAssetVersion || '').trim();
+      const withPluginClientVersion = (url) => {
+        if (!url || !pluginClientVersion) return url;
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}v=${encodeURIComponent(pluginClientVersion)}`;
+      };
       const loadPluginClientScript = (url) => new Promise((resolve, reject) => {
-        if (!url || loadedPluginClients.has(url)) return resolve();
+        const finalUrl = withPluginClientVersion(url);
+        if (!finalUrl || loadedPluginClients.has(finalUrl)) return resolve();
         const script = document.createElement('script');
-        script.src = url;
+        script.src = finalUrl;
         script.async = true;
         script.onload = () => {
-          loadedPluginClients.add(url);
+          loadedPluginClients.add(finalUrl);
           resolve();
         };
         script.onerror = () => reject(new Error('plugin_load_failed'));
@@ -601,6 +636,18 @@
         return value;
       };
 
+      const formatJobStatusLabel = (value) => {
+        const token = formatStatusToken(value);
+        if (token === 'running') return tr('Running');
+        if (token === 'queued') return tr('Queued');
+        if (token === 'completed') return tr('Completed');
+        if (token === 'success') return tr('Success');
+        if (token === 'error') return tr('Error');
+        if (token === 'aborted') return tr('Aborted');
+        if (token === 'skipped') return tr('Skipped');
+        return value || tr('Unknown');
+      };
+
       const formatZoomRangeLabel = (min, max) => {
         const hasMin = Number.isFinite(min);
         const hasMax = Number.isFinite(max);
@@ -669,7 +716,7 @@
         }
       }
 
-      const openRecacheDialog = ({ layerName, cachedEntry }) => {
+      const openRecacheDialog = ({ projectId, layerName, cachedEntry }) => {
         ensureRecacheDialogElements();
         return new Promise((resolve) => {
           if (recacheDialogResolve) {
@@ -886,7 +933,7 @@
         }
       }
 
-      async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin, configLayer }) {
+      async function toggleLayerDetails(containerElement, { projectId, layerData, cachedEntry, isAdmin, configLayer, project: projectRef }) {
         if (!projectId || !layerData) return;
 
         const safeXmlNameLocal = (value) => {
@@ -1095,53 +1142,63 @@
         const xyzPath = isTheme
           ? `/wmts/${encodeURIComponent(projectId)}/themes/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`
           : `/wmts/${encodeURIComponent(projectId)}/${encodeURIComponent(layerName)}/{z}/{x}/{y}.png`;
+        const xyzCrs = (cachedEntry && (cachedEntry.tile_crs || cachedEntry.tileCrs || cachedEntry.crs))
+          || output?.tileCrs
+          || layerData?.tile_crs
+          || layerData?.tileCrs
+          || layerData?.crs
+          || projectMeta?.crs
+          || null;
+        const xyzEnabled = isXyzCompatibleCrs(xyzCrs);
 
-        // XYZ URL (for Origo and similar clients)
-        const xyzUrl = `${window.location.origin}${xyzPath}`;
-        
-        const xyzLabel = document.createElement('div');
-        xyzLabel.style.fontSize = '12px';
-        xyzLabel.style.fontWeight = '600';
-        xyzLabel.style.marginTop = '12px';
-        xyzLabel.style.marginBottom = '4px';
-        xyzLabel.style.color = '#666';
-        xyzLabel.textContent = 'XYZ URL (for Origo Web Map):';
-        wmtsSection.appendChild(xyzLabel);
+        if (xyzEnabled) {
+          // XYZ URL (for Origo and similar clients)
+          const xyzUrl = withApiKey(`${window.location.origin}${xyzPath}`, projectRef);
 
-        const xyzUrlContainer = document.createElement('div');
-        xyzUrlContainer.style.display = 'flex';
-        xyzUrlContainer.style.gap = '8px';
-        xyzUrlContainer.style.marginBottom = '16px';
+          const xyzLabel = document.createElement('div');
+          xyzLabel.style.fontSize = '12px';
+          xyzLabel.style.fontWeight = '600';
+          xyzLabel.style.marginTop = '12px';
+          xyzLabel.style.marginBottom = '4px';
+          xyzLabel.style.color = '#666';
+          xyzLabel.textContent = 'XYZ URL (for Origo Web Map):';
+          wmtsSection.appendChild(xyzLabel);
 
-        const xyzUrlInput = document.createElement('input');
-        xyzUrlInput.type = 'text';
-        xyzUrlInput.readOnly = true;
-        xyzUrlInput.value = xyzUrl;
-        xyzUrlInput.style.flex = '1';
-        xyzUrlInput.style.padding = '8px';
-        xyzUrlInput.style.fontFamily = 'Consolas, Monaco, monospace';
-        xyzUrlInput.style.fontSize = '12px';
-        xyzUrlInput.style.border = '1px solid #ccc';
-        xyzUrlInput.style.borderRadius = '4px';
-        xyzUrlInput.style.background = '#f8f9fa';
-        xyzUrlContainer.appendChild(xyzUrlInput);
+          const xyzUrlContainer = document.createElement('div');
+          xyzUrlContainer.style.display = 'flex';
+          xyzUrlContainer.style.gap = '8px';
+          xyzUrlContainer.style.marginBottom = '16px';
 
-        const xyzCopyBtn = document.createElement('button');
-        xyzCopyBtn.type = 'button';
-        xyzCopyBtn.className = 'btn btn-secondary btn-sm';
-        xyzCopyBtn.textContent = 'Copy';
-        xyzCopyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(xyzUrl).then(() => {
-            showStatus('XYZ URL copied to clipboard');
-          }).catch(err => {
-            showStatus('Copy failed: ' + String(err), true);
+          const xyzUrlInput = document.createElement('input');
+          xyzUrlInput.type = 'text';
+          xyzUrlInput.readOnly = true;
+          xyzUrlInput.value = xyzUrl;
+          xyzUrlInput.style.flex = '1';
+          xyzUrlInput.style.padding = '8px';
+          xyzUrlInput.style.fontFamily = 'Consolas, Monaco, monospace';
+          xyzUrlInput.style.fontSize = '12px';
+          xyzUrlInput.style.border = '1px solid #ccc';
+          xyzUrlInput.style.borderRadius = '4px';
+          xyzUrlInput.style.background = '#f8f9fa';
+          xyzUrlContainer.appendChild(xyzUrlInput);
+
+          const xyzCopyBtn = document.createElement('button');
+          xyzCopyBtn.type = 'button';
+          xyzCopyBtn.className = 'btn btn-secondary btn-sm';
+          xyzCopyBtn.textContent = 'Copy';
+          xyzCopyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(xyzUrl).then(() => {
+              showStatus('XYZ URL copied to clipboard');
+            }).catch(err => {
+              showStatus('Copy failed: ' + String(err), true);
+            });
           });
-        });
-        xyzUrlContainer.appendChild(xyzCopyBtn);
-        wmtsSection.appendChild(xyzUrlContainer);
+          xyzUrlContainer.appendChild(xyzCopyBtn);
+          wmtsSection.appendChild(xyzUrlContainer);
+        }
 
         // GetCapabilities URL (standard WMTS)
-        const capabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`;
+        const capabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`, projectRef);
         
         const capLabel = document.createElement('div');
         capLabel.style.fontSize = '12px';
@@ -1183,7 +1240,7 @@
         wmtsSection.appendChild(capUrlContainer);
 
         // WMS GetCapabilities URL
-        const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
+        const wmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`, projectRef);
 
         const wmsLabel = document.createElement('div');
         wmsLabel.style.fontSize = '14px';
@@ -1681,6 +1738,9 @@
         if (!existingSchedule.yearly || !Array.isArray(existingSchedule.yearly.occurrences) || !existingSchedule.yearly.occurrences.length) {
           existingSchedule.yearly = { occurrences: DEFAULT_YEARLY_OCCURRENCES.map((occ) => ({ ...occ })) };
         }
+        const configuredTargetZoom = targetType === 'layer'
+          ? getLayerZoomRange(projectId, targetName)
+          : getProjectZoomRange(projectId);
 
         scheduleDialogContainer.innerHTML = '';
 
@@ -1713,6 +1773,8 @@
         zoomMinInput.step = '1';
         if (Number.isFinite(existingSchedule.zoomMin)) {
           zoomMinInput.value = String(existingSchedule.zoomMin);
+        } else if (configuredTargetZoom?.min != null) {
+          zoomMinInput.placeholder = String(configuredTargetZoom.min);
         }
         zoomMinLabel.appendChild(zoomMinInput);
         zoomRow.appendChild(zoomMinLabel);
@@ -1728,10 +1790,20 @@
         zoomMaxInput.step = '1';
         if (Number.isFinite(existingSchedule.zoomMax)) {
           zoomMaxInput.value = String(existingSchedule.zoomMax);
+        } else if (configuredTargetZoom?.max != null) {
+          zoomMaxInput.placeholder = String(configuredTargetZoom.max);
         }
         zoomMaxLabel.appendChild(zoomMaxInput);
         zoomRow.appendChild(zoomMaxLabel);
         form.appendChild(zoomRow);
+
+        if (targetType === 'layer') {
+          const targetMapHint = document.createElement('div');
+          targetMapHint.className = 'meta';
+          targetMapHint.style.marginTop = '8px';
+          targetMapHint.textContent = tr('Automatic cache uses the extent saved in this layer map. Leave zoom empty to use that layer map zoom range.');
+          form.appendChild(targetMapHint);
+        }
 
         const enableRow = document.createElement('label');
         enableRow.style.display = 'flex';
@@ -2167,6 +2239,11 @@
       function applyCachedZoomRangeToControls(projectId, { force = false } = {}){
         if (!projectId || projectId !== activeProjectId) return;
         const state = getProjectState(projectId);
+        const projectZoom = getProjectZoomRange(projectId);
+        if (projectZoom) {
+          state.lastAppliedZoomRange = null;
+          return;
+        }
         const range = state?.cachedZoomRange || null;
         if (!range) {
           state.lastAppliedZoomRange = null;
@@ -2263,6 +2340,53 @@
         }
       }
 
+      function syncProjectBatchControls(projectId, current){
+        const state = getProjectState(projectId);
+        if (!state) return;
+        const progressEl = state.batchProgressEl;
+        const progressBarEl = state.batchProgressBarEl;
+        const progressTextEl = state.batchProgressTextEl;
+        const abortBtn = state.batchAbortBtn;
+        if (!progressEl || !progressBarEl || !progressTextEl || !abortBtn) return;
+
+        const isActive = !!(current && (current.status === 'running' || current.status === 'queued'));
+        progressEl.style.display = isActive ? '' : 'none';
+        abortBtn.style.display = isActive ? '' : 'none';
+
+        if (!isActive) {
+          progressBarEl.style.width = '0%';
+          progressTextEl.textContent = '';
+          abortBtn.disabled = false;
+          abortBtn.textContent = tr('Abort');
+          return;
+        }
+
+        const totalLayers = Array.isArray(current.layers)
+          ? current.layers.length
+          : (Number.isFinite(current.totalCount) ? current.totalCount : null);
+        const completedLayers = Number.isFinite(current.completedCount) ? current.completedCount : 0;
+        const hasActiveLayer = !!(current.currentLayer || Number.isFinite(current.currentIndex));
+        let percent = 0;
+        if (current.status === 'queued') {
+          percent = 5;
+        } else if (Number.isFinite(totalLayers) && totalLayers > 0) {
+          const visualCompleted = Math.min(totalLayers, completedLayers + (hasActiveLayer ? 1 : 0));
+          percent = Math.max(5, Math.min(99, (visualCompleted / totalLayers) * 100));
+        } else {
+          percent = 35;
+        }
+        progressBarEl.style.width = percent + '%';
+
+        if (Number.isFinite(totalLayers) && totalLayers > 0) {
+          progressTextEl.textContent = `${Math.min(totalLayers, completedLayers)}/${totalLayers}`;
+        } else {
+          progressTextEl.textContent = formatJobStatusLabel(current.status);
+        }
+
+        abortBtn.disabled = !!current.abortRequested;
+        abortBtn.textContent = current.abortRequested ? tr('Aborting…') : tr('Abort');
+      }
+
       function updateProjectBatchInfo(projectId, payload){
         const state = getProjectState(projectId);
         if (!state || !state.batchInfoEl) return;
@@ -2281,30 +2405,48 @@
         const lines = [];
         if (current) {
           const status = current.status || 'unknown';
-          const startedLabel = current.startedAt ? new Date(current.startedAt).toLocaleString() : null;
+          const startedLabel = current.startedAt ? formatDateTimeLocal(current.startedAt) : null;
           const totalLayers = Array.isArray(current.layers)
             ? current.layers.length
             : (Number.isFinite(current.totalCount) ? current.totalCount : (typeof current.layers === 'number' ? current.layers : null));
           if (status === 'running') {
-            lines.push(`Project cache running${totalLayers != null ? ` (${totalLayers} layers)` : ''}${startedLabel ? ` since ${startedLabel}` : ''}`);
+            let runningLine = tr('Project cache running');
+            if (totalLayers != null) runningLine += ` (${totalLayers})`;
+            if (startedLabel) runningLine += ` · ${startedLabel}`;
+            lines.push(runningLine);
             const idx = Number.isFinite(current.currentIndex) ? current.currentIndex : null;
             const activeLayer = current.currentLayer || (idx != null && Array.isArray(current.layers) && current.layers[idx] ? current.layers[idx] : null);
             if (activeLayer) {
-              const ordinal = idx != null && totalLayers != null ? ` (${idx + 1}/${totalLayers})` : '';
-              lines.push(`Working on ${activeLayer}${ordinal}`);
+              if (idx != null && totalLayers != null) {
+                lines.push(tr('Working on {layer} ({current}/{total})', {
+                  layer: activeLayer,
+                  current: idx + 1,
+                  total: totalLayers
+                }));
+              } else {
+                lines.push(tr('Working on {layer}', { layer: activeLayer }));
+              }
+                const configuredLayerZoom = projectId && layerName ? getLayerZoomRange(projectId, layerName) : null;
             }
           } else if (status === 'queued') {
-            lines.push('Project cache queued…');
+                const defaultMin = configuredLayerZoom?.min != null
+                  ? configuredLayerZoom.min
+                  : (rangeInfo.min != null ? rangeInfo.min : (controlMin != null ? controlMin : 0));
+                let defaultMax = configuredLayerZoom?.max != null
+                  ? configuredLayerZoom.max
+                  : (rangeInfo.max != null ? rangeInfo.max : (controlMax != null ? controlMax : defaultMin));
+            lines.push(tr('Project cache aborted.'));
           } else if (status === 'error') {
-            lines.push(`Project cache error: ${current.error || 'unknown'}`);
+            lines.push(tr('Project cache error: {error}', { error: current.error || tr('Unknown') }));
           } else {
-            lines.push(`Project cache status: ${status}`);
+            lines.push(tr('Project cache status: {status}', { status: formatJobStatusLabel(status) }));
           }
+          if (current.abortRequested) lines.push(tr('Project cache abort requested.'));
           const triggerToken = current.trigger || current.reason || null;
           const triggerLabel = formatTriggerLabel(triggerToken);
           if (triggerLabel) lines.push(tr('Trigger: {value}', { value: triggerLabel }));
         } else {
-          lines.push('Project cache idle');
+          lines.push(tr('Project cache idle'));
         }
         if (last?.lastRunAt) {
           const parsed = Date.parse(last.lastRunAt);
@@ -2318,11 +2460,17 @@
             || (lastResultToken !== 'error')
             || ageMs <= keepErrorWindowMs;
           if (shouldShowLast) {
-            const label = isParsed ? new Date(parsed).toLocaleString() : last.lastRunAt;
-            lines.push(`Last result: ${last.lastResult || 'unknown'}${label ? ` at ${label}` : ''}`);
+            const label = isParsed ? formatDateTimeLocal(parsed) : last.lastRunAt;
+            const resultLabel = formatJobStatusLabel(last.lastResult || 'unknown');
+            if (label) {
+              lines.push(tr('Last result: {result} at {time}', { result: resultLabel, time: label }));
+            } else {
+              lines.push(tr('Last result: {result}', { result: resultLabel }));
+            }
           }
         }
         state.batchInfoEl.textContent = lines.join(' · ');
+        syncProjectBatchControls(projectId, current);
         const nextStatus = current ? current.status : null;
         if (state.batchButton) {
           state.batchButton.disabled = nextStatus === 'running' || nextStatus === 'queued';
@@ -2347,18 +2495,20 @@
           if (!res.ok) {
             setProjectBatchPolling(projectId, false);
             const state = getProjectState(projectId);
-            if (state?.batchInfoEl) state.batchInfoEl.textContent = 'Project cache status unavailable';
+            if (state?.batchInfoEl) state.batchInfoEl.textContent = tr('Project cache status unavailable');
+            syncProjectBatchControls(projectId, null);
             return;
           }
           const data = await res.json().catch(() => null) || {};
           updateProjectBatchInfo(projectId, data);
-          const active = data?.current?.status === 'running';
+          const active = data?.current?.status === 'running' || data?.current?.status === 'queued';
           setProjectBatchPolling(projectId, active);
         } catch (err) {
           console.warn('Project batch status fetch failed', projectId, err);
           setProjectBatchPolling(projectId, false);
           const state = getProjectState(projectId);
-          if (state?.batchInfoEl) state.batchInfoEl.textContent = 'Project cache status error';
+          if (state?.batchInfoEl) state.batchInfoEl.textContent = tr('Project cache status error');
+          syncProjectBatchControls(projectId, null);
         } finally {
           projectBatchFetches.delete(projectId);
         }
@@ -2372,8 +2522,9 @@
           }
 
           enforceCacheControls();
-          const defaultMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
-          const defaultMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
+          const projectZoom = getProjectZoomRange(project.id);
+          const defaultMin = projectZoom ? projectZoom.min : Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
+          const defaultMax = projectZoom ? projectZoom.max : Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
           const initialMin = Number.isFinite(defaultMin) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, defaultMin)) : 0;
           const initialMax = Number.isFinite(defaultMax) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, defaultMax)) : 0;
 
@@ -2386,7 +2537,7 @@
           dialog.style.maxWidth = '720px';
 
           const title = document.createElement('h3');
-          title.textContent = tr('Generate cache');
+          title.textContent = tr('Generate WMTS-Tiles for all layers');
 
           const subtitle = document.createElement('p');
           subtitle.className = 'dialog-description';
@@ -2586,6 +2737,15 @@
         const selection = await openProjectCacheDialog(project, layers);
         if (!selection) return;
 
+        const confirmedProjectRun = await confirmActionModal({
+          title: tr('Project-wide recache confirmation title'),
+          message: tr('Project-wide recache confirmation message'),
+          confirmLabel: tr('Continue'),
+          cancelLabel: tr('Cancel'),
+          isDanger: true
+        });
+        if (!confirmedProjectRun) return;
+
         const { zoomMin, zoomMax, selectedLayers } = selection;
         const throttleVal = Math.max(300, parseInt(throttleInput ? throttleInput.value : '300', 10) || 300);
         const extentPayload = getProjectedExtentPayload(project.id);
@@ -2670,6 +2830,8 @@
         ,
         refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 4a.75.75 0 0 1 .75.75v2.19A7.25 7.25 0 0 1 20.02 12a.75.75 0 0 1-1.5 0 5.75 5.75 0 1 0-10.95-2h2.18a.75.75 0 0 1 .53 1.28l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5A.75.75 0 0 1 2.75 11h2.18a7.25 7.25 0 0 1 13.57-3.56V4.75a.75.75 0 0 1 1.5 0v4a.75.75 0 0 1-.75.75h-4a.75.75 0 0 1 0-1.5h2.19A5.75 5.75 0 1 0 3.5 12a.75.75 0 0 1-1.5 0A7.25 7.25 0 0 1 5.5 6.94V4.75a.75.75 0 0 1 .75-.75Z"/></svg>'
         ,
+        reload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.25a8.75 8.75 0 1 1-7.92 5.04.75.75 0 0 1 1.36.63A7.25 7.25 0 1 0 12 4.75c-2.1 0-4.08.89-5.45 2.43H9a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 7.93V3.75a.75.75 0 0 1 1.5 0v2.12A8.72 8.72 0 0 1 12 3.25Z"/></svg>'
+        ,
         cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.24-10A6.01 6.01 0 0 1 12.76 6 4.75 4.75 0 0 1 19 10.5a4 4 0 0 1-.18 8.5H7Zm0-1.5h11.82a2.5 2.5 0 0 0 .19-5c-.38 0-.75.04-1.1.12a.75.75 0 0 1-.9-.54A4.5 4.5 0 0 0 12.76 7.5c-1.7 0-3.2.95-4 2.37a.75.75 0 0 1-.7.39H8a3.5 3.5 0 0 0-.17 7Z"/></svg>'
       };
 
@@ -2728,6 +2890,10 @@
             batchInfoEl: null,
             batchPoller: null,
             batchButton: null,
+            batchProgressEl: null,
+            batchProgressBarEl: null,
+            batchProgressTextEl: null,
+            batchAbortBtn: null,
             lastBatchStatus: null,
             cachedZoomRange: null,
             lastAppliedZoomRange: null,
@@ -2735,6 +2901,7 @@
             layerExtents: new Map(),
             themeExtents: new Map(),
             layerExtentUnion: null,
+            layerExtentPanels: new Map(),
             focusLayerGroup: null,
             lastFocusKey: null,
             pendingMapFocus: null,
@@ -2792,12 +2959,8 @@
         const projectId = project && project.id ? project.id : project;
         const state = getProjectState(projectId);
         if (!state.metaInfoEl) return;
-        const metaSource = projectMeta || state.projectMeta || null;
         const parts = [];
-        parts.push('CRS: ' + (metaSource?.crs || 'Unknown'));
-        if (state.extent && Array.isArray(state.extent) && state.extent.length === 4) {
-          parts.push('Custom extent ready');
-        }
+        parts.push('Project settings');
         const cfg = projectConfig || state.config || projectConfigs.get(projectId);
         if (cfg && cfg.zoom) {
           const zMin = cfg.zoom.min != null ? cfg.zoom.min : 'auto';
@@ -3188,6 +3351,115 @@
         };
       };
 
+      const buildLayerExtentPatch = (projectId, layerName, extentList, layerCrs) => {
+        const nowIso = new Date().toISOString();
+        const projectState = getProjectState(projectId);
+        const configuredTileCrs = (projectState && projectState.config && projectState.config.cachePreferences && projectState.config.cachePreferences.tileCrs) || null;
+        const configuredCrsSafe = (typeof configuredTileCrs === 'string' && configuredTileCrs.trim() && configuredTileCrs.trim().toUpperCase() !== 'AUTO')
+          ? configuredTileCrs.trim()
+          : null;
+        const nativeCrs = layerCrs || projectState?.projectMeta?.crs || configuredCrsSafe || 'EPSG:4326';
+        const entryPatch = {
+          extent: { bbox: null, crs: nativeCrs, updatedAt: nowIso },
+          extentWgs84: { bbox: null, crs: 'EPSG:4326', updatedAt: nowIso }
+        };
+        if (Array.isArray(extentList) && extentList.length === 4) {
+          const norm = normalizeExtentList(extentList);
+          if (norm) {
+            const converted = transformExtentToProjectCrs(norm, nativeCrs);
+            const nativeBbox = (converted && Array.isArray(converted.bbox)) ? converted.bbox.slice() : norm.slice();
+            const nativeOutCrs = converted?.crs || nativeCrs;
+            entryPatch.extent = { bbox: nativeBbox, crs: nativeOutCrs, updatedAt: nowIso };
+            entryPatch.extentWgs84 = { bbox: norm.slice(), crs: 'EPSG:4326', updatedAt: nowIso };
+          }
+        }
+        return { layers: { [layerName]: entryPatch } };
+      };
+
+      const getLayerProjectedExtentPayload = (projectId, layerName, fallbackLayerCrs = null) => {
+        const projectState = getProjectState(projectId);
+        const livePanel = projectState?.layerExtentPanels?.get?.(layerName) || null;
+        if (livePanel && Object.prototype.hasOwnProperty.call(livePanel, 'extent')) {
+          if (Array.isArray(livePanel.extent) && livePanel.extent.length === 4) {
+            const livePatch = buildLayerExtentPatch(projectId, layerName, livePanel.extent, livePanel.layerCrs || fallbackLayerCrs);
+            const liveExtent = livePatch?.layers?.[layerName]?.extent || null;
+            const bbox = Array.isArray(liveExtent?.bbox) ? normalizeExtentList(liveExtent.bbox) : null;
+            const crs = liveExtent?.crs || livePanel.layerCrs || fallbackLayerCrs || null;
+            if (bbox) {
+              const resolvedCrs = crs || 'EPSG:4326';
+              const fixed = normalizeAxisOrderForCrs(bbox, resolvedCrs) || bbox;
+              return {
+                bbox: fixed,
+                extentString: fixed.join(','),
+                crs: resolvedCrs
+              };
+            }
+          }
+          return null;
+        }
+        const cfg = projectConfigs.get(projectId);
+        const layerCfg = cfg && cfg.layers ? cfg.layers[layerName] : null;
+        if (!layerCfg) return null;
+        let bbox = null;
+        let crs = fallbackLayerCrs || null;
+        if (layerCfg.extent && Array.isArray(layerCfg.extent.bbox)) {
+          bbox = normalizeExtentList(layerCfg.extent.bbox);
+          crs = layerCfg.extent.crs || crs;
+        }
+        if (!bbox && layerCfg.extentWgs84 && Array.isArray(layerCfg.extentWgs84.bbox)) {
+          const wgs = normalizeExtentList(layerCfg.extentWgs84.bbox);
+          if (wgs) {
+            const converted = transformExtentToProjectCrs(wgs, fallbackLayerCrs || crs || null);
+            if (converted && Array.isArray(converted.bbox)) {
+              bbox = normalizeExtentList(converted.bbox);
+              crs = converted.crs || fallbackLayerCrs || crs;
+            }
+          }
+        }
+        if (!bbox) return null;
+        const resolvedCrs = crs || fallbackLayerCrs || 'EPSG:4326';
+        const fixed = normalizeAxisOrderForCrs(bbox, resolvedCrs) || bbox;
+        return {
+          bbox: fixed,
+          extentString: fixed.join(','),
+          crs: resolvedCrs
+        };
+      };
+
+      const getLayerZoomRange = (projectId, layerName) => {
+        const projectState = getProjectState(projectId);
+        const livePanel = projectState?.layerExtentPanels?.get?.(layerName) || null;
+        if (livePanel) {
+          const inputMin = parseZoomNumber(livePanel.minInputEl?.value);
+          const inputMax = parseZoomNumber(livePanel.maxInputEl?.value);
+          if (inputMin != null && inputMax != null) {
+            return { min: inputMin, max: inputMax };
+          }
+          const liveMin = parseZoomNumber(livePanel.zoomMin);
+          const liveMax = parseZoomNumber(livePanel.zoomMax);
+          if (liveMin != null && liveMax != null) {
+            return { min: liveMin, max: liveMax };
+          }
+        }
+        const cfg = projectConfigs.get(projectId);
+        const layerCfg = cfg && cfg.layers ? cfg.layers[layerName] : null;
+        if (!layerCfg || !layerCfg.zoom) return null;
+        const min = parseZoomNumber(layerCfg.zoom.min);
+        const max = parseZoomNumber(layerCfg.zoom.max);
+        if (min == null || max == null) return null;
+        return { min, max };
+      };
+
+      const getProjectZoomRange = (projectId) => {
+        const cfg = projectConfigs.get(projectId);
+        const zoomCfg = cfg && cfg.zoom ? cfg.zoom : null;
+        if (!zoomCfg) return null;
+        const min = parseZoomNumber(zoomCfg.min);
+        const max = parseZoomNumber(zoomCfg.max);
+        if (min == null || max == null) return null;
+        return { min, max };
+      };
+
       const getProjectedExtentPayload = (projectId) => {
         const state = getProjectState(projectId);
         if (!state) return null;
@@ -3286,11 +3558,316 @@
         }
       };
 
+      async function toggleLayerExtentPanel(project, layer, configLayer, container, toggleBtn){
+        const state = getProjectState(project.id);
+        const panelKey = String(layer?.name || '');
+        if (!panelKey) return;
+        if (!state.layerExtentPanels) state.layerExtentPanels = new Map();
+        const existing = state.layerExtentPanels.get(panelKey) || {
+          open: false,
+          map: null,
+          extent: null,
+          layerCrs: layer?.tile_crs || layer?.crs || state?.projectMeta?.crs || null,
+          zoomMin: null,
+          zoomMax: null,
+          mapResizeObserver: null,
+          mapResizeTimer: null
+        };
+        state.layerExtentPanels.set(panelKey, existing);
+
+        const updateToggleLabel = () => {
+          if (!toggleBtn) return;
+          toggleBtn.textContent = existing.open ? tr('Hide extent map') : tr('Show extent map');
+        };
+
+        if (existing.open) {
+          existing.open = false;
+          container.style.display = 'none';
+          existing.minInputEl = null;
+          existing.maxInputEl = null;
+          if (existing.map) {
+            try { existing.map.remove(); } catch {}
+            existing.map = null;
+          }
+          if (existing.mapResizeObserver) {
+            try { existing.mapResizeObserver.disconnect(); } catch {}
+            existing.mapResizeObserver = null;
+          }
+          if (existing.mapResizeTimer) {
+            clearTimeout(existing.mapResizeTimer);
+            existing.mapResizeTimer = null;
+          }
+          container.innerHTML = '';
+          updateToggleLabel();
+          return;
+        }
+
+        existing.open = true;
+        container.style.display = 'block';
+        container.innerHTML = '';
+        updateToggleLabel();
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'layer-extent-panel';
+        const title = document.createElement('div');
+        title.className = 'panel-title';
+        title.textContent = tr('Layer extent map') + ' · ' + (layer.name || 'layer');
+        wrapper.appendChild(title);
+
+        const mapId = `layer-extent-map-${toDomId(project.id)}-${toDomId(layer.name)}-${Date.now()}`;
+        const mapHolder = document.createElement('div');
+        mapHolder.id = mapId;
+        mapHolder.style.height = '260px';
+        mapHolder.style.width = '100%';
+        mapHolder.style.border = '1px solid var(--border)';
+        mapHolder.style.borderRadius = '8px';
+        mapHolder.style.overflow = 'hidden';
+        wrapper.appendChild(mapHolder);
+
+        const settings = document.createElement('div');
+        settings.className = 'control-grid project-settings-grid';
+        settings.style.marginTop = '10px';
+
+        const layerZoom = getLayerZoomRange(project.id, layer.name);
+        const defaultMin = layerZoom ? layerZoom.min : (Number.parseInt(zoomMinInput?.value || '0', 10) || 0);
+        const defaultMax = layerZoom ? layerZoom.max : (Number.parseInt(zoomMaxInput?.value || '0', 10) || 0);
+        existing.zoomMin = defaultMin;
+        existing.zoomMax = defaultMax;
+
+        const minWrap = document.createElement('label');
+        minWrap.className = 'field';
+        const minLabel = document.createElement('span');
+        minLabel.textContent = tr('Min zoom:');
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.className = 'input-number';
+        minInput.min = '0';
+        minInput.max = String(MAX_ZOOM_LEVEL);
+        minInput.value = String(defaultMin);
+        existing.minInputEl = minInput;
+        minWrap.append(minLabel, minInput);
+
+        const maxWrap = document.createElement('label');
+        maxWrap.className = 'field';
+        const maxLabel = document.createElement('span');
+        maxLabel.textContent = tr('Max zoom:');
+        const maxInput = document.createElement('input');
+        maxInput.type = 'number';
+        maxInput.className = 'input-number';
+        maxInput.min = '0';
+        maxInput.max = String(MAX_ZOOM_LEVEL);
+        maxInput.value = String(defaultMax);
+        existing.maxInputEl = maxInput;
+        maxWrap.append(maxLabel, maxInput);
+
+        const crsWrap = document.createElement('div');
+        crsWrap.className = 'field';
+        const crsLabel = document.createElement('span');
+        crsLabel.textContent = tr('Tile CRS:');
+        const crsValue = document.createElement('input');
+        crsValue.type = 'text';
+        crsValue.className = 'input-text';
+        crsValue.disabled = true;
+        crsValue.value = existing.layerCrs || 'AUTO';
+        crsWrap.append(crsLabel, crsValue);
+
+        settings.append(minWrap, maxWrap, crsWrap);
+        wrapper.appendChild(settings);
+
+        const buttons = document.createElement('div');
+        buttons.style.marginTop = '8px';
+        buttons.style.display = 'flex';
+        buttons.style.flexWrap = 'wrap';
+        buttons.style.gap = '8px';
+        wrapper.appendChild(buttons);
+
+        const status = document.createElement('div');
+        status.className = 'meta project-settings-status';
+        status.style.marginTop = '8px';
+        wrapper.appendChild(status);
+
+        const showLocalStatus = (msg, isError = false) => {
+          status.textContent = String(msg || '');
+          status.classList.toggle('error', !!isError);
+        };
+
+        const saveLayerSettings = (extentList = null) => {
+          const minVal = Number.parseInt(minInput.value, 10);
+          const maxVal = Number.parseInt(maxInput.value, 10);
+          const min = Number.isFinite(minVal) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, minVal)) : 0;
+          const max = Number.isFinite(maxVal) ? Math.max(0, Math.min(MAX_ZOOM_LEVEL, maxVal)) : 0;
+          const finalMin = Math.min(min, max);
+          const finalMax = Math.max(min, max);
+          existing.zoomMin = finalMin;
+          existing.zoomMax = finalMax;
+          existing.extent = Array.isArray(extentList) ? extentList.slice() : null;
+          minInput.value = String(finalMin);
+          maxInput.value = String(finalMax);
+          const patch = buildLayerExtentPatch(project.id, layer.name, extentList, existing.layerCrs) || { layers: {} };
+          patch.layers[layer.name] = patch.layers[layer.name] || {};
+          patch.layers[layer.name].zoom = { min: finalMin, max: finalMax, updatedAt: new Date().toISOString() };
+          queueProjectConfigSave(project.id, patch, { immediate: true });
+          showLocalStatus(tr('Layer settings saved: z{min}-{max}', { min: finalMin, max: finalMax }));
+        };
+
+        container.appendChild(wrapper);
+
+        try {
+          await ensureLeafletReady();
+        } catch (err) {
+          showLocalStatus(tr('Failed to load map: {error}', { error: String(err) }), true);
+          return;
+        }
+
+        const map = L.map(mapId, {
+          zoomControl: true,
+          maxZoom: 23,
+          minZoom: 0,
+          zoomSnap: 0.25,
+          wheelPxPerZoomLevel: 80
+        });
+        existing.map = map;
+        try { L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23, attribution:'OSM'}).addTo(map); } catch {}
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        const applyRect = (extentArr) => {
+          drawnItems.clearLayers();
+          const bounds = toBoundsWgs84(extentArr);
+          if (!bounds) return;
+          try {
+            const rect = L.rectangle(bounds, { color: '#2563eb', weight: 1, fillOpacity: 0.05 });
+            drawnItems.addLayer(rect);
+          } catch {}
+        };
+
+        const configuredWgsExtent = normalizeExtentList(configLayer?.extentWgs84?.bbox)
+          || normalizeExtentList(configLayer?.extent_wgs84?.bbox)
+          || normalizeExtentList(layer.extent_wgs84)
+          || normalizeExtentList(layer.extent);
+        if (configuredWgsExtent) {
+          existing.extent = configuredWgsExtent.slice();
+          applyRect(existing.extent);
+          try { map.fitBounds(toBoundsWgs84(existing.extent), { maxZoom: 20 }); } catch {}
+        } else if (Array.isArray(layer.extent_wgs84) && layer.extent_wgs84.length === 4) {
+          try { map.fitBounds(toBoundsWgs84(layer.extent_wgs84), { maxZoom: 20 }); } catch {}
+        } else {
+          try { map.setView([0, 0], 2); } catch {}
+        }
+
+        try {
+          const drawControl = new L.Control.Draw({
+            draw: { polygon:false, polyline:false, circle:false, marker:false, circlemarker:false, rectangle:{ showArea:false } },
+            edit: { featureGroup: drawnItems, remove: true }
+          });
+          map.addControl(drawControl);
+          map.on(L.Draw.Event.CREATED, (e) => {
+            drawnItems.clearLayers();
+            drawnItems.addLayer(e.layer);
+            const b = e.layer.getBounds();
+            existing.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+            saveLayerSettings(existing.extent);
+          });
+          map.on('draw:edited', () => {
+            const layerShape = drawnItems.getLayers()[0];
+            if (!layerShape) return;
+            const b = layerShape.getBounds();
+            existing.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+            saveLayerSettings(existing.extent);
+          });
+          map.on('draw:deleted', () => {
+            existing.extent = null;
+            saveLayerSettings(null);
+          });
+        } catch {}
+
+        const setMinBtn = document.createElement('button');
+        setMinBtn.type = 'button';
+        setMinBtn.className = 'btn btn-secondary';
+        setMinBtn.textContent = tr('Set current zoom as Min');
+        setMinBtn.onclick = () => {
+          minInput.value = String(Math.round(map.getZoom()));
+          saveLayerSettings(existing.extent);
+        };
+        buttons.appendChild(setMinBtn);
+
+        const setMaxBtn = document.createElement('button');
+        setMaxBtn.type = 'button';
+        setMaxBtn.className = 'btn btn-secondary';
+        setMaxBtn.textContent = tr('Set current zoom as Max');
+        setMaxBtn.onclick = () => {
+          maxInput.value = String(Math.round(map.getZoom()));
+          saveLayerSettings(existing.extent);
+        };
+        buttons.appendChild(setMaxBtn);
+
+        const useCurrentBtn = document.createElement('button');
+        useCurrentBtn.type = 'button';
+        useCurrentBtn.className = 'btn btn-secondary';
+        useCurrentBtn.textContent = tr('Use current view');
+        useCurrentBtn.onclick = () => {
+          const b = map.getBounds();
+          existing.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
+          applyRect(existing.extent);
+          saveLayerSettings(existing.extent);
+        };
+        buttons.appendChild(useCurrentBtn);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'btn';
+        clearBtn.textContent = tr('Clear extent');
+        clearBtn.onclick = () => {
+          existing.extent = null;
+          drawnItems.clearLayers();
+          saveLayerSettings(null);
+        };
+        buttons.appendChild(clearBtn);
+
+        const onZoomInputChange = () => saveLayerSettings(existing.extent);
+        minInput.addEventListener('input', () => {
+          existing.zoomMin = parseZoomNumber(minInput.value);
+        });
+        maxInput.addEventListener('input', () => {
+          existing.zoomMax = parseZoomNumber(maxInput.value);
+        });
+        minInput.addEventListener('change', onZoomInputChange);
+        maxInput.addEventListener('change', onZoomInputChange);
+      }
+
       async function toggleProjectExtentPanel(project, projectMeta, container){
+        const projectSettingsCard = document.getElementById('project_settings_card');
+        const projectSettingsStatus = document.getElementById('project_settings_status');
+        const moveSettingsCardToDefault = () => {
+          if (!projectSettingsCard) return;
+          const contentPanel = document.querySelector('.content-panel');
+          const statusNode = document.getElementById('status');
+          if (contentPanel) {
+            if (statusNode && statusNode.parentElement === contentPanel) {
+              contentPanel.insertBefore(projectSettingsCard, statusNode);
+            } else {
+              contentPanel.appendChild(projectSettingsCard);
+            }
+          }
+          projectSettingsCard.hidden = true;
+          projectSettingsCard.dataset.projectId = '';
+          if (projectSettingsStatus) {
+            projectSettingsStatus.textContent = '';
+            projectSettingsStatus.classList.remove('error');
+          }
+        };
+
+        const showProjectSettingsStatus = (message, isError = false) => {
+          if (!projectSettingsStatus) return;
+          projectSettingsStatus.textContent = String(message || '');
+          projectSettingsStatus.classList.toggle('error', !!isError);
+        };
+
         const state = getProjectState(project.id);
         if (container.dataset.open === '1') {
           container.dataset.open = '0';
           container.style.display = 'none';
+          moveSettingsCardToDefault();
           if (state.map) {
             try { state.map.remove(); } catch {}
             state.map = null;
@@ -3315,6 +3892,7 @@
           state.mapHolder = null;
           container.innerHTML = '';
           state.open = false;
+          state.batchButton = null;
           refreshProjectMetaInfo(project, projectMeta, state.config);
           return;
         }
@@ -3347,7 +3925,7 @@
         const title = document.createElement('div');
         title.style.fontWeight = '600';
         title.style.marginBottom = '8px';
-        title.textContent = 'Extent capture · ' + (project.name || project.id);
+        title.textContent = tr('Extent capture') + ' · ' + (project.name || project.id);
         wrapper.appendChild(title);
 
         const mapId = `extent-map-${project.id}-${Date.now()}`;
@@ -3366,12 +3944,34 @@
         mapHolder.style.position = 'relative';
         wrapper.appendChild(mapHolder);
 
+        const settingsMount = document.createElement('div');
+        settingsMount.className = 'project-settings-mount';
+        wrapper.appendChild(settingsMount);
+
+        if (projectSettingsCard) {
+          projectSettingsCard.dataset.projectId = project.id;
+          projectSettingsCard.hidden = false;
+          settingsMount.appendChild(projectSettingsCard);
+        }
+
         const buttons = document.createElement('div');
         buttons.style.marginTop = '8px';
         buttons.style.display = 'flex';
         buttons.style.flexWrap = 'wrap';
         buttons.style.gap = '8px';
         wrapper.appendChild(buttons);
+
+        const isAdminUser = !window.appState?.authEnabled || (window.appState.user && window.appState.user.role === 'admin');
+        if (isAdminUser && Array.isArray(state.projectLayers) && state.projectLayers.length > 0) {
+          const runAllBtn = document.createElement('button');
+          runAllBtn.className = 'btn btn-primary';
+          runAllBtn.type = 'button';
+          runAllBtn.textContent = tr('Generate WMTS-Tiles for all layers');
+          runAllBtn.setAttribute('data-i18n', 'Generate WMTS-Tiles for all layers');
+          runAllBtn.addEventListener('click', () => runProjectCacheFromDialog(project, state.projectLayers, runAllBtn));
+          buttons.appendChild(runAllBtn);
+          state.batchButton = runAllBtn;
+        }
 
         const info = document.createElement('div');
         info.style.marginTop = '8px';
@@ -3393,7 +3993,7 @@
         try {
           await ensureLeafletReady();
         } catch (err) {
-          info.textContent = 'Failed to load map: ' + String(err);
+          info.textContent = tr('Failed to load map: {error}', { error: String(err) });
           showStatus('Unable to load map library: ' + err, true);
           container.dataset.open = '0';
           container.style.display = 'none';
@@ -3544,7 +4144,7 @@
         const btnCapture = document.createElement('button');
         btnCapture.className = 'btn btn-secondary';
         btnCapture.type = 'button';
-        btnCapture.textContent = 'Use current view';
+        btnCapture.textContent = tr('Use current view');
         btnCapture.onclick = () => {
           const b = map.getBounds();
           state.extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => Number(v.toFixed(6)));
@@ -3562,7 +4162,7 @@
         const btnCenterProject = document.createElement('button');
         btnCenterProject.className = 'btn btn-secondary';
         btnCenterProject.type = 'button';
-        btnCenterProject.textContent = 'Center on project extent';
+        btnCenterProject.textContent = tr('Center on project extent');
         btnCenterProject.onclick = () => {
           const targetExtent = normalizeExtentList(state.projectViewExtent)
             || normalizeExtentList(state.defaultMapExtent)
@@ -3571,7 +4171,7 @@
           if (targetExtent) {
             focusMapToExtent(project.id, targetExtent, { highlight: false, sourceKey: 'project-center', maxZoom: 20 });
           } else {
-            showStatus('Project extent unavailable.', true);
+            showProjectSettingsStatus(tr('Project extent unavailable.'), true);
           }
         };
         buttons.appendChild(btnCenterProject);
@@ -3580,11 +4180,11 @@
         const btnMin = document.createElement('button');
         btnMin.className = 'btn btn-secondary';
         btnMin.type = 'button';
-        btnMin.textContent = 'Set current zoom as Min';
+        btnMin.textContent = tr('Set current zoom as Min');
         btnMin.onclick = () => {
           const rounded = Math.round(map.getZoom());
           document.getElementById('zoom_min').value = rounded;
-          showStatus('zoom_min set to ' + rounded);
+          showProjectSettingsStatus(tr('zoom_min set to {zoom}', { zoom: rounded }));
           const currentMaxRaw = document.getElementById('zoom_max').value;
           const parsedMax = Number(currentMaxRaw);
           queueProjectConfigSave(project.id, {
@@ -3600,11 +4200,11 @@
         const btnMax = document.createElement('button');
         btnMax.className = 'btn btn-secondary';
         btnMax.type = 'button';
-        btnMax.textContent = 'Set current zoom as Max';
+        btnMax.textContent = tr('Set current zoom as Max');
         btnMax.onclick = () => {
           const rounded = Math.round(map.getZoom());
           document.getElementById('zoom_max').value = rounded;
-          showStatus('zoom_max set to ' + rounded);
+          showProjectSettingsStatus(tr('zoom_max set to {zoom}', { zoom: rounded }));
           const currentMinRaw = document.getElementById('zoom_min').value;
           const parsedMin = Number(currentMinRaw);
           queueProjectConfigSave(project.id, {
@@ -3620,12 +4220,12 @@
         const btnClear = document.createElement('button');
         btnClear.className = 'btn';
         btnClear.type = 'button';
-        btnClear.textContent = 'Clear extent';
+        btnClear.textContent = tr('Clear extent');
         btnClear.onclick = () => {
           state.extent = null;
           drawnItems.clearLayers();
           updateInfo();
-          showStatus('Extent cleared.');
+          showProjectSettingsStatus(tr('Extent removed'));
           queueProjectConfigSave(project.id, buildExtentPatch(project.id, null));
         };
         buttons.appendChild(btnClear);
@@ -3633,15 +4233,58 @@
         updateInfo();
       }
 
-      // Helper global para mostrar estado
-      function showStatus(msg, isError = false) {
-        const statusEl = document.getElementById('status');
-        if (!statusEl) return;
-        statusEl.innerHTML = '<div class="status ' + (isError ? 'error' : '') + '">' + String(msg) + '</div>';
+      let statusHideTimer = null;
+
+      function ensureStatusToastHost() {
+        let host = document.getElementById('status_toast_host');
+        if (!host) {
+          host = document.createElement('div');
+          host.id = 'status_toast_host';
+          host.className = 'status-toast-host';
+          host.setAttribute('aria-live', 'polite');
+          host.setAttribute('aria-atomic', 'true');
+          document.body.appendChild(host);
+        }
+        return host;
+      }
+
+      function clearStatus() {
+        const host = document.getElementById('status_toast_host');
+        if (!host) return;
+        host.innerHTML = '';
+        host.classList.remove('is-visible');
+        if (statusHideTimer) {
+          clearTimeout(statusHideTimer);
+          statusHideTimer = null;
+        }
+      }
+
+      // Global helper to show centered Bulma-like notifications.
+      function showStatus(msg, isError = false, autoHideMs = null) {
+        const host = ensureStatusToastHost();
+        host.innerHTML = '';
+        host.classList.add('is-visible');
+
+        const note = document.createElement('div');
+        note.className = 'notification qtiler-toast ' + (isError ? 'is-danger' : 'is-success');
+        note.textContent = String(msg || '');
+        host.appendChild(note);
+
+        if (statusHideTimer) {
+          clearTimeout(statusHideTimer);
+          statusHideTimer = null;
+        }
+        const ttl = Number.isFinite(autoHideMs)
+          ? Math.max(0, autoHideMs)
+          : (isError ? 5600 : 3400);
+        if (ttl > 0) {
+          statusHideTimer = setTimeout(() => {
+            clearStatus();
+          }, ttl);
+        }
       }
 
   const layersEl = document.getElementById('layers');
-  const statusEl = document.getElementById('status');
   const reloadBtn = document.getElementById('reload');
   const uploadBtn = document.getElementById('upload_project_btn');
   const uploadInput = document.getElementById('project_upload_input');
@@ -3655,6 +4298,13 @@
       if (languageSelect && languageSelect.value !== currentLang) {
         languageSelect.value = currentLang;
       }
+      try { reapplyInlineJobSlotsFromCache(); } catch {}
+      try { refreshJobs(); } catch {}
+      try {
+        extentStates.forEach((state, projectId) => {
+          if (state?.batchInfoEl) refreshProjectBatchStatus(projectId);
+        });
+      } catch {}
     });
   }
   const zoomMinInput = document.getElementById('zoom_min');
@@ -3782,11 +4432,11 @@
         document.querySelectorAll('button[data-remote="1"]').forEach(btn => {
           btn.disabled = !active;
           if (active) {
-            btn.title = isAdminUser && !allowChecked ? 'Generate cache (admin override)' : 'Generate cache';
+            btn.title = isAdminUser && !allowChecked ? tr('Generate Tiles (admin override)') : tr('Generate Tiles');
             btn.setAttribute('aria-label', btn.title);
           } else {
-            btn.title = 'Remote layer. Enable "Allow remote" to cache.';
-            btn.setAttribute('aria-label', 'Remote layer. Enable "Allow remote" to cache.');
+            btn.title = tr('Remote layer. Enable "Allow remote" to cache.');
+            btn.setAttribute('aria-label', tr('Remote layer. Enable "Allow remote" to cache.'));
           }
         });
       }
@@ -3823,6 +4473,12 @@
             authEnabled: data.authEnabled === true,
             user: data.user || null
           };
+          // Ensure plugin clients are loaded after we know auth/user state and projects
+          try {
+            await loadPluginClients();
+          } catch (e) {
+            console.warn('loadPluginClients after projects failed:', String(e?.message || e));
+          }
           
           // Fallback for legacy response
           if (Array.isArray(data)) {
@@ -3921,8 +4577,8 @@
         }
         finally {
           loadLayersRunning = false;
-          if (!loadLayersError && statusEl) {
-            statusEl.innerHTML = '';
+          if (!loadLayersError) {
+            clearStatus();
           }
           syncRemoteButtons();
           if (loadLayersQueued) {
@@ -4078,6 +4734,130 @@
         }, timeout);
       }
 
+      function findLayerRowIn(container, layerName, kind = 'layer') {
+        if (!container || !layerName) return null;
+        const targetName = String(layerName);
+        return Array.from(container.querySelectorAll('.layer')).find((node) => {
+          return node?.dataset?.layerKind === kind && node?.dataset?.layerName === targetName;
+        }) || null;
+      }
+
+      function findProjectLayerRow(projectId, layerName, kind = 'layer') {
+        const wrap = findProjectWrap(projectId);
+        if (!wrap) return null;
+        const listEl = wrap.querySelector('.list');
+        return findLayerRowIn(listEl, layerName, kind);
+      }
+
+      function snapshotProjectState(projectId) {
+        const state = getProjectState(projectId);
+        return {
+          projectMeta: state.projectMeta,
+          themes: state.themes,
+          projectLayers: state.projectLayers,
+          layerExtents: state.layerExtents,
+          themeExtents: state.themeExtents,
+          layerExtentUnion: state.layerExtentUnion,
+          projectViewExtent: state.projectViewExtent,
+          defaultMapExtent: state.defaultMapExtent,
+          config: state.config,
+          metaInfoEl: state.metaInfoEl,
+          batchInfoEl: state.batchInfoEl,
+          batchButton: state.batchButton,
+          batchProgressEl: state.batchProgressEl,
+          batchProgressBarEl: state.batchProgressBarEl,
+          batchProgressTextEl: state.batchProgressTextEl,
+          batchAbortBtn: state.batchAbortBtn,
+          lastBatchStatus: state.lastBatchStatus
+        };
+      }
+
+      function restoreProjectState(projectId, snapshot) {
+        if (!snapshot) return;
+        const state = getProjectState(projectId);
+        state.projectMeta = snapshot.projectMeta;
+        state.themes = snapshot.themes;
+        state.projectLayers = snapshot.projectLayers;
+        state.layerExtents = snapshot.layerExtents;
+        state.themeExtents = snapshot.themeExtents;
+        state.layerExtentUnion = snapshot.layerExtentUnion;
+        state.projectViewExtent = snapshot.projectViewExtent;
+        state.defaultMapExtent = snapshot.defaultMapExtent;
+        state.config = snapshot.config;
+        state.metaInfoEl = snapshot.metaInfoEl;
+        state.batchInfoEl = snapshot.batchInfoEl;
+        state.batchButton = snapshot.batchButton;
+        state.batchProgressEl = snapshot.batchProgressEl;
+        state.batchProgressBarEl = snapshot.batchProgressBarEl;
+        state.batchProgressTextEl = snapshot.batchProgressTextEl;
+        state.batchAbortBtn = snapshot.batchAbortBtn;
+        state.lastBatchStatus = snapshot.lastBatchStatus;
+      }
+
+      async function reloadLayerRow(btn, project, layerName) {
+        if (!btn || !project?.id || !layerName) return;
+        let stateSnapshot = null;
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        btn.title = tr('Reloading layer: {layer}', { layer: layerName });
+        btn.setAttribute('aria-busy', 'true');
+
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/layers');
+          if (res.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
+          const text = await res.text();
+          if (!res.ok) {
+            throw new Error(tr('Failed to load layers: HTTP {status}', { status: res.status }) + ' · ' + text);
+          }
+
+          const payload = JSON.parse(text);
+          const layers = Array.isArray(payload) ? payload : (Array.isArray(payload?.layers) ? payload.layers : []);
+          const targetLayer = layers.find((entry) => entry && entry.name === layerName);
+          if (!targetLayer) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+          stateSnapshot = snapshotProjectState(project.id);
+          const tempTarget = document.createElement('div');
+          await renderProjectLayers(project, { project: payload?.project || null, layers: [targetLayer], themes: [] }, tempTarget, null, {
+            forceConfigReload: true,
+            clearProjectInlineSlots: false,
+            skipProjectChrome: true
+          });
+          const replacementRow = findLayerRowIn(tempTarget, layerName, 'layer');
+          restoreProjectState(project.id, stateSnapshot);
+          if (!replacementRow) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+
+          const currentRow = findProjectLayerRow(project.id, layerName, 'layer');
+          if (!currentRow) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+          currentRow.replaceWith(replacementRow);
+          showStatus(tr('Layer reloaded: {layer}', { layer: layerName }));
+        } catch (err) {
+          showStatus(tr('Failed to reload layer: {error}', { error: err?.message || String(err) }), true);
+          console.error('reloadLayerRow failed', err);
+          scheduleProjectRefresh(project.id, { delayMs: 0, forceConfigReload: true });
+        } finally {
+          if (stateSnapshot) restoreProjectState(project.id, stateSnapshot);
+          restoreButton();
+        }
+      }
+
       function showProjectReplaceDialog(conflictPayload = {}) {
         const lang = String(conflictPayload?.language || currentLang || 'en').toLowerCase();
         const isEs = lang.startsWith('es');
@@ -4222,17 +5002,119 @@
         });
       }
 
+      function showPartialCacheResumeDialog({ targetName, cachedEntry = null } = {}) {
+        const progress = cachedEntry && typeof cachedEntry === 'object' ? (cachedEntry.progress || null) : null;
+        const savedMin = Number.isFinite(Number(progress?.zoom_min)) ? Number(progress.zoom_min)
+          : (Number.isFinite(Number(cachedEntry?.last_zoom_min)) ? Number(cachedEntry.last_zoom_min) : null);
+        const savedMax = Number.isFinite(Number(progress?.zoom_max)) ? Number(progress.zoom_max)
+          : (Number.isFinite(Number(cachedEntry?.last_zoom_max)) ? Number(cachedEntry.last_zoom_max) : null);
+        const zoomHint = savedMin != null && savedMax != null
+          ? tr('Saved progress covers zoom {min}-{max}.', { min: savedMin, max: savedMax })
+          : tr('Saved progress from the aborted cache run is available.');
+
+        return new Promise((resolve) => {
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed';
+          overlay.style.inset = '0';
+          overlay.style.background = 'rgba(2, 8, 23, 0.65)';
+          overlay.style.display = 'flex';
+          overlay.style.alignItems = 'center';
+          overlay.style.justifyContent = 'center';
+          overlay.style.zIndex = '4200';
+          overlay.style.padding = '16px';
+
+          const card = document.createElement('div');
+          card.style.width = 'min(560px, 96vw)';
+          card.style.background = '#0f1729';
+          card.style.border = '1px solid #334766';
+          card.style.borderRadius = '12px';
+          card.style.padding = '16px';
+          card.style.color = '#e6edf7';
+          card.style.boxShadow = '0 20px 50px rgba(0,0,0,.45)';
+          overlay.appendChild(card);
+
+          const title = document.createElement('h3');
+          title.textContent = tr('Partial cache detected');
+          title.style.margin = '0 0 8px 0';
+          card.appendChild(title);
+
+          const message = document.createElement('p');
+          message.textContent = tr('Cache for {target} was not finished. Do you want to continue from the saved progress or replace it and start over?', { target: targetName || '' });
+          message.style.margin = '0 0 6px 0';
+          message.style.lineHeight = '1.45';
+          card.appendChild(message);
+
+          const hint = document.createElement('p');
+          hint.textContent = zoomHint;
+          hint.style.margin = '0 0 14px 0';
+          hint.style.color = '#9fb0ca';
+          hint.style.fontSize = '0.92rem';
+          card.appendChild(hint);
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.gap = '10px';
+          actions.style.justifyContent = 'flex-end';
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.type = 'button';
+          cancelBtn.textContent = tr('Cancel');
+          cancelBtn.className = 'secondary';
+
+          const resumeBtn = document.createElement('button');
+          resumeBtn.type = 'button';
+          resumeBtn.textContent = tr('Continue existing cache');
+          resumeBtn.className = 'secondary';
+
+          const replaceBtn = document.createElement('button');
+          replaceBtn.type = 'button';
+          replaceBtn.textContent = tr('Replace existing cache');
+          replaceBtn.className = 'primary';
+
+          const cleanup = () => {
+            try {
+              window.removeEventListener('keydown', onKey);
+              overlay.remove();
+            } catch {}
+          };
+
+          const done = (result) => {
+            cleanup();
+            resolve(result);
+          };
+
+          const onKey = (ev) => {
+            if (ev.key === 'Escape') done(null);
+          };
+
+          window.addEventListener('keydown', onKey);
+          overlay.addEventListener('click', (ev) => {
+            if (ev.target === overlay) done(null);
+          });
+          cancelBtn.addEventListener('click', () => done(null));
+          resumeBtn.addEventListener('click', () => done('resume'));
+          replaceBtn.addEventListener('click', () => done('replace'));
+
+          actions.appendChild(cancelBtn);
+          actions.appendChild(resumeBtn);
+          actions.appendChild(replaceBtn);
+          card.appendChild(actions);
+          document.body.appendChild(overlay);
+          resumeBtn.focus();
+        });
+      }
+
       async function uploadProjectFile(btn, file) {
         if (!file) return;
         const originalDisabled = btn.disabled;
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Uploading…';
+        btn.textContent = tr('Uploading…');
         const ext = String(file.name || '').toLowerCase().split('.').pop();
         if (ext === 'zip') {
-          showStatus('Uploading bundle (.zip): ' + file.name + ' (must contain exactly one .qgz/.qgs project)');
+          showStatus(tr('Uploading bundle (.zip): {file}', { file: file.name }) + ' · ' + tr('Upload bundle requirement'));
         } else {
-          showStatus('Uploading project: ' + file.name);
+          showStatus(tr('Uploading project: {file}', { file: file.name }));
         }
         try {
           const submitUpload = async (options = null) => {
@@ -4259,8 +5141,7 @@
           if (!res.ok && res.status === 409 && (data?.code === 'PROJECT_ALREADY_EXISTS' || data?.error === 'project_already_exists')) {
             const decision = await showProjectReplaceDialog(data || {});
             if (!decision) {
-              const lang = String(data?.language || currentLang || 'en').toLowerCase();
-              showStatus(lang.startsWith('es') ? 'Subida cancelada por el usuario.' : (lang.startsWith('sv') ? 'Uppladdning avbruten av anvandaren.' : 'Upload cancelled by user.'));
+              showStatus(tr('Upload cancelled by user.'));
               return;
             }
 
@@ -4276,14 +5157,14 @@
             } else if (data?.error === 'project_already_exists') {
               detail = data?.message || 'Project already exists.';
             }
-            showStatus('Upload failed: ' + detail, true);
+            showStatus(tr('Upload failed: {error}', { error: detail }), true);
             return;
           }
           const projectId = data?.id || null;
           if (projectId) {
             extentStates.delete(projectId);
           }
-          showStatus('Project uploaded: ' + (projectId || file.name));
+          showStatus(tr('Project uploaded: {project}', { project: projectId || file.name }));
           try {
             if (projectId) {
               await ensureProjectBlock(projectId, {
@@ -4305,7 +5186,7 @@
             }
           }
         } catch (err) {
-          showStatus('Network error: ' + err, true);
+          showStatus(tr('Network error: {error}', { error: err }), true);
         } finally {
           btn.disabled = originalDisabled;
           btn.textContent = originalText;
@@ -4314,9 +5195,264 @@
 
       // Gestión de jobs activos (persistencia visual tras recarga)
       const jobMonitors = new Map(); // id -> {timer, inner, txt}
+      const abortConfirmedAnnouncements = new Set();
+      const inlineJobSlots = new Map(); // key -> { projectId, targetMode, targetName, button, host, stopBtn, progressEl, progressBarEl, progressTextEl, currentJobId }
+      const inlineJobMonitors = new Map(); // key -> { jobId, timer }
+      const latestInlineJobs = new Map(); // key -> running job snapshot
+
+      function makeInlineJobSlotKey(projectId, targetMode, targetName) {
+        return `${projectId || ''}:${targetMode || 'layer'}:${targetName || ''}`;
+      }
+
+      function isInlineManagedGenerateJob(job) {
+        if (!job || !job.project || !job.targetName) return false;
+        const targetMode = job.targetMode || 'layer';
+        return targetMode === 'layer' || targetMode === 'theme';
+      }
+
+      function parseJobProgress(stdout) {
+        if (!stdout) return null;
+        const lines = stdout.split(/\r?\n/).filter(Boolean);
+        let last = null;
+        for (const line of lines) {
+          const start = line.indexOf('{');
+          const end = line.lastIndexOf('}');
+          if (start !== -1 && end !== -1 && end > start) {
+            try {
+              const obj = JSON.parse(line.slice(start, end + 1));
+              if (obj && (obj.progress || obj.status || obj.debug || typeof obj.percent === 'number')) last = obj;
+            } catch {}
+          }
+        }
+        return last;
+      }
+
+      function restoreInlineSlotButton(slot) {
+        if (!slot?.button) return;
+        const btn = slot.button;
+        btn.disabled = false;
+        btn.innerHTML = btn.dataset.iconHtml || btn.innerHTML;
+        const originalTitle = btn.dataset.inlineOriginalTitle;
+        if (originalTitle) btn.title = originalTitle;
+        btn.removeAttribute('aria-busy');
+        delete btn.dataset.inlineBusy;
+      }
+
+      function clearInlineJobMonitor(slotKey) {
+        const monitor = inlineJobMonitors.get(slotKey);
+        if (monitor?.timer) {
+          try { clearInterval(monitor.timer); } catch {}
+        }
+        inlineJobMonitors.delete(slotKey);
+      }
+
+      function clearInlineJobUi(slot, { restoreButton = true, clearMonitor = true } = {}) {
+        if (!slot) return;
+        if (clearMonitor) clearInlineJobMonitor(slot.key);
+        try { slot.stopBtn?.remove(); } catch {}
+        try { slot.progressEl?.remove(); } catch {}
+        slot.stopBtn = null;
+        slot.progressEl = null;
+        slot.progressBarEl = null;
+        slot.progressTextEl = null;
+        slot.currentJobId = null;
+        slot.lastPercent = null;
+        slot.lastStatus = null;
+        if (restoreButton) restoreInlineSlotButton(slot);
+      }
+
+      function ensureInlineJobUi(slot, jobId) {
+        if (!slot?.host || !slot?.button) return null;
+        if (!slot.button.dataset.inlineOriginalTitle) {
+          slot.button.dataset.inlineOriginalTitle = slot.button.title || '';
+        }
+        slot.button.disabled = true;
+        slot.button.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        slot.button.setAttribute('aria-busy', 'true');
+        slot.button.dataset.inlineBusy = '1';
+        slot.currentJobId = jobId;
+
+        if (!slot.progressEl || !slot.progressEl.isConnected) {
+          const progressEl = document.createElement('span');
+          progressEl.className = 'progress-pill';
+          progressEl.dataset.inlineJob = slot.key;
+          const bar = document.createElement('span');
+          bar.className = 'progress-bar';
+          const barInner = document.createElement('i');
+          bar.appendChild(barInner);
+          const txt = document.createElement('span');
+          txt.textContent = '...';
+          progressEl.appendChild(bar);
+          progressEl.appendChild(txt);
+          slot.host.appendChild(progressEl);
+          slot.progressEl = progressEl;
+          slot.progressBarEl = barInner;
+          slot.progressTextEl = txt;
+        }
+
+        if (!slot.stopBtn || !slot.stopBtn.isConnected) {
+          const stopBtn = document.createElement('button');
+          stopBtn.type = 'button';
+          stopBtn.className = 'btn btn-danger';
+          stopBtn.dataset.inlineJob = slot.key;
+          slot.host.appendChild(stopBtn);
+          slot.stopBtn = stopBtn;
+        }
+
+        slot.stopBtn.textContent = tr('Abort');
+        slot.stopBtn.disabled = false;
+        slot.stopBtn.onclick = async () => {
+          slot.stopBtn.disabled = true;
+          showStatus(tr('Aborting job {id}', { id: jobId }));
+          try {
+            const r = await fetch('/generate-cache/' + encodeURIComponent(jobId), { method: 'DELETE' });
+            const resjson = await r.json().catch(() => null);
+            if (!r.ok) {
+              showStatus(tr('Abort failed: {error}', { error: resjson?.error || r.statusText }), true);
+              slot.stopBtn.disabled = false;
+            }
+          } catch (err) {
+            showStatus(tr('Network error while aborting: {error}', { error: err }), true);
+            slot.stopBtn.disabled = false;
+          }
+        };
+
+        return slot;
+      }
+
+      function updateInlineJobUi(slot, { percent = null, status = null } = {}) {
+        if (!slot?.progressBarEl || !slot?.progressTextEl) return;
+        const pct = Number.isFinite(Number(percent)) ? Math.max(0, Math.min(100, Number(percent))) : null;
+        slot.lastPercent = pct;
+        slot.lastStatus = status || null;
+        if (pct != null) slot.progressBarEl.style.width = pct + '%';
+        const statusText = status ? formatJobStatusLabel(status) : '';
+        slot.progressTextEl.textContent = (pct != null ? (pct + '%') : '...') + (statusText ? (' · ' + statusText) : '');
+      }
+
+      function startInlineJobMonitor(slot, jobId, { onDone } = {}) {
+        if (!slot?.key || !jobId) return;
+        const existing = inlineJobMonitors.get(slot.key);
+        if (existing?.jobId === jobId) {
+          ensureInlineJobUi(slot, jobId);
+          updateInlineJobUi(slot, { percent: slot.lastPercent, status: slot.lastStatus });
+          return;
+        }
+        if (existing) clearInlineJobMonitor(slot.key);
+        ensureInlineJobUi(slot, jobId);
+        const timer = setInterval(async () => {
+          try {
+            if (!slot.host?.isConnected || !slot.button?.isConnected) {
+              clearInlineJobMonitor(slot.key);
+              return;
+            }
+            const r = await fetch('/generate-cache/' + encodeURIComponent(jobId) + '?tail=50000');
+            if (!r.ok) {
+              if (r.status === 404) {
+                latestInlineJobs.delete(slot.key);
+                clearInlineJobUi(slot, { restoreButton: true, clearMonitor: true });
+                if (typeof onDone === 'function') onDone('missing');
+              }
+              return;
+            }
+            const job = await r.json().catch(() => null);
+            const last = parseJobProgress(job?.stdout || '');
+            const pct = last?.percent != null ? Number(last.percent) : (job?.status === 'completed' ? 100 : null);
+            updateInlineJobUi(slot, { percent: pct, status: job?.status || null });
+            if (job?.status && ['completed', 'error', 'aborted'].includes(job.status)) {
+              if (job.status === 'aborted' && !abortConfirmedAnnouncements.has(String(jobId))) {
+                abortConfirmedAnnouncements.add(String(jobId));
+                showStatus(tr('Abort confirmed by worker for job {id}', { id: jobId }));
+              }
+              latestInlineJobs.delete(slot.key);
+              clearInlineJobUi(slot, { restoreButton: true, clearMonitor: true });
+              if (typeof onDone === 'function') onDone(job.status);
+            }
+          } catch {}
+        }, 1200);
+        inlineJobMonitors.set(slot.key, { jobId, timer });
+      }
+
+      function clearInlineJobSlotsForProject(projectId) {
+        const prefix = `${projectId || ''}:`;
+        Array.from(inlineJobSlots.entries()).forEach(([key, slot]) => {
+          if (!key.startsWith(prefix)) return;
+          clearInlineJobUi(slot, { restoreButton: false, clearMonitor: true });
+          inlineJobSlots.delete(key);
+        });
+      }
+
+      function registerInlineJobSlot({ projectId, targetMode = 'layer', targetName, button, host }) {
+        if (!projectId || !targetName || !button || !host) return null;
+        const key = makeInlineJobSlotKey(projectId, targetMode, targetName);
+        const prev = inlineJobSlots.get(key);
+        if (prev && prev.button !== button) {
+          clearInlineJobUi(prev, { restoreButton: false, clearMonitor: true });
+        }
+        const slot = {
+          key,
+          projectId,
+          targetMode,
+          targetName,
+          button,
+          host,
+          stopBtn: null,
+          progressEl: null,
+          progressBarEl: null,
+          progressTextEl: null,
+          currentJobId: null,
+          lastPercent: null,
+          lastStatus: null
+        };
+        inlineJobSlots.set(key, slot);
+        const runningJob = latestInlineJobs.get(key);
+        if (runningJob?.id) {
+          startInlineJobMonitor(slot, runningJob.id, {
+            onDone: () => scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true })
+          });
+        }
+        return slot;
+      }
+
+      function syncInlineJobSlots(list) {
+        const nextJobs = new Map();
+        (Array.isArray(list) ? list : []).forEach((job) => {
+          if (!isInlineManagedGenerateJob(job)) return;
+          nextJobs.set(makeInlineJobSlotKey(job.project, job.targetMode || 'layer', job.targetName), job);
+        });
+
+        nextJobs.forEach((job, key) => latestInlineJobs.set(key, job));
+
+        inlineJobSlots.forEach((slot, key) => {
+          const job = nextJobs.get(key);
+          if (!job?.id) {
+            // Keep the inline monitor alive when /generate-cache/running temporarily omits
+            // an active job; the per-job endpoint remains the source of truth.
+            return;
+          }
+          startInlineJobMonitor(slot, job.id, {
+            onDone: () => scheduleProjectRefresh(slot.projectId, { delayMs: 600, forceConfigReload: true })
+          });
+        });
+
+        Array.from(latestInlineJobs.keys()).forEach((key) => {
+          if (nextJobs.has(key)) return;
+          const slot = inlineJobSlots.get(key);
+          const monitor = inlineJobMonitors.get(key);
+          if (slot?.currentJobId || monitor?.jobId) return;
+          latestInlineJobs.delete(key);
+        });
+      }
+
+      function reapplyInlineJobSlotsFromCache() {
+        if (!latestInlineJobs.size) return;
+        syncInlineJobSlots(Array.from(latestInlineJobs.values()));
+      }
+
       function renderJobsList(list, onDemandStatus = null){
         jobsList.innerHTML = '';
-        const hasGenerateJobs = Array.isArray(list) && list.length > 0;
+        const visibleJobs = Array.isArray(list) ? list.filter((job) => !isInlineManagedGenerateJob(job)) : [];
+        const hasGenerateJobs = visibleJobs.length > 0;
         const od = onDemandStatus && typeof onDemandStatus === 'object' ? onDemandStatus : null;
         const odActive = od && Number.isFinite(Number(od.active)) ? Number(od.active) : 0;
         const odQueued = od && Number.isFinite(Number(od.queued)) ? Number(od.queued) : 0;
@@ -4341,12 +5477,12 @@
           const info = document.createElement('div');
           info.className = 'job-info';
           const bits = [];
-          bits.push('active ' + odActive);
-          bits.push('queued ' + odQueued);
-          if (odPoolQueued) bits.push('pool ' + odPoolQueued);
-          if (odPausedMs > 0) bits.push('paused');
-          info.innerHTML = `<div><strong>On-demand tiles</strong> <span class="info">· ${bits.join(' · ')}</span></div>` +
-                           `<div class="info">(viewer / WMTS on-demand)</div>`;
+          bits.push(tr('Active: {count}', { count: odActive }));
+          bits.push(tr('Queued: {count}', { count: odQueued }));
+          if (odPoolQueued) bits.push(tr('Pool: {count}', { count: odPoolQueued }));
+          if (odPausedMs > 0) bits.push(tr('Paused'));
+          info.innerHTML = `<div><strong>${escapeHtml(tr('On-demand tiles'))}</strong> <span class="info">· ${bits.map((bit) => escapeHtml(bit)).join(' · ')}</span></div>` +
+                           `<div class="info">(${escapeHtml(tr('viewer / WMTS on-demand'))})</div>`;
 
           const right = document.createElement('div');
           right.style.display = 'flex';
@@ -4367,19 +5503,19 @@
 
           const abortBtn = document.createElement('button');
           abortBtn.className = 'btn btn-danger';
-          abortBtn.textContent = 'Abort';
+          abortBtn.textContent = tr('Abort');
           abortBtn.onclick = async () => {
             abortBtn.disabled = true;
-            showStatus('Aborting on-demand rendering…');
+            showStatus(tr('Aborting on-demand rendering…'));
             try {
               const r = await fetch('/on-demand/abort-all', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
               });
-              if (!r.ok) showStatus('No se pudo abortar on-demand', true);
+              if (!r.ok) showStatus(tr('Failed to abort on-demand rendering'), true);
             } catch (e) {
-              showStatus('Network error while aborting on-demand: ' + e, true);
+              showStatus(tr('Network error while aborting on-demand: {error}', { error: e }), true);
             } finally {
               abortBtn.disabled = true;
             }
@@ -4393,7 +5529,7 @@
         }
 
         const seen = new Set();
-        list.forEach(j => {
+        visibleJobs.forEach(j => {
           if (!j || !j.id) return;
           seen.add(j.id);
           const existing = jobMonitors.get(j.id);
@@ -4439,15 +5575,15 @@
 
           const abortBtn = document.createElement('button');
           abortBtn.className = 'btn btn-danger';
-          abortBtn.textContent = 'Abort';
+          abortBtn.textContent = tr('Abort');
           abortBtn.onclick = async () => {
             abortBtn.disabled = true;
-            showStatus('Aborting job ' + j.id);
+            showStatus(tr('Aborting job {id}', { id: j.id }));
             try {
               const r = await fetch('/generate-cache/' + encodeURIComponent(j.id), { method: 'DELETE' });
-              if (!r.ok) showStatus('No se pudo abortar job', true);
+              if (!r.ok) showStatus(tr('Failed to abort job'), true);
             } catch (e) {
-              showStatus('Network error while aborting: ' + e, true);
+              showStatus(tr('Network error while aborting: {error}', { error: e }), true);
             }
           };
 
@@ -4490,8 +5626,12 @@
               if (last && typeof last.percent === 'number') pct = Math.max(0, Math.min(100, last.percent));
               if (status === 'completed' && (pct == null || pct < 100)) pct = 100;
               if (pct != null) inner.style.width = pct + '%';
-              txt.textContent = (pct != null ? (pct + '%') : '...') + (status ? (' · ' + status) : '');
+              txt.textContent = (pct != null ? (pct + '%') : '...') + (status ? (' · ' + formatJobStatusLabel(status)) : '');
               if (status && ['completed', 'error', 'aborted'].includes(status)) {
+                if (status === 'aborted' && !abortConfirmedAnnouncements.has(String(j.id))) {
+                  abortConfirmedAnnouncements.add(String(j.id));
+                  showStatus(tr('Abort confirmed by worker for job {id}', { id: j.id }));
+                }
                 clearInterval(timer);
                 jobMonitors.delete(j.id);
                 setTimeout(() => {
@@ -4548,18 +5688,21 @@
           }
           const list = rJobs && rJobs.ok ? await rJobs.json() : [];
           const od = rOnDemand && rOnDemand.ok ? await rOnDemand.json().catch(()=>null) : null;
+          syncInlineJobSlots(list);
           renderJobsList(list, od);
         }catch{}
       }
 
-  async function renderProjectLayers(project, payload, targetEl, wrapEl, { forceConfigReload = false } = {}) {
+  async function renderProjectLayers(project, payload, targetEl, wrapEl, { forceConfigReload = false, clearProjectInlineSlots = true, skipProjectChrome = false } = {}) {
         const projectMeta = (!Array.isArray(payload) && payload && typeof payload === 'object' && Array.isArray(payload.layers)) ? payload.project : null;
   const layers = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.layers) ? payload.layers : []);
   const themes = payload && Array.isArray(payload.themes) ? payload.themes : [];
         const parent = wrapEl || targetEl.parentElement;
     const state = getProjectState(project.id);
+      if (clearProjectInlineSlots) clearInlineJobSlotsForProject(project.id);
     state.projectMeta = projectMeta;
     state.themes = themes;
+    state.projectLayers = layers;
     state.layerExtents = new Map();
     state.themeExtents = new Map();
     state.layerExtentUnion = null;
@@ -4610,14 +5753,20 @@
           state.defaultMapExtent = null;
         }
 
-        if (parent) {
+        if (parent && !skipProjectChrome) {
           const existingMeta = parent.querySelector('[data-role="project-meta"]');
           if (existingMeta) existingMeta.remove();
+          const existingSettingsHost = parent.querySelector('[data-role="project-settings-host"]');
+          if (existingSettingsHost) existingSettingsHost.remove();
           state.metaInfoEl = null;
           const existingBatch = parent.querySelector('[data-role="project-batch"]');
           if (existingBatch) existingBatch.remove();
           state.batchInfoEl = null;
           state.batchButton = null;
+          state.batchProgressEl = null;
+          state.batchProgressBarEl = null;
+          state.batchProgressTextEl = null;
+          state.batchAbortBtn = null;
           state.lastBatchStatus = null;
           setProjectBatchPolling(project.id, false);
           const existingExtent = parent.querySelector('[data-role="project-extent"]');
@@ -4651,60 +5800,97 @@
           refreshProjectMetaInfo(project, projectMeta, state.config);
 
           const controlsBox = document.createElement('div');
-          controlsBox.style.display = 'flex';
-          controlsBox.style.gap = '8px';
+          controlsBox.className = 'project-service-boxes';
 
           // isAdmin and canView already defined at top of function - no need to redefine
 
           if (canView) {
+            // --- Raster group ---
+            const rasterGroup = document.createElement('div');
+            rasterGroup.className = 'project-service-group';
+            const rasterLabel = document.createElement('span');
+            rasterLabel.className = 'project-service-group__label';
+            rasterLabel.textContent = tr('Raster');
+            rasterLabel.setAttribute('data-i18n', 'Raster');
+            rasterGroup.appendChild(rasterLabel);
+
             const copyWmtsBtn = document.createElement('button');
             copyWmtsBtn.className = 'btn btn-outline';
             copyWmtsBtn.type = 'button';
-            copyWmtsBtn.textContent = 'Copy WMTS URL';
+            copyWmtsBtn.textContent = tr('Copy WMTS URL');
+            copyWmtsBtn.setAttribute('data-i18n', 'Copy WMTS URL');
             copyWmtsBtn.addEventListener('click', () => {
-              const wmtsUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              const wmtsUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`, project);
               navigator.clipboard.writeText(wmtsUrl).then(() => {
                 showStatus('WMTS capabilities URL copied: ' + wmtsUrl);
               }).catch(err => {
                 showStatus('Copy failed: ' + String(err), true);
               });
             });
-            controlsBox.appendChild(copyWmtsBtn);
+            rasterGroup.appendChild(copyWmtsBtn);
 
             const copyWmsBtn = document.createElement('button');
             copyWmsBtn.className = 'btn btn-outline';
             copyWmsBtn.type = 'button';
             copyWmsBtn.textContent = tr('Copy WMS URL');
+            copyWmsBtn.setAttribute('data-i18n', 'Copy WMS URL');
             copyWmsBtn.addEventListener('click', () => {
-              const wmsUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              const wmsUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`, project);
               navigator.clipboard.writeText(wmsUrl).then(() => {
                 showStatus(tr('WMS URL copied to clipboard'));
               }).catch(err => {
                 showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
             });
-            controlsBox.appendChild(copyWmsBtn);
+            rasterGroup.appendChild(copyWmsBtn);
+
+            // --- Vector group ---
+            const vectorGroup = document.createElement('div');
+            vectorGroup.className = 'project-service-group';
+            vectorGroup.dataset.role = 'vector-controls';
+            const vectorLabel = document.createElement('span');
+            vectorLabel.className = 'project-service-group__label';
+            vectorLabel.textContent = tr('Vector');
+            vectorLabel.setAttribute('data-i18n', 'Vector');
+            vectorGroup.appendChild(vectorLabel);
 
             const copyWfsBtn = document.createElement('button');
             copyWfsBtn.className = 'btn btn-outline';
             copyWfsBtn.type = 'button';
             copyWfsBtn.textContent = tr('Copy WFS URL');
+            copyWfsBtn.setAttribute('data-i18n', 'Copy WFS URL');
             copyWfsBtn.addEventListener('click', () => {
-              const wfsUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+              const wfsUrl = withApiKey(`${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`, project);
               navigator.clipboard.writeText(wfsUrl).then(() => {
                 showStatus(tr('WFS URL copied to clipboard'));
               }).catch(err => {
                 showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
             });
-            if (hasVectorLayers) controlsBox.appendChild(copyWfsBtn);
+            if (hasVectorLayers) {
+              vectorGroup.appendChild(copyWfsBtn);
+            } else {
+              const noVector = document.createElement('span');
+              noVector.className = 'meta';
+              noVector.textContent = tr('No vector layers in this project');
+              vectorGroup.appendChild(noVector);
+            }
+
+            // Keep stable vertical order: Vector on top, Raster below.
+            controlsBox.appendChild(vectorGroup);
+            controlsBox.appendChild(rasterGroup);
           }
+
+          metaRow.appendChild(controlsBox);
+
+          parent.insertBefore(metaRow, targetEl);
+          parent.insertBefore(extentContainer, targetEl);
 
           const extentToggle = document.createElement('button');
           extentToggle.className = 'btn btn-outline';
           extentToggle.type = 'button';
           const updateToggleLabel = () => {
-            extentToggle.textContent = extentContainer.dataset.open === '1' ? 'Hide extent map' : 'Show extent map';
+            extentToggle.textContent = extentContainer.dataset.open === '1' ? tr('Hide extent map') : tr('Show extent map');
           };
           extentToggle.onclick = () => {
             toggleProjectExtentPanel(project, projectMeta, extentContainer)
@@ -4712,11 +5898,6 @@
               .finally(updateToggleLabel);
           };
           updateToggleLabel();
-          controlsBox.appendChild(extentToggle);
-          metaRow.appendChild(controlsBox);
-
-          parent.insertBefore(metaRow, targetEl);
-          parent.insertBefore(extentContainer, targetEl);
 
           if (isAdmin) {
             const batchRow = document.createElement('div');
@@ -4728,22 +5909,72 @@
             batchRow.style.margin = '4px 0 10px 0';
             const batchInfo = document.createElement('div');
             batchInfo.className = 'meta';
-            batchInfo.textContent = 'Project cache idle';
+            batchInfo.textContent = tr('Project cache idle');
             const batchActions = document.createElement('div');
             batchActions.style.display = 'flex';
+            batchActions.style.alignItems = 'center';
             batchActions.style.gap = '8px';
-            const runAllBtn = document.createElement('button');
-            runAllBtn.className = 'btn btn-primary';
-            runAllBtn.type = 'button';
-            runAllBtn.textContent = tr('Generate cache');
-            runAllBtn.addEventListener('click', () => runProjectCacheFromDialog(project, layers, runAllBtn));
-            batchActions.appendChild(runAllBtn);
+
+            const batchProgress = document.createElement('span');
+            batchProgress.className = 'progress-pill';
+            batchProgress.style.display = 'none';
+            const batchProgressBar = document.createElement('span');
+            batchProgressBar.className = 'progress-bar';
+            const batchProgressBarInner = document.createElement('i');
+            batchProgressBar.appendChild(batchProgressBarInner);
+            const batchProgressText = document.createElement('span');
+            batchProgress.appendChild(batchProgressBar);
+            batchProgress.appendChild(batchProgressText);
+
+            const batchAbortBtn = document.createElement('button');
+            batchAbortBtn.className = 'btn btn-danger';
+            batchAbortBtn.type = 'button';
+            batchAbortBtn.textContent = tr('Abort');
+            batchAbortBtn.style.display = 'none';
+            batchAbortBtn.addEventListener('click', async () => {
+              batchAbortBtn.disabled = true;
+              batchAbortBtn.textContent = tr('Aborting…');
+              showStatus(tr('Aborting project cache…'));
+              try {
+                const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/cache/project', { method: 'DELETE' });
+                const data = await res.json().catch(() => null);
+                if (!res.ok) {
+                  const detail = data?.details || data?.error || res.statusText;
+                  showStatus(tr('Failed to abort project cache: {error}', { error: detail }), true);
+                  batchAbortBtn.disabled = false;
+                  batchAbortBtn.textContent = tr('Abort');
+                  return;
+                }
+                showStatus(tr('Project cache abort requested.'));
+                refreshProjectBatchStatus(project.id);
+              } catch (err) {
+                showStatus(tr('Failed to abort project cache: {error}', { error: err }), true);
+                batchAbortBtn.disabled = false;
+                batchAbortBtn.textContent = tr('Abort');
+              }
+            });
+
+            batchActions.appendChild(batchProgress);
+            batchActions.appendChild(batchAbortBtn);
+            batchActions.appendChild(extentToggle);
             batchRow.appendChild(batchInfo);
             batchRow.appendChild(batchActions);
+            // Insert the project-wide `Generate Tiles` button in its own batchRow
+            // (do not inject into plugin-specific action containers).
             parent.insertBefore(batchRow, targetEl);
             state.batchInfoEl = batchInfo;
-            state.batchButton = runAllBtn;
+            state.batchButton = null;
+            state.batchProgressEl = batchProgress;
+            state.batchProgressBarEl = batchProgressBarInner;
+            state.batchProgressTextEl = batchProgressText;
+            state.batchAbortBtn = batchAbortBtn;
             refreshProjectBatchStatus(project.id);
+          } else if (canView) {
+            // Non-admin: show extent toggle in its own row
+            const extentRow = document.createElement('div');
+            extentRow.style.cssText = 'display:flex;gap:8px;margin:4px 0 10px 0';
+            extentRow.appendChild(extentToggle);
+            parent.insertBefore(extentRow, targetEl);
           }
 
           if (state.open) {
@@ -4820,6 +6051,8 @@
           try {
           const d = document.createElement('div');
           d.className = 'layer';
+          d.dataset.layerKind = 'layer';
+          d.dataset.layerName = l.name;
           const info = document.createElement('div');
           info.className = 'layer-info';
           const provider = (l.provider || '').toLowerCase();
@@ -4833,6 +6066,11 @@
           const tileCount = Number.isFinite(Number(tileCountRaw)) ? Number(tileCountRaw) : 0;
           const hasTilesFlag = cachedEntry ? (cachedEntry.has_tiles ?? cachedEntry.hasTiles) : null;
           const hasCachedTiles = hasCacheEntry && (tileCount > 0 || hasTilesFlag === true);
+          const cacheStatus = String(cachedEntry?.status || '').toLowerCase();
+          const partialTileCountRaw = cachedEntry ? (cachedEntry.progress?.totalGenerated ?? cachedEntry.generated_tiles ?? cachedEntry.generatedTiles) : null;
+          const partialTileCount = Number.isFinite(Number(partialTileCountRaw)) ? Number(partialTileCountRaw) : 0;
+          const hasRecoverablePartialCache = hasCacheEntry && (tileCount > 0 || hasTilesFlag === true || partialTileCount > 0);
+          const hasPartialCache = hasRecoverablePartialCache && (cachedEntry?.partial === true || ['aborted', 'error', 'running'].includes(cacheStatus));
           const cachePresence = cachePresenceByLayer.get(l.name) || null;
           const hasWmsCache = !!cachePresence?.wms;
           const hasVectorTilesCache = !!cachePresence?.vectortiles || hasVectorTilesProjectCache;
@@ -4853,11 +6091,14 @@
             `<span>${escapeHtml(l.name)}</span>`
           ];
           if (badges.length) titlePieces.push(badges.join(' '));
-          const metaSegments = [];
-          if (l.crs) metaSegments.push(l.crs);
-          if (provider) metaSegments.push(provider);
-          if (l.extent) metaSegments.push('extent: ' + JSON.stringify(l.extent));
-          if (scheduleSummary) metaSegments.push('Auto: ' + scheduleSummary);
+          const metaPrimary = [];
+          const metaSecondary = [];
+          if (l.layer_crs) metaPrimary.push('Layer CRS: ' + l.layer_crs);
+          if (l.tile_crs || l.crs) metaPrimary.push('Tile CRS: ' + (l.tile_crs || l.crs));
+          if (provider) metaPrimary.push(provider);
+          if (Array.isArray(l.extent) && l.extent.length === 4) metaSecondary.push('Layer extent: ' + JSON.stringify(l.extent));
+          if (Array.isArray(l.extent_wgs84) && l.extent_wgs84.length === 4) metaSecondary.push('WGS84 extent: ' + JSON.stringify(l.extent_wgs84));
+          if (scheduleSummary) metaSecondary.push('Auto: ' + scheduleSummary);
           if (scheduleObj) {
             const history = Array.isArray(scheduleObj.history) ? scheduleObj.history : [];
             const lastHistory = history.length ? history[history.length - 1] : null;
@@ -4865,13 +6106,13 @@
             const lastRunLabel = formatDateTimeLocal(lastRunSource);
             const lastStatusToken = scheduleObj.lastResult || (lastHistory && lastHistory.status) || null;
             if (lastRunLabel && lastStatusToken) {
-              metaSegments.push('Auto last: ' + formatStatusToken(lastStatusToken) + ' @ ' + lastRunLabel);
+              metaSecondary.push('Auto last: ' + formatStatusToken(lastStatusToken) + ' @ ' + lastRunLabel);
             } else if (lastRunLabel) {
-              metaSegments.push('Auto last: ' + lastRunLabel);
+              metaSecondary.push('Auto last: ' + lastRunLabel);
             }
             const nextRunLabel = formatDateTimeLocal(scheduleObj.nextRunAt);
             if (nextRunLabel) {
-              metaSegments.push('Auto next: ' + nextRunLabel);
+              metaSecondary.push('Auto next: ' + nextRunLabel);
             }
           }
           if (cachedEntry) {
@@ -4880,16 +6121,25 @@
             const cachedMin = Number.isFinite(cachedMinVal) ? Math.round(cachedMinVal) : null;
             const cachedMax = Number.isFinite(cachedMaxVal) ? Math.round(cachedMaxVal) : null;
             const coverageLabel = formatZoomRangeLabel(cachedMin, cachedMax);
-            if (coverageLabel && hasCachedTiles) metaSegments.push('Cached ' + coverageLabel);
+            if (coverageLabel && hasCachedTiles) metaSecondary.push('Cached ' + coverageLabel);
           }
-          info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` +
-                           '<div class="meta">' + metaSegments.map(escapeHtml).join(' · ') + '</div>';
+          const metaLines = [];
+          if (metaPrimary.length) {
+            metaLines.push('<div class="meta layer-meta-line">' + metaPrimary.map(escapeHtml).join(' · ') + '</div>');
+          }
+          if (metaSecondary.length) {
+            metaLines.push('<div class="meta layer-meta-line">' + metaSecondary.map(escapeHtml).join(' · ') + '</div>');
+          }
+          info.innerHTML = `<div class="layer-title">${titlePieces.join(' ')}</div>` + metaLines.join('');
 
           const tileTemplate = `/wmts/${encodeURIComponent(project.id)}/${encodeURIComponent(l.name)}/{z}/{x}/{y}.png`;
-          const xyzTemplateAbsolute = `${window.location.origin}${tileTemplate}`;
-          const layerCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`;
+          const xyzTemplateAbsolute = withApiKey(`${window.location.origin}${tileTemplate}`, project);
+          const layerCapabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`, project);
           const cachedScheme = cachedEntry && cachedEntry.scheme ? cachedEntry.scheme : null;
           const isCachedXYZ = cachedScheme === 'xyz';
+          const xyzEnabled = l.xyz_enabled === true
+            || l.xyzEnabled === true
+            || ((l.xyz_enabled !== false && l.xyzEnabled !== false) && isXyzCompatibleCrs(l.tile_crs || l.tileCrs || l.crs || project?.crs || null));
 
           let exampleLink = null;
           if (cachedEntry && isCachedXYZ) {
@@ -4902,13 +6152,13 @@
             exampleLink.textContent = tr('View sample tile');
           }
 
-          const copyXyzBtn = makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
+          const copyXyzBtn = xyzEnabled ? makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
             navigator.clipboard.writeText(xyzTemplateAbsolute).then(() => {
               showStatus(tr('Tile template copied to clipboard: {url}', { url: xyzTemplateAbsolute }));
             }).catch(err => {
               showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
             });
-          });
+          }) : null;
 
           const copyWmtsBtn = makeIconButton(tr('Copy WMTS URL'), 'wmts', () => {
             navigator.clipboard.writeText(layerCapabilitiesUrl).then(() => {
@@ -4918,7 +6168,7 @@
             });
           });
 
-          const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`;
+          const wmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(l.name)}`, project);
           const copyWmsBtn = makeIconButton(tr('Copy WMS URL'), 'wms', () => {
             navigator.clipboard.writeText(wmsCapabilitiesUrl).then(() => {
               showStatus(tr('WMS URL copied to clipboard'));
@@ -4928,7 +6178,7 @@
           });
 
           const isVectorLayer = isVectorLayerLike(l);
-          const wfsCapabilitiesUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&TYPENAME=${encodeURIComponent(safeXmlName(l.name))}`;
+          const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&TYPENAME=${encodeURIComponent(safeXmlName(l.name))}`, project);
           const copyWfsBtn = makeIconButton(tr('Copy WFS URL'), 'wfs', () => {
             navigator.clipboard.writeText(wfsCapabilitiesUrl).then(() => {
               showStatus(tr('WFS URL copied to clipboard'));
@@ -4945,6 +6195,10 @@
           const actionBox = document.createElement('div');
           actionBox.className = 'layer-actions-box';
 
+          const rowMap = document.createElement('div');
+          rowMap.className = 'layer-actions-row';
+          rowMap.dataset.row = 'map';
+
           const rowFlags = document.createElement('div');
           rowFlags.className = 'layer-actions-row';
           rowFlags.dataset.row = 'flags';
@@ -4960,6 +6214,26 @@
           const rowView = document.createElement('div');
           rowView.className = 'layer-actions-row';
           rowView.dataset.row = 'view';
+
+          const layerExtentContainer = document.createElement('div');
+          layerExtentContainer.className = 'layer-extent-container';
+          layerExtentContainer.style.display = 'none';
+
+          const showLayerExtentBtn = document.createElement('button');
+          showLayerExtentBtn.type = 'button';
+          showLayerExtentBtn.className = 'btn btn-secondary';
+          showLayerExtentBtn.textContent = tr('Show extent map');
+          showLayerExtentBtn.addEventListener('click', () => {
+            toggleLayerExtentPanel(project, l, configLayer || null, layerExtentContainer, showLayerExtentBtn)
+              .catch((err) => {
+                console.error('Layer extent panel error', err);
+                showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+              });
+          });
+          rowMap.appendChild(showLayerExtentBtn);
+
+          const reloadLayerBtn = makeIconButton(tr('Reload layer'), 'reload', () => reloadLayerRow(reloadLayerBtn, project, l.name), 'btn-secondary');
+          rowMap.appendChild(reloadLayerBtn);
 
           if (isAdmin && l && (l.kind === 'vector' || l.kind === 'VectorLayer' || l.geometry_type)) {
             const editableWrap = document.createElement('label');
@@ -5044,11 +6318,28 @@
           }
 
           // Always show the manual cache button so operators can trigger caching.
-          const genBtn = makeIconButton(hasCachedTiles ? 'Recache layer' : 'Generate cache', hasCachedTiles ? 'refresh' : 'play', null, 'btn-primary');
-          if (hasCachedTiles) {
-            genBtn.title = 'Recache layer (rebuild tiles)';
+          const genBtn = makeIconButton((hasCachedTiles || hasPartialCache) ? tr('Recache layer') : tr('Generate Tiles'), 'play', null, 'btn-primary');
+          if (hasPartialCache) {
+            genBtn.title = tr('Recache layer');
             genBtn.addEventListener('click', async () => {
-              const selection = await openRecacheDialog({ layerName: l.name, cachedEntry });
+              const decision = await showPartialCacheResumeDialog({ targetName: l.name, cachedEntry });
+              if (!decision) return;
+              const resumeRange = decision === 'resume' ? deriveCachedZoomRange(cachedEntry) : null;
+              try {
+                await generateCache(genBtn, project.id, l.name, l, {
+                  recache: false,
+                  cachedEntry,
+                  zoomOverride: decision === 'resume' ? resumeRange : null,
+                  forcePurgeBeforeStart: decision === 'replace'
+                });
+              } catch (err) {
+                console.error('Partial cache restart failed', err);
+              }
+            });
+          } else if (hasCachedTiles) {
+            genBtn.title = tr('Recache layer');
+            genBtn.addEventListener('click', async () => {
+              const selection = await openRecacheDialog({ projectId: project.id, layerName: l.name, cachedEntry });
               if (!selection) return;
               try {
                 await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
@@ -5073,14 +6364,20 @@
             const allowRemoteActive = (allowRemoteCheckbox ? !!allowRemoteCheckbox.checked : cfgAllowRemote) || isAdminUser;
             genBtn.disabled = !allowRemoteActive;
             genBtn.title = allowRemoteActive
-              ? (isAdminUser && allowRemoteCheckbox && !allowRemoteCheckbox.checked ? 'Generate cache (admin override)' : 'Generate cache')
-              : 'Remote layer. Enable "Allow remote" to cache.';
+              ? (isAdminUser && allowRemoteCheckbox && !allowRemoteCheckbox.checked ? tr('Generate Tiles (admin override)') : tr('Generate Tiles'))
+              : tr('Remote layer. Enable "Allow remote" to cache.');
           }
 
           if (isAdmin) {
             const scheduleBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'layer', targetName: l.name, configEntry: configLayer || null }));
+            const cacheRunHost = document.createElement('span');
+            cacheRunHost.style.display = 'inline-flex';
+            cacheRunHost.style.alignItems = 'center';
+            cacheRunHost.style.gap = '8px';
             rowCache.appendChild(scheduleBtn);
-            rowCache.appendChild(genBtn);
+            cacheRunHost.appendChild(genBtn);
+            rowCache.appendChild(cacheRunHost);
+            registerInlineJobSlot({ projectId: project.id, targetMode: 'layer', targetName: l.name, button: genBtn, host: cacheRunHost });
 
             if (hasAnyCacheForDelete) {
               const delBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
@@ -5097,7 +6394,7 @@
             rowCopy.appendChild(copyWmtsBtn);
             rowCopy.appendChild(copyWmsBtn);
             if (isVectorLayer) rowCopy.appendChild(copyWfsBtn);
-            rowCopy.appendChild(copyXyzBtn);
+            if (copyXyzBtn) rowCopy.appendChild(copyXyzBtn);
           }
 
           // Viewers row
@@ -5124,8 +6421,26 @@
                 window.open(viewerWfsUrl, '_blank', 'noopener');
               });
               rowView.appendChild(viewWfsBtn);
+            }
+          }
 
-              // Add-to-Origo button removed.
+          // Plugin-provided layer action buttons (e.g. Qrigo "Open in Origo")
+          if (canView) {
+            const pluginActionBtns = Array.isArray(window.qtilerPluginHooks?.layerActionButtons)
+              ? window.qtilerPluginHooks.layerActionButtons
+              : [];
+            const seenPluginActionIds = new Set();
+            for (const hook of pluginActionBtns) {
+              try {
+                const hookId = String(hook?.id || '').trim();
+                if (hookId) {
+                  if (seenPluginActionIds.has(hookId)) continue;
+                  seenPluginActionIds.add(hookId);
+                }
+                if (typeof hook.shouldShow === 'function' && !hook.shouldShow({ layerData: l, projectId: project.id, isAdmin })) continue;
+                const btn = hook.create({ layerData: l, projectId: project.id, isAdmin, makeLabeledIconButton, tr });
+                if (btn instanceof HTMLElement) rowView.appendChild(btn);
+              } catch (e) { console.warn('[pluginActionBtn]', e); }
             }
           }
 
@@ -5137,13 +6452,15 @@
               layerData: l, 
               cachedEntry, 
               isAdmin,
-              configLayer
+              configLayer,
+              project
             });
           }, 'btn-secondary');
 
           if (canView && detailsBtn) rowView.appendChild(detailsBtn);
 
           // Assemble box rows (cache actions are admin-only)
+          if (canView) actionBox.appendChild(rowMap);
           if (rowFlags.childElementCount > 0) actionBox.appendChild(rowFlags);
           if (isAdmin) actionBox.appendChild(rowCache);
           if (canView) actionBox.appendChild(rowCopy);
@@ -5152,6 +6469,7 @@
           
 
           d.appendChild(info);
+          info.appendChild(layerExtentContainer);
           if (exampleLink) d.appendChild(exampleLink);
           d.appendChild(controls);
           targetEl.appendChild(d);
@@ -5169,6 +6487,8 @@
             if (!theme || !theme.name) return;
             const themeRow = document.createElement('div');
             themeRow.className = 'layer';
+            themeRow.dataset.layerKind = 'theme';
+            themeRow.dataset.layerName = theme.name;
             const infoBox = document.createElement('div');
             infoBox.className = 'layer-info';
             const themeHeaderPieces = [
@@ -5207,32 +6527,63 @@
               state.themeExtents.set(theme.name, themeExtent);
             }
 
-            const actions = document.createElement('div');
-            actions.className = 'actions';
-            actions.setAttribute('role', 'group');
-            actions.addEventListener('click', (event) => event.stopPropagation());
+            const controls = document.createElement('div');
+            controls.className = 'actions';
+            controls.setAttribute('role', 'group');
+            controls.addEventListener('click', (event) => event.stopPropagation());
+
+            const actionBox = document.createElement('div');
+            actionBox.className = 'layer-actions-box';
+
+            const rowCache = document.createElement('div');
+            rowCache.className = 'layer-actions-row';
+            rowCache.dataset.row = 'cache';
+
+            const rowCopy = document.createElement('div');
+            rowCopy.className = 'layer-actions-row';
+            rowCopy.dataset.row = 'copy';
+
+            const rowView = document.createElement('div');
+            rowView.className = 'layer-actions-row';
+            rowView.dataset.row = 'view';
 
             const themeObj = { name: theme.name, layers: sources };
             
             if (isAdmin) {
               const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
               const scheduleThemeBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'theme', targetName: theme.name, configEntry: configTheme || null }));
-              actions.appendChild(scheduleThemeBtn);
-              actions.appendChild(cacheBtn);
+              const cacheRunHost = document.createElement('span');
+              cacheRunHost.style.display = 'inline-flex';
+              cacheRunHost.style.alignItems = 'center';
+              cacheRunHost.style.gap = '8px';
+              rowCache.appendChild(scheduleThemeBtn);
+              cacheRunHost.appendChild(cacheBtn);
+              rowCache.appendChild(cacheRunHost);
+              registerInlineJobSlot({ projectId: project.id, targetMode: 'theme', targetName: theme.name, button: cacheBtn, host: cacheRunHost });
             }
 
-            const themeCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`;
-            const themeXyzTemplate = `${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`;
+            const themeCapabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`, project);
+            const themeXyzTemplate = withApiKey(`${window.location.origin}/wmts/${encodeURIComponent(project.id)}/themes/${encodeURIComponent(theme.name)}/{z}/{x}/{y}.png`, project);
+            const themeXyzEnabled = theme.xyz_enabled === true
+              || theme.xyzEnabled === true
+              || ((theme.xyz_enabled !== false && theme.xyzEnabled !== false) && isXyzCompatibleCrs(
+                (cachedTheme && (cachedTheme.tile_crs || cachedTheme.tileCrs || cachedTheme.crs))
+                || theme.tile_crs
+                || theme.tileCrs
+                || theme.crs
+                || project?.crs
+                || null
+              ));
 
             const copyThemeWmtsBtn = makeIconButton(tr('Copy WMTS URL'), 'wmts', () => {
               navigator.clipboard.writeText(themeCapabilitiesUrl).then(() => {
-                showStatus('WMTS capabilities URL copied: ' + themeCapabilitiesUrl);
+                showStatus(tr('WMTS URL copied to clipboard'));
               }).catch(err => {
                 showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
             });
 
-            const themeWmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`;
+            const themeWmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`, project);
             const copyThemeWmsBtn = makeIconButton(tr('Copy WMS URL'), 'wms', () => {
               navigator.clipboard.writeText(themeWmsCapabilitiesUrl).then(() => {
                 showStatus(tr('WMS URL copied to clipboard'));
@@ -5241,18 +6592,18 @@
               });
             });
 
-            const copyThemeXyzBtn = makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
+            const copyThemeXyzBtn = themeXyzEnabled ? makeIconButton(tr('Copy XYZ URL'), 'tiles', () => {
               navigator.clipboard.writeText(themeXyzTemplate).then(() => {
                 showStatus(tr('Tile template copied to clipboard: {url}', { url: themeXyzTemplate }));
               }).catch(err => {
                 showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
               });
-            });
+            }) : null;
 
             if (canView) {
-              actions.appendChild(copyThemeWmtsBtn);
-              actions.appendChild(copyThemeWmsBtn);
-              actions.appendChild(copyThemeXyzBtn);
+              rowCopy.appendChild(copyThemeWmtsBtn);
+              rowCopy.appendChild(copyThemeWmsBtn);
+              if (copyThemeXyzBtn) rowCopy.appendChild(copyThemeXyzBtn);
             }
 
             if (canView) {
@@ -5260,7 +6611,49 @@
                 const url = '/viewer.html?project=' + encodeURIComponent(project.id) + '&theme=' + encodeURIComponent(theme.name);
                 window.open(url, '_blank', 'noopener');
               }, 'btn-secondary');
-              actions.appendChild(viewThemeBtn);
+              rowView.appendChild(viewThemeBtn);
+
+              const viewThemeWmsBtn = makeLabeledIconButton(tr('Open WMS viewer'), 'map', 'WMS', () => {
+                const url = '/viewer.html?project=' + encodeURIComponent(project.id)
+                  + '&theme=' + encodeURIComponent(theme.name)
+                  + '&layer=' + encodeURIComponent(theme.name)
+                  + '&service=wms';
+                window.open(url, '_blank', 'noopener');
+              }, 'btn-secondary');
+              rowView.appendChild(viewThemeWmsBtn);
+
+              const qrigoEnabled = Array.isArray(window.qtilerPluginsEnabled) && window.qtilerPluginsEnabled.includes('Qrigo');
+              if (qrigoEnabled) {
+                const openOrigoThemeBtn = makeLabeledIconButton(tr('Open in Origo'), 'map', 'Origo', () => {
+                  const openModal = window.qtilerOpenOrigoServiceModal;
+                  if (typeof openModal === 'function') {
+                    openModal({
+                      hasWfs: false,
+                      hasVectorTiles: false,
+                      tr,
+                      onConfirm: (selectedServices) => {
+                        const selected = Array.isArray(selectedServices)
+                          ? selectedServices.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean)
+                          : [];
+                        if (!selected.length) return;
+                        const url = '/qrigo/preview2?project=' + encodeURIComponent(project.id)
+                          + '&layer=' + encodeURIComponent(theme.name)
+                          + '&mode=theme&service=' + encodeURIComponent(selected.join(','))
+                          + '&_ts=' + encodeURIComponent(String(Date.now()));
+                        window.open(url, '_blank', 'noopener');
+                      }
+                    });
+                    return;
+                  }
+
+                  const fallbackUrl = '/qrigo/preview2?project=' + encodeURIComponent(project.id)
+                    + '&layer=' + encodeURIComponent(theme.name)
+                    + '&mode=theme&service=wmts'
+                    + '&_ts=' + encodeURIComponent(String(Date.now()));
+                  window.open(fallbackUrl, '_blank', 'noopener');
+                }, 'btn-secondary');
+                rowView.appendChild(openOrigoThemeBtn);
+              }
 
               const themeDetailsBtn = makeIconButton(tr('Layer Details'), 'info', () => {
                 toggleLayerDetails(themeRow, { 
@@ -5268,13 +6661,18 @@
                   layerData: themeObj, 
                   cachedEntry: cachedTheme || null, 
                   isAdmin,
-                  configLayer: null
+                  configLayer: null,
+                  project
                 });
               }, 'btn-secondary');
-              actions.appendChild(themeDetailsBtn);
+              rowView.appendChild(themeDetailsBtn);
             }
 
-            themeRow.appendChild(actions);
+            if (isAdmin && rowCache.childElementCount > 0) actionBox.appendChild(rowCache);
+            if (canView && rowCopy.childElementCount > 0) actionBox.appendChild(rowCopy);
+            if (canView && rowView.childElementCount > 0) actionBox.appendChild(rowView);
+            controls.appendChild(actionBox);
+            themeRow.appendChild(controls);
             targetEl.appendChild(themeRow);
             } catch (err) {
               console.error('Error rendering theme:', theme, err);
@@ -5287,7 +6685,7 @@
       function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
       async function generateCache(btn, projectId, layerName, layerObj, options = {}) {
-        const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null } = options || {};
+        const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null, forcePurgeBeforeStart = false } = options || {};
         const isTheme = kind === 'theme';
         const targetLabel = isTheme ? `theme "${layerName}"` : layerName;
         // IMPORTANT: don't call setActiveProject() here; it rewrites the left-panel
@@ -5321,10 +6719,22 @@
             }
           }
           if (zoom_min == null || zoom_max == null) {
-            const controlMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
-            const controlMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
-            zoom_min = Number.isFinite(controlMin) ? controlMin : 0;
-            zoom_max = Number.isFinite(controlMax) ? controlMax : 0;
+            const layerZoom = !isTheme ? getLayerZoomRange(projectId, layerName) : null;
+            if (layerZoom) {
+              zoom_min = layerZoom.min;
+              zoom_max = layerZoom.max;
+            } else {
+              const projectZoom = getProjectZoomRange(projectId);
+              if (projectZoom) {
+                zoom_min = projectZoom.min;
+                zoom_max = projectZoom.max;
+              } else {
+                const controlMin = Number.parseInt(zoomMinInput ? zoomMinInput.value : '0', 10);
+                const controlMax = Number.parseInt(zoomMaxInput ? zoomMaxInput.value : '0', 10);
+                zoom_min = Number.isFinite(controlMin) ? controlMin : 0;
+                zoom_max = Number.isFinite(controlMax) ? controlMax : 0;
+              }
+            }
           }
           if (zoom_min < 0) zoom_min = 0; if (zoom_max < 0) zoom_max = 0;
           if (zoom_min > MAX_ZOOM_LEVEL) zoom_min = MAX_ZOOM_LEVEL;
@@ -5382,7 +6792,8 @@
           body.wmts = true;
           // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
           const state = extentStates.get(projectId);
-          const extentPayload = getProjectedExtentPayload(projectId);
+          const layerExtentPayload = !isTheme ? getLayerProjectedExtentPayload(projectId, layerName, layerObj?.tile_crs || layerObj?.crs || null) : null;
+          const extentPayload = layerExtentPayload || getProjectedExtentPayload(projectId);
           if (extentPayload) {
             body.project_extent = extentPayload.extentString;
             body.extent_crs = extentPayload.crs;
@@ -5416,6 +6827,25 @@
             projectPatch.layers = { [layerName]: targetConfigPatch };
           }
           queueProjectConfigSave(projectId, projectPatch);
+
+          if (forcePurgeBeforeStart) {
+            if (isTheme) {
+              showStatus(tr('Replacing partial theme cache is not supported yet.'), true);
+              restoreButton();
+              return;
+            }
+            try {
+              const delRes = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
+              if (!delRes.ok && delRes.status !== 404) {
+                const delData = await delRes.json().catch(()=>null);
+                throw new Error(delData?.error || delData?.details || delRes.statusText || 'Failed to purge old cache');
+              }
+            } catch (delErr) {
+              showStatus(tr('Cache restart aborted (purge failed): {error}', { error: delErr }), true);
+              restoreButton();
+              return;
+            }
+          }
 
           if (recache) {
             if (isTheme) {
@@ -5487,23 +6917,41 @@
           }
 
           showStatus((recache ? 'Recache' : 'Generation') + ' started for ' + targetLabel + ': job id ' + data.id);
+          const inlineKey = makeInlineJobSlotKey(projectId, isTheme ? 'theme' : 'layer', layerName);
+          latestInlineJobs.set(inlineKey, {
+            id: data.id,
+            project: projectId,
+            targetMode: isTheme ? 'theme' : 'layer',
+            targetName: layerName,
+            status: 'running'
+          });
+          const inlineSlot = inlineJobSlots.get(inlineKey);
+          if (inlineSlot) {
+            startInlineJobMonitor(inlineSlot, data.id, {
+              onDone: () => {
+                restoreButton();
+                scheduleProjectRefresh(projectId, { delayMs: 600, forceConfigReload: true });
+              }
+            });
+            return;
+          }
           // crear botón detener junto al botón original
           const stopBtn = document.createElement('button');
           stopBtn.className = 'btn btn-danger';
-          stopBtn.textContent = 'Abort';
+          stopBtn.textContent = tr('Abort');
           stopBtn.onclick = async () => {
             stopBtn.disabled = true;
-            showStatus('Aborting job ' + data.id);
+            showStatus(tr('Aborting job {id}', { id: data.id }));
             try {
               const r = await fetch('/generate-cache/' + encodeURIComponent(data.id), { method: 'DELETE' });
               const resjson = await r.json().catch(()=>null);
               if (!r.ok) {
-                showStatus('Abort failed: ' + (resjson?.error || r.statusText), true);
+                showStatus(tr('Abort failed: {error}', { error: resjson?.error || r.statusText }), true);
               } else {
-                showStatus('Job abortado: ' + data.id);
+                showStatus(tr('Job aborted: {id}', { id: data.id }));
               }
             } catch (err) {
-              showStatus('Network error while aborting: ' + err, true);
+              showStatus(tr('Network error while aborting: {error}', { error: err }), true);
             } finally {
               // dejamos que el polling detecte el estado y cierre UI
               stopBtn.disabled = true;
@@ -5573,7 +7021,10 @@
                   barInner.style.width = '100%';
                   txt.textContent = '100%';
                 }
-                txt.textContent += ` · ${j.status}`;
+                if (j.status === 'aborted') {
+                  showStatus(tr('Abort confirmed by worker for job {id}', { id: data.id }));
+                }
+                txt.textContent += ` · ${formatJobStatusLabel(j.status)}`;
                 clearInterval(timer);
                 polling = false;
                 // limpiar UI y reactivar botón
@@ -5591,7 +7042,7 @@
           window.addEventListener('beforeunload', () => { try { clearInterval(timer); } catch {} });
           // --- FIN NUEVO FLUJO ---
         } catch (err) {
-          showStatus('Network error: ' + err, true);
+          showStatus(tr('Network error: {error}', { error: err }), true);
           restoreButton();
         }
       }
@@ -5783,11 +7234,11 @@
 
       async function deleteProject(btn, project) {
         if (!project || !project.id) return;
-        const message = `Delete project "${project.name || project.id}"? This also removes cached tiles.`;
+        const message = `The project "${project.name || project.id}" and any uploaded data will be removed from the server. Do you want to continue?`;
         const confirmedDelete = await confirmActionModal({
           title: tr('Delete project'),
           message,
-          confirmLabel: tr('Delete project'),
+          confirmLabel: tr('Remove project and data'),
           cancelLabel: tr('Cancel'),
           isDanger: true
         });
@@ -5872,7 +7323,12 @@
         }
       }
 
-  reloadBtn.onclick = () => { showStatus('Reloading…'); loadLayers({ forceConfigReload: true }); };
+  reloadBtn.onclick = async () => {
+    showStatus(tr('Reloading…'));
+    try { await refreshJobs(); } catch {}
+    reapplyInlineJobSlotsFromCache();
+    loadLayers({ forceConfigReload: true });
+  };
       loadLayers({ forceConfigReload: true });
       // arrancar polling de jobs para persistir estado entre recargas
       refreshJobs();

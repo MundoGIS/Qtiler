@@ -36,4 +36,4 @@ This License remains in effect until terminated. Licensor may terminate the Lice
 This License is governed by the laws of Sweden, without regard to conflict-of-law principles. Any dispute shall be submitted to the competent courts of Gothenburg, Sweden.
 
 10. Contact
-For licensing questions, contact MundoGIS AB · abel.gonzalez@mundogis.se.
+For licensing questions, contact MundoGIS AB · support@mundogis.se.

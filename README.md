@@ -17,17 +17,17 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Serve cached tiles and expose a WMTS GetCapabilities endpoint (OGC WMTS 1.0.0, layers and themes) ready for GIS clients.
 - Expose WMS 1.3.0 (GetCapabilities, tiled GetMap) and WFS 1.1.0 endpoints, including WFS-T (transactional editing for vector layers).
 - Vector tiles support through the commercial VectorTiles plugin (MBTiles generation + TileJSON/Style endpoints).
-- Built-in Leaflet viewer with CRS awareness, on/off layer toggles, and WMTS URL helpers.
+- Built-in OpenLayers viewer with CRS awareness, WMTS/WMS/WFS modes, and VectorTiles mode.
 - Origo Map integration via Qrigo plugin (Origo Map: https://github.com/origo-map/origo).
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
 
 ## Commercial plugin support
 Qtiler supports optional commercial plugins. Current bundled versions:
 
-- QtilerAuth: `0.1.0`
+- QtilerAuth: `0.2.0`
 - ProjectSearch: `0.1.0`
 - Qrigo: `0.1.0`
-- VectorTiles: `0.1.1`
+- VectorTiles: `0.2.0`
 
 ## VectorTiles auth in QGIS (protected projects)
 If your project is protected by QtilerAuth, avoid shared URLs and use user-based credentials.
@@ -52,8 +52,29 @@ Notes:
 - Node.js 18 or newer.
 - Git (recommended) to clone the repository.
 
+## QGIS compatibility notice
+- Supported: QGIS 3.4 and newer within the 3.x line (Qt5-based builds).
+- Not supported: QGIS 4.x (Qt6-based).
+
+Qtiler currently targets the QGIS 3.x runtime stack and Python bindings. Running with QGIS 4.x is expected to fail due to major dependency and API/runtime changes.
+
+## Minimum Windows resources (recommended baseline)
+For stable production behavior (cache jobs, WMS/WFS, and optional on-demand rendering), use at least:
+
+- CPU: 8 logical cores (minimum 4 for small demos)
+- RAM: 32 GB (minimum 16 GB for small demos)
+- Storage: NVMe SSD, 200 GB free (minimum 80 GB)
+- Network: 1 Gbps NIC for multi-user GIS access
+
+Sizing guidance:
+- Small pilots (1-5 users, light layers): 4 vCPU / 16 GB RAM
+- Normal deployments (5-20 users, mixed raster+vector): 8 vCPU / 32 GB RAM
+- Heavy deployments (20+ users, frequent recache/on-demand): 12-16 vCPU / 64 GB RAM
+
+These values assume QGIS rendering on the same machine as the Node service.
+
 ## Prepare the QGIS environment
-1. Install OSGeo4W (Advanced Install) or the latest QGIS standalone build.
+1. Install OSGeo4W (Advanced Install) or a QGIS 3.x standalone build.
 2. Verify these paths exist:
    - `C:\OSGeo4W\bin\python.exe` (or your QGIS Python runtime).
    - `C:\OSGeo4W\apps\qgis` (QGIS prefix).
@@ -78,7 +99,8 @@ npm install
 After installation, sign in with the default admin account:
 
 - Username: `admin`
-- Password: `admin2026`
+- Password: value from `QTILER_DEFAULT_ADMIN_PASSWORD`.
+   If not set, the default is `adminnuevo`.
 
 For security, change this password immediately after your first login.
 Do this from the backend admin interface (`/admin`) in the authentication/user management section.
@@ -86,7 +108,7 @@ Do this from the backend admin interface (`/admin`) in the authentication/user m
 ### Repository layout
 ```
 Qtil
-   qgisprojects/     # Uploaded .qgs/.qgz files (includes a demo project in qgisprojects/demo)
+   qgisprojects/     # Uploaded .qgs/.qgz files (includes a demo project in qgisprojects/demo2)
    cache/            # Generated tiles and index metadata
    plugins/          # Optional plugins (Qrigo, ProjectSearch, custom modules)
    logs/             # Runtime logs
@@ -107,19 +129,27 @@ The server listens on `http://localhost:3000` by default; override with `PORT` i
 2. **Define map themes in QGIS** – Save Map Themes (Kartteman) before uploading so composites appear automatically.
 3. **Set extent and zooms** – Adjust global min/max zooms and use *Show extent map* to draw WGS84 bounding boxes.
 4. **Generate caches** – Trigger per-layer jobs, cache all layers, or build theme mosaics. Each run logs parameters for future recache batches.
-5. **Inspect & share** – Preview layers in the Leaflet viewer and copy WMTS URLs. The GetCapabilities endpoint lives at `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
+5. **Inspect & share** – Preview layers in the OpenLayers viewer and copy WMTS URLs. The GetCapabilities endpoint lives at `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
 
 ## On-demand WMTS/XYZ tiles
-Qtiler can render tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrency is capped (2 workers by default) so misses are queued safely. See `README_on_demand.md` for a deeper walkthrough and test commands.
+Qtiler renders tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrency is capped (2 workers by default) so misses are queued safely via FIFO. CRS-aware tile-grid derivation ensures on-demand tiles align with pre-cached tiles. See `README_on_demand.md` for a deeper walkthrough.
 
 
 ## Supported OGC service versions
 - **WMTS**: 1.0.0
 - **WMS**: 1.3.0
-- **WFS**: 1.1.0 and 2.0.0 (WFS-T transactional editing is guaranteed for 1.1.0)
+- **WFS**: 1.1.0 and 2.0.0 (WFS-T transactional editing is guaranteed for 1.1.0; default version negotiation prefers 2.0.0)
 
 ## Demo project
-A demo QGIS project is included in `qgisprojects/demo` so you can test the full workflow out of the box.
+A demo QGIS project is included in `qgisprojects/demo2` so you can test the full workflow out of the box.
+
+## Demo data attribution (OSM)
+If you use the bundled demo vector layers derived from OpenStreetMap, include this attribution in user-facing maps and documentation:
+
+- `© OpenStreetMap contributors`
+
+OpenStreetMap data is available under the Open Database License (ODbL):
+- https://www.openstreetmap.org/copyright
 
 ## WMS (GetCapabilities + tiled GetMap)
 Qtiler exposes a lightweight WMS 1.3.0 endpoint intended for tiled clients and GIS integration.
@@ -134,7 +164,7 @@ Notes:
 - For performance, WMS GetMap is designed to align to the same tile grids used by WMTS/XYZ caching.
 
 ## WFS (read) + WFS-T (editing)
-Qtiler exposes a minimal WFS 1.1.0 endpoint for vector layers.
+Qtiler exposes WFS 1.1.0 and 2.0.0 endpoints for vector layers.
 
 ### WFS read (GetCapabilities / DescribeFeatureType / GetFeature)
 - GetCapabilities:
@@ -195,6 +225,7 @@ QGIS_PREFIX=C:\OSGeo4W\apps\qgis
 OSGEO4W_BIN=C:\OSGeo4W\bin
 PYTHON_EXE=C:\OSGeo4W\bin\python.exe
 QT_PLUGIN_PATH=C:\OSGeo4W\apps\qgis\qtplugins
+QTILER_DEFAULT_ADMIN_PASSWORD=CHANGE_ME
 PROJECT_UPLOAD_MAX_BYTES=209715200
 ```
 
@@ -203,6 +234,38 @@ PROJECT_UPLOAD_MAX_BYTES=209715200
 - Use a dedicated Windows account/service user with access to `cache/` and `logs/`.
 - Schedule log rotation and cache cleanup via Task Scheduler.
 - Keep QGIS and Node.js versions aligned across dev/prod to avoid rendering drift.
+
+## Portal
+The public portal at `/portal` lists all projects the current user can access. Each project card provides:
+- Copy buttons for WMTS, WMS, WFS, VectorTiles Style-URL and Source-URL.
+- Viewer links (WMTS, WMS, WFS, VectorTiles) grouped under a "Viewers" box.
+- Per-layer XYZ copy and viewer links for cached layers and themes.
+
+Public projects are visible without login. Protected projects require the user to be authenticated via QtilerAuth.
+
+## API key authentication
+When QtilerAuth is installed and a project is protected:
+- All copied URLs from the dashboard, portal, and VectorTiles plugin automatically include `?api_key=<key>`.
+- WMTS GetCapabilities embeds the `api_key` in KVP URLs and REST `ResourceURL` templates.
+- WMS GetCapabilities embeds the `api_key` in `OnlineResource` hrefs.
+- This ensures GIS clients (QGIS, ArcGIS, etc.) carry the key on every subsequent tile/map/feature request.
+- API keys are also accepted via `x-api-key` HTTP header.
+
+## Multi-language UI
+The admin console, portal, guide, and VectorTiles dashboard support four languages:
+- **English** (default)
+- **Spanish** (Español)
+- **Swedish** (Svenska)
+- **Norwegian** (Norsk)
+
+Switch language from the selector in the navigation bar. The preference is persisted via cookie.
+
+## Third-party licenses
+See `THIRD-PARTY-LICENSES.txt` for a complete list of third-party software and their licenses.
+
+## License
+Qtiler is licensed under the **Mozilla Public License, v. 2.0** (MPL-2.0).
+Commercial plugins (QtilerAuth, VectorTiles, Qrigo, ProjectSearch) are separately licensed by MundoGIS.
 
 ---
 Questions or need a tailored deployment? Reach out to MundoGIS for support, private builds, or hands-on assistance with IIS/Apache URL Rewrite configurations.

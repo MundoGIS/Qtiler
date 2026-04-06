@@ -1,0 +1,169 @@
+===============================================================================
+THIRD-PARTY LICENSES
+===============================================================================
+Qtiler (c) 2025 MundoGIS — Licensed under MPL-2.0
+
+This file lists third-party software used by Qtiler.
+It does NOT cover Qtiler plugins (QtilerAuth, VectorTiles, Qrigo,
+ProjectSearch, QuantizedMesh), which are commercially licensed by MundoGIS.
+
+
+===============================================================================
+OpenStreetMap Demo Data Attribution
+===============================================================================
+Some demo vector layers distributed with Qtiler may be derived from
+OpenStreetMap data. When these datasets are used in maps or downstream
+products, attribution must be shown:
+
+    (c) OpenStreetMap contributors
+
+OpenStreetMap data is licensed under ODbL:
+https://www.openstreetmap.org/copyright
+
+
+===============================================================================
+1. QGIS Python API
+===============================================================================
+License:     GNU General Public License v2 or later (GPL-2.0-or-later)
+Website:     https://qgis.org
+Source:      https://github.com/qgis/QGIS
+
+Usage:       Qtiler spawns Python scripts (extract_info.py, generate_cache.py,
+             search_layer.py) that import qgis.core to read QGIS project files
+             and render map tiles. QGIS is NOT bundled with Qtiler; the user
+             must install QGIS separately. The Python scripts run as separate
+             processes and are licensed under MPL-2.0, which is compatible with
+             GPL per MPL-2.0 Section 3.3 ("Larger Work").
+
+Note:        No QGIS source code is included in or modified by Qtiler.
+
+
+===============================================================================
+2. GDAL/OGR (OSGeo)
+===============================================================================
+License:     MIT/X11
+Website:     https://gdal.org
+Source:      https://github.com/OSGeo/gdal
+
+Usage:       Used via Python bindings (from osgeo import gdal, ogr) in
+             generate_cache.py for geospatial operations.
+
+
+===============================================================================
+3. Origo Map
+===============================================================================
+License:     BSD 2-Clause
+Copyright:   Origo contributors
+Website:     https://github.com/origo-map/origo
+Version:     Bundled in public/Thirdparty/origo/
+
+BSD 2-Clause License:
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED.
+
+
+===============================================================================
+4. OpenLayers
+===============================================================================
+License:     BSD 2-Clause
+Copyright:   OpenLayers contributors
+Website:     https://openlayers.org
+Source:      https://github.com/openlayers/openlayers
+Version:     10.8.0 (npm), also bundled in public/Thirdparty/ol/
+
+
+===============================================================================
+5. ol-mapbox-style
+===============================================================================
+License:     BSD 2-Clause
+Copyright:   ol-mapbox-style contributors
+Source:      https://github.com/openlayers/ol-mapbox-style
+Version:     13.4.0
+
+
+===============================================================================
+6. Proj4Leaflet
+===============================================================================
+License:     BSD 2-Clause
+Copyright:   (c) 2012, Kartena AB
+Source:      https://github.com/kartena/Proj4Leaflet
+File:        proj4leaflet.js
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+===============================================================================
+7. mesh-dem-to-terrain (CSI Foxbyte)
+===============================================================================
+License:     GNU Lesser General Public License v3 (LGPL-3.0)
+Copyright:   CSI Foxbyte
+Source:      https://github.com/csi-FOXBYTE/mesh-dem-to-terrain
+Location:    ThirdParty/mesh-dem-to-terrain/
+
+Usage:       Used by the QuantizedMesh plugin for terrain tile generation.
+             LGPL-3.0 permits linking without requiring the main application
+             to adopt GPL.
+
+
+===============================================================================
+8. Node.js Dependencies (npm)
+===============================================================================
+The following are direct production dependencies of Qtiler.
+All transitive dependencies use MIT, ISC, BSD, or Apache-2.0 compatible
+licenses unless noted.
+
+Package              Version     License
+-------              -------     -------
+adm-zip              ^0.5.12     MIT
+bcryptjs             ^2.4.3      MIT
+better-sqlite3       ^12.8.0     MIT
+cookie-parser        ^1.4.6      MIT
+cors                 ^2.8.5      MIT
+dotenv               ^17.2.3     BSD-2-Clause
+ejs                  ^3.1.10     Apache-2.0
+express              ^5.1.0      MIT
+jsonwebtoken         ^9.0.2      MIT
+multer               ^1.4.5      MIT
+node-windows         ^1.0.0      MIT
+ol                   ^10.8.0     BSD-2-Clause
+ol-mapbox-style      ^13.4.0     BSD-2-Clause
+yauzl                ^3.2.0      MIT
+
+
+===============================================================================
+10. proj4js
+===============================================================================
+License:     MIT
+Source:      https://github.com/proj4js/proj4js
+
+Usage:       Coordinate transformation library used with Proj4Leaflet.
+
+
+===============================================================================
+END OF THIRD-PARTY LICENSES
+===============================================================================

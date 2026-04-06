@@ -371,7 +371,8 @@ export const registerWmsRoutes = ({
 
         // Include the required `project` parameter in the advertised endpoint so clients that
         // follow the OnlineResource won't lose project context after GetCapabilities.
-        const serviceUrl = `${req.protocol}://${req.get("host")}/wms?project=${encodeURIComponent(projectId)}`;
+        const reqApiKey = req.query?.api_key || "";
+        const serviceUrl = `${req.protocol}://${req.get("host")}/wms?project=${encodeURIComponent(projectId)}${reqApiKey ? '&api_key=' + encodeURIComponent(reqApiKey) : ''}`;
         const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type("text/xml").send(xml);

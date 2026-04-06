@@ -77,6 +77,7 @@ import AdmZip from "adm-zip";
 import cookieParser from "cookie-parser";
  //ort { spawnSync } from 'child_process';
 import { PluginManager } from "./lib/pluginManager.js";
+import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removeProjectAccessFromDb, purgeProjectFromUsersInDb, persistProjectAccessInDb } from "./lib/authDb.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -301,7 +302,7 @@ const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess(
   return null;
 });
 
-const supportedLanguages = ["en", "es", "sv"];
+const supportedLanguages = ["en", "es", "sv", "no"];
 const defaultLanguage = "en";
 
 const normalizeLanguageCode = (value) => {
@@ -444,22 +445,7 @@ app.use((req, res, next) => {
 const publicDir = path.join(__dirname, "public");
 const serviceMetadataPath = path.join(__dirname, "config", "service-metadata.json");
 const tileGridDir = path.join(__dirname, "config", "tile-grids");
-const projectAccessPath = path.join(dataDir, "QtilerAuth", "project-access.json");
-const legacyProjectAccessPaths = [
-  path.join(dataDir, "project-access.json"),
-  path.join(dataDir, "auth", "project-access.json")
-];
-const authUserSnapshotPaths = [
-  path.join(dataDir, "auth-users.json"),
-  path.join(dataDir, "auth", "auth-users.json"),
-  path.join(dataDir, "QtilerAuth", "auth-users.json")
-];
 const authPluginInstallUrl = "/admin";
-const authPluginRequiredResponse = {
-  error: "auth_plugin_disabled",
-  message: "Authentication requires the QtilerAuth plugin to be installed.",
-  installUrl: authPluginInstallUrl
-};
 
 const normalizeZoomInput = (value) => {
   if (value === null || value === undefined || value === "") {
@@ -1083,6 +1069,8 @@ const deepMerge = (target, source) => {
   for (const [key, value] of Object.entries(source)) {
     if (Array.isArray(value)) {
       target[key] = value.slice();
+    } else if (value && typeof value === "object" && ["extent", "extentWgs84", "zoom"].includes(key)) {
+      target[key] = deepMerge({}, value);
     } else if (value && typeof value === "object") {
       const destination = target[key] && typeof target[key] === "object" ? { ...target[key] } : {};
       target[key] = deepMerge(destination, value);
@@ -2357,6 +2345,15 @@ const normalizeExtentPatch = (value, { defaultCrs = null } = {}) => {
   if (value == null) {
     return { bbox: null, crs: defaultCrs || null, updatedAt: stamp };
   }
+  if (Array.isArray(value)) {
+    const bboxInput = value.map((v) => Number(v));
+    const bbox = bboxInput.length === 4 && bboxInput.every((n) => Number.isFinite(n)) ? bboxInput : null;
+    return {
+      bbox,
+      crs: defaultCrs || null,
+      updatedAt: stamp
+    };
+  }
   if (typeof value !== "object") {
     return { bbox: null, crs: defaultCrs || null, updatedAt: stamp };
   }
@@ -2405,19 +2402,35 @@ const buildProjectConfigPatch = (input = {}) => {
       if (!layerName) continue;
       const info = layerValue && typeof layerValue === "object" ? layerValue : {};
       const layerPatch = {};
-      if (info.lastParams && typeof info.lastParams === "object") {
-        layerPatch.lastParams = info.lastParams;
+      if (Object.prototype.hasOwnProperty.call(info, "lastParams")) {
+        layerPatch.lastParams = (info.lastParams && typeof info.lastParams === "object") ? info.lastParams : null;
       }
       if (typeof info.autoRecache === "boolean") layerPatch.autoRecache = info.autoRecache;
-      if (info.lastRequestedAt) layerPatch.lastRequestedAt = info.lastRequestedAt;
+      if (Object.prototype.hasOwnProperty.call(info, "lastRequestedAt")) layerPatch.lastRequestedAt = info.lastRequestedAt || null;
       if (info.lastResult) layerPatch.lastResult = info.lastResult;
       if (info.lastMessage) layerPatch.lastMessage = info.lastMessage;
       if (info.lastRunAt) layerPatch.lastRunAt = info.lastRunAt;
+
+      if (Object.prototype.hasOwnProperty.call(info, "extent")) {
+        layerPatch.extent = normalizeExtentPatch(info.extent, { defaultCrs: null });
+      }
+      if (Object.prototype.hasOwnProperty.call(info, "extentWgs84")) {
+        layerPatch.extentWgs84 = normalizeExtentPatch(info.extentWgs84, { defaultCrs: "EPSG:4326" });
+      } else if (Object.prototype.hasOwnProperty.call(info, "extent_wgs84")) {
+        layerPatch.extentWgs84 = normalizeExtentPatch(info.extent_wgs84, { defaultCrs: "EPSG:4326" });
+      }
+      if (Object.prototype.hasOwnProperty.call(info, "zoom")) {
+        const zoomObj = info.zoom && typeof info.zoom === "object" ? info.zoom : {};
+        layerPatch.zoom = {
+          min: Number.isFinite(Number(zoomObj.min)) ? Number(zoomObj.min) : null,
+          max: Number.isFinite(Number(zoomObj.max)) ? Number(zoomObj.max) : null,
+          updatedAt: zoomObj.updatedAt || new Date().toISOString()
+        };
+      }
       
       // Allow admin to set custom layer properties for technical configuration
       if (info.layerName) layerPatch.layerName = info.layerName;
       if (info.crs) layerPatch.crs = info.crs;
-      if (Array.isArray(info.extent)) layerPatch.extent = info.extent;
       if (Array.isArray(info.projectionExtent)) layerPatch.projectionExtent = info.projectionExtent;
       if (Array.isArray(info.origin)) layerPatch.origin = info.origin;
       if (Array.isArray(info.center)) layerPatch.center = info.center;
@@ -2590,10 +2603,38 @@ const buildScheduledFallbackParams = (projectId, targetMode, targetName, config,
   if (!projectId || !targetName) return null;
   const cfg = config && typeof config === 'object' ? config : readProjectConfig(projectId, { useCache: false });
   const prefs = cfg?.cachePreferences || {};
+  const targetCfg = targetMode === 'theme'
+    ? (cfg?.themes && cfg.themes[targetName] ? cfg.themes[targetName] : null)
+    : (cfg?.layers && cfg.layers[targetName] ? cfg.layers[targetName] : null);
   const out = {};
 
-  const resolvedZoomMin = Number.isFinite(Number(zoomMin)) ? Math.floor(Number(zoomMin)) : (Number.isFinite(Number(cfg?.zoom?.min)) ? Math.floor(Number(cfg.zoom.min)) : null);
-  const resolvedZoomMax = Number.isFinite(Number(zoomMax)) ? Math.floor(Number(zoomMax)) : (Number.isFinite(Number(cfg?.zoom?.max)) ? Math.floor(Number(cfg.zoom.max)) : null);
+  const readExtentSpec = (entry) => {
+    if (!entry || typeof entry !== 'object') return null;
+    if (Array.isArray(entry?.extent?.bbox) && entry.extent.bbox.length === 4 && entry.extent.bbox.every((n) => Number.isFinite(Number(n)))) {
+      return {
+        bbox: entry.extent.bbox.map((n) => Number(n)),
+        crs: entry.extent.crs || null
+      };
+    }
+    if (Array.isArray(entry?.extentWgs84?.bbox) && entry.extentWgs84.bbox.length === 4 && entry.extentWgs84.bbox.every((n) => Number.isFinite(Number(n)))) {
+      return {
+        bbox: entry.extentWgs84.bbox.map((n) => Number(n)),
+        crs: entry.extentWgs84.crs || 'EPSG:4326'
+      };
+    }
+    return null;
+  };
+
+  const resolvedZoomMin = Number.isFinite(Number(zoomMin))
+    ? Math.floor(Number(zoomMin))
+    : (Number.isFinite(Number(targetCfg?.zoom?.min))
+      ? Math.floor(Number(targetCfg.zoom.min))
+      : (Number.isFinite(Number(cfg?.zoom?.min)) ? Math.floor(Number(cfg.zoom.min)) : null));
+  const resolvedZoomMax = Number.isFinite(Number(zoomMax))
+    ? Math.floor(Number(zoomMax))
+    : (Number.isFinite(Number(targetCfg?.zoom?.max))
+      ? Math.floor(Number(targetCfg.zoom.max))
+      : (Number.isFinite(Number(cfg?.zoom?.max)) ? Math.floor(Number(cfg.zoom.max)) : null));
   if (resolvedZoomMin == null || resolvedZoomMax == null) {
     return null;
   }
@@ -2601,10 +2642,13 @@ const buildScheduledFallbackParams = (projectId, targetMode, targetName, config,
   out.zoom_max = Math.max(resolvedZoomMax, resolvedZoomMin);
 
   // Extent
-  const bbox = Array.isArray(cfg?.extent?.bbox) && cfg.extent.bbox.length === 4 ? cfg.extent.bbox : null;
-  if (bbox && bbox.every((n) => Number.isFinite(Number(n)))) {
-    out.project_extent = `${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}`;
-    if (cfg?.extent?.crs) out.extent_crs = cfg.extent.crs;
+  const extentSpec = readExtentSpec(targetCfg) || readExtentSpec(cfg);
+  if (extentSpec?.bbox) {
+    out.project_extent = `${extentSpec.bbox[0]},${extentSpec.bbox[1]},${extentSpec.bbox[2]},${extentSpec.bbox[3]}`;
+    if (extentSpec.crs) out.extent_crs = extentSpec.crs;
+  } else {
+    out.project_extent = null;
+    out.extent_crs = null;
   }
 
   // Basic options
@@ -2697,6 +2741,14 @@ const runScheduledLayer = async (projectId, layerName, config) => {
       zoomMin: scheduleMin,
       zoomMax: scheduleMax
     });
+  } else {
+    const currentFallbackParams = buildScheduledFallbackParams(projectId, 'layer', layerName, currentConfig, {
+      zoomMin: scheduleMin,
+      zoomMax: scheduleMax
+    });
+    if (currentFallbackParams && typeof currentFallbackParams === 'object') {
+      effectiveLastParams = { ...effectiveLastParams, ...currentFallbackParams };
+    }
   }
   if (!effectiveLastParams || typeof effectiveLastParams !== 'object') {
     const message = "Skipped automatic recache: no parameters recorded";
@@ -2804,6 +2856,14 @@ const runScheduledTheme = async (projectId, themeName, config) => {
       zoomMin: scheduleMin,
       zoomMax: scheduleMax
     });
+  } else {
+    const currentFallbackParams = buildScheduledFallbackParams(projectId, 'theme', themeName, currentConfig, {
+      zoomMin: scheduleMin,
+      zoomMax: scheduleMax
+    });
+    if (currentFallbackParams && typeof currentFallbackParams === 'object') {
+      effectiveLastParams = { ...effectiveLastParams, ...currentFallbackParams };
+    }
   }
   if (!effectiveLastParams || typeof effectiveLastParams !== 'object') {
     const message = "Skipped automatic recache: no parameters recorded";
@@ -3022,6 +3082,82 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
   const startedAt = Date.now();
   const totalCount = layerNames.length;
   let completedCount = 0;
+  const getCurrentBatchState = () => {
+    const current = projectBatchRuns.get(projectId);
+    if (!current || current.id !== effectiveRunId) return null;
+    return current;
+  };
+  const getAbortMessage = () => getCurrentBatchState()?.abortReason || "Project cache aborted by user.";
+  const isAbortRequested = () => !!getCurrentBatchState()?.abortRequested;
+  const finalizeProjectBatchRun = ({ status, result, message, errors = [] }) => {
+    const nowIso = new Date().toISOString();
+    const includedLayers = layerEntries.map((entry) => entry.name);
+    const historyEntry = {
+      at: nowIso,
+      status: result,
+      message,
+      reason,
+      errors,
+      runId: effectiveRunId,
+      includedLayers
+    };
+    const recHistory = Array.isArray(config.recache?.history) ? config.recache.history : [];
+    const projectHistory = Array.isArray(config.projectCache?.history) ? config.projectCache.history : [];
+    const recacheUpdate = {
+      recache: {
+        lastRunAt: nowIso,
+        lastResult: result,
+        lastMessage: errors.join(" | ") || message,
+        history: [...recHistory, historyEntry]
+      },
+      projectCache: {
+        includedLayers,
+        lastRunAt: nowIso,
+        lastResult: result,
+        lastMessage: errors.join(" | ") || message,
+        lastRunId: effectiveRunId,
+        history: [...projectHistory, historyEntry]
+      }
+    };
+    if (config.recache && config.recache.intervalMinutes && Number(config.recache.intervalMinutes) > 0) {
+      const nextTs = computeNextRunTimestamp({ ...config, recache: { ...config.recache, lastRunAt: nowIso } });
+      recacheUpdate.recache.nextRunAt = nextTs ? new Date(nextTs).toISOString() : null;
+    } else if (config.recache && config.recache.nextRunAt) {
+      recacheUpdate.recache.nextRunAt = null;
+    }
+    updateProjectConfig(projectId, recacheUpdate);
+    const endedAt = Date.now();
+    updateProjectBatchRun(projectId, {
+      id: effectiveRunId,
+      project: projectId,
+      status,
+      result,
+      error: result === "error" ? (errors.join(" | ") || message) : null,
+      endedAt,
+      trigger: normalizedTrigger,
+      reason,
+      layers: layerNames,
+      completedCount,
+      totalCount,
+      currentLayer: null,
+      currentIndex: null,
+      abortRequested: false,
+      abortRequestedAt: null,
+      abortReason: null
+    });
+  };
+
+  const queuedState = getCurrentBatchState();
+  if (queuedState && (queuedState.abortRequested || queuedState.status === "aborted")) {
+    finalizeProjectBatchRun({
+      status: "aborted",
+      result: "aborted",
+      message: getAbortMessage(),
+      errors: []
+    });
+    return;
+  }
+
   updateProjectBatchRun(projectId, {
     id: effectiveRunId,
     project: projectId,
@@ -3037,7 +3173,14 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
   });
 
   const failures = [];
+  let wasAborted = false;
+  let abortMessage = "";
   for (let idx = 0; idx < layerEntries.length; idx++) {
+    if (isAbortRequested()) {
+      wasAborted = true;
+      abortMessage = getAbortMessage();
+      break;
+    }
     const entry = layerEntries[idx];
     const layerName = entry.name;
     updateProjectBatchRun(projectId, {
@@ -3061,6 +3204,11 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       failures.push(msg);
       continue;
     }
+    if (isAbortRequested()) {
+      wasAborted = true;
+      abortMessage = getAbortMessage();
+      break;
+    }
     const params = entry.params || {};
     const payload = {
       ...params,
@@ -3082,6 +3230,11 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       payload.batch_total = totalCount;
       payload.batch_index = idx;
       const result = await runCacheJobViaHttp(payload, {});
+      if (result?.status === "aborted" && isAbortRequested()) {
+        wasAborted = true;
+        abortMessage = getAbortMessage();
+        break;
+      }
       if (!result || (result.status && result.status !== "completed")) {
         const status = (result && result.status) ? String(result.status) : "unknown";
         const exitCode = (result && (result.exitCode ?? result.exit_code)) != null ? (result.exitCode ?? result.exit_code) : null;
@@ -3101,9 +3254,19 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
         logProjectEvent(projectId, `Layer ${layerName} recached successfully.`);
       }
     } catch (err) {
+      if (isAbortRequested()) {
+        wasAborted = true;
+        abortMessage = getAbortMessage();
+        break;
+      }
       const msg = `Recache job for ${layerName} failed: ${err?.message || err}`;
       failures.push(msg);
       logProjectEvent(projectId, msg, "error");
+    }
+    if (isAbortRequested()) {
+      wasAborted = true;
+      abortMessage = getAbortMessage();
+      break;
     }
     completedCount += 1;
     updateProjectBatchRun(projectId, {
@@ -3114,55 +3277,88 @@ const runRecacheForProject = async (projectId, reason = "manual", options = {}) 
       currentIndex: null
     });
   }
-  const nowIso = new Date().toISOString();
-  const success = failures.length === 0;
-  const includedLayers = layerEntries.map((entry) => entry.name);
-  const message = success ? `Recache completed successfully (${includedLayers.length} layers).` : `Recache completed with ${failures.length} error(s).`;
-  const historyEntry = { at: nowIso, status: success ? "success" : "error", message, reason, errors: failures, runId, includedLayers };
-  const recHistory = Array.isArray(config.recache?.history) ? config.recache.history : [];
-  const projectHistory = Array.isArray(config.projectCache?.history) ? config.projectCache.history : [];
-  const recacheUpdate = {
-    recache: {
-      lastRunAt: nowIso,
-      lastResult: success ? "success" : "error",
-      lastMessage: failures.join(" | ") || message,
-      history: [...recHistory, historyEntry]
-    },
-    projectCache: {
-      includedLayers,
-      lastRunAt: nowIso,
-      lastResult: success ? "success" : "error",
-      lastMessage: failures.join(" | ") || message,
-      lastRunId: runId || null,
-      history: [...projectHistory, historyEntry]
-    }
-  };
-  if (config.recache && config.recache.intervalMinutes && Number(config.recache.intervalMinutes) > 0) {
-    const nextTs = computeNextRunTimestamp({ ...config, recache: { ...config.recache, lastRunAt: nowIso } });
-    recacheUpdate.recache.nextRunAt = nextTs ? new Date(nextTs).toISOString() : null;
-  } else if (config.recache && config.recache.nextRunAt) {
-    recacheUpdate.recache.nextRunAt = null;
+  if (wasAborted) {
+    const progressLabel = totalCount > 0 ? `${completedCount}/${totalCount}` : `${completedCount}`;
+    finalizeProjectBatchRun({
+      status: "aborted",
+      result: "aborted",
+      message: abortMessage || `Project cache aborted by user (${progressLabel} layers completed).`,
+      errors: []
+    });
+    return;
   }
-  updateProjectConfig(projectId, recacheUpdate);
-  const endedAt = Date.now();
-  updateProjectBatchRun(projectId, {
-    id: effectiveRunId,
-    project: projectId,
+  const success = failures.length === 0;
+  const message = success ? `Recache completed successfully (${layerNames.length} layers).` : `Recache completed with ${failures.length} error(s).`;
+  finalizeProjectBatchRun({
     status: success ? "completed" : "error",
     result: success ? "success" : "error",
-    error: success ? null : failures.join(" | "),
-    endedAt,
-    trigger: normalizedTrigger,
-    reason,
-    layers: layerNames,
-    completedCount,
-    totalCount,
-    currentLayer: null,
-    currentIndex: null
+    message,
+    errors: failures
   });
   if (!success) {
     throw new Error(message + " " + failures.join(" | "));
   }
+};
+
+const abortProjectBatchRunInternal = async (projectId, { reason = "user_abort" } = {}) => {
+  const current = projectBatchRuns.get(projectId);
+  if (!current) {
+    return { ok: false, status: 404, payload: { error: "batch_not_found" } };
+  }
+  if (!["running", "queued"].includes(String(current.status || ""))) {
+    return { ok: false, status: 409, payload: { error: "batch_not_running", status: current.status || null } };
+  }
+
+  const runId = current.id || null;
+  const abortReason = reason === "user_abort"
+    ? "Project cache aborted by user."
+    : `Project cache aborted: ${reason}`;
+
+  updateProjectBatchRun(projectId, {
+    abortRequested: true,
+    abortRequestedAt: Date.now(),
+    abortReason
+  });
+
+  const matchingJobs = Array.from(runningJobs.values()).filter((job) => {
+    if (!job || !job.id) return false;
+    if (job.project !== projectId) return false;
+    if (!runId) return true;
+    return !job.runId || job.runId === runId;
+  });
+
+  let abortedJobs = 0;
+  for (const job of matchingJobs) {
+    try {
+      const result = await abortGenerateCacheJobInternal(String(job.id), { silentAbort: true });
+      if (result?.ok) abortedJobs += 1;
+    } catch {}
+  }
+
+  if (!matchingJobs.length && String(current.status) === "queued") {
+    updateProjectBatchRun(projectId, {
+      status: "aborted",
+      result: "aborted",
+      endedAt: Date.now(),
+      error: null,
+      currentLayer: null,
+      currentIndex: null,
+      abortRequested: false,
+      abortRequestedAt: null,
+      abortReason: null
+    });
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    payload: {
+      status: matchingJobs.length ? "aborting" : "aborted",
+      project: projectId,
+      runId,
+      abortedJobs
+    }
+  };
 };
 
 const deleteLayerCacheInternal = async (projectId, layerName, { force = false, silent = false, cacheType = 'all' } = {}) => {
@@ -3484,15 +3680,31 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
         if (!l || l.name !== layerName) return l;
         found = true;
         const updated = Object.assign({}, l);
-        // mark cache fields as cleared
+        // Reset cache-derived fields so the UI behaves like a fresh layer upload.
+        updated.kind = updated.kind || 'layer';
         updated.cached_zoom_min = null;
         updated.cached_zoom_max = null;
+        updated.zoom_min = null;
+        updated.zoom_max = null;
+        updated.last_zoom_min = null;
+        updated.last_zoom_max = null;
         // remove path reference to avoid pointing to removed directory
         if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
         // optional metadata about removal
         updated.cache_removed_at = new Date().toISOString();
         updated.cache_exists = false;
         updated.updated = new Date().toISOString();
+        updated.partial = false;
+        updated.progress = null;
+        updated.status = null;
+        updated.extent = null;
+        updated.scheme = null;
+        updated.tile_format = null;
+        updated.tile_crs = null;
+        updated.tile_matrix_preset = null;
+        updated.tile_matrix_set = null;
+        updated.has_tiles = false;
+        updated.hasTiles = false;
         // remove any tile counts/sizes if present
         if (Object.prototype.hasOwnProperty.call(updated, 'tiles')) updated.tiles = 0;
         if (Object.prototype.hasOwnProperty.call(updated, 'tile_count')) updated.tile_count = 0;
@@ -3507,9 +3719,28 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
           kind: 'layer',
           cached_zoom_min: null,
           cached_zoom_max: null,
+          zoom_min: null,
+          zoom_max: null,
+          last_zoom_min: null,
+          last_zoom_max: null,
           cache_removed_at: new Date().toISOString(),
           cache_exists: false,
-          updated: new Date().toISOString()
+          updated: new Date().toISOString(),
+          partial: false,
+          progress: null,
+          status: null,
+          extent: null,
+          scheme: null,
+          tile_format: null,
+          tile_crs: null,
+          tile_matrix_preset: null,
+          tile_matrix_set: null,
+          has_tiles: false,
+          hasTiles: false,
+          tiles: 0,
+          tile_count: 0,
+          tileCount: 0,
+          size: 0
         });
       }
       fs.writeFileSync(projectIndexPath, JSON.stringify(index, null, 2), "utf8");
@@ -3520,16 +3751,25 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
   }
 
   try {
+    const nowIso = new Date().toISOString();
     const message = shouldDeleteWmts && shouldDeleteWms
       ? "Cache removed"
       : (shouldDeleteWmts ? "WMTS cache removed" : "WMS cache removed");
+    const layerPatch = {
+      lastResult: "deleted",
+      lastMessage: message,
+      lastRunAt: nowIso
+    };
+    if (shouldDeleteWmts) {
+      layerPatch.lastParams = null;
+      layerPatch.lastRequestedAt = null;
+      layerPatch.zoom = { min: null, max: null, updatedAt: nowIso };
+      layerPatch.extent = { bbox: null, crs: null, updatedAt: nowIso };
+      layerPatch.extentWgs84 = { bbox: null, crs: "EPSG:4326", updatedAt: nowIso };
+    }
     updateProjectConfig(projectId, {
       layers: {
-        [layerName]: {
-          lastResult: "deleted",
-          lastMessage: message,
-          lastRunAt: new Date().toISOString()
-        }
+        [layerName]: layerPatch
       }
     }, { skipReschedule: true });
   } catch (cfgErr) {
@@ -4088,6 +4328,20 @@ const normalizeCrsCode = (value) => {
   return normalized || null;
 };
 
+const XYZ_COMPATIBLE_CRS = new Set([
+  "EPSG:3857",
+  "EPSG:900913",
+  "EPSG:102100",
+  "EPSG:3785",
+  "URN:OGC:DEF:CRS:EPSG::3857"
+]);
+
+const isXyzCompatibleCrs = (value) => {
+  const normalized = normalizeCrsCode(value);
+  if (!normalized) return false;
+  return XYZ_COMPATIBLE_CRS.has(normalized);
+};
+
 const cloneObject = (value) => {
   if (value === null || value === undefined) {
     return value;
@@ -4559,6 +4813,12 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       path: resolveTileBaseDir(projectId, kind, finalName),
       tile_profile_source: tileProfile.source || null
     };
+    if (options.layerKind) {
+      entry.type = options.layerKind;
+    }
+    if (options.geometryType) {
+      entry.geometry_type = options.geometryType;
+    }
     if (kind === "theme") {
       entry.theme = finalName;
     } else {
@@ -4601,6 +4861,8 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
       crs: layer.crs,
       cacheable: layer.cacheable !== false,
       layerId: layer.id || null,
+      layerKind: layer.kind || null,
+      geometryType: layer.geometry_type || null,
       preferProjectExtent
     });
   }
@@ -4687,6 +4949,89 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
       tileProfile: defaultTileProfile,
       allowRemote: requiresAllowRemote
     });
+
+    // Auto-prepare VectorTiles if the plugin is enabled and the project has vector layers.
+    // Creates an empty MBTiles with the correct schema so on-demand tile generation works
+    // when users zoom in via QGIS, OL viewer, or any MVT client.
+    try {
+      const bootstrapLayerList = Array.isArray(extractPayload.layers) ? extractPayload.layers : [];
+      const hasVectorLayers = bootstrapLayerList.some((l) => l && l.kind === 'vector');
+      const vtPluginEnabled = pluginManager && pluginManager.listEnabled().includes('VectorTiles');
+      if (hasVectorLayers && vtPluginEnabled) {
+        const vtCacheDir = path.join(process.cwd(), 'cache', 'vector-tiles', projectId);
+        const vtMbtiles = path.join(vtCacheDir, 'tiles.mbtiles');
+        const vtTilesetPath = path.join(process.cwd(), 'data', 'VectorTiles', 'tilesets.json');
+        await fs.promises.mkdir(vtCacheDir, { recursive: true });
+        // Create empty MBTiles with tiles + metadata tables if it doesn't exist
+        if (!fs.existsSync(vtMbtiles)) {
+          try {
+            const Database = (await import('better-sqlite3')).default;
+            const db = new Database(vtMbtiles);
+            db.exec(`
+              CREATE TABLE IF NOT EXISTS tiles (
+                zoom_level integer,
+                tile_column integer,
+                tile_row integer,
+                tile_data blob,
+                UNIQUE (zoom_level, tile_column, tile_row)
+              );
+              CREATE TABLE IF NOT EXISTS metadata (
+                name text,
+                value text,
+                UNIQUE (name)
+              );
+            `);
+            db.close();
+          } catch (sqliteErr) {
+            // Fallback: try Python init script
+            try {
+              const { execSync } = await import('child_process');
+              const initScript = path.join(process.cwd(), 'plugins', 'VectorTiles', 'python', 'init_mbtiles.py');
+              execSync(`python "${initScript}" "${vtMbtiles}"`, { timeout: 10000, stdio: 'ignore' });
+            } catch {
+              // If all fails, the file will be created by first on-demand job
+            }
+          }
+        }
+        // Add/update entry in tilesets.json if not already present
+        try {
+          await fs.promises.mkdir(path.dirname(vtTilesetPath), { recursive: true });
+          let tilesets = { items: {} };
+          try {
+            const raw = await fs.promises.readFile(vtTilesetPath, 'utf8');
+            tilesets = JSON.parse(raw);
+            if (!tilesets || typeof tilesets !== 'object') tilesets = { items: {} };
+            if (!tilesets.items || typeof tilesets.items !== 'object') tilesets.items = {};
+          } catch {}
+          if (!tilesets.items[projectId]) {
+            const boundsArr = (projectExtentWgs && Array.isArray(projectExtentWgs) && projectExtentWgs.length === 4)
+              ? projectExtentWgs
+              : null;
+            tilesets.items[projectId] = {
+              projectId,
+              mbtilesPath: vtMbtiles,
+              minZoom: 0,
+              maxZoom: 20,
+              selectedLayerIds: [],
+              vectorLayerCount: bootstrapLayerList.filter((l) => l && l.kind === 'vector').length,
+              selectedLayerCount: 0,
+              layerStyles: [],
+              sourceLayerMeta: [],
+              sourceLayers: [],
+              bounds: boundsArr,
+              updatedAt: new Date().toISOString(),
+              autoBootstrapped: true
+            };
+            await fs.promises.writeFile(vtTilesetPath, JSON.stringify(tilesets, null, 2), 'utf8');
+            console.log(`[bootstrap] Auto-prepared VectorTiles for project ${projectId}`);
+          }
+        } catch (vtStoreErr) {
+          console.warn(`[bootstrap] VT tileset store update failed for ${projectId}:`, vtStoreErr?.message || vtStoreErr);
+        }
+      }
+    } catch (vtErr) {
+      console.warn(`[bootstrap] VT auto-prepare failed for ${projectId}:`, vtErr?.message || vtErr);
+    }
     return true;
   } catch (err) {
     console.warn(`[bootstrap] Failed to persist index for ${projectId}`, err?.message || err);
@@ -4864,127 +5209,38 @@ registerOrigoRoutes({
 
 const persistProjectAccessSnapshot = (snapshot) => {
   if (!snapshot || typeof snapshot !== "object") return;
+  // Write to SQLite (primary storage)
   try {
-    fs.mkdirSync(path.dirname(projectAccessPath), { recursive: true });
-    fs.writeFileSync(projectAccessPath, JSON.stringify(snapshot, null, 2), "utf8");
+    persistProjectAccessInDb(dataDir, snapshot);
   } catch (err) {
-    throw new Error(`Failed to write project access snapshot: ${err?.message || err}`);
-  }
-  for (const legacyPath of legacyProjectAccessPaths) {
-    try {
-      fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
-      fs.writeFileSync(legacyPath, JSON.stringify(snapshot, null, 2), "utf8");
-    } catch (legacyErr) {
-      if (legacyErr?.code !== "ENOENT") {
-        console.warn("Failed to update legacy project access snapshot", { legacyPath, error: String(legacyErr?.message || legacyErr) });
-      }
-    }
+    throw new Error(`Failed to write project access to SQLite: ${err?.message || err}`);
   }
 };
 
 const readProjectAccessSnapshot = () => {
-  const createDefaultSnapshot = () => ({ projects: {} });
-
-  const readSnapshotFrom = (filePath) => {
-    try {
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-      const raw = fs.readFileSync(filePath, "utf8");
-      if (!raw) return createDefaultSnapshot();
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        if (!parsed.projects || typeof parsed.projects !== "object") {
-          parsed.projects = {};
-        }
-        return parsed;
-      }
-    } catch (err) {
-      if (err?.code !== "ENOENT") {
-        console.warn("Failed to read project access snapshot", { filePath, error: String(err?.message || err) });
-      }
-    }
-    return null;
-  };
-
-  const candidatePaths = [projectAccessPath, ...legacyProjectAccessPaths];
-  const candidates = [];
-  for (const filePath of candidatePaths) {
-    const snapshot = readSnapshotFrom(filePath);
-    if (!snapshot) continue;
-    let mtimeMs = 0;
-    try {
-      const stats = fs.statSync(filePath);
-      if (stats && Number.isFinite(stats.mtimeMs)) {
-        mtimeMs = stats.mtimeMs;
-      }
-    } catch (err) {
-      mtimeMs = 0;
-    }
-    candidates.push({ filePath, snapshot, mtimeMs });
+  try {
+    return readProjectAccessFromDb(dataDir);
+  } catch (err) {
+    console.warn("Failed to read project access from SQLite", String(err?.message || err));
+    return { projects: {} };
   }
-
-  if (!candidates.length) {
-    const defaults = createDefaultSnapshot();
-    try {
-      persistProjectAccessSnapshot(defaults);
-    } catch (err) {
-      console.warn("Failed to seed project access snapshot", String(err?.message || err));
-    }
-    return defaults;
-  }
-
-  candidates.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
-  const best = candidates[0];
-  if (best.filePath !== projectAccessPath) {
-    try {
-      persistProjectAccessSnapshot(best.snapshot);
-      console.log("Synchronized project access snapshot", { source: best.filePath, target: projectAccessPath });
-    } catch (err) {
-      console.warn("Failed to synchronize project access snapshot", { source: best.filePath, error: String(err?.message || err) });
-    }
-  }
-  return best.snapshot;
 };
 
 const removeProjectAccessEntry = (projectId) => {
   if (!projectId) return;
-  const snapshot = readProjectAccessSnapshot();
-  if (!snapshot || typeof snapshot !== "object") return;
-  if (!snapshot.projects || typeof snapshot.projects !== "object") {
-    snapshot.projects = {};
+  try {
+    removeProjectAccessFromDb(dataDir, projectId);
+  } catch (err) {
+    console.warn("Failed to remove project access entry from SQLite", { projectId, error: String(err?.message || err) });
   }
-  if (!Object.prototype.hasOwnProperty.call(snapshot.projects, projectId)) return;
-  delete snapshot.projects[projectId];
-  persistProjectAccessSnapshot(snapshot);
 };
 
 const purgeProjectFromAuthUsers = (projectId) => {
   if (!projectId) return;
-  for (const filePath of authUserSnapshotPaths) {
-    let changed = false;
-    try {
-      if (!fs.existsSync(filePath)) continue;
-      const raw = fs.readFileSync(filePath, "utf8");
-      if (!raw) continue;
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== "object" || !Array.isArray(data.users)) continue;
-      for (const user of data.users) {
-        if (!Array.isArray(user?.projects)) continue;
-        const filtered = user.projects.filter((id) => id !== projectId);
-        if (filtered.length !== user.projects.length) {
-          user.projects = filtered;
-          changed = true;
-        }
-      }
-      if (changed) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-      }
-    } catch (err) {
-      if (err?.code === "ENOENT") continue;
-      throw new Error(`Failed to update auth users at ${filePath}: ${err?.message || err}`);
-    }
+  try {
+    purgeProjectFromUsersInDb(dataDir, projectId);
+  } catch (err) {
+    console.warn("Failed to purge project from auth users in SQLite", { projectId, error: String(err?.message || err) });
   }
 };
 
@@ -5086,6 +5342,7 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   }
   const config = readProjectConfig(projectId);
   const projectMeta = config && typeof config === "object" && config.project ? config.project : null;
+  const projectCrs = normalizeCrsCode(projectMeta?.crs);
   const displayName = projectMeta?.title || projectMeta?.name || project.name || projectId;
   const summary = projectMeta?.summary || projectMeta?.description || null;
   const wmtsUrl = `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
@@ -5093,11 +5350,25 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   const wfsUrl = `/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
   const cacheUpdatedAt = indexData.updated || indexData.modified || indexData.generatedAt || indexData.created || null;
   const accessInfo = access && typeof access === "object" ? access : { public: true, allowed: true };
+
+  for (const entry of [...layers, ...themes]) {
+    if (!entry || typeof entry !== "object") continue;
+    const effectiveTileCrs = normalizeCrsCode(entry.tile_crs || entry.tileCrs || entry.crs || projectCrs);
+    const xyzEnabled = isXyzCompatibleCrs(effectiveTileCrs);
+    entry.xyz_enabled = xyzEnabled;
+    entry.xyzEnabled = xyzEnabled;
+    if (effectiveTileCrs && !entry.tile_crs) {
+      entry.tile_crs = effectiveTileCrs;
+    }
+  }
+
   return {
     id: projectId,
     name: project.name,
     title: displayName,
     summary,
+    projectCrs,
+    xyzEnabled: isXyzCompatibleCrs(projectCrs),
     public: accessInfo.public === true,
     wmtsUrl,
     wmsUrl,
@@ -5220,8 +5491,29 @@ function canEnqueueJob(project, layer) {
 // directorio para persistir metadatos de jobs (pid, args) para poder detectar huérfanos
 const jobPidDir = path.resolve(__dirname, 'data', 'job-pids');
 try { fs.mkdirSync(jobPidDir, { recursive: true }); } catch (e) { /* ignore */ }
+const jobAbortDir = path.resolve(__dirname, 'data', 'job-aborts');
+try { fs.mkdirSync(jobAbortDir, { recursive: true }); } catch (e) { /* ignore */ }
 // Helpers para persistir metadatos de job -> pid
 const jobPidPathFor = (id) => path.join(jobPidDir, `${id}.json`);
+const jobAbortPathFor = (id) => path.join(jobAbortDir, `${id}.abort`);
+const writeJobAbortMarker = (id) => {
+  try {
+    if (!id) return false;
+    fs.writeFileSync(jobAbortPathFor(id), String(Date.now()), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+};
+const deleteJobAbortMarker = (id) => {
+  try {
+    if (!id) return;
+    const p = jobAbortPathFor(id);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {
+    // ignore
+  }
+};
 const writeJobPidFile = (job) => {
   try {
     const p = jobPidPathFor(job.id);
@@ -5247,6 +5539,8 @@ const writeJobPidFile = (job) => {
 // Internal helper: abort a generate-cache job by id (supports cross-worker/orphan best-effort).
 const abortGenerateCacheJobInternal = async (id, { silentAbort = false } = {}) => {
   if (!id) return { ok: false, status: 400, payload: { error: 'id required' } };
+  // Cooperative abort marker: Python checks this and stops even if process tree kill is delayed.
+  writeJobAbortMarker(id);
   const job = runningJobs.get(id);
   if (!job) {
     try {
@@ -5396,6 +5690,21 @@ const abortGenerateCacheJobInternal = async (id, { silentAbort = false } = {}) =
     return { ok: false, status: 500, payload: { error: String(err) } };
   }
 };
+
+// In cluster mode, ask all workers to attempt an in-memory abort for the same job id.
+const requestClusterAbortPropagation = async (id, { waitMs = 450 } = {}) => {
+  try {
+    if (!id) return;
+    if (cluster.isWorker && typeof process.send === 'function') {
+      process.send({ cmd: 'abortGenerateCacheJob', id: String(id), sourcePid: process.pid });
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    }
+  } catch {
+    // best effort
+  }
+};
 const deleteJobPidFile = (id) => {
   try {
     const p = jobPidPathFor(id);
@@ -5403,6 +5712,7 @@ const deleteJobPidFile = (id) => {
   } catch (e) {
     // ignore
   }
+  try { deleteJobAbortMarker(id); } catch {}
 };
 
 // util: check if pid is alive
@@ -5526,6 +5836,7 @@ registerProjectRoutes({
   getProjectConfigPath,
   deleteLayerCacheInternal,
   updateProjectBatchRun,
+  abortProjectBatchRunInternal,
   tileRendererPool,
   runRecacheForProject,
   logProjectEvent,
@@ -5758,6 +6069,8 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
 
   const jobLabel = targetMode === "theme" ? `theme:${targetName}` : targetName;
   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // Clear stale abort marker for this id before launching the process.
+  try { deleteJobAbortMarker(id); } catch {}
   // Attach job id so we can reliably find/abort the real python process even when spawned via shell/batch on Windows.
   try { args.push('--job_id', String(id)); } catch {}
   const childEnvOverrides = {};
@@ -5937,7 +6250,16 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
 // Abort / stop job
 app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
-  const result = await abortGenerateCacheJobInternal(id, { silentAbort: false });
+  let result = await abortGenerateCacheJobInternal(id, { silentAbort: false });
+  if (!result.ok) {
+    // In clustered setups the request may hit a different worker than the one
+    // owning the process; propagate and retry once.
+    await requestClusterAbortPropagation(id, { waitMs: 500 });
+    result = await abortGenerateCacheJobInternal(id, { silentAbort: false });
+  } else {
+    // Safety: propagate success so any stray in-memory copy in another worker is also stopped.
+    requestClusterAbortPropagation(id, { waitMs: 0 }).catch(() => {});
+  }
   if (!result.ok) return res.status(result.status).json(result.payload);
   return res.status(result.status).json(result.payload);
 });
@@ -5945,7 +6267,13 @@ app.delete("/generate-cache/:id", requireAdmin, async (req, res) => {
 // POST alias for tab-close (sendBeacon) scenarios.
 app.post('/generate-cache/:id/abort', requireAdmin, async (req, res) => {
   const id = req.params.id;
-  const result = await abortGenerateCacheJobInternal(id, { silentAbort: true });
+  let result = await abortGenerateCacheJobInternal(id, { silentAbort: true });
+  if (!result.ok) {
+    await requestClusterAbortPropagation(id, { waitMs: 500 });
+    result = await abortGenerateCacheJobInternal(id, { silentAbort: true });
+  } else {
+    requestClusterAbortPropagation(id, { waitMs: 0 }).catch(() => {});
+  }
   if (!result.ok) return res.status(result.status).json(result.payload);
   return res.status(result.status).json(result.payload);
 });
@@ -7112,8 +7440,23 @@ app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res)
       } catch {}
     }
     const layerFilterRaw = String(req.query.l || '').trim();
+    const normalizeLayerToken = (value) => String(value || '')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_:]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
     const layerFilter = layerFilterRaw
       ? layerFilterRaw.split(',').map((v) => v.trim()).filter(Boolean)
+      : null;
+    const layerFilterByNormalized = layerFilter
+      ? new Map(layerFilter.map((v) => [normalizeLayerToken(v), v]))
+      : null;
+    const layerFilterNormalized = layerFilter
+      ? new Set(layerFilter.map((v) => normalizeLayerToken(v)).filter(Boolean))
       : null;
 
     const limitRaw = Number.parseInt(String(req.query.limit || req.query.max || '10'), 10);
@@ -7128,7 +7471,24 @@ app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res)
       }
       if (layer.searchable === false) continue;
       if (wfsSearchableFlags && wfsSearchableFlags.get(String(layer.name)) === false) continue;
-      if (layerFilter && !layerFilter.includes(layer.name)) continue;
+      if (layerFilter) {
+        const rawName = String(layer.name || '').trim();
+        const normalizedName = normalizeLayerToken(rawName);
+        const directMatch = layerFilter.includes(rawName);
+        const normalizedMatch = normalizedName && layerFilterNormalized && layerFilterNormalized.has(normalizedName);
+        if (!directMatch && !normalizedMatch) continue;
+      }
+
+      const rawLayerName = String(layer.name || '').trim();
+      const normalizedLayerName = normalizeLayerToken(rawLayerName);
+      const layerTypeForResult = (layerFilterByNormalized && normalizedLayerName && layerFilterByNormalized.get(normalizedLayerName))
+        || rawLayerName;
+      const layerSearchAttribute = String(
+        layer.searchAttribute
+        || layer.titleField
+        || (Array.isArray(layer.fields) && layer.fields[0])
+        || ''
+      ).trim();
 
       const layerResults = await (async () => {
         try {
@@ -7152,15 +7512,72 @@ app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res)
 
       for (const row of layerResults) {
         const centroidWkt = row.geometry_centroid || row.centroid || null;
-        const geomWkt = centroidWkt || row.GEOM || row.geometry || null;
+        const rawGeomWkt = row.GEOM || row.geometry || null;
+        const rawGeomText = typeof rawGeomWkt === 'string' ? rawGeomWkt : '';
+        const geomWkt = centroidWkt
+          || (rawGeomText && rawGeomText.length <= 12000 ? rawGeomWkt : null);
+        let easting = null;
+        let northing = null;
+        const parseFirstCoordFromWkt = (wkt) => {
+          try {
+            const text = typeof wkt === 'string' ? wkt : '';
+            if (!text) return null;
+            const m = text.match(/\(\s*\(?\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+            if (!m) return null;
+            const x = Number.parseFloat(m[1]);
+            const y = Number.parseFloat(m[2]);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+            return [x, y];
+          } catch {
+            return null;
+          }
+        };
+        try {
+          const pointWkt = typeof centroidWkt === 'string' ? centroidWkt : '';
+          const m = pointWkt.match(/POINT\s*(?:Z|M|ZM)?\s*\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
+          if (m) {
+            easting = Number.parseFloat(m[1]);
+            northing = Number.parseFloat(m[2]);
+            if (!Number.isFinite(easting)) easting = null;
+            if (!Number.isFinite(northing)) northing = null;
+          }
+        } catch {}
+        if (!Number.isFinite(easting) || !Number.isFinite(northing)) {
+          const fallbackCoord = parseFirstCoordFromWkt(rawGeomWkt) || parseFirstCoordFromWkt(geomWkt);
+          if (fallbackCoord) {
+            easting = fallbackCoord[0];
+            northing = fallbackCoord[1];
+          }
+        }
         const nameValue = row.NAMN || row.namn || row.Name || row.name || null;
+        const rawSearchValue = layerSearchAttribute ? row[layerSearchAttribute] : null;
+        const searchValue = rawSearchValue != null && String(rawSearchValue).trim() !== ''
+          ? rawSearchValue
+          : nameValue;
         const gidValue = row.GID || row.gid || row.ID || row.id || null;
-        results.push({
+        const resultRow = {
+          ...(row && typeof row === 'object' ? row : {}),
           NAMN: nameValue,
+          namn: nameValue,
+          name: nameValue,
           GID: gidValue,
-          TYPE: layer.name,
-          GEOM: geomWkt
-        });
+          gid: gidValue,
+          ID: gidValue,
+          id: gidValue,
+          TYPE: layerTypeForResult,
+          type: layerTypeForResult,
+          GEOM: geomWkt,
+          geom: geomWkt,
+          geometry: geomWkt,
+          the_geom: geomWkt,
+          wkb_geometry: geomWkt,
+          EASTING: easting,
+          NORTHING: northing,
+          easting,
+          northing,
+          SEARCH_VALUE: searchValue
+        };
+        results.push(resultRow);
       }
     }
 
@@ -8458,12 +8875,16 @@ app.get("/wmts", (req, res, next) => {
         const derivedBaseUrl = host ? `${proto}://${host}` : "";
         const baseUrl = configuredBaseUrl || derivedBaseUrl;
 
+        const reqApiKey = req.query?.api_key || "";
         let kvpUrl = baseUrl + "/wmts?";
         if (filterProjectId) {
             kvpUrl += "project=" + encodeURIComponent(filterProjectId) + "&";
         }
         if (filterLayer) {
           kvpUrl += "layer=" + encodeURIComponent(filterLayer) + "&";
+        }
+        if (reqApiKey) {
+          kvpUrl += "api_key=" + encodeURIComponent(reqApiKey) + "&";
         }
 
         const metadataSnapshot = serviceMetadata || serviceMetadataDefaults;
@@ -8596,7 +9017,7 @@ app.get("/wmts", (req, res, next) => {
           xmlParts.push("</TileMatrixSetLink>");
           
           if (baseUrl) {
-             const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png`;
+             const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png${reqApiKey ? '?api_key=' + encodeURIComponent(reqApiKey) : ''}`;
              xmlParts.push(`<ResourceURL format=\"image/png\" resourceType=\"tile\" template=\"${xmlEscape(template)}\"/>`);
           }
           
@@ -9155,7 +9576,8 @@ const startServer = async () => {
   }
   initializeProjectSchedules();
   startScheduleHeartbeat();
-  const server = app.listen(3000, () => console.log("🚀 Servidor Node.js en http://localhost:3000"));
+  const port = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
+  const server = app.listen(port, () => console.log(`🚀 Servidor Node.js en http://localhost:${port}`));
   // Increase timeout for tile rendering requests (default is 2 minutes)
   server.timeout = 300000; // 5 minutes
   server.keepAliveTimeout = 310000; // Slightly longer than timeout
@@ -9181,6 +9603,19 @@ if (cluster.isPrimary || cluster.isMaster) {
           cluster.workers[id].process.kill();
         } catch (err) {
           console.warn('[Qtiler] Failed to kill worker', id, err?.message || err);
+        }
+      }
+      return;
+    }
+
+    if (msg && msg.cmd === 'abortGenerateCacheJob' && msg.id) {
+      // Broadcast to all workers so the worker that owns the in-memory child
+      // process can abort it directly.
+      for (const id in cluster.workers) {
+        try {
+          cluster.workers[id].process.send({ cmd: 'abortGenerateCacheJob', id: String(msg.id), sourcePid: msg.sourcePid || null });
+        } catch (err) {
+          console.warn('[Qtiler] Failed to propagate abortGenerateCacheJob to worker', id, err?.message || err);
         }
       }
     }
@@ -9212,6 +9647,9 @@ if (cluster.isPrimary || cluster.isMaster) {
           // allow master to detect exit and fork new worker
           process.exit(1);
         }
+      } else if (msg && msg.cmd === 'abortGenerateCacheJob' && msg.id) {
+        // Best-effort local abort. This is intentionally async and fire-and-forget.
+        abortGenerateCacheJobInternal(String(msg.id), { silentAbort: true }).catch(() => {});
       }
     } catch (e) {
       // ignore

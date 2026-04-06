@@ -9,6 +9,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { getAuthDb, closeAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 
 const ROLE_ADMIN = 'admin';
 const ROLE_AUTH = 'authenticated';
@@ -28,6 +29,13 @@ const pickUserPayload = (user) => {
 };
 
 const pickAdminUserPayload = (user) => {
+  const payload = pickUserPayload(user);
+  if (!payload) return null;
+  return { ...payload, apiKey: user?.apiKey || null };
+};
+
+// Like pickUserPayload but includes the user's own apiKey (for /auth/me and /auth/login)
+const pickSelfPayload = (user) => {
   const payload = pickUserPayload(user);
   if (!payload) return null;
   return { ...payload, apiKey: user?.apiKey || null };
@@ -87,130 +95,290 @@ const getApiKey = (req) => {
   return null;
 };
 
-export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
-  const usersStore = registerStore('../auth-users.json', { users: [] });
-  // Store project access rules inside the plugin data directory (data/QtilerAuth/project-access.json)
-  // so both the core server and the plugin read the same source of truth.
-  const projectStore = registerStore('project-access.json', { projects: {} });
-  const configStore = registerStore('../auth-config.json', {
-    jwtSecret: null,
-    tokenTtlSeconds: DEFAULT_IDLE_TIMEOUT_SECONDS,
-    refreshTtlSeconds: 1209600
-  });
+/* ------------------------------------------------------------------ */
+/*  SQLite row ↔ JS object helper                                     */
+/* ------------------------------------------------------------------ */
+const rowToUser = (row) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    passwordHash: row.password_hash,
+    role: row.role,
+    apiKey: row.api_key,
+    projects: JSON.parse(row.projects || '[]'),
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+};
 
+export const register = async ({ app, security, dataDir, baseDir }) => {
+  /* ---------------------------------------------------------------- */
+  /*  Database initialization                                          */
+  /* ---------------------------------------------------------------- */
+  const dataRoot = path.resolve(dataDir, '..');
+  const db = getAuthDb(dataRoot);
+
+  /* ---------------------------------------------------------------- */
+  /*  Auto-migrate from JSON files (one-time, on first startup)        */
+  /* ---------------------------------------------------------------- */
+  const migrateFromJson = () => {
+    const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
+    if (userCount > 0) return; // Already has data, skip migration
+
+    // --- Users ---
+    const usersJsonPath = path.join(dataRoot, 'auth-users.json');
+    try {
+      if (fs.existsSync(usersJsonPath)) {
+        const raw = JSON.parse(fs.readFileSync(usersJsonPath, 'utf8'));
+        const users = Array.isArray(raw?.users) ? raw.users : [];
+        const insert = db.prepare(`
+          INSERT OR IGNORE INTO users (id, username, password_hash, role, api_key, projects, status, created_at, updated_at)
+          VALUES (@id, @username, @password_hash, @role, @api_key, @projects, @status, @created_at, @updated_at)
+        `);
+        db.transaction(() => {
+          for (const u of users) {
+            insert.run({
+              id: u.id || crypto.randomUUID(),
+              username: normalizeUsername(u.username),
+              password_hash: u.passwordHash || '',
+              role: VALID_ROLES.has(u.role) ? u.role : ROLE_AUTH,
+              api_key: u.apiKey || null,
+              projects: JSON.stringify(Array.isArray(u.projects) ? u.projects : []),
+              status: u.status === 'disabled' ? 'disabled' : 'active',
+              created_at: u.createdAt || nowIso(),
+              updated_at: u.updatedAt || nowIso()
+            });
+          }
+        })();
+        fs.renameSync(usersJsonPath, usersJsonPath + '.bak');
+        console.log(`[QtilerAuth] Migrated ${users.length} users from JSON → SQLite`);
+      }
+    } catch (err) {
+      console.warn('[QtilerAuth] Failed to migrate users from JSON', err?.message || err);
+    }
+
+    // --- Config ---
+    const configJsonPath = path.join(dataRoot, 'auth-config.json');
+    try {
+      if (fs.existsSync(configJsonPath)) {
+        const cfg = JSON.parse(fs.readFileSync(configJsonPath, 'utf8'));
+        const upsert = db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
+        db.transaction(() => {
+          if (cfg?.jwtSecret) upsert.run('jwtSecret', cfg.jwtSecret);
+          if (cfg?.tokenTtlSeconds) upsert.run('tokenTtlSeconds', String(cfg.tokenTtlSeconds));
+          if (cfg?.refreshTtlSeconds) upsert.run('refreshTtlSeconds', String(cfg.refreshTtlSeconds));
+        })();
+        fs.renameSync(configJsonPath, configJsonPath + '.bak');
+        console.log('[QtilerAuth] Migrated config from JSON → SQLite');
+      }
+    } catch (err) {
+      console.warn('[QtilerAuth] Failed to migrate config from JSON', err?.message || err);
+    }
+
+    // --- Project access ---
+    const projectJsonPaths = [
+      path.join(dataDir, 'project-access.json'),
+      path.join(dataRoot, 'project-access.json'),
+      path.join(dataRoot, 'auth', 'project-access.json')
+    ];
+    for (const pPath of projectJsonPaths) {
+      try {
+        if (!fs.existsSync(pPath)) continue;
+        const raw = JSON.parse(fs.readFileSync(pPath, 'utf8'));
+        const projs = raw?.projects;
+        if (!projs || typeof projs !== 'object') continue;
+        const upsert = db.prepare(`
+          INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles)
+          VALUES (?, ?, ?, ?)
+        `);
+        db.transaction(() => {
+          for (const [pid, entry] of Object.entries(projs)) {
+            upsert.run(
+              pid,
+              entry?.public ? 1 : 0,
+              JSON.stringify(ensureArrayOfStrings(entry?.allowedUsers)),
+              JSON.stringify(ensureArrayOfStrings(entry?.allowedRoles))
+            );
+          }
+        })();
+        try { fs.renameSync(pPath, pPath + '.bak'); } catch {}
+        console.log(`[QtilerAuth] Migrated project access from ${pPath} → SQLite`);
+        break; // Only migrate from first found
+      } catch (err) {
+        console.warn('[QtilerAuth] Failed to migrate project access from', pPath, err?.message || err);
+      }
+    }
+  };
+  migrateFromJson();
+
+  /* ---------------------------------------------------------------- */
+  /*  Prepared statements                                              */
+  /* ---------------------------------------------------------------- */
+  const stmts = {
+    getAllUsers: db.prepare('SELECT * FROM users'),
+    getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
+    getUserByUsername: db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE'),
+    getUserByApiKey: db.prepare('SELECT * FROM users WHERE api_key = ?'),
+    insertUser: db.prepare(`
+      INSERT INTO users (id, username, password_hash, role, api_key, projects, status, created_at, updated_at)
+      VALUES (@id, @username, @password_hash, @role, @api_key, @projects, @status, @created_at, @updated_at)
+    `),
+    updateUser: db.prepare(`
+      UPDATE users SET username = @username, password_hash = @password_hash, role = @role,
+        api_key = @api_key, projects = @projects, status = @status, updated_at = @updated_at
+      WHERE id = @id
+    `),
+    deleteUser: db.prepare('DELETE FROM users WHERE id = ? AND username != ?'),
+    getConfig: db.prepare('SELECT key, value FROM config'),
+    upsertConfig: db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)'),
+    getProject: db.prepare('SELECT * FROM projects WHERE project_id = ?'),
+    upsertProject: db.prepare(`
+      INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles)
+      VALUES (@project_id, @is_public, @allowed_users, @allowed_roles)
+    `)
+  };
+
+  /* ---------------------------------------------------------------- */
+  /*  Configuration                                                    */
+  /* ---------------------------------------------------------------- */
   const configuredIdleRaw = Number(process.env.QTILER_AUTH_IDLE_TIMEOUT_SECONDS || DEFAULT_IDLE_TIMEOUT_SECONDS);
   const idleTimeoutSeconds = Number.isFinite(configuredIdleRaw) && configuredIdleRaw > 0
     ? Math.floor(configuredIdleRaw)
     : DEFAULT_IDLE_TIMEOUT_SECONDS;
 
-  const ensureObjectSnapshot = (value, fallback) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
-    return value;
+  /* ---------------------------------------------------------------- */
+  /*  Data-access helpers                                              */
+  /* ---------------------------------------------------------------- */
+  const readUsers = () => stmts.getAllUsers.all().map(rowToUser);
+
+  const findUserByUsername = (username) => {
+    const target = normalizeUsername(username);
+    return rowToUser(stmts.getUserByUsername.get(target));
   };
 
-  const normalizeProjectAccessSnapshot = (raw) => {
-    const snapshot = ensureObjectSnapshot(raw, { projects: {} });
-    if (!snapshot.projects || typeof snapshot.projects !== 'object' || Array.isArray(snapshot.projects)) {
-      snapshot.projects = {};
-    }
-    return snapshot;
+  const findUserByApiKey = (apiKey) => {
+    if (!apiKey) return null;
+    const needle = String(apiKey || '').trim();
+    if (!needle) return null;
+    return rowToUser(stmts.getUserByApiKey.get(needle));
   };
 
-  const tryReadJson = async (filePath) => {
-    try {
-      const raw = await fs.promises.readFile(filePath, 'utf8');
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (err) {
-      if (err?.code === 'ENOENT') return null;
-      return null;
-    }
-  };
+  const findUserById = (id) => rowToUser(stmts.getUserById.get(id));
 
-  const seedProjectAccessFromLegacy = async () => {
-    // If the plugin store is empty, seed it from the newest legacy snapshot.
-    try {
-      const current = normalizeProjectAccessSnapshot(await projectStore.read());
-      const hasEntries = current && current.projects && Object.keys(current.projects).length > 0;
-      if (hasEntries) return;
-
-      const dataRoot = path.resolve(dataDir, '..');
-      const candidates = [
-        path.join(dataRoot, 'project-access.json'),
-        path.join(dataRoot, 'auth', 'project-access.json')
-      ];
-
-      const existing = [];
-      for (const filePath of candidates) {
-        try {
-          const stats = await fs.promises.stat(filePath);
-          const payload = await tryReadJson(filePath);
-          if (!payload) continue;
-          existing.push({ filePath, mtimeMs: Number(stats?.mtimeMs) || 0, payload: normalizeProjectAccessSnapshot(payload) });
-        } catch {
-          // ignore
-        }
-      }
-
-      if (!existing.length) return;
-      existing.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
-      await projectStore.write(existing[0].payload);
-      console.log('[QtilerAuth] Seeded project-access.json from legacy snapshot', { source: existing[0].filePath });
-    } catch (err) {
-      console.warn('[QtilerAuth] Failed to seed project access from legacy', err?.message || err);
-    }
-  };
-
-  const ensureSecret = async () => {
-    await configStore.update((draft) => {
-      if (!draft || typeof draft !== 'object') {
-        return { jwtSecret: crypto.randomBytes(32).toString('hex'), tokenTtlSeconds: idleTimeoutSeconds, refreshTtlSeconds: 1209600 };
-      }
-      if (!draft.jwtSecret) {
-        draft.jwtSecret = crypto.randomBytes(32).toString('hex');
-      }
-      // Enforce idle timeout policy for browser login sessions.
-      if (!Number.isFinite(draft.tokenTtlSeconds) || Number(draft.tokenTtlSeconds) <= 0) {
-        draft.tokenTtlSeconds = idleTimeoutSeconds;
-      } else {
-        draft.tokenTtlSeconds = Math.min(Math.floor(Number(draft.tokenTtlSeconds)), idleTimeoutSeconds);
-      }
-      if (!Number.isFinite(draft.refreshTtlSeconds)) {
-        draft.refreshTtlSeconds = 1209600;
-      }
-      return draft;
+  const insertUser = (user) => {
+    stmts.insertUser.run({
+      id: user.id,
+      username: normalizeUsername(user.username),
+      password_hash: user.passwordHash,
+      role: user.role,
+      api_key: user.apiKey || null,
+      projects: JSON.stringify(Array.isArray(user.projects) ? user.projects : []),
+      status: user.status || 'active',
+      created_at: user.createdAt || nowIso(),
+      updated_at: user.updatedAt || nowIso()
     });
   };
 
-  const readConfig = async () => {
-    const cfg = await configStore.read();
-    const ttl = Number.isFinite(cfg?.tokenTtlSeconds) && Number(cfg?.tokenTtlSeconds) > 0
-      ? Math.min(Math.floor(Number(cfg.tokenTtlSeconds)), idleTimeoutSeconds)
-      : idleTimeoutSeconds;
+  const updateUserFields = (id, changes) => {
+    const current = stmts.getUserById.get(id);
+    if (!current) return null;
+    const merged = {
+      id,
+      username: changes.username !== undefined ? normalizeUsername(changes.username) : current.username,
+      password_hash: changes.passwordHash !== undefined ? changes.passwordHash : current.password_hash,
+      role: changes.role !== undefined ? changes.role : current.role,
+      api_key: changes.apiKey !== undefined ? changes.apiKey : current.api_key,
+      projects: changes.projects !== undefined ? JSON.stringify(changes.projects) : current.projects,
+      status: changes.status !== undefined ? changes.status : current.status,
+      updated_at: nowIso()
+    };
+    stmts.updateUser.run(merged);
+    return rowToUser(stmts.getUserById.get(id));
+  };
+
+  const updateUserRecord = (id, updater) => {
+    const current = findUserById(id);
+    if (!current) return;
+    const next = updater({ ...current });
+    if (next === null) {
+      stmts.deleteUser.run(id, 'admin');
+    } else {
+      updateUserFields(id, next);
+    }
+  };
+
+  /* ---------------------------------------------------------------- */
+  /*  Config helpers                                                   */
+  /* ---------------------------------------------------------------- */
+  const readConfigMap = () => {
+    const rows = stmts.getConfig.all();
+    const map = {};
+    for (const r of rows) map[r.key] = r.value;
+    return map;
+  };
+
+  const ensureSecret = () => {
+    const cfg = readConfigMap();
+    if (!cfg.jwtSecret) {
+      stmts.upsertConfig.run('jwtSecret', crypto.randomBytes(32).toString('hex'));
+    }
+    const currentTtl = Number(cfg.tokenTtlSeconds);
+    if (!Number.isFinite(currentTtl) || currentTtl <= 0) {
+      stmts.upsertConfig.run('tokenTtlSeconds', String(idleTimeoutSeconds));
+    } else {
+      const clamped = Math.min(Math.floor(currentTtl), idleTimeoutSeconds);
+      stmts.upsertConfig.run('tokenTtlSeconds', String(clamped));
+    }
+    if (!cfg.refreshTtlSeconds) {
+      stmts.upsertConfig.run('refreshTtlSeconds', '1209600');
+    }
+  };
+
+  const readConfig = () => {
+    const cfg = readConfigMap();
+    const ttl = Number(cfg.tokenTtlSeconds);
     return {
-      jwtSecret: cfg?.jwtSecret,
-      tokenTtlSeconds: ttl
+      jwtSecret: cfg.jwtSecret,
+      tokenTtlSeconds: Number.isFinite(ttl) && ttl > 0
+        ? Math.min(Math.floor(ttl), idleTimeoutSeconds)
+        : idleTimeoutSeconds
     };
   };
 
-  const readUsers = async () => {
-    const data = await usersStore.read();
-    return Array.isArray(data?.users) ? data.users : [];
+  /* ---------------------------------------------------------------- */
+  /*  Project access helpers                                           */
+  /* ---------------------------------------------------------------- */
+  const getProjectAccess = (projectId) => {
+    const row = stmts.getProject.get(projectId);
+    if (!row) return null;
+    return {
+      public: !!row.is_public,
+      allowedUsers: JSON.parse(row.allowed_users || '[]'),
+      allowedRoles: JSON.parse(row.allowed_roles || '[]')
+    };
   };
 
-  const saveUsers = async (nextUsers) => {
-    await usersStore.write({ users: nextUsers });
+  const upsertProjectAccess = (projectId, entry) => {
+    const current = getProjectAccess(projectId) || { public: false, allowedUsers: [], allowedRoles: [] };
+    stmts.upsertProject.run({
+      project_id: projectId,
+      is_public: (entry.public !== undefined ? entry.public : current.public) ? 1 : 0,
+      allowed_users: JSON.stringify(ensureArrayOfStrings(entry.allowedUsers !== undefined ? entry.allowedUsers : current.allowedUsers)),
+      allowed_roles: JSON.stringify(ensureArrayOfStrings(entry.allowedRoles !== undefined ? entry.allowedRoles : current.allowedRoles).filter((r) => VALID_ROLES.has(r)))
+    });
   };
 
-  const ensureDefaultAdmin = async () => {
-    const users = await readUsers();
-    // FIX: Check specifically for admin user, not just any user.
-    // This ensures that if 'admin' was deleted or doesn't exist (even if other users do), it gets recreated.
-    const adminExists = users.some((u) => normalizeUsername(u.username) === 'admin');
-    if (adminExists) return;
+  /* ---------------------------------------------------------------- */
+  /*  Startup initialization                                           */
+  /* ---------------------------------------------------------------- */
+  ensureSecret();
 
+  // Ensure default admin
+  if (!findUserByUsername('admin')) {
     const passwordHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
-    const adminUser = {
+    insertUser({
       id: crypto.randomUUID(),
       username: 'admin',
       role: ROLE_ADMIN,
@@ -220,63 +388,42 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       createdAt: nowIso(),
       updatedAt: nowIso(),
       status: 'active'
-    };
-    
-    // Use update to append, preserving existing users if any
-    await usersStore.update((draft) => {
-      if (!Array.isArray(draft?.users)) draft.users = [];
-      // Double check inside lock
-      if (!draft.users.some((u) => normalizeUsername(u.username) === 'admin')) {
-         draft.users.push(adminUser);
-      }
-      return draft;
     });
     console.warn(`QtilerAuth initialized default admin user. Username: admin Password: ${DEFAULT_ADMIN_PASSWORD} (change immediately).`);
-  };
+  }
 
-  const ensureApiKeys = async () => {
-    await usersStore.update((draft) => {
-      if (!Array.isArray(draft?.users)) draft.users = [];
-      draft.users = draft.users.map((u) => {
-        if (!u) return u;
-        if (!u.apiKey) {
-          return { ...u, apiKey: crypto.randomBytes(24).toString('hex'), updatedAt: nowIso() };
-        }
-        return u;
-      });
-      return draft;
-    });
-  };
+  // Backfill API keys for any users missing them
+  for (const u of readUsers()) {
+    if (!u.apiKey) {
+      updateUserFields(u.id, { apiKey: crypto.randomBytes(24).toString('hex') });
+    }
+  }
 
+  // Migrate legacy default admin password
   const migrateLegacyDefaultAdminPassword = async () => {
-    // If the admin account is still using a legacy default password, upgrade it to the current DEFAULT.
     if (!DEFAULT_ADMIN_PASSWORD) return;
-    const admin = await findUserByUsername('admin');
+    const admin = findUserByUsername('admin');
     if (!admin || !admin.passwordHash) return;
     try {
       const matchesCurrent = await bcrypt.compare(DEFAULT_ADMIN_PASSWORD, admin.passwordHash);
       if (matchesCurrent) return;
-    } catch {
-      // continue
-    }
-
+    } catch { /* continue */ }
     for (const legacy of LEGACY_DEFAULT_ADMIN_PASSWORDS) {
       if (!legacy || legacy === DEFAULT_ADMIN_PASSWORD) continue;
       try {
         const matchesLegacy = await bcrypt.compare(legacy, admin.passwordHash);
         if (!matchesLegacy) continue;
         const nextHash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
-        await updateUserRecord(admin.id, (current) => ({ ...current, passwordHash: nextHash }));
+        updateUserFields(admin.id, { passwordHash: nextHash });
         console.warn(`QtilerAuth migrated legacy admin default password to current default. Username: admin Password: ${DEFAULT_ADMIN_PASSWORD} (change immediately).`);
         return;
-      } catch {
-        // ignore this legacy candidate
-      }
+      } catch { /* ignore this legacy candidate */ }
     }
   };
+  await migrateLegacyDefaultAdminPassword();
 
   const isDefaultAdminPasswordActive = async () => {
-    const admin = await findUserByUsername('admin');
+    const admin = findUserByUsername('admin');
     if (!admin || !admin.passwordHash) return false;
     try {
       if (await bcrypt.compare(DEFAULT_ADMIN_PASSWORD, admin.passwordHash)) return true;
@@ -291,48 +438,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   };
 
-
-  const findUserByUsername = async (username) => {
-    const users = await readUsers();
-    const target = normalizeUsername(username);
-    return users.find((u) => normalizeUsername(u.username) === target) || null;
-  };
-
-  const findUserByApiKey = async (apiKey) => {
-    if (!apiKey) return null;
-    const users = await readUsers();
-    const needle = String(apiKey || '').trim();
-    if (!needle) return null;
-    return users.find((u) => u && u.apiKey && String(u.apiKey).trim() === needle) || null;
-  };
-
-  const findUserById = async (id) => {
-    const users = await readUsers();
-    return users.find((u) => u.id === id) || null;
-  };
-
-  const updateUserRecord = async (id, updater) => {
-    await usersStore.update((draft) => {
-      if (!Array.isArray(draft?.users)) draft.users = [];
-      const idx = draft.users.findIndex((u) => u.id === id);
-      if (idx === -1) return draft;
-      const next = updater({ ...draft.users[idx] });
-      if (next === null) {
-        draft.users.splice(idx, 1);
-      } else {
-        draft.users[idx] = { ...draft.users[idx], ...next, updatedAt: nowIso() };
-      }
-      return draft;
-    });
-  };
-
-  await ensureSecret();
-  await seedProjectAccessFromLegacy();
-  await ensureDefaultAdmin();
-  await ensureApiKeys();
-  await migrateLegacyDefaultAdminPassword();
-
-  const { jwtSecret, tokenTtlSeconds } = await readConfig();
+  /* ---------------------------------------------------------------- */
+  /*  JWT helpers                                                      */
+  /* ---------------------------------------------------------------- */
+  const { jwtSecret, tokenTtlSeconds } = readConfig();
 
   const issueToken = (user) => {
     const payload = buildTokenPayload(user);
@@ -347,26 +456,23 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   };
 
+  /* ---------------------------------------------------------------- */
+  /*  Security middleware                                               */
+  /* ---------------------------------------------------------------- */
   const requireRoles = (...roles) => (req, res, next) => security.ensureRoles(req, res, next, roles);
 
-  security.attachUser = (req, res, next) => {
-    const bearer = getAuthHeaderToken(req);
-    const token = bearer || req.cookies?.[COOKIE_NAME];
-    
-    // Debug log for troubleshooting auth issues
-    if (process.env.DEBUG_AUTH === 'true' || !req.user) {
-       // Only log if something interesting happens or explicitly enabled
-       // console.log('[QtilerAuth] attachUser check', { hasToken: !!token, secure: req.secure, url: req.url });
-    }
+  security.attachUser = async (req, res, next) => {
+    try {
+      const bearer = getAuthHeaderToken(req);
+      const token = bearer || req.cookies?.[COOKIE_NAME];
 
-    if (token) {
-      const decoded = verifyToken(token);
-      if (decoded && decoded.sub) {
-        return findUserById(decoded.sub).then((user) => {
+      if (token) {
+        const decoded = verifyToken(token);
+        if (decoded && decoded.sub) {
+          const user = findUserById(decoded.sub);
           req.user = user ? pickUserPayload(user) : null;
 
           // Sliding idle timeout for browser cookie sessions.
-          // If there is activity and auth came from cookie (not bearer), issue a fresh short-lived token.
           if (req.user && !bearer) {
             try {
               const renewedToken = issueToken(user);
@@ -380,57 +486,40 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               console.warn('[QtilerAuth] Failed to refresh idle token', err?.message || err);
             }
           }
-          next();
-        }).catch((err) => {
-          console.warn('attachUser failed', err);
-          req.user = null;
-          next();
-        });
-      } else {
-         // Token invalid or expired
-         // console.warn('[QtilerAuth] Invalid token', { token: token.substring(0, 10) + '...' });
+          return next();
+        }
       }
-    }
 
-    const apiKey = getApiKey(req);
-    if (apiKey) {
-      return findUserByApiKey(apiKey).then((user) => {
+      const apiKey = getApiKey(req);
+      if (apiKey) {
+        const user = findUserByApiKey(apiKey);
         if (!user || user.status === 'disabled') {
           req.user = null;
           return next();
         }
         req.user = pickUserPayload(user);
-        next();
-      }).catch((err) => {
-        console.warn('API key auth failed', err);
-        req.user = null;
-        next();
-      });
-    }
-    
-    const basicCreds = parseBasicAuth(req);
-    if (basicCreds) {
-      return findUserByUsername(basicCreds.username).then(async (user) => {
+        return next();
+      }
+
+      const basicCreds = parseBasicAuth(req);
+      if (basicCreds) {
+        const user = findUserByUsername(basicCreds.username);
         if (!user || user.status === 'disabled') {
           req.user = null;
           return next();
         }
         const valid = await bcrypt.compare(basicCreds.password, user.passwordHash || '');
-        if (valid) {
-          req.user = pickUserPayload(user);
-        } else {
-          req.user = null;
-        }
-        next();
-      }).catch((err) => {
-        console.warn('Basic auth failed', err);
-        req.user = null;
-        next();
-      });
+        req.user = valid ? pickUserPayload(user) : null;
+        return next();
+      }
+
+      req.user = null;
+      return next();
+    } catch (err) {
+      console.warn('attachUser failed', err);
+      req.user = null;
+      return next();
     }
-    
-    req.user = null;
-    return next();
   };
 
   security.ensureRoles = (req, res, next, roles) => {
@@ -442,14 +531,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return res.status(403).json({ error: 'forbidden' });
   };
 
-  security.ensureProjectAccess = async (req, res, next, projectId) => {
+  security.ensureProjectAccess = (req, res, next, projectId) => {
     if (!projectId) {
       if (req.user && req.user.role === ROLE_ADMIN) return next();
       return res.status(400).json({ error: 'project_required' });
     }
     if (req.user && req.user.role === ROLE_ADMIN) return next();
-    const projectData = await projectStore.read();
-    const entry = projectData?.projects?.[projectId] || null;
+    const entry = getProjectAccess(projectId);
     if (entry?.public) return next();
     if (!req.user) {
       return res.status(401).json({ error: 'auth_required' });
@@ -475,6 +563,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     security.isEnabled = () => false;
   };
 
+  /* ---------------------------------------------------------------- */
+  /*  Routes                                                           */
+  /* ---------------------------------------------------------------- */
   const router = express.Router();
   router.use((req, res, next) => {
     if (typeof security.isEnabled === 'function' && !security.isEnabled()) {
@@ -488,7 +579,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     if (!username || !password) {
       return res.status(400).json({ error: 'missing_credentials' });
     }
-    const user = await findUserByUsername(username);
+    const user = findUserByUsername(username);
     if (!user) {
       return res.status(401).json({ error: 'invalid_credentials' });
     }
@@ -501,16 +592,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
     const token = issueToken(user);
     // FIX: Force secure=false for local testing to avoid login issues on HTTP
-    // In production with HTTPS, you can change this back to !!req.secure
     const cookieOpts = {
       httpOnly: true,
       sameSite: 'lax',
-      secure: false, 
+      secure: false,
       maxAge: tokenTtlSeconds * 1000
     };
     res.cookie(COOKIE_NAME, token, cookieOpts);
     console.log('[QtilerAuth] Login successful', { username: user.username, secure: cookieOpts.secure });
-    return res.json({ token, user: pickUserPayload(user) });
+    return res.json({ token, user: pickSelfPayload(user) });
   });
 
   router.post('/logout', (req, res) => {
@@ -526,11 +616,16 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     if (!req.user) {
       return res.status(401).json({ error: 'auth_required' });
     }
-    return res.json({ user: req.user });
+    // Return the user's own apiKey so the frontend can build authenticated URLs
+    const fullUser = req.user.id ? findUserById(req.user.id) : null;
+    return res.json({ user: fullUser ? pickSelfPayload(fullUser) : req.user });
   });
 
   app.use('/auth', router);
 
+  /* ---------------------------------------------------------------- */
+  /*  Admin routes                                                     */
+  /* ---------------------------------------------------------------- */
   const adminRouter = express.Router();
   adminRouter.use((req, res, next) => {
     if (typeof security.isEnabled === 'function' && !security.isEnabled()) {
@@ -540,8 +635,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   });
   adminRouter.use(requireRoles(ROLE_ADMIN));
 
-  adminRouter.get('/users', async (_req, res) => {
-    const users = await readUsers();
+  adminRouter.get('/users', (_req, res) => {
+    const users = readUsers();
     res.json({ users: users.map(pickAdminUserPayload) });
   });
 
@@ -567,10 +662,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return res.status(400).json({ error: 'password_too_short' });
     }
     const targetRole = VALID_ROLES.has(role) ? role : ROLE_AUTH;
-    const existing = await findUserByUsername(cleanUsername);
-    if (existing) {
-      return res.status(409).json({ error: 'username_taken' });
-    }
     const passwordHash = await bcrypt.hash(password, 10);
     const now = nowIso();
     const userRecord = {
@@ -584,26 +675,25 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       updatedAt: now,
       status: status === 'disabled' ? 'disabled' : 'active'
     };
-    await usersStore.update((draft) => {
-      if (!Array.isArray(draft?.users)) draft.users = [];
-      draft.users.push(userRecord);
-      return draft;
-    });
+    try {
+      insertUser(userRecord);
+    } catch (err) {
+      if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return res.status(409).json({ error: 'username_taken' });
+      }
+      throw err;
+    }
     res.status(201).json({ user: pickAdminUserPayload(userRecord) });
   });
 
-  adminRouter.post('/users/:id/api-key', async (req, res) => {
+  adminRouter.post('/users/:id/api-key', (req, res) => {
     const { id } = req.params;
-    let updatedUser = null;
-    await updateUserRecord(id, (current) => {
-      if (!current) return null;
-      updatedUser = { ...current, apiKey: crypto.randomBytes(24).toString('hex') };
-      return updatedUser;
-    });
-    if (!updatedUser) {
+    const newKey = crypto.randomBytes(24).toString('hex');
+    const updated = updateUserFields(id, { apiKey: newKey });
+    if (!updated) {
       return res.status(404).json({ error: 'user_not_found' });
     }
-    res.json({ user: pickAdminUserPayload(updatedUser) });
+    res.json({ user: pickAdminUserPayload(updated) });
   });
 
   adminRouter.patch('/users/:id', async (req, res) => {
@@ -625,78 +715,54 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
       changes.passwordHash = await bcrypt.hash(password, 10);
     }
-    let updatedUser = null;
-    await updateUserRecord(id, (current) => {
-      if (!current) return null;
-      updatedUser = { ...current, ...changes };
-      return updatedUser;
-    });
-    if (!updatedUser) {
+    const updated = updateUserFields(id, changes);
+    if (!updated) {
       return res.status(404).json({ error: 'user_not_found' });
     }
-    res.json({ user: pickUserPayload(updatedUser) });
+    res.json({ user: pickUserPayload(updated) });
   });
 
-  adminRouter.delete('/users/:id', async (req, res) => {
+  adminRouter.delete('/users/:id', (req, res) => {
     const { id } = req.params;
-    let removed = false;
-    let wasAdmin = false;
-    await usersStore.update((draft) => {
-      if (!Array.isArray(draft?.users)) draft.users = [];
-      const idx = draft.users.findIndex((u) => u.id === id);
-      if (idx !== -1) {
-        const user = draft.users[idx];
-        if (user.username === 'admin') {
-          wasAdmin = true;
-          return draft;
-        }
-        draft.users.splice(idx, 1);
-        removed = true;
-      }
-      return draft;
-    });
-    if (wasAdmin) {
-      return res.status(403).json({ error: 'cannot_delete_admin' });
-    }
-    if (!removed) {
+    const user = findUserById(id);
+    if (!user) {
       return res.status(404).json({ error: 'user_not_found' });
     }
+    if (user.username === 'admin') {
+      return res.status(403).json({ error: 'cannot_delete_admin' });
+    }
+    stmts.deleteUser.run(id, 'admin');
     res.json({ ok: true });
   });
 
-  adminRouter.get('/projects', async (_req, res) => {
-    const data = await projectStore.read();
-    res.json({ projects: data?.projects || {} });
+  adminRouter.get('/projects', (_req, res) => {
+    const data = readProjectAccessFromDb(dataRoot);
+    res.json({ projects: data.projects });
   });
 
-  adminRouter.patch('/projects/:id', async (req, res) => {
+  adminRouter.patch('/projects/:id', (req, res) => {
     const { id } = req.params;
     const { public: isPublic, allowedUsers, allowedRoles } = req.body || {};
-    await projectStore.update((draft) => {
-      if (!draft || typeof draft !== 'object') draft = { projects: {} };
-      if (!draft.projects) draft.projects = {};
-      const entry = draft.projects[id] || {};
-      if (typeof isPublic === 'boolean') entry.public = isPublic;
-      if (allowedUsers) entry.allowedUsers = ensureArrayOfStrings(allowedUsers);
-      if (allowedRoles) entry.allowedRoles = ensureArrayOfStrings(allowedRoles).filter((r) => VALID_ROLES.has(r));
-      draft.projects[id] = entry;
-      return draft;
-    });
-    const data = await projectStore.read();
-    res.json({ project: data?.projects?.[id] || null });
+    const entry = {};
+    if (typeof isPublic === 'boolean') entry.public = isPublic;
+    if (allowedUsers) entry.allowedUsers = allowedUsers;
+    if (allowedRoles) entry.allowedRoles = allowedRoles;
+    upsertProjectAccess(id, entry);
+    const updated = getProjectAccess(id);
+    res.json({ project: updated });
   });
 
   // Avoid collisions with Qtiler core admin UI under /admin.
   app.use('/auth-admin', adminRouter);
 
-  // The core Qtiler UI already serves the auth admin UI at /plugins/auth-admin.
-  // Keep /plugins/<pluginName>/admin working for the plugin manager iframe, but
-  // delegate the actual UI + access control to the core route.
   const pluginSlug = (path.basename(baseDir || '') || 'QtilerAuth').replace(/[^a-z0-9-_]/gi, '') || 'QtilerAuth';
   app.get(`/plugins/${pluginSlug}/admin`, (_req, res) => res.redirect('/plugins/auth-admin'));
 
   return {
     roles: [ROLE_ADMIN, ROLE_AUTH],
-    dispose: resetSecurity
+    dispose: () => {
+      resetSecurity();
+      closeAuthDb();
+    }
   };
 };

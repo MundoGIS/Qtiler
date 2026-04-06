@@ -3,8 +3,37 @@
   "version": "0.1.0",
   "displayName": "Qrigo · Origo helper",
   "description": "Adds Origo-ready WMS/WMTS/WFS snippets to the layer details modal.",
+  "docs": {
+    "en": {
+      "description": "Connects Qtiler projects to Origo with guided snippets and layer setup tools.",
+      "readme": [
+        "Open a layer in the dashboard and click the Origo button in layer details.",
+        "The Origo panel shows available layers and indicates which layers are searchable and editable.",
+        "Use the Info button to copy the exact code for layers, source, and search used in Origo.",
+        "Paste snippets into your Origo config, publish, and validate the complete flow."
+      ]
+    },
+    "es": {
+      "description": "Conecta proyectos de Qtiler con Origo mediante snippets guiados y herramientas de configuracion de capas.",
+      "readme": [
+        "Abre una capa en el dashboard y pulsa el boton Origo en los detalles de la capa.",
+        "El panel de Origo muestra capas disponibles e indica cuales son buscables y editables.",
+        "Usa el boton Info para copiar el codigo exacto de layers, source y search para Origo.",
+        "Pega los snippets en la configuracion de Origo, publica y valida el flujo completo."
+      ]
+    },
+    "sv": {
+      "description": "Kopplar Qtiler-projekt till Origo med guidande kodsnuttar och verktyg for lagerkonfiguration.",
+      "readme": [
+        "Oppna ett lager i dashboarden och klicka pa Origo-knappen i lagerdetaljer.",
+        "Origo-panelen visar tillgangliga lager och markerar vilka lager som ar sokbara och redigerbara.",
+        "Anvand Info-knappen for att kopiera exakt kod for layers, source och search i Origo.",
+        "Klistra in kodsnuttarna i Origo-konfigurationen, publicera och validera hela flodet."
+      ]
+    }
+  },
   "autoEnable": false,
   "license": "Qrigo Commercial License",
   "licenseFile": "LICENSE_Qrigo.txt",
-  "supportContact": "abel.gonzalez@mundogis.se"
+  "supportContact": "support@mundogis.se"
 }

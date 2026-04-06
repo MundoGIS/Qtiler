@@ -16,7 +16,7 @@
     <div class="header-top">
       <div class="header-copy">
         <h1>QtilerAuth Administration</h1>
-        <p>Manage WMTS access control for your deployment.</p>
+        <p>Manage access control for your deployment.</p>
       </div>
       <button id="go-dashboard" type="button" class="header-button" hidden>Back to dashboard</button>
     </div>
@@ -25,14 +25,21 @@
     <section id="messages" aria-live="polite"></section>
 
     <section id="users-section" class="card">
-      <div class="section-head">
+      <div class="section-head" data-collapse="users-body">
         <h2>Users</h2>
-        <button id="refresh-users" type="button">Refresh</button>
+        <div class="section-head-actions">
+          <button id="refresh-users" type="button">Refresh</button>
+          <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+        </div>
       </div>
-      <div class="section-body">
-        <div class="form-panel">
-          <h3 id="user-form-title">Create user</h3>
+      <div class="section-body" id="users-body">
+        <div class="form-panel" id="user-form-panel">
+          <div class="form-panel-header" data-collapse="user-form-inner">
+            <h3 id="user-form-title">Create user</h3>
+            <button class="collapse-toggle" type="button" aria-label="Toggle form">&#9660;</button>
+          </div>
           <form id="user-form" autocomplete="off">
+          <div class="form-collapsible" id="user-form-inner">
             <input type="hidden" name="userId" id="user-id">
             <label for="username">Username</label>
             <input type="text" id="username" name="username" required>
@@ -62,21 +69,31 @@
               <button type="submit" id="user-form-submit">Save</button>
               <button type="button" id="user-form-reset">Cancel</button>
             </div>
+          </div>
           </form>
         </div>
         <div class="table-panel">
           <table id="users-table">
+            <colgroup>
+              <col style="width: 10%">
+              <col style="width: 7%">
+              <col style="width: 7%">
+              <col style="width: 28%">
+              <col style="width: 14%">
+              <col style="width: 11%">
+              <col style="width: 11%">
+              <col style="width: 12%">
+            </colgroup>
             <thead>
               <tr>
                 <th>User</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>API key</th>
-                <th>Password</th>
                 <th>Projects</th>
                 <th>Created</th>
                 <th>Updated</th>
-                <th></th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -86,11 +103,14 @@
     </section>
 
     <section id="projects-section" class="card">
-      <div class="section-head">
-        <h2>WMTS project access</h2>
-        <button id="refresh-projects" type="button">Refresh</button>
+      <div class="section-head" data-collapse="projects-body">
+        <h2>Project access</h2>
+        <div class="section-head-actions">
+          <button id="refresh-projects" type="button">Refresh</button>
+          <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+        </div>
       </div>
-      <div class="section-body">
+      <div class="section-body" id="projects-body">
         <div class="public-projects-panel">
           <h3>Public projects</h3>
           <p class="help">Public projects are accessible to everyone without authentication.</p>
@@ -115,19 +135,99 @@
     </section>
 
     <section id="license-section" class="card license-card">
-      <div class="section-head">
+      <div class="section-head" data-collapse="license-body">
         <h2>License &amp; support</h2>
+        <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
       </div>
-      <div class="section-body">
+      <div class="section-body" id="license-body">
         <p>QtilerAuth is distributed under the proprietary <strong>QtilerAuth Commercial License</strong>. Purchase grants a perpetual, non-transferable right to deploy the plugin inside your own Qtiler environments.</p>
         <ul>
           <li>Redistribution, resale, or public sharing of the ZIP is not allowed.</li>
           <li>Refer to <code>LICENSE_QtilerAuth.txt</code> in this package for the complete agreement.</li>
-          <li>Need help with deployment or license questions? Contact <a href="mailto:abel.gonzalez@mundogis.se">abel.gonzalez@mundogis.se</a> or visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>.</li>
+          <li>Need help with deployment or license questions? Contact <a href="mailto:support@mundogis.se">support@mundogis.se</a> or visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>.</li>
+        </ul>
+        <hr>
+        <h3 data-doc-i18n="readme.title">QtilerAuth README</h3>
+        <p data-doc-i18n="readme.intro">QtilerAuth secures Qtiler deployments with users, roles, project access rules, and API-key based authentication for GIS/web clients.</p>
+        <ul>
+          <li data-doc-i18n="readme.1">Users and roles: create administrators and authenticated users, suspend accounts, rotate passwords and API keys.</li>
+          <li data-doc-i18n="readme.2">Project permissions: mark projects as public/private and assign user-specific access from this backend.</li>
+          <li data-doc-i18n="readme.3">Authentication methods: cookie session, bearer token, basic auth, and api_key query/header support.</li>
+          <li data-doc-i18n="readme.4">Integration: copied WMTS/WMS/WFS/VectorTiles URLs can include api_key for QGIS and other external clients.</li>
+          <li data-doc-i18n="readme.5">Persistence: user accounts, plugin trial state, and project access rules are stored in SQLite.</li>
         </ul>
       </div>
     </section>
   </main>
+  <script>
+    (function () {
+      const DOC_I18N = {
+        en: {
+          'readme.title': 'QtilerAuth README',
+          'readme.intro': 'QtilerAuth secures Qtiler deployments with users, roles, project access rules, and API-key based authentication for GIS/web clients.',
+          'readme.1': 'Users and roles: create administrators and authenticated users, suspend accounts, rotate passwords and API keys.',
+          'readme.2': 'Project permissions: mark projects as public/private and assign user-specific access from this backend.',
+          'readme.3': 'Authentication methods: cookie session, bearer token, basic auth, and api_key query/header support.',
+          'readme.4': 'Integration: copied WMTS/WMS/WFS/VectorTiles URLs can include api_key for QGIS and other external clients.',
+          'readme.5': 'Persistence: user accounts, plugin trial state, and project access rules are stored in SQLite.'
+        },
+        es: {
+          'readme.title': 'README de QtilerAuth',
+          'readme.intro': 'QtilerAuth asegura despliegues de Qtiler con usuarios, roles, reglas de acceso a proyectos y autenticación por API key para clientes GIS/web.',
+          'readme.1': 'Usuarios y roles: crea administradores y usuarios autenticados, suspende cuentas y rota contraseñas y API keys.',
+          'readme.2': 'Permisos de proyecto: marca proyectos como públicos/privados y asigna acceso por usuario desde este backend.',
+          'readme.3': 'Métodos de autenticación: sesión por cookie, bearer token, basic auth y soporte api_key por query/header.',
+          'readme.4': 'Integración: las URLs copiadas de WMTS/WMS/WFS/VectorTiles pueden incluir api_key para QGIS y clientes externos.',
+          'readme.5': 'Persistencia: cuentas de usuario, estado de trial de plugins y reglas de acceso se almacenan en SQLite.'
+        },
+        sv: {
+          'readme.title': 'QtilerAuth README',
+          'readme.intro': 'QtilerAuth säkrar Qtiler-installationer med användare, roller, projektregler och API-nyckelbaserad autentisering för GIS/webbklienter.',
+          'readme.1': 'Användare och roller: skapa administratörer och autentiserade användare, pausa konton och rotera lösenord/API-nycklar.',
+          'readme.2': 'Projektbehörighet: markera projekt som publika/privata och tilldela användarspecifik åtkomst i denna backend.',
+          'readme.3': 'Autentiseringsmetoder: cookiesession, bearer-token, basic auth och stöd för api_key i query/header.',
+          'readme.4': 'Integration: kopierade WMTS/WMS/WFS/VectorTiles-URL:er kan inkludera api_key för QGIS och andra externa klienter.',
+          'readme.5': 'Persistens: användarkonton, plugin-trialstatus och projektregler lagras i SQLite.'
+        }
+      };
+
+      const normalizeLang = (value) => {
+        const raw = String(value || '').toLowerCase();
+        if (raw.startsWith('es')) return 'es';
+        if (raw.startsWith('sv')) return 'sv';
+        return 'en';
+      };
+
+      const readLang = () => {
+        return window.parent?.qtilerLang?.get?.() || localStorage.getItem('qtiler.lang') || navigator.language || 'en';
+      };
+
+      let currentLang = normalizeLang(readLang());
+
+      const applyDocTranslations = () => {
+        const table = DOC_I18N[currentLang] || DOC_I18N.en;
+        document.querySelectorAll('[data-doc-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-doc-i18n');
+          if (!key) return;
+          el.textContent = table[key] || DOC_I18N.en[key] || key;
+        });
+      };
+
+      const syncLang = () => {
+        const next = normalizeLang(readLang());
+        if (next === currentLang) return;
+        currentLang = next;
+        applyDocTranslations();
+      };
+
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'qtiler.lang') syncLang();
+      });
+
+      setInterval(syncLang, 1000);
+      applyDocTranslations();
+    })();
+  </script>
   <script type="module" src="/plugins/auth-admin/assets/app.js"></script>
 </body>
 </html>

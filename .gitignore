@@ -4,6 +4,7 @@ PLUGINS.md
 
 # Environment files
 .env
+.env.local
 
 
 # Logs
@@ -23,7 +24,6 @@ temp_zip_wmscache/
 temp_zip_qtilerauth/
 temp_zip_projectsearch/
 temp_zip_quantizedmesh/
-ThirdParty/
 
 
 # Build and extras
@@ -34,11 +34,20 @@ daemon/
 
 # Data files (sensitive information)
 data/auth-config.json
+data/auth-config.json.bak
 data/auth-users.json
+data/auth-users.json.bak
 data/project-access.json
+data/auth.db
+data/auth.db-wal
+data/auth.db-shm
 data/licenses.json
 data/auth/
+data/job-pids/
 tools/licenses/
+
+# Archives
+*.7z
 
 
 
@@ -51,6 +60,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.venv/
+venv/
 
 
 # QtilerAuth commercial files (not for public repo)

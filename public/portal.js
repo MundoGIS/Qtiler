@@ -20,7 +20,7 @@ if (footerYearEl) {
 
 const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
   ? window.qtilerLang.SUPPORTED_LANGS
-  : ['en', 'es', 'sv'];
+  : ['en', 'es', 'sv', 'no'];
 const normalizeLang = window.qtilerLang?.normalize || ((value) => {
   const raw = String(value || '').toLowerCase();
   if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -61,6 +61,10 @@ const TRANSLATIONS = {
     'portal.layer.copy.wmts': 'Copy WMTS URL',
     'portal.layer.copy.wms': 'Copy WMS URL',
     'portal.layer.copy.wfs': 'Copy WFS URL',
+    'portal.layer.vectortiles.viewer': 'Vector Tiles',
+    'portal.layer.copy.vt.style': 'Copy VectorTiles Style-URL',
+    'portal.layer.copy.vt.source': 'Copy VectorTiles Source-URL',
+    'portal.section.viewers': 'Viewers',
     'portal.layer.copy.copied': '{label} URL copied to clipboard.',
     'portal.layer.copy.failed': 'Unable to copy {label} URL.',
     'portal.layer.xyz': 'XYZ (Tiles)',
@@ -114,6 +118,10 @@ const TRANSLATIONS = {
     'portal.layer.copy.wmts': 'Copiar URL WMTS',
     'portal.layer.copy.wms': 'Copiar URL WMS',
     'portal.layer.copy.wfs': 'Copiar URL WFS',
+    'portal.layer.vectortiles.viewer': 'Vector Tiles',
+    'portal.layer.copy.vt.style': 'Copiar URL Style VectorTiles',
+    'portal.layer.copy.vt.source': 'Copiar URL Source VectorTiles',
+    'portal.section.viewers': 'Visores',
     'portal.layer.copy.copied': 'URL {label} copiada al portapapeles.',
     'portal.layer.copy.failed': 'No se pudo copiar la URL {label}.',
     'portal.layer.xyz': 'XYZ (Teselas)',
@@ -167,6 +175,10 @@ const TRANSLATIONS = {
     'portal.layer.copy.wmts': 'Kopiera WMTS-URL',
     'portal.layer.copy.wms': 'Kopiera WMS-URL',
     'portal.layer.copy.wfs': 'Kopiera WFS-URL',
+    'portal.layer.vectortiles.viewer': 'Vektorplattor',
+    'portal.layer.copy.vt.style': 'Kopiera VectorTiles Style-URL',
+    'portal.layer.copy.vt.source': 'Kopiera VectorTiles Source-URL',
+    'portal.section.viewers': 'Visare',
     'portal.layer.copy.copied': '{label}-URL kopierad till urklipp.',
     'portal.layer.copy.failed': 'Det gick inte att kopiera {label}-URL.',
     'portal.layer.xyz': 'XYZ (Tiles)',
@@ -194,6 +206,63 @@ const TRANSLATIONS = {
     'portal.project.label': 'QGIS-projekt:',
     'portal.project.expand': 'Visa mer',
     'portal.project.collapse': 'Dölj'
+  },
+  no: {
+    'Dashboard': 'Oversikt',
+    'User guide': 'Brukerveiledning',
+    'Language': 'Språk',
+    'portal.pageTitle': 'Qtiler · Offentlige kart',
+    'portal.tagline': 'WMTS-tjenester delt av MundoGIS',
+    'portal.login': 'Logg inn',
+    'portal.logout': 'Logg ut',
+    'portal.intro.heading': 'Tilgjengelige WMTS-kart',
+    'portal.intro.heading.authenticated': 'Dine WMTS-tjenester',
+    'portal.intro.subtitle': 'Utforsk offentlig delte prosjekter eller logg inn for flere alternativer.',
+    'portal.intro.subtitle.authenticated': 'Disse prosjektene er tilgjengelige for kontoen din.',
+    'portal.empty.heading': 'Ingen offentlige kart ennå',
+    'portal.empty.detail': 'En administrator kan dele prosjekter fra dashboardet. Logg inn for å se hele konsollen.',
+    'portal.empty.button': 'Logg inn',
+    'portal.empty.auth.heading': 'Ingen prosjekter tildelt ennå',
+    'portal.empty.auth.detail': 'Be en administrator om å dele WMTS-prosjekter med kontoen din.',
+    'portal.section.cachedLayers': 'Bufrede lag',
+    'portal.section.availableThemes': 'Tilgjengelige temaer',
+    'portal.layer.wmts': 'WMTS (GetCapabilities)',
+    'portal.layer.wms': 'WMS (GetCapabilities)',
+    'portal.layer.wfs': 'WFS (GetCapabilities)',
+    'portal.layer.copy.wmts': 'Kopier WMTS-URL',
+    'portal.layer.copy.wms': 'Kopier WMS-URL',
+    'portal.layer.copy.wfs': 'Kopier WFS-URL',
+    'portal.layer.vectortiles.viewer': 'Vektorfliser',
+    'portal.layer.copy.vt.style': 'Kopier VectorTiles Style-URL',
+    'portal.layer.copy.vt.source': 'Kopier VectorTiles Source-URL',
+    'portal.section.viewers': 'Visere',
+    'portal.layer.copy.copied': '{label}-URL kopiert til utklippstavlen.',
+    'portal.layer.copy.failed': 'Kunne ikke kopiere {label}-URL.',
+    'portal.layer.xyz': 'XYZ (Tiles)',
+    'portal.layer.xyz.copy': 'Kopier XYZ-URL',
+    'portal.layer.xyz.copied': 'XYZ-URL kopiert til utklippstavlen.',
+    'portal.layer.xyz.copyFailed': 'Kunne ikke kopiere XYZ-URL.',
+    'portal.layer.noCached': 'Ingen bufrede lag for dette prosjektet ennå.',
+    'portal.layer.cacheUpdated': 'Bufret oppdatert: {timestamp}',
+    'portal.meta.zoomRange': 'Zoom {min} – {max}',
+    'portal.meta.zoomMin': 'Zoom ≥ {value}',
+    'portal.meta.zoomMax': 'Zoom ≤ {value}',
+    'portal.meta.tileCount': '{count} tiles',
+    'portal.meta.tileCrs': 'Tile-CRS: {crs}',
+    'portal.status.loading': 'Laster offentlige prosjekter…',
+    'portal.status.loading.assigned': 'Laster dine WMTS-prosjekter…',
+    'portal.status.none': 'Ingen offentlige prosjekter akkurat nå.',
+    'portal.status.none.assigned': 'Ingen prosjekter er tildelt kontoen din.',
+    'portal.status.error': 'Kunne ikke laste offentlige prosjekter.',
+    'portal.projects.updated': 'Oppdatert: {timestamp}',
+    'portal.session.badge': 'Sesjon: {user}',
+    'portal.access.public': 'Offentlig',
+    'portal.access.assigned': 'Tildelt',
+    'portal.access.role': 'Rolletilgang',
+    'portal.access.user': 'Delt direkte',
+    'portal.project.label': 'QGIS-prosjekt:',
+    'portal.project.expand': 'Utvid',
+    'portal.project.collapse': 'Skjul'
   }
 };
 
@@ -322,12 +391,38 @@ const copyToClipboard = async (text) => {
   }
 };
 
+// Append api_key query param to a URL when the user is logged in with an apiKey
+// and the project is not public (public projects don't need authentication).
+const withApiKey = (url, isPublic) => {
+  if (!url) return url;
+  if (!sessionUser || !sessionUser.apiKey) return url;
+  if (isPublic) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}api_key=${encodeURIComponent(sessionUser.apiKey)}`;
+};
+
+const normalizeCrsCode = (value) => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  return normalized || null;
+};
+
+const isXyzCompatibleCrs = (value) => {
+  const normalized = normalizeCrsCode(value);
+  if (!normalized) return false;
+  return normalized === 'EPSG:3857'
+    || normalized === 'EPSG:900913'
+    || normalized === 'EPSG:102100'
+    || normalized === 'EPSG:3785'
+    || normalized === 'URN:OGC:DEF:CRS:EPSG::3857';
+};
+
 const clearStatus = () => {
   statusState = { key: null, params: {}, text: '', tone: 'info' };
   renderStatus();
 };
 
-const renderLayerGroup = (titleKey, items) => {
+const renderLayerGroup = (titleKey, items, isPublic) => {
   if (!items || !items.length) return null;
   const container = document.createElement('div');
   container.className = 'portal-layer-group';
@@ -369,48 +464,50 @@ const renderLayerGroup = (titleKey, items) => {
     const xyzPath = item.kind === 'theme'
       ? `/wmts/${projectIdEnc}/themes/${nameEnc}/{z}/{x}/{y}.png`
       : `/wmts/${projectIdEnc}/${nameEnc}/{z}/{x}/{y}.png`;
-    const xyzUrl = `${window.location.origin}${xyzPath}`;
+    const xyzUrl = withApiKey(`${window.location.origin}${xyzPath}`, isPublic);
+    const rawTileCrs = item.tile_crs || item.tileCrs || item.crs || null;
+    const xyzEnabled = item.xyz_enabled === true
+      || item.xyzEnabled === true
+      || ((item.xyz_enabled !== false && item.xyzEnabled !== false) && isXyzCompatibleCrs(rawTileCrs));
 
     const layerParam = item.kind === 'theme' ? 'theme' : 'layer';
-    const wmtsCapabilitiesUrl = `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`;
-    const wmsCapabilitiesUrl = `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&layer=${encodeURIComponent(item.name)}`;
-    const wfsCapabilitiesUrl = `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}`;
+    const wmtsCapabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`, isPublic);
+    const wmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&layer=${encodeURIComponent(item.name)}`, isPublic);
+    const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}`, isPublic);
 
-    const viewerBase = `/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`;
-    const viewerWms = `${viewerBase}&service=wms`;
-    const viewerWfs = `${viewerBase}&service=wfs`;
+    const viewerBase = withApiKey(`/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`, isPublic);
+    const viewerWms = withApiKey(`/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}&service=wms`, isPublic);
+    const viewerWfs = withApiKey(`/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}&service=wfs`, isPublic);
 
-    // Add WMTS viewer link
-    const viewerLink = document.createElement('a');
-    viewerLink.href = viewerBase;
-    viewerLink.target = '_blank';
-    viewerLink.rel = 'noopener';
-    viewerLink.className = 'portal-action-icon';
-    viewerLink.title = 'Open WMTS viewer';
-    viewerLink.textContent = 'WMTS';
-    actions.appendChild(viewerLink);
+    // --- Viewers sub-section ---
+    const viewersFieldset = document.createElement('fieldset');
+    viewersFieldset.className = 'portal-viewers-box portal-viewers-box--inline';
+    const viewersLeg = document.createElement('legend');
+    viewersLeg.textContent = tr('portal.section.viewers');
+    viewersFieldset.appendChild(viewersLeg);
+    const viewersInner = document.createElement('div');
+    viewersInner.className = 'portal-viewers-row';
 
-    const viewerWmsLink = document.createElement('a');
-    viewerWmsLink.href = viewerWms;
-    viewerWmsLink.target = '_blank';
-    viewerWmsLink.rel = 'noopener';
-    viewerWmsLink.className = 'portal-action-icon';
-    viewerWmsLink.title = 'Open WMS viewer';
-    viewerWmsLink.textContent = 'WMS';
-    actions.appendChild(viewerWmsLink);
+    const mkLayerViewer = (href, label) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'portal-action-icon';
+      a.textContent = label;
+      return a;
+    };
 
+    viewersInner.appendChild(mkLayerViewer(viewerBase, 'WMTS'));
+    viewersInner.appendChild(mkLayerViewer(viewerWms, 'WMS'));
     if (isWfsCapable) {
-      const viewerWfsLink = document.createElement('a');
-      viewerWfsLink.href = viewerWfs;
-      viewerWfsLink.target = '_blank';
-      viewerWfsLink.rel = 'noopener';
-      viewerWfsLink.className = 'portal-action-icon';
-      viewerWfsLink.title = 'Open WFS viewer';
-      viewerWfsLink.textContent = 'WFS';
-      actions.appendChild(viewerWfsLink);
+      viewersInner.appendChild(mkLayerViewer(viewerWfs, 'WFS'));
     }
+    viewersFieldset.appendChild(viewersInner);
+    actions.appendChild(viewersFieldset);
 
-    if (!sessionUser) {
+    // --- Copy URL buttons ---
+    if (!sessionUser && xyzEnabled) {
       const copyXyzBtn = document.createElement('button');
       copyXyzBtn.type = 'button';
       copyXyzBtn.className = 'portal-action-button';
@@ -605,9 +702,21 @@ const renderProjects = (projects) => {
       if (url.startsWith('/')) return `${window.location.origin}${url}`;
       return `${window.location.origin}/${url}`;
     };
-    const projectWmtsUrl = toAbsoluteUrl(project.wmtsUrl) || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
-    const projectWmsUrl = toAbsoluteUrl(project.wmsUrl) || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
-    const projectWfsUrl = toAbsoluteUrl(project.wfsUrl) || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}`;
+    const projectIdEnc = encodeURIComponent(project.id);
+    const isPublicProject = !!(accessInfo.public);
+    const projectWmtsUrl = withApiKey(toAbsoluteUrl(project.wmtsUrl) || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
+    const projectWmsUrl = withApiKey(toAbsoluteUrl(project.wmsUrl) || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
+    const projectWfsUrl = withApiKey(toAbsoluteUrl(project.wfsUrl) || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
+
+    const projectLayers = Array.isArray(project.layers) ? project.layers : [];
+    const projectHasVector = projectLayers.some((layer) => {
+      if (!layer) return false;
+      const typeToken = String(layer.type || '').toUpperCase();
+      if (typeToken === 'WFS') return true;
+      if (layer.kind === 'vector' || layer.kind === 'VectorLayer') return true;
+      if (layer.geometry_type) return true;
+      return false;
+    });
 
     const copyProjectBtn = (key, url, label) => {
       const btn = document.createElement('button');
@@ -621,19 +730,48 @@ const renderProjects = (projects) => {
       return btn;
     };
 
+    // --- Viewers section ---
+    const viewersBox = document.createElement('fieldset');
+    viewersBox.className = 'portal-viewers-box';
+    const viewersLegend = document.createElement('legend');
+    viewersLegend.textContent = tr('portal.section.viewers');
+    viewersBox.appendChild(viewersLegend);
+    const viewersRow = document.createElement('div');
+    viewersRow.className = 'portal-viewers-row';
+
+    const mkViewerLink = (href, label) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'portal-action-icon';
+      a.textContent = label;
+      return a;
+    };
+
+    viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}`, isPublicProject), 'WMTS'));
+    viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}&service=wms`, isPublicProject), 'WMS'));
+    if (projectHasVector || !!project.wfsUrl) {
+      viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}&service=wfs`, isPublicProject), 'WFS'));
+    }
+    if (projectHasVector) {
+      viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?vectortiles=${projectIdEnc}`, isPublicProject), tr('portal.layer.vectortiles.viewer')));
+    }
+
+    viewersBox.appendChild(viewersRow);
+    links.appendChild(viewersBox);
+
+    // --- Copy URLs ---
     links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
     links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
-    const projectLayers = Array.isArray(project.layers) ? project.layers : [];
-    const projectHasVector = projectLayers.some((layer) => {
-      if (!layer) return false;
-      const typeToken = String(layer.type || '').toUpperCase();
-      if (typeToken === 'WFS') return true;
-      if (layer.kind === 'vector' || layer.kind === 'VectorLayer') return true;
-      if (layer.geometry_type) return true;
-      return false;
-    });
     if (projectHasVector || !!project.wfsUrl) {
       links.appendChild(copyProjectBtn('portal.layer.copy.wfs', projectWfsUrl, 'WFS'));
+    }
+    if (projectHasVector) {
+      const vtStyleUrl = withApiKey(`${window.location.origin}/plugins/VectorTiles/style/${projectIdEnc}.json`, isPublicProject);
+      const vtSourceUrl = withApiKey(`${window.location.origin}/plugins/VectorTiles/tiles/${projectIdEnc}/{z}/{x}/{y}.pbf`, isPublicProject);
+      links.appendChild(copyProjectBtn('portal.layer.copy.vt.style', vtStyleUrl, 'VectorTiles Style'));
+      links.appendChild(copyProjectBtn('portal.layer.copy.vt.source', vtSourceUrl, 'VectorTiles Source'));
     }
 
     const cacheUpdatedLabel = formatDateTime(project.cacheUpdatedAt);
@@ -645,7 +783,7 @@ const renderProjects = (projects) => {
     }
     body.appendChild(links);
 
-    const layerGroup = renderLayerGroup('portal.section.cachedLayers', Array.isArray(project.layers) ? project.layers : []);
+    const layerGroup = renderLayerGroup('portal.section.cachedLayers', Array.isArray(project.layers) ? project.layers : [], isPublicProject);
     if (layerGroup) {
       body.appendChild(layerGroup);
     } else {
@@ -655,7 +793,7 @@ const renderProjects = (projects) => {
       body.appendChild(placeholder);
     }
 
-  const themeGroup = renderLayerGroup('portal.section.availableThemes', Array.isArray(project.themes) ? project.themes : []);
+  const themeGroup = renderLayerGroup('portal.section.availableThemes', Array.isArray(project.themes) ? project.themes : [], isPublicProject);
     if (themeGroup) {
       body.appendChild(themeGroup);
     }
