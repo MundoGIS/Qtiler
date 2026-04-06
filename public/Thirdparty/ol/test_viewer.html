@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OL Map Test</title>
+  <link href="/Thirdparty/ol/ol.css" rel="stylesheet" />
+  <style>html,body,#map{height:100%;margin:0;padding:0}body{font-family:Segoe UI,Roboto,Arial}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="/Thirdparty/ol/ol.js"></script>
+  <script src="/Thirdparty/ol/ol-mapbox-style.js"></script>
+  <script>
+    (async function(){
+      try{
+        const map = new ol.Map({
+          target:'map',
+          view: new ol.View({center: ol.proj.fromLonLat([18.17,59.27]), zoom:8}),
+          layers: [ new ol.layer.Tile({ source: new ol.source.OSM() }) ]
+        });
+        const resp = await fetch('/plugins/VectorTiles/style/demo2.json', {credentials:'include'});
+        const style = await resp.json();
+        console.log('style loaded', style);
+        const candidate = window.olms || window.olMapboxStyle || (window.olms && window.olms.default);
+        console.log('olms candidate', !!candidate);
+        const fn = (typeof candidate === 'function') ? candidate : (candidate && candidate.default) ? candidate.default : (candidate && candidate.olms) ? candidate.olms : null;
+        if (typeof fn !== 'function') {
+          document.body.innerHTML = '<p>ol-mapbox-style not available as function</p>';
+          return;
+        }
+        await fn(map, style);
+        console.log('layers after olms', map.getLayers().getLength(), map.getLayers().getArray().map(l=>l.get('id')||l.get('name')));
+      } catch(e) { console.error(e); document.body.innerHTML = '<pre>'+String(e)+'</pre>'; }
+    })();
+  </script>
+</body>
+</html>

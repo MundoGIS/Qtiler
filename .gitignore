@@ -83,5 +83,3 @@ tools/mesh_dem_to_terrain_runner.mjs
 tools/mesh_build.py
 tools/vendorize-mesh-dem-to-terrain.mjs
 tools/package-quantizedmesh-plugin.mjs
-
-public/Thirdparty
