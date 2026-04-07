@@ -19,6 +19,249 @@
       ],
       "updatedAt": "2026-04-07T07:38:56.443Z",
       "autoBootstrapped": true
+    },
+    "demoproject": {
+      "projectId": "demoproject",
+      "mbtilesPath": "C:\\Qtiler\\cache\\vector-tiles\\demoproject\\tiles.mbtiles",
+      "minZoom": 0,
+      "maxZoom": 14,
+      "selectedLayerIds": [
+        "building_7fd605fa_0152_430e_8250_414841aef3c8",
+        "Line_28854115_bcc8_47ec_be49_7fc0992b63c3",
+        "Polygon_1235cdc6_e9c0_4ad5_a66d_26fdb7ac2a27",
+        "road_87c6675b_a359_406f_b184_36601a85a879"
+      ],
+      "vectorLayerCount": 4,
+      "selectedLayerCount": 4,
+      "layerStyles": [
+        {
+          "layerId": "Line_28854115_bcc8_47ec_be49_7fc0992b63c3",
+          "layerName": "demodata — Line",
+          "geometry": "line",
+          "color": "#db1e2a",
+          "lineWidth": 1,
+          "pointSize": null,
+          "fillOpacity": 1,
+          "renderer": null
+        },
+        {
+          "layerId": "Polygon_1235cdc6_e9c0_4ad5_a66d_26fdb7ac2a27",
+          "layerName": "demodata — Polygon",
+          "geometry": "polygon",
+          "color": "#377eb8",
+          "lineWidth": 0.26,
+          "pointSize": null,
+          "fillOpacity": 1,
+          "renderer": null
+        },
+        {
+          "layerId": "building_7fd605fa_0152_430e_8250_414841aef3c8",
+          "layerName": "demodata — building",
+          "geometry": "polygon",
+          "color": "#bfbfbf",
+          "lineWidth": 0.26,
+          "pointSize": null,
+          "fillOpacity": 1,
+          "renderer": null
+        },
+        {
+          "layerId": "road_87c6675b_a359_406f_b184_36601a85a879",
+          "layerName": "demodata — road",
+          "geometry": "line",
+          "color": null,
+          "lineWidth": null,
+          "pointSize": null,
+          "fillOpacity": null,
+          "renderer": null
+        }
+      ],
+      "sourceLayerMeta": [
+        {
+          "id": "demodata — Line",
+          "name": "demodata — Line",
+          "geometry": "line",
+          "fields": [
+            {
+              "name": "fid",
+              "type": "Integer64",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "name",
+              "type": "Integer",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "descript",
+              "type": "Integer",
+              "length": 0,
+              "precision": 0
+            }
+          ]
+        },
+        {
+          "id": "demodata — Polygon",
+          "name": "demodata — Polygon",
+          "geometry": "polygon",
+          "fields": [
+            {
+              "name": "fid",
+              "type": "Integer64",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "name",
+              "type": "String",
+              "length": 255,
+              "precision": 0
+            },
+            {
+              "name": "descrip",
+              "type": "String",
+              "length": 255,
+              "precision": 0
+            }
+          ]
+        },
+        {
+          "id": "demodata — building",
+          "name": "demodata — building",
+          "geometry": "polygon",
+          "fields": [
+            {
+              "name": "fid",
+              "type": "Integer64",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "full_id",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "osm_id",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "osm_type",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "building",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "name",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "amenity",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "brand",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "wheelchair",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            }
+          ]
+        },
+        {
+          "id": "demodata — road",
+          "name": "demodata — road",
+          "geometry": "line",
+          "fields": [
+            {
+              "name": "fid",
+              "type": "Integer64",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "full_id",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "osm_id",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "osm_type",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "highway",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "name",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "surface",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "maxspeed",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            },
+            {
+              "name": "ref",
+              "type": "String",
+              "length": 0,
+              "precision": 0
+            }
+          ]
+        }
+      ],
+      "sourceLayers": [
+        "demodata — Line",
+        "demodata — Polygon",
+        "demodata — building",
+        "demodata — road"
+      ],
+      "bounds": [
+        17.8388426,
+        59.1761421,
+        18.6072449,
+        59.397011
+      ],
+      "updatedAt": "2026-04-07T11:03:50.314Z"
     }
   }
 }
