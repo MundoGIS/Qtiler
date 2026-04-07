@@ -6,6 +6,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { getRequestBaseUrl } from '../lib/requestBaseUrl.js';
 
 const redactSecrets = (value) => {
   const input = value == null ? '' : String(value);
@@ -300,7 +301,7 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
         const reqApiKey = String(getQueryCI(req, 'api_key') || '').trim();
-        const serviceUrl = `${req.protocol}://${req.get('host')}/wfs?project=${encodeURIComponent(projectId)}${reqApiKey ? `&api_key=${encodeURIComponent(reqApiKey)}` : ''}`;
+        const serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}${reqApiKey ? `&api_key=${encodeURIComponent(reqApiKey)}` : ''}`;
         // Advertise the same default cap used by GetFeature to avoid client-side truncation surprises.
         const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10) || 5000000;
         const countDefault = Number.parseInt(

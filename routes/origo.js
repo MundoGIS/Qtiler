@@ -6,6 +6,7 @@
 import express from "express";
 import fs from "fs";
 import path from "path";
+import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 
 export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRendererPool, findProjectById }) => {
   const origoDir = path.join(publicDir, "Thirdparty", "origo");
@@ -77,7 +78,7 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
       const attribution = body.attribution != null ? String(body.attribution) : null;
       const style = body.style != null ? String(body.style) : "add me";
 
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const baseUrl = getRequestBaseUrl(req);
       const sourceUrl = String(body.url || `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}`).trim();
       const wantsEditable = body.editable === true;
       const workspace = body.workspace != null

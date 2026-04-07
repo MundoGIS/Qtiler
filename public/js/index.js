@@ -1587,7 +1587,7 @@
               saveBtn.disabled = true;
 
               // Save configuration to cache index (index.json)
-              const saveRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`, {
+              let saveRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`, {
                 method: 'PATCH',
                 headers: { 
                   'Content-Type': 'application/json',
@@ -1596,6 +1596,17 @@
                 credentials: 'include',
                 body: JSON.stringify(patchData)
               });
+              if ([403, 404, 405, 501].includes(saveRes.status)) {
+                saveRes = await fetch(`/cache/${encodeURIComponent(projectId)}/index.json`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  credentials: 'include',
+                  body: JSON.stringify(patchData)
+                });
+              }
 
               console.log('Save response status:', saveRes.status);
 
@@ -2286,11 +2297,18 @@
         projectConfigPending.delete(projectId);
         projectConfigTimers.delete(projectId);
         try {
-          const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config', {
+          let res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(patch)
           });
+          if ([403, 404, 405, 501].includes(res.status)) {
+            res = await fetch('/projects/' + encodeURIComponent(projectId) + '/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(patch)
+            });
+          }
           if (!res.ok) {
             const err = await res.json().catch(()=>null);
             throw new Error(err?.details || err?.error || res.statusText);

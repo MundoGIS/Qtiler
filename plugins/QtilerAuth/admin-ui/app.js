@@ -86,7 +86,7 @@ initCollapsible();
   }
 });
 
-const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'adminnuevo321';
+const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'MundoGIS-2026';
 const urlParams = new URLSearchParams(window.location.search);
 const justInstalledFlag = urlParams.has('justInstalled');
 if (justInstalledFlag && typeof window !== 'undefined' && window.history?.replaceState) {
@@ -385,7 +385,11 @@ async function api(url, options = {}) {
   if (Object.keys(opts.headers).length === 0) {
     delete opts.headers;
   }
-  const response = await fetch(url, opts);
+  const requestMethod = String(opts.method || 'GET').toUpperCase();
+  let response = await fetch(url, opts);
+  if ((response.status === 403 || response.status === 404 || response.status === 405 || response.status === 501) && requestMethod === 'PATCH') {
+    response = await fetch(url, { ...opts, method: 'POST' });
+  }
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const payload = isJson ? await response.json().catch(() => null) : null;

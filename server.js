@@ -25,6 +25,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerWmsRoutes } from "./routes/wms.js";
 import { registerWfsRoutes } from "./routes/wfs.js";
 import { registerOrigoRoutes } from "./routes/origo.js";
+import { getRequestBaseUrl } from "./lib/requestBaseUrl.js";
 
 
 dotenv.config();
@@ -612,7 +613,7 @@ app.get('/searchable-layers', (req, res) => {
           if (layerConfig.wfsSearchable === true) {
             const searchableConfig = searchableLayersMap.get(layerName);
             if (searchableConfig) {
-              const wfsUrl = `${req.protocol}://${req.get('host')}/wfs/${project.id}`;
+              const wfsUrl = `${getRequestBaseUrl(req)}/wfs/${project.id}`;
               result.push({
                 name: layerName,
                 projectId: project.id,
@@ -7761,7 +7762,7 @@ app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.projec
 });
 
 // Patch index.json for a project: update/merge layer entries
-app.patch("/cache/:project/index.json", requireAdmin, async (req, res) => {
+const patchCacheIndexHandler = async (req, res) => {
   const p = req.params.project;
   const proj = findProjectById(p);
   if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -7832,7 +7833,10 @@ app.patch("/cache/:project/index.json", requireAdmin, async (req, res) => {
   try { logProjectEvent(p, `index.json patched for layers: ${updatedLayers.join(', ')}`); } catch {}
   const resp = { status: 'ok', project: p, updated: updatedLayers, purged: purgedLayers, index };
   return res.json(resp);
-});
+};
+
+app.patch("/cache/:project/index.json", requireAdmin, patchCacheIndexHandler);
+app.post("/cache/:project/index.json", requireAdmin, patchCacheIndexHandler);
 
 // Delete entire project cache (all layers + index)
 app.delete("/cache/:project", requireAdmin, async (req, res) => {
@@ -8866,14 +8870,8 @@ app.get("/wmts", (req, res, next) => {
           return num.toPrecision(15).replace(/0+$/g, "").replace(/\.$/, "");
         };
         const formatCorner = (coords) => `${formatNumber(coords[0])} ${formatNumber(coords[1])}`;
-        
-        const configuredBaseUrl = (process.env.PUBLIC_BASE_URL || "").trim().replace(/\/+$/g, "");
-        let proto = req.protocol || "http";
-        if (req.get("x-forwarded-proto")) proto = req.get("x-forwarded-proto").split(",")[0].trim();
-        
-        const host = req.get("host");
-        const derivedBaseUrl = host ? `${proto}://${host}` : "";
-        const baseUrl = configuredBaseUrl || derivedBaseUrl;
+
+        const baseUrl = getRequestBaseUrl(req);
 
         const reqApiKey = req.query?.api_key || "";
         let kvpUrl = baseUrl + "/wmts?";
@@ -9317,7 +9315,7 @@ function handleWmsGetCapabilities(req, res) {
       return num.toString();
     };
 
-    const baseUrl = `http://${req.get('host') || 'localhost:3000'}`;
+    const baseUrl = getRequestBaseUrl(req) || 'http://localhost:3000';
     const wmsUrl = filterProjectId 
       ? `${baseUrl}/wms?project=${encodeURIComponent(filterProjectId)}`
       : `${baseUrl}/wms`;

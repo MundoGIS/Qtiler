@@ -1587,7 +1587,7 @@ export const registerProjectRoutes = ({
     return res.json(config);
   });
 
-  app.patch("/projects/:id/config", requireAdmin, async (req, res) => {
+  const updateProjectConfigHandler = async (req, res) => {
     const projectId = req.params.id;
     const proj = findProjectById(projectId);
     if (!proj) return res.status(404).json({ error: "project_not_found" });
@@ -1663,7 +1663,10 @@ export const registerProjectRoutes = ({
       console.error("Failed to update project config", projectId, err);
       return res.status(500).json({ error: "config_update_failed", details: String(err?.message || err) });
     }
-  });
+  };
+
+  app.patch("/projects/:id/config", requireAdmin, updateProjectConfigHandler);
+  app.post("/projects/:id/config", requireAdmin, updateProjectConfigHandler);
 
   app.get("/projects/:id/cache/project", ensureProjectAccess((req) => req.params.id), (req, res) => {
     const projectId = req.params.id;

@@ -7,6 +7,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 
 const getQueryCI = (req, key) => {
   if (!req || !req.query) return null;
@@ -372,7 +373,7 @@ export const registerWmsRoutes = ({
         // Include the required `project` parameter in the advertised endpoint so clients that
         // follow the OnlineResource won't lose project context after GetCapabilities.
         const reqApiKey = req.query?.api_key || "";
-        const serviceUrl = `${req.protocol}://${req.get("host")}/wms?project=${encodeURIComponent(projectId)}${reqApiKey ? '&api_key=' + encodeURIComponent(reqApiKey) : ''}`;
+        const serviceUrl = `${getRequestBaseUrl(req)}/wms?project=${encodeURIComponent(projectId)}${reqApiKey ? '&api_key=' + encodeURIComponent(reqApiKey) : ''}`;
         const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type("text/xml").send(xml);

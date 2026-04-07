@@ -16,8 +16,8 @@ const ROLE_AUTH = 'authenticated';
 const VALID_ROLES = new Set([ROLE_ADMIN, ROLE_AUTH]);
 const COOKIE_NAME = 'qtiler_token';
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 3600;
-const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'adminnuevo321';
-const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo123'];
+const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'MundoGIS-2026';
+const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo321', 'adminnuevo123'];
 
 const nowIso = () => new Date().toISOString();
 const normalizeUsername = (value) => String(value || '').trim().toLowerCase();
@@ -696,7 +696,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({ user: pickAdminUserPayload(updated) });
   });
 
-  adminRouter.patch('/users/:id', async (req, res) => {
+  const updateUserHandler = async (req, res) => {
     const { id } = req.params;
     const { password, role, projects, status } = req.body || {};
     const changes = {};
@@ -720,7 +720,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       return res.status(404).json({ error: 'user_not_found' });
     }
     res.json({ user: pickUserPayload(updated) });
-  });
+  };
+
+  adminRouter.patch('/users/:id', updateUserHandler);
+  adminRouter.post('/users/:id', updateUserHandler);
 
   adminRouter.delete('/users/:id', (req, res) => {
     const { id } = req.params;
@@ -740,7 +743,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({ projects: data.projects });
   });
 
-  adminRouter.patch('/projects/:id', (req, res) => {
+  const updateProjectHandler = (req, res) => {
     const { id } = req.params;
     const { public: isPublic, allowedUsers, allowedRoles } = req.body || {};
     const entry = {};
@@ -750,7 +753,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     upsertProjectAccess(id, entry);
     const updated = getProjectAccess(id);
     res.json({ project: updated });
-  });
+  };
+
+  adminRouter.patch('/projects/:id', updateProjectHandler);
+  adminRouter.post('/projects/:id', updateProjectHandler);
 
   // Avoid collisions with Qtiler core admin UI under /admin.
   app.use('/auth-admin', adminRouter);

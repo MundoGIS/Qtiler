@@ -1,3 +1,24 @@
 {
-  "items": {}
+  "items": {
+    "nackasbakgrund": {
+      "projectId": "nackasbakgrund",
+      "mbtilesPath": "C:\\Qtiler\\cache\\vector-tiles\\nackasbakgrund\\tiles.mbtiles",
+      "minZoom": 0,
+      "maxZoom": 20,
+      "selectedLayerIds": [],
+      "vectorLayerCount": 28,
+      "selectedLayerCount": 0,
+      "layerStyles": [],
+      "sourceLayerMeta": [],
+      "sourceLayers": [],
+      "bounds": [
+        17.218996277325875,
+        58.66925944008789,
+        19.848256042935017,
+        60.2911432233634
+      ],
+      "updatedAt": "2026-04-07T07:38:56.443Z",
+      "autoBootstrapped": true
+    }
+  }
 }

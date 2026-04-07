@@ -100,7 +100,7 @@ After installation, sign in with the default admin account:
 
 - Username: `admin`
 - Password: value from `QTILER_DEFAULT_ADMIN_PASSWORD`.
-   If not set, the default is `adminnuevo`.
+   If not set, the default is `MundoGIS-2026`.
 
 For security, change this password immediately after your first login.
 Do this from the backend admin interface (`/admin`) in the authentication/user management section.
@@ -225,7 +225,7 @@ QGIS_PREFIX=C:\OSGeo4W\apps\qgis
 OSGEO4W_BIN=C:\OSGeo4W\bin
 PYTHON_EXE=C:\OSGeo4W\bin\python.exe
 QT_PLUGIN_PATH=C:\OSGeo4W\apps\qgis\qtplugins
-QTILER_DEFAULT_ADMIN_PASSWORD=CHANGE_ME
+QTILER_DEFAULT_ADMIN_PASSWORD=MundoGIS-2026
 PROJECT_UPLOAD_MAX_BYTES=209715200
 ```
 
