@@ -138,7 +138,7 @@ export const registerPluginRoutes = ({
 
     if (!entry.trial) {
       const startedAt = new Date().toISOString();
-      const trialEnds = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const trialEnds = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       const sig = signTrial(pluginName, store.instanceId, startedAt, trialEnds);
       entry.trial = { startedAt, expiresAt: trialEnds, sig };
       saveLicenseStore(store);
