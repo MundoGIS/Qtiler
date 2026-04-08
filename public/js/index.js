@@ -4876,6 +4876,56 @@
         }
       }
 
+      async function reloadLayerRowSilent(projectId, layerName, { forceConfigReload = true } = {}) {
+        if (!projectId || !layerName) return;
+        let stateSnapshot = null;
+        try {
+          const state = getProjectState(projectId);
+          const projectMeta = state?.projectMeta && state.projectMeta.id ? state.projectMeta : { id: projectId, name: projectId };
+
+          const res = await fetch('/projects/' + encodeURIComponent(projectId) + '/layers');
+          if (res.status === 401) {
+            window.location.href = '/login?reason=session_expired';
+            return;
+          }
+          const text = await res.text();
+          if (!res.ok) {
+            throw new Error(tr('Failed to load layers: HTTP {status}', { status: res.status }) + ' · ' + text);
+          }
+
+          const payload = JSON.parse(text);
+          const layers = Array.isArray(payload) ? payload : (Array.isArray(payload?.layers) ? payload.layers : []);
+          const targetLayer = layers.find((entry) => entry && entry.name === layerName);
+          if (!targetLayer) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+
+          stateSnapshot = snapshotProjectState(projectId);
+          const tempTarget = document.createElement('div');
+          await renderProjectLayers(projectMeta, { project: payload?.project || null, layers: [targetLayer], themes: [] }, tempTarget, null, {
+            forceConfigReload,
+            clearProjectInlineSlots: false,
+            skipProjectChrome: true
+          });
+          const replacementRow = findLayerRowIn(tempTarget, layerName, 'layer');
+          restoreProjectState(projectId, stateSnapshot);
+          if (!replacementRow) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+
+          const currentRow = findProjectLayerRow(projectId, layerName, 'layer');
+          if (!currentRow) {
+            throw new Error(tr('Layer not found: {layer}', { layer: layerName }));
+          }
+          currentRow.replaceWith(replacementRow);
+        } catch (err) {
+          console.warn('reloadLayerRowSilent failed', err);
+          scheduleProjectRefresh(projectId, { delayMs: 0, forceConfigReload: true });
+        } finally {
+          if (stateSnapshot) restoreProjectState(projectId, stateSnapshot);
+        }
+      }
+
       function showProjectReplaceDialog(conflictPayload = {}) {
         const lang = String(conflictPayload?.language || currentLang || 'en').toLowerCase();
         const isEs = lang.startsWith('es');
@@ -7240,7 +7290,11 @@
             } else {
               showStatus(tr('{type} cache deleted: {layer}', { type: cacheType.toUpperCase(), layer: layerName }));
             }
-            scheduleProjectRefresh(projectId, { forceConfigReload: true });
+            if (cacheType === 'wmts' || cacheType === 'wms') {
+              await reloadLayerRowSilent(projectId, layerName, { forceConfigReload: true });
+            } else {
+              scheduleProjectRefresh(projectId, { forceConfigReload: true });
+            }
           }
         } catch (err) {
           showStatus(tr('Failed to delete cache: {error}', { error: err }), true);

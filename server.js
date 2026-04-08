@@ -3681,12 +3681,12 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
         if (!l || l.name !== layerName) return l;
         found = true;
         const updated = Object.assign({}, l);
-        // Reset cache-derived fields so the UI behaves like a fresh layer upload.
+        // Reset only cache-derived runtime fields.
+        // Keep WMTS metadata (extent/crs/preset/tile_matrix_set/scheme) so
+        // capabilities still advertise the layer after cache purge.
         updated.kind = updated.kind || 'layer';
         updated.cached_zoom_min = null;
         updated.cached_zoom_max = null;
-        updated.zoom_min = null;
-        updated.zoom_max = null;
         updated.last_zoom_min = null;
         updated.last_zoom_max = null;
         // remove path reference to avoid pointing to removed directory
@@ -3698,12 +3698,6 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
         updated.partial = false;
         updated.progress = null;
         updated.status = null;
-        updated.extent = null;
-        updated.scheme = null;
-        updated.tile_format = null;
-        updated.tile_crs = null;
-        updated.tile_matrix_preset = null;
-        updated.tile_matrix_set = null;
         updated.has_tiles = false;
         updated.hasTiles = false;
         // remove any tile counts/sizes if present
