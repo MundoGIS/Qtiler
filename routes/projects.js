@@ -1808,95 +1808,47 @@ export const registerProjectRoutes = ({
     });
   });
 
-  app.get("/projects/:id/searchable", ensureProjectAccess((req) => req.params.id), (req, res) => {
+  app.get("/projects/:id/searchable", ensureProjectAccess((req) => req.params.id), async (req, res) => {
     const projectId = sanitizeProjectId(req.params.id);
     if (!projectId) {
       return res.status(400).json({ error: "invalid_project" });
     }
+    
     const searchableDir = path.join(process.cwd(), 'data', 'searchable-layers');
     const searchableLayersPath = path.join(searchableDir, `${projectId}.json`);
-    fs.readFile(searchableLayersPath, 'utf8', (err, data) => {
-      if (err) {
-        if (err.code === 'ENOENT') {
-          return res.json([]);
-        }
-        console.error("Failed to read searchable layers file", err);
-        return res.status(500).json({ error: "read_failed" });
+    
+    try {
+      const data = await fs.promises.readFile(searchableLayersPath, 'utf8');
+      const layers = JSON.parse(data);
+      return res.json(layers);
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        return res.json([]); // Si no existe, devuelve array vacío
       }
-      try {
-        const layers = JSON.parse(data);
-        res.json(layers);
-      } catch (parseErr) {
-        console.error("Failed to parse searchable layers file", parseErr);
-        res.status(500).json({ error: "parse_failed" });
-      }
-    });
+      console.error("Failed to read/parse searchable layers file", err);
+      return res.status(500).json({ error: "read_failed" });
+    }
   });
 
-  app.post("/projects/:id/searchable", requireAdmin, (req, res) => {
+  app.post("/projects/:id/searchable", requireAdmin, async (req, res) => {
     const projectId = sanitizeProjectId(req.params.id);
     if (!projectId) {
       return res.status(400).json({ error: "invalid_project" });
     }
+    
     const searchableDir = path.join(process.cwd(), 'data', 'searchable-layers');
     const searchableLayersPath = path.join(searchableDir, `${projectId}.json`);
     const updatedLayers = req.body;
 
-    fs.mkdir(searchableDir, { recursive: true }, (dirErr) => {
-      if (dirErr) {
-        console.error("Failed to create searchable layers dir", dirErr);
-        return res.status(500).json({ error: "dir_create_failed" });
-      }
-
-      fs.writeFile(searchableLayersPath, JSON.stringify(updatedLayers, null, 2), 'utf8', (err) => {
-      if (err) {
-        console.error("Failed to write searchable layers file", err);
-        return res.status(500).json({ error: "write_failed" });
-      }
-      res.status(200).json({ status: "success" });
-      });
-    });
+    try {
+      await fs.promises.mkdir(searchableDir, { recursive: true });
+      await fs.promises.writeFile(searchableLayersPath, JSON.stringify(updatedLayers, null, 2), 'utf8');
+      return res.status(200).json({ status: "success" });
+    } catch (err) {
+      console.error("Failed to save searchable layers", err);
+      return res.status(500).json({ error: "write_failed" });
+    }
   });
 
-  // /layers -> ejecutar script extract_info.py usando o4w_env.bat
-  app.get("/layers", requireAdmin, (req, res) => {
-    const script = path.join(pythonDir, "extract_info.py");
-    console.log("GET /layers -> launching python:", pythonExe, script);
-    const proc = runPythonViaOSGeo4W(script, []);
-
-    let stdout = "", stderr = "";
-    proc.stdout.on("data", (d) => {
-      const s = d.toString();
-      stdout += s;
-      console.log("[py stdout]", s.trim());
-    });
-    proc.stderr.on("data", (d) => {
-      const s = d.toString();
-      stderr += s;
-      console.error("[py stderr]", s.trim());
-    });
-    proc.on("error", (err) => {
-      console.error("Failed to spawn python:", err);
-      res.status(500).json({ error: "spawn_error", details: String(err) });
-    });
-
-    proc.on("close", (code) => {
-      console.log(`python process exited ${code}`);
-      let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
-      if (raw) {
-        const candidate = extractJsonLike(raw);
-        if (candidate) {
-          try {
-            const parsed = JSON.parse(candidate);
-            return res.status(code === 0 ? 200 : 500).json(parsed);
-          } catch (e) {
-            return res.status(code === 0 ? 200 : 500).json({ raw, code });
-          }
-        } else {
-          return res.status(code === 0 ? 200 : 500).json({ raw, code });
-        }
-      }
-      return res.status(code === 0 ? 200 : 500).json({ code, details: stderr || "no output" });
-    });
-  });
+ 
 };

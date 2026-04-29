@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { spawn, execSync } from 'child_process';
 import Database from 'better-sqlite3';
-import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
 const asTrimmed = (value, fallback = '') => {
   if (value == null) return fallback;
@@ -830,7 +829,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
     }
     const snapshot = await tilesetStore.read();
     const items = snapshot && snapshot.items && typeof snapshot.items === 'object' ? snapshot.items : {};
-    const base = getRequestBaseUrl(req);
+    const base = `${req.protocol}://${req.get('host')}`;
     const listRaw = Object.values(items).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     const list = await Promise.all(listRaw.map(async (item) => {
       const sourceLayers = Array.isArray(item?.sourceLayers) && item.sourceLayers.length
@@ -1156,7 +1155,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       return res.status(404).json({ error: 'tileset_not_found' });
     }
 
-    const base = getRequestBaseUrl(req);
+    const base = `${req.protocol}://${req.get('host')}`;
     const url = `${base}/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
     const style = `${base}/plugins/${pluginName}/style/${encodeURIComponent(projectId)}.json`;
     const vectorLayersRaw = (Array.isArray(tile.sourceLayerMeta) && tile.sourceLayerMeta.length)
@@ -1207,7 +1206,7 @@ export const register = async ({ app, baseDir, registerStore, security }) => {
       return res.status(404).json({ error: 'tileset_not_found' });
     }
 
-    const base = getRequestBaseUrl(req);
+    const base = `${req.protocol}://${req.get('host')}`;
     const tilesUrl = `${base}/plugins/${pluginName}/tiles/${encodeURIComponent(projectId)}/{z}/{x}/{y}.pbf`;
     // Always expose the full renderable zoom range (0–20) in styles, NOT the generated range.
     // The generated range only reflects which tiles exist in MBTiles — missing ones trigger on-demand.

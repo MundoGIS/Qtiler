@@ -135,7 +135,24 @@ def main():
                 row[fname] = json_safe(feature[fname])
             try:
                 geom = feature.geometry()
-                row["geometry"] = geom.asWkt() if geom is not None else None
+                if geom is not None and not geom.isNull():
+                    row["geometry"] = geom.asWkt()
+                    bb = geom.boundingBox()
+                    row["bbox"] = [bb.xMinimum(), bb.yMinimum(), bb.xMaximum(), bb.yMaximum()]
+                    # Centroid fallback
+                    try:
+                        pt = geom.centroid().asPoint()
+                        row["x"] = pt.x()
+                        row["y"] = pt.y()
+                    except Exception:
+                        row["x"] = (bb.xMinimum() + bb.xMaximum()) / 2.0
+                        row["y"] = (bb.yMinimum() + bb.yMaximum()) / 2.0
+                    try:
+                        row["crs"] = layer.crs().authid()
+                    except Exception:
+                        pass
+                else:
+                    row["geometry"] = None
             except Exception:
                 row["geometry"] = None
             if title_field and title_field not in row:

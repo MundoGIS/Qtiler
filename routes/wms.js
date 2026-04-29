@@ -8,6 +8,7 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
+import express from "express";
 
 const getQueryCI = (req, key) => {
   if (!req || !req.query) return null;
@@ -46,6 +47,129 @@ const parseBbox = (value) => {
   const nums = parts.map((p) => Number(p));
   if (!nums.every(Number.isFinite)) return null;
   return nums;
+};
+
+const escapeXml = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+const findPrintMapField = (req, suffix) => {
+  const targetSuffix = `:${String(suffix || "").toLowerCase()}`;
+  for (const [key, value] of Object.entries(req?.query || {})) {
+    if (String(key).toLowerCase().endsWith(targetSuffix)) {
+      return { key, value: Array.isArray(value) ? value[0] : value };
+    }
+  }
+  return null;
+};
+
+const parsePrintRequestParams = (req) => {
+  const extentField = findPrintMapField(req, "extent");
+  const scaleField = findPrintMapField(req, "scale");
+  const rotationField = findPrintMapField(req, "rotation");
+  const bbox = parseBbox(getQueryCI(req, "BBOX")) || parseBbox(extentField?.value);
+  const mapName = extentField?.key?.split(":")[0] || scaleField?.key?.split(":")[0] || rotationField?.key?.split(":")[0] || null;
+  const rotation = rotationField ? Number(rotationField.value) : null;
+  const dpi = clampInt(getQueryCI(req, "DPI"), { min: 30, max: 1200, fallback: null });
+
+  const reservedKeys = new Set([
+    "SERVICE", "VERSION", "REQUEST", "FORMAT", "TEMPLATE", "CRS", "SRS", "BBOX", "LAYERS",
+    "WIDTH", "HEIGHT", "DPI", "PROJECT", "API_KEY", "CSRF_TOKEN", "NAME", "FILE", "DOWNLOAD",
+    "FORMAT_OPTIONS", "LEGEND", "ATLAS_PK"
+  ]);
+
+  const labels = {};
+  for (const [key, value] of Object.entries(req?.query || {})) {
+    const upper = String(key).toUpperCase();
+    if (reservedKeys.has(upper)) continue;
+    if (String(key).includes(":")) continue;
+    labels[key] = Array.isArray(value) ? value[0] : value;
+  }
+
+  return {
+    mapName,
+    bbox,
+    rotation: Number.isFinite(rotation) ? rotation : null,
+    dpi,
+    labels
+  };
+};
+
+const fallbackPrintLayouts = () => ([
+  {
+    name: "A4",
+    width: 297,
+    height: 210,
+    map: { name: "map0", width: 280, height: 190, x: 0, y: 0 },
+    labels: []
+  },
+  {
+    name: "A3",
+    width: 420,
+    height: 297,
+    map: { name: "map0", width: 400, height: 280, x: 0, y: 0 },
+    labels: []
+  }
+]);
+
+const buildProjectSettingsXml = (layouts) => {
+  const safeLayouts = Array.isArray(layouts) && layouts.length ? layouts : fallbackPrintLayouts();
+  const templatesXml = safeLayouts.map((layout) => {
+    const map = layout?.map && typeof layout.map === 'object' ? layout.map : null;
+    const labels = Array.isArray(layout?.labels) ? layout.labels : [];
+    const mapXml = map
+      ? `<ComposerMap width="${Number(map.width) || 0}" height="${Number(map.height) || 0}" x="${Number(map.x) || 0}" y="${Number(map.y) || 0}" name="${escapeXml(map.name || 'map0')}"/>`
+      : '';
+    const labelsXml = labels.map((label) => `<ComposerLabel name="${escapeXml(label)}"/>`).join('');
+    return `<ComposerTemplate width="${Number(layout?.width) || 0}" height="${Number(layout?.height) || 0}" name="${escapeXml(layout?.name || 'Layout')}">${mapXml}${labelsXml}</ComposerTemplate>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<WMS_Capabilities version="1.3.0">
+  <Capability>
+    <ComposerTemplates>${templatesXml}</ComposerTemplates>
+  </Capability>
+</WMS_Capabilities>`;
+};
+
+const loadProjectPrintLayouts = async ({ tileRendererPool, projectFile }) => {
+  const result = await tileRendererPool.renderTile({
+    action: 'list_print_layouts',
+    project_path: projectFile
+  });
+  if (!result || result.status !== 'success') {
+    const msg = result?.message || result?.error || 'list_print_layouts_failed';
+    throw new Error(String(msg));
+  }
+  return Array.isArray(result.layouts) ? result.layouts : [];
+};
+
+const parseFilterGeomBbox = (value) => {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const nums = [];
+  const re = /(-?\d+(?:\.\d+)?)/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n)) nums.push(n);
+  }
+  if (nums.length < 4 || nums.length % 2 !== 0) return null;
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (let i = 0; i < nums.length; i += 2) {
+    const x = nums[i];
+    const y = nums[i + 1];
+    if (x < minx) minx = x;
+    if (x > maxx) maxx = x;
+    if (y < miny) miny = y;
+    if (y > maxy) maxy = y;
+  }
+  if (![minx, miny, maxx, maxy].every(Number.isFinite)) return null;
+  if (!(maxx > minx) || !(maxy > miny)) return null;
+  return [minx, miny, maxx, maxy];
 };
 
 const clampInt = (value, { min = 1, max = 8192, fallback = null } = {}) => {
@@ -148,6 +272,8 @@ const loadTileMatrixPresetsForCrs = ({ tileGridDir, crs }) => {
   return out;
 };
 
+  
+
 const findAlignedTileForBbox = ({ preset, bbox, width, height }) => {
   if (!preset || !Array.isArray(bbox) || bbox.length !== 4) return null;
   if (width !== 256 || height !== 256) return null;
@@ -212,6 +338,35 @@ const wmsExceptionXml = (message, { code = "InvalidRequest" } = {}) => {
   );
 };
 
+const featureInfoDataToXml = (payload) => {
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
+  const data = payload && typeof payload === 'object' ? payload : {};
+  const layers = Array.isArray(data.layers) ? data.layers : [];
+  const point = data.point && typeof data.point === 'object' ? data.point : {};
+  const bbox = Array.isArray(data.bbox) ? data.bbox : [];
+
+  const layerXml = layers.map((layer) => {
+    const lname = esc(layer?.name || '');
+    const feats = Array.isArray(layer?.features) ? layer.features : [];
+    const featsXml = feats.map((feat) => {
+      const fid = feat?.id == null ? '' : esc(feat.id);
+      const props = feat?.properties && typeof feat.properties === 'object' ? feat.properties : {};
+      // QGIS format: <Attribute name="..." value="..."/>
+      const propsXml = Object.entries(props).map(([k, v]) => `<Attribute name="${esc(k)}" value="${esc(v == null ? '' : v)}"/>`).join('');
+      const geom = feat?.geometryWkt ? `<GeometryWkt>${esc(feat.geometryWkt)}</GeometryWkt>` : '';
+      return `<Feature id="${fid}">${propsXml}${geom}</Feature>`;
+    }).join('');
+    return `<Layer name="${lname}">${featsXml}</Layer>`;
+  }).join('');
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<GetFeatureInfoResponse>\n` +
+    `${layerXml}\n` +
+    `</GetFeatureInfoResponse>`
+  );
+};
+
 const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [] }) => {
   const now = new Date().toISOString();
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -246,7 +401,7 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
     `<Request>` +
     `<GetCapabilities><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetCapabilities>` +
     `<GetMap><Format>image/png</Format><Format>image/jpeg</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetMap>` +
-    `<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
+    `<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
     `<GetLegendGraphic><Format>image/png</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetLegendGraphic>` +
     `</Request>` +
     `<Exception><Format>XML</Format></Exception>` +
@@ -316,6 +471,15 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
   }
 };
 
+const safeLayerNameForWfs = (value) => {
+  if (!value) return '';
+  try {
+    return String(value).normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  } catch {
+    return '';
+  }
+};
+
 export const registerWmsRoutes = ({
   app,
   cacheDir,
@@ -326,10 +490,16 @@ export const registerWmsRoutes = ({
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
 
-  app.get(
-    "/wms",
-    ensureProjectAccessFromQuery("project"),
-    async (req, res) => {
+  // Extracted handler so we can accept POST requests (with KVP body) as well
+  const handleWmsKvp = async (req, res) => {
+    // QWC2 MapInfoTooltip elevation queries sometimes hit /wms incorrectly.
+    // E.g.: GET /wms?pos=X,Y&crs=EPSG:3857
+    if (getQueryCI(req, "pos")) {
+      return res.status(200).json({});
+    }
+
+      console.log('[WMS]', req.method, req.path, '| REQUEST='+getQueryCI(req,'REQUEST'), '| PROJECT='+getQueryCI(req,'project'));
+
       const service = String(getQueryCI(req, "SERVICE") || "WMS").toUpperCase();
       if (service !== "WMS") {
         res.status(400).type("application/xml").send(wmsExceptionXml("SERVICE must be WMS"));
@@ -428,14 +598,16 @@ export const registerWmsRoutes = ({
       if (requestUpper === "GETFEATUREINFO") {
         const version = String(getQueryCI(req, "VERSION") || "1.3.0").trim();
         const crs = normalizeCrs(getQueryCI(req, "CRS") || getQueryCI(req, "SRS")) || "EPSG:3857";
-        const bboxRaw = parseBbox(getQueryCI(req, "BBOX"));
+        const filterGeomRaw = String(getQueryCI(req, "FILTER_GEOM") || "").trim();
+        const filterGeomBbox = parseFilterGeomBbox(filterGeomRaw);
+        const bboxRaw = parseBbox(getQueryCI(req, "BBOX")) || filterGeomBbox;
         if (!bboxRaw) {
           res.status(400).type("application/xml").send(wmsExceptionXml("BBOX must have 4 numeric values"));
           return;
         }
 
-        const width = clampInt(getQueryCI(req, "WIDTH"), { min: 1, max: 8192, fallback: null });
-        const height = clampInt(getQueryCI(req, "HEIGHT"), { min: 1, max: 8192, fallback: null });
+        const width = clampInt(getQueryCI(req, "WIDTH"), { min: 1, max: 8192, fallback: filterGeomBbox ? 101 : null });
+        const height = clampInt(getQueryCI(req, "HEIGHT"), { min: 1, max: 8192, fallback: filterGeomBbox ? 101 : null });
         if (!width || !height) {
           res.status(400).type("application/xml").send(wmsExceptionXml("WIDTH/HEIGHT are required"));
           return;
@@ -449,16 +621,26 @@ export const registerWmsRoutes = ({
 
         const infoFormatRaw = String(getQueryCI(req, "INFO_FORMAT") || "application/json").trim().toLowerCase();
         const infoFormat = infoFormatRaw.split(';')[0].trim();
-        if (infoFormat !== 'application/json' && infoFormat !== 'text/plain') {
+        if (
+          infoFormat !== 'application/json'
+          && infoFormat !== 'text/plain'
+          && infoFormat !== 'text/xml'
+          && infoFormat !== 'application/vnd.ogc.gml'
+          && infoFormat !== 'application/vnd.ogc.gml/3.1.1'
+        ) {
           res.status(400).type("application/xml").send(wmsExceptionXml(`Unsupported INFO_FORMAT: ${infoFormatRaw}`));
           return;
         }
 
+        const normalizedInfoFormat = (
+          infoFormat === 'application/vnd.ogc.gml' || infoFormat === 'application/vnd.ogc.gml/3.1.1'
+        ) ? 'text/xml' : infoFormat;
+
         const featureCount = clampInt(getQueryCI(req, "FEATURE_COUNT"), { min: 1, max: 50, fallback: 10 });
         const iRaw = getQueryCI(req, "I") ?? getQueryCI(req, "X");
         const jRaw = getQueryCI(req, "J") ?? getQueryCI(req, "Y");
-        const i = clampInt(iRaw, { min: 0, max: 100000, fallback: null });
-        const j = clampInt(jRaw, { min: 0, max: 100000, fallback: null });
+        const i = clampInt(iRaw, { min: 0, max: 100000, fallback: filterGeomBbox ? Math.floor(width / 2) : null });
+        const j = clampInt(jRaw, { min: 0, max: 100000, fallback: filterGeomBbox ? Math.floor(height / 2) : null });
         if (i == null || j == null) {
           res.status(400).type("application/xml").send(wmsExceptionXml("I/J (or X/Y) are required"));
           return;
@@ -481,7 +663,8 @@ export const registerWmsRoutes = ({
             j,
             query_layers: queryLayers,
             feature_count: featureCount,
-            info_format: infoFormat
+            info_format: normalizedInfoFormat,
+            filter_geom: filterGeomRaw || null
           });
 
           if (!result || result.status !== 'success') {
@@ -491,8 +674,10 @@ export const registerWmsRoutes = ({
           }
 
           res.setHeader('Cache-Control', 'no-store');
-          if (infoFormat === 'text/plain') {
+          if (normalizedInfoFormat === 'text/plain') {
             res.type('text/plain').send(String(result.text || ''));
+          } else if (normalizedInfoFormat === 'text/xml') {
+            res.type('text/xml').send(String(result.xml || featureInfoDataToXml(result.data || {})));
           } else {
             res.type('application/json').json(result.data || {});
           }
@@ -502,7 +687,88 @@ export const registerWmsRoutes = ({
         return;
       }
 
+      if (requestUpper === "GETPROJECTSETTINGS") {
+        try {
+          const layouts = await loadProjectPrintLayouts({ tileRendererPool, projectFile: project.file });
+          res.setHeader("Cache-Control", "no-store");
+          res.status(200).type("text/xml").send(buildProjectSettingsXml(layouts));
+        } catch {
+          res.setHeader("Cache-Control", "no-store");
+          res.status(200).type("text/xml").send(buildProjectSettingsXml(null));
+        }
+        return;
+      }
+
+      if (requestUpper === "DESCRIBELAYER") {
+        // DescribeLayer is used by QWC2 to discover if a layer has WFS capabilities.
+        // We return a minimal valid XML response indicating no WFS endpoint.
+        const requestedLayers = parseCsv(getQueryCI(req, "LAYERS") || "");
+        const layerDescs = requestedLayers.map((l) =>
+          `<LayerDescription name="${l.replace(/[<>&"]/g, '')}"/>`
+        ).join("\n    ");
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<WMS_DescribeLayerResponse version="1.1.1" xmlns:xlink="http://www.w3.org/1999/xlink">\n    ${layerDescs || `<LayerDescription name=""/>`}\n</WMS_DescribeLayerResponse>`;
+        res.setHeader("Cache-Control", "no-store");
+        res.status(200).type("text/xml").send(xml);
+        return;
+      }
+
+      if (requestUpper === "GETPRINT") {
+        const layoutName = String(getQueryCI(req, "TEMPLATE") || "A4").trim();
+        const crsRaw = String(getQueryCI(req, "CRS") || getQueryCI(req, "SRS") || "EPSG:3857").trim();
+        const printParams = parsePrintRequestParams(req);
+        const bboxRaw = printParams.bbox;
+        if (!bboxRaw) {
+          res.status(400).type("application/xml").send(wmsExceptionXml("BBOX or map extent must have 4 numeric values"));
+          return;
+        }
+
+        const formatRaw = String(getQueryCI(req, "FORMAT") || "pdf").trim().toLowerCase();
+        if (formatRaw !== "pdf" && formatRaw !== "application/pdf") {
+          res.status(400).type("application/xml").send(wmsExceptionXml(`Unsupported print FORMAT: ${formatRaw}`));
+          return;
+        }
+
+        const queryLayers = parseCsv(getQueryCI(req, "LAYERS"));
+
+        let tmpDir;
+        try {
+          tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-wms-print-"));
+          const outFile = path.join(tmpDir, `print_output.pdf`);
+          
+          const result = await tileRendererPool.renderTile({
+            action: "print_layout",
+            project_path: project.file,
+            output_file: outFile,
+            layout_name: layoutName,
+            bbox: bboxRaw,
+            crs: crsRaw,
+            layers: queryLayers,
+            labels: printParams.labels,
+            rotation: printParams.rotation,
+            dpi: printParams.dpi,
+            map_name: printParams.mapName
+          });
+
+          if (!result || result.status !== "success") {
+            const msg = result?.message || result?.error || "print_failed";
+            res.status(500).type("application/xml").send(wmsExceptionXml(String(msg), { code: "NoApplicableCode" }));
+            return;
+          }
+
+          res.setHeader("Cache-Control", "no-store");
+          res.type("application/pdf");
+          res.sendFile(outFile, async () => {
+            try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
+          });
+        } catch (err) {
+          try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
+          res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
+        }
+        return;
+      }
+
       if (requestUpper !== "GETMAP") {
+        console.warn('[WMS-400] Unsupported REQUEST:', request, '| method:', req.method, '| url:', req.originalUrl);
         res.status(400).type("application/xml").send(wmsExceptionXml(`Unsupported REQUEST: ${request}`));
         return;
       }
@@ -511,6 +777,7 @@ export const registerWmsRoutes = ({
       const crs = normalizeCrs(getQueryCI(req, "CRS") || getQueryCI(req, "SRS")) || "EPSG:3857";
       const bboxRaw = parseBbox(getQueryCI(req, "BBOX"));
       if (!bboxRaw) {
+        console.warn('[WMS-400] BBOX invalid | BBOX='+getQueryCI(req,'BBOX'), '| method:', req.method);
         res.status(400).type("application/xml").send(wmsExceptionXml("BBOX must have 4 numeric values"));
         return;
       }
@@ -518,6 +785,7 @@ export const registerWmsRoutes = ({
       const width = clampInt(getQueryCI(req, "WIDTH"), { min: 1, max: 8192, fallback: null });
       const height = clampInt(getQueryCI(req, "HEIGHT"), { min: 1, max: 8192, fallback: null });
       if (!width || !height) {
+        console.warn('[WMS-400] WIDTH/HEIGHT missing | W='+width+' H='+height+' | method:', req.method);
         res.status(400).type("application/xml").send(wmsExceptionXml("WIDTH/HEIGHT are required"));
         return;
       }
@@ -532,6 +800,7 @@ export const registerWmsRoutes = ({
       const formatRaw = String(getQueryCI(req, "FORMAT") || "image/png").trim().toLowerCase();
       const format = formatRaw.split(";")[0].trim();
       if (format !== "image/png" && format !== "image/jpeg" && format !== "image/jpg") {
+        console.warn('[WMS-400] Unsupported FORMAT:', formatRaw, '| method:', req.method);
         res.status(400).type("application/xml").send(wmsExceptionXml(`Unsupported FORMAT: ${formatRaw}`));
         return;
       }
@@ -540,9 +809,16 @@ export const registerWmsRoutes = ({
 
       const transparent = toBool(getQueryCI(req, "TRANSPARENT"), true);
 
-      const layers = parseCsv(getQueryCI(req, "LAYERS"));
+      let layers = parseCsv(getQueryCI(req, "LAYERS"));
       if (!layers.length) {
-        res.status(400).type("application/xml").send(wmsExceptionXml("LAYERS is required"));
+        // QWC2 MapFilter sends a GetMap with empty LAYERS as a "validation" probe
+        // when no filters are active. Return a transparent 1×1 PNG so it succeeds.
+        const emptyPng = Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          'base64'
+        );
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(200).type('image/png').send(emptyPng);
         return;
       }
 
@@ -562,6 +838,25 @@ export const registerWmsRoutes = ({
       // GeoWebCache-like caching: only cache tile-aligned WMS requests.
       // Criteria: 256x256 + bbox matches a known tile matrix set for this CRS.
       const isTileSized = width === 256 && height === 256;
+      // Attempt to map sanitized layer names (from themes.json) back to actual
+      // layer names present in the project's cache index. This allows QWC2 to
+      // request `madrid_building` while the cached layer is named "madrid — building".
+      try {
+        const knownLayers = readProjectIndexLayers({ cacheDir, projectId });
+        if (Array.isArray(knownLayers) && knownLayers.length) {
+          layers = layers.map((ln) => {
+            if (!ln) return ln;
+            // exact match
+            if (knownLayers.some((k) => String(k.name || '') === String(ln))) return ln;
+            // try sanitized match
+            const target = safeLayerNameForWfs(ln);
+            const found = knownLayers.find((k) => safeLayerNameForWfs(k.name) === target);
+            return found ? String(found.name) : ln;
+          });
+        }
+      } catch {
+        // ignore mapping failures and continue with original layers
+      }
       const presets = isTileSized ? loadTileMatrixPresetsForCrs({ tileGridDir, crs }) : [];
       let cacheTarget = null;
       if (isTileSized && presets.length) {
@@ -662,6 +957,45 @@ export const registerWmsRoutes = ({
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
         res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
       }
-    }
+    };
+
+  // Register GET + POST handlers for /wms. POST requests often send KVP body
+  // instead of querystring (QWC2 components may do this), so for POST we
+  // merge `req.body` into `req.query` before handling.
+  app.get(
+    "/wms",
+    ensureProjectAccessFromQuery("project"),
+    handleWmsKvp
   );
+
+  app.post(
+    "/wms",
+    // 1. Primero leer el body (con límite ampliado para peticiones grandes de QWC2)
+    express.urlencoded({ extended: true, limit: '50mb' }),
+    express.json({ limit: '50mb' }),
+    // 2. Mezclar el body dentro del query
+    // NOTA: req.query es un getter de solo lectura en el prototipo de Express.
+    // En strict mode (módulos ES), "req.query = value" lanza TypeError.
+    // Usamos Object.defineProperty para crear una propiedad propia en la instancia
+    // que sombrea al getter del prototipo.
+    (req, res, next) => {
+      try {
+        const merged = Object.assign({}, req.query || {}, req.body || {});
+        Object.defineProperty(req, 'query', {
+          value: merged,
+          writable: true,
+          enumerable: true,
+          configurable: true
+        });
+      } catch {
+        // Si falla por alguna razón, seguir sin mezclar
+      }
+      next();
+    },
+    // 3. AHORA ejecutar la seguridad (que ya podrá leer el proyecto del query mezclado)
+    ensureProjectAccessFromQuery("project"),
+    // 4. Finalmente, procesar el WMS
+    (req, res, next) => handleWmsKvp(req, res, next)
+  );
+
 };

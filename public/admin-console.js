@@ -445,6 +445,86 @@ const searchableLayersSection = document.getElementById('searchable-layers-secti
 const searchableLayersContainer = document.getElementById('searchable-layers-container');
 const saveSearchableLayersBtn = document.getElementById('save-searchable-layers');
 
+/* ── Installed-plugins section collapse ── */
+function setupInstalledPluginsCollapse() {
+  const head = document.getElementById('installed-plugins-head');
+  const body = document.getElementById('installed-plugins-body');
+  const toggle = document.getElementById('installed-plugins-toggle');
+  if (!head || !body) return;
+
+  const expand = () => {
+    body.style.display = '';
+    head.setAttribute('aria-expanded', 'true');
+    if (toggle) toggle.classList.remove('collapsed');
+  };
+  const collapse = () => {
+    body.style.display = 'none';
+    head.setAttribute('aria-expanded', 'false');
+    if (toggle) toggle.classList.add('collapsed');
+  };
+  const toggleState = () => {
+    if (body.style.display === 'none') expand(); else collapse();
+  };
+
+  head.addEventListener('click', (e) => {
+    if (e.target.closest('button') && e.target !== toggle) return;
+    toggleState();
+  });
+  head.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleState(); }
+  });
+
+  // Start collapsed
+  collapse();
+
+  // Public API so loadPlugins can re-expand on first render if needed
+  setupInstalledPluginsCollapse._expand = expand;
+}
+
+/* ── License-expiry banner (once per session) ── */
+const _licenseWarnShown = { done: false };
+function showLicenseExpiryBanner() {
+  if (_licenseWarnShown.done) return;
+  const licenses = state.plugins.licenses || {};
+  const expiring = [];
+  for (const [pluginName, info] of Object.entries(licenses)) {
+    if (!info || typeof info !== 'object') continue;
+    const days = typeof info.daysLeft === 'number' ? info.daysLeft : null;
+    if (days != null && days <= 30 && days >= 0) {
+      expiring.push({ name: pluginName, days });
+    }
+  }
+  if (!expiring.empty && expiring.length === 0) return;
+  _licenseWarnShown.done = true;
+
+  const names = expiring.map(p => `${p.name} (${p.days}d)`).join(', ');
+  // Build a persistent Bulma-style notification banner
+  const banner = document.createElement('div');
+  banner.className = 'message warning license-expiry-banner';
+  banner.style.cssText = 'position:relative;margin-bottom:0;padding:14px 44px 14px 16px;border-radius:6px;background:var(--warning-bg,#fffbeb);color:var(--warning-fg,#78350f);border:1px solid var(--warning-border,#fbbf24);font-size:.92rem;line-height:1.5;';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.style.cssText = 'position:absolute;top:8px;right:10px;background:none;border:none;cursor:pointer;font-size:1.1rem;color:inherit;opacity:.7;';
+  closeBtn.innerHTML = '&#x2715;';
+  closeBtn.addEventListener('click', () => banner.remove());
+
+  const lines = [
+    `\u26A0\uFE0F ${expiring.map(p => p.name).join(', ')}: license${expiring.length > 1 ? 's expire' : ' expires'} in ${expiring.length === 1 ? expiring[0].days : 'less than 30'} day${expiring[0]?.days === 1 ? '' : 's'}.`,
+    'Without renewal the plugin(s) will automatically uninstall. Contact MundoGIS (support@mundogis.se) to renew.'
+  ];
+  banner.textContent = lines.join(' ');
+  banner.appendChild(closeBtn);
+
+  const messagesArea = document.getElementById('messages');
+  if (messagesArea) {
+    messagesArea.insertAdjacentElement('afterend', banner);
+  } else {
+    document.body.insertAdjacentElement('afterbegin', banner);
+  }
+}
+
 if (searchableLayersSection) {
   searchableLayersSection.hidden = true;
 }
@@ -1251,6 +1331,7 @@ async function loadPlugins() {
     state.plugins.meta = payload?.meta && typeof payload.meta === 'object' ? payload.meta : {};
     renderPlugins();
     updatePluginSections();
+    showLicenseExpiryBanner();
     if (state.plugins.securityWarnings.length) {
       showMessage('error', String(state.plugins.securityWarnings[0]), { sticky: true });
     }
@@ -1631,6 +1712,7 @@ async function checkQrigoEnabled() {
 }
 
 async function loadSearchableLayers() {
+  return; // Searchable layers UI removed — managed within project access
   if (!hasSearchableUi()) return;
   if (!qrigoEnabled) {
     if (searchableLayersSection) searchableLayersSection.hidden = true;
@@ -1723,6 +1805,7 @@ async function saveSearchableLayers() {
 
 async function init() {
   initLanguage();
+  setupInstalledPluginsCollapse();
   setupUploadForm();
   setupRefreshButton();
   if (saveSearchableLayersBtn) {

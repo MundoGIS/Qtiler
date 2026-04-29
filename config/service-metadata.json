@@ -2,7 +2,14 @@
   "serviceIdentification": {
     "title": "Qtiler Services",
     "abstract": "This is the fantastic Qtiler.",
-    "keywords": ["WMTS", "WMS", "WFS", "XYZ", "Qtiler", "GIS"],
+    "keywords": [
+      "WMTS",
+      "WMS",
+      "WFS",
+      "XYZ",
+      "Qtiler",
+      "GIS"
+    ],
     "serviceType": "OGC WMTS, WMS, WFS, XYZ",
     "serviceTypeVersion": "1.0.0",
     "fees": "None",
@@ -27,6 +34,6 @@
     }
   },
   "operations": {
-    "getFeatureInfo": false
+    "getFeatureInfo": true
   }
 }

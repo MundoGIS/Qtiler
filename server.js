@@ -27,6 +27,15 @@ import { registerWfsRoutes } from "./routes/wfs.js";
 import { registerOrigoRoutes } from "./routes/origo.js";
 import { getRequestBaseUrl } from "./lib/requestBaseUrl.js";
 
+import crypto from "crypto";
+import AdmZip from "adm-zip";
+
+import cookieParser from "cookie-parser";
+ //ort { spawnSync } from 'child_process';
+import { PluginManager } from "./lib/pluginManager.js";
+import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removeProjectAccessFromDb, purgeProjectFromUsersInDb, persistProjectAccessInDb } from "./lib/authDb.js";
+
+
 
 dotenv.config();
 const ensureLicenseSecret = () => {
@@ -72,13 +81,6 @@ function verifyQGISEnv() {
   }
 }
 verifyQGISEnv();
-import crypto from "crypto";
-import AdmZip from "adm-zip";
-
-import cookieParser from "cookie-parser";
- //ort { spawnSync } from 'child_process';
-import { PluginManager } from "./lib/pluginManager.js";
-import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removeProjectAccessFromDb, purgeProjectFromUsersInDb, persistProjectAccessInDb } from "./lib/authDb.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -4052,6 +4054,7 @@ const poolSize = parseInt(process.env.PY_WORKER_POOL_SIZE || "4");
 const pythonScript = path.resolve(__dirname, 'python', 'worker_wrapper.py');
 // --- create the Python worker pool AFTER poolSize and pythonScript are defined ---
 const tileRendererPool = new PythonPool(pythonScript, poolSize);
+app.locals.tileRendererPool = tileRendererPool;
 // crear env para procesos hijos incluyendo OSGeo4W paths si están en .env
 const makeChildEnv = () => {
   const env = { ...process.env };
@@ -6794,6 +6797,7 @@ const buildWmtsInventory = (options = {}) => {
   const filterProject = options.filterProjectId ? String(options.filterProjectId).toLowerCase() : "";
   const filterLayerRaw = options.filterLayerName != null ? String(options.filterLayerName).trim() : "";
   const filterLayerNorm = filterLayerRaw ? normalizeIdentifier(filterLayerRaw, "layer") : "";
+  const projectAccessFilter = options.projectAccessFilter instanceof Set ? options.projectAccessFilter : null;
   const projects = fs.existsSync(cacheDir)
     ? fs.readdirSync(cacheDir).filter((dir) => fs.statSync(path.join(cacheDir, dir)).isDirectory())
     : [];
@@ -6820,6 +6824,7 @@ const buildWmtsInventory = (options = {}) => {
 
   for (const project of projects) {
     if (filterProject && project.toLowerCase() !== filterProject) continue;
+    if (projectAccessFilter && !projectAccessFilter.has(project.toLowerCase())) continue;
     const index = loadIndex(project);
     if (!index || !Array.isArray(index.layers)) continue;
     const projectKeyBase = normalizeIdentifier(project, "project");
@@ -8759,6 +8764,31 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
   });
 });
 
+//print 
+app.post('/api/print', requireAdmin, async (req, res) => {
+  try {
+    // 1. Capturamos lo que manda QWC2
+    const printParams = req.body; 
+    
+    // 2. Lo mandamos a nuestro motor Python
+    const result = await tileRendererPool.renderTile({
+      action: 'print_layout',
+      project_path: resolveProjectFilePath(printParams.project),
+      layout_name: printParams.template,
+      bbox: printParams.bbox
+      // ... otros datos que mande QWC2
+    });
+
+    // 3. Devolvemos el PDF al navegador
+    if (result.status === 'success' && result.pdfPath) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.sendFile(result.pdfPath);
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Fallo al imprimir' });
+  }
+});
+
 app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, layer, z, x, y } = req.params;
   const sid = normalizeViewerSessionId(req.query && req.query.sid);
@@ -8850,9 +8880,24 @@ app.get("/wmts", (req, res, next) => {
     // For GetCapabilities, check project access if a specific project is requested
     const executeGetCapabilities = () => {
       try {
+        let projectAccessFilter = null;
+        const authEnabledForRequest = typeof security?.isEnabled === "function" ? security.isEnabled() : false;
+        if (authEnabledForRequest) {
+          const snapshot = readProjectAccessSnapshot();
+          const allProjects = fs.existsSync(cacheDir)
+            ? fs.readdirSync(cacheDir).filter((dir) => fs.statSync(path.join(cacheDir, dir)).isDirectory())
+            : [];
+          projectAccessFilter = new Set(
+            allProjects
+              .filter((projectId) => deriveProjectAccess(snapshot, req.user || null, projectId).allowed)
+              .map((projectId) => String(projectId).toLowerCase())
+          );
+        }
+
         const inventory = buildWmtsInventory({
           ...(filterProjectId ? { filterProjectId } : {}),
-          ...(filterLayer ? { filterLayerName: filterLayer } : {})
+          ...(filterLayer ? { filterLayerName: filterLayer } : {}),
+          ...(projectAccessFilter ? { projectAccessFilter } : {})
         });
         const { layers, tileMatrixSets } = inventory;
 
@@ -9247,7 +9292,7 @@ app.get("/wmts", (req, res, next) => {
 });
 
 // ---------------------------------------------------------
-// 2. HANDLER CAPABILITIES: Genera el XML para QGIS (?REQUEST=GetCapabilities)
+// RUTA DEBUG BOOTSTRAP
 // ---------------------------------------------------------
 app.get("/debug/bootstrap/:project", async (req, res) => {
   const p = req.params.project;
@@ -9260,305 +9305,6 @@ app.get("/debug/bootstrap/:project", async (req, res) => {
     res.status(500).json({ error: String(e) });
   }
 });
-
-
-
-// =============================================================================
-// WMS SERVICE ENDPOINTS
-// =============================================================================
-
-// WMS GetCapabilities and GetMap
-app.get("/wms", ensureProjectAccessFromQuery(), (req, res) => {
-  const findQ = (name) => {
-    const low = name.toLowerCase();
-    for (const k of Object.keys(req.query || {})) {
-      if (k.toLowerCase() === low) return req.query[k];
-    }
-    return undefined;
-  };
-
-  const service = String(findQ('SERVICE') || findQ('service') || "").toUpperCase();
-  const request = String(findQ('REQUEST') || findQ('request') || "").toUpperCase();
-
-  if (service !== "WMS") {
-    return res.status(400).json({ error: "unsupported_service", details: "Use SERVICE=WMS" });
-  }
-
-  if (request === "GETCAPABILITIES") {
-    return handleWmsGetCapabilities(req, res);
-  } else if (request === "GETMAP") {
-    return handleWmsGetMap(req, res);
-  } else {
-    return res.status(400).json({ error: "unsupported_request", details: "Use REQUEST=GetCapabilities or GetMap" });
-  }
-});
-
-// WMS GetCapabilities Handler
-function handleWmsGetCapabilities(req, res) {
-  try {
-    const filterProjectRaw = req.query.project != null ? String(req.query.project).trim() : "";
-    const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
-
-    const inventory = buildWmtsInventory(filterProjectId ? { filterProjectId } : {});
-    const { layers } = inventory;
-
-    const xmlEscape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    const formatNumber = (value) => {
-      const num = Number(value);
-      if (!Number.isFinite(num)) return "0";
-      return num.toString();
-    };
-
-    const baseUrl = getRequestBaseUrl(req) || 'http://localhost:3000';
-    const wmsUrl = filterProjectId 
-      ? `${baseUrl}/wms?project=${encodeURIComponent(filterProjectId)}`
-      : `${baseUrl}/wms`;
-
-    const xmlParts = [];
-    xmlParts.push('<?xml version="1.0" encoding="UTF-8"?>');
-    xmlParts.push('<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd">');
-    
-    // Service
-    xmlParts.push('<Service>');
-    xmlParts.push('<Name>WMS</Name>');
-    xmlParts.push('<Title>Qtiler WMS Service</Title>');
-    xmlParts.push('<Abstract>Tiled WMS service powered by Qtiler</Abstract>');
-    xmlParts.push('<OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(baseUrl) + '"/>');
-    xmlParts.push('</Service>');
-
-    // Capability
-    xmlParts.push('<Capability>');
-    xmlParts.push('<Request>');
-    xmlParts.push('<GetCapabilities>');
-    xmlParts.push('<Format>text/xml</Format>');
-    xmlParts.push('<DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(wmsUrl) + '"/></Get></HTTP></DCPType>');
-    xmlParts.push('</GetCapabilities>');
-    xmlParts.push('<GetMap>');
-    xmlParts.push('<Format>image/png</Format>');
-    xmlParts.push('<DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="' + xmlEscape(wmsUrl) + '"/></Get></HTTP></DCPType>');
-    xmlParts.push('</GetMap>');
-    xmlParts.push('</Request>');
-
-    // Parent Layer (queryable container)
-    xmlParts.push('<Layer queryable="1">');
-    xmlParts.push('<Title>Qtiler Layers</Title>');
-    
-    // Add CRS to parent layer
-    xmlParts.push('<CRS>CRS:84</CRS>');
-    xmlParts.push('<CRS>EPSG:4326</CRS>');
-    xmlParts.push('<CRS>EPSG:3857</CRS>');
-    xmlParts.push('<CRS>EPSG:3006</CRS>');
-
-    for (const layer of layers) {
-      const crs = layer.tileCrs || 'EPSG:3857';
-      const extent = layer.extent || [-20037508.34, -20037508.34, 20037508.34, 20037508.34];
-      const extentWgs = layer.extentWgs || [-180, -85, 180, 85];
-
-      xmlParts.push('<Layer queryable="1">');
-      xmlParts.push('<Name>' + xmlEscape(layer.identifier) + '</Name>');
-      xmlParts.push('<Title>' + xmlEscape(layer.displayTitle || layer.identifier) + '</Title>');
-      
-      // CRS - add more common CRS
-      xmlParts.push('<CRS>CRS:84</CRS>');
-      xmlParts.push('<CRS>EPSG:4326</CRS>');
-      xmlParts.push('<CRS>EPSG:3857</CRS>');
-      xmlParts.push('<CRS>' + xmlEscape(crs) + '</CRS>');
-
-      // EX_GeographicBoundingBox (WGS84 - always lon/lat order)
-      xmlParts.push('<EX_GeographicBoundingBox>');
-      xmlParts.push('<westBoundLongitude>' + formatNumber(extentWgs[0]) + '</westBoundLongitude>');
-      xmlParts.push('<eastBoundLongitude>' + formatNumber(extentWgs[2]) + '</eastBoundLongitude>');
-      xmlParts.push('<southBoundLatitude>' + formatNumber(extentWgs[1]) + '</southBoundLatitude>');
-      xmlParts.push('<northBoundLatitude>' + formatNumber(extentWgs[3]) + '</northBoundLatitude>');
-      xmlParts.push('</EX_GeographicBoundingBox>');
-
-      // BoundingBox in native CRS (WMS 1.3.0 format)
-      // For EPSG:3006 and similar CRS with northing/easting, use miny/minx/maxy/maxx order
-      if (crs === 'EPSG:3006' || crs === 'EPSG:3010' || crs === 'EPSG:3011') {
-        xmlParts.push('<BoundingBox CRS="' + xmlEscape(crs) + '" miny="' + formatNumber(extent[0]) + '" minx="' + formatNumber(extent[1]) + '" maxy="' + formatNumber(extent[2]) + '" maxx="' + formatNumber(extent[3]) + '"/>');
-      } else {
-        xmlParts.push('<BoundingBox CRS="' + xmlEscape(crs) + '" minx="' + formatNumber(extent[0]) + '" miny="' + formatNumber(extent[1]) + '" maxx="' + formatNumber(extent[2]) + '" maxy="' + formatNumber(extent[3]) + '"/>');
-      }
-      
-      // Also add EPSG:3857 bounding box for web mercator clients
-      if (crs !== 'EPSG:3857') {
-        xmlParts.push('<BoundingBox CRS="EPSG:3857" minx="-20037508.34" miny="-20037508.34" maxx="20037508.34" maxy="20037508.34"/>');
-      }
-      
-      // EPSG:4326 bounding box (lat/lon order for WMS 1.3.0)
-      xmlParts.push('<BoundingBox CRS="EPSG:4326" miny="' + formatNumber(extentWgs[0]) + '" minx="' + formatNumber(extentWgs[1]) + '" maxy="' + formatNumber(extentWgs[2]) + '" maxx="' + formatNumber(extentWgs[3]) + '"/>');
-      
-      xmlParts.push('<EX_GeographicBoundingBox>');
-      xmlParts.push('<westBoundLongitude>' + formatNumber(extentWgs[0]) + '</westBoundLongitude>');
-      xmlParts.push('<eastBoundLongitude>' + formatNumber(extentWgs[2]) + '</eastBoundLongitude>');
-      xmlParts.push('<southBoundLatitude>' + formatNumber(extentWgs[1]) + '</southBoundLatitude>');
-      xmlParts.push('<northBoundLatitude>' + formatNumber(extentWgs[3]) + '</northBoundLatitude>');
-      xmlParts.push('</EX_GeographicBoundingBox>');
-
-      // Styles
-      xmlParts.push('<Style>');
-      xmlParts.push('<Name>default</Name>');
-      xmlParts.push('<Title>Default</Title>');
-      xmlParts.push('</Style>');
-
-      xmlParts.push('</Layer>');
-    }
-
-    xmlParts.push('</Layer>');
-    xmlParts.push('</Capability>');
-    xmlParts.push('</WMS_Capabilities>');
-
-    res.setHeader("Content-Type", "application/xml");
-    return res.send(xmlParts.join(""));
-  } catch (error) {
-    console.error("WMS GetCapabilities error", error);
-    return res.status(500).json({ error: "wms_capabilities_failed", details: String(error) });
-  }
-}
-
-// WMS GetMap Handler (returns tile from cache or triggers on-demand rendering)
-async function handleWmsGetMap(req, res) {
-  try {
-    const findQ = (name) => {
-      const low = name.toLowerCase();
-      for (const k of Object.keys(req.query || {})) {
-        if (k.toLowerCase() === low) return req.query[k];
-      }
-      return undefined;
-    };
-
-    const layers = String(findQ('LAYERS') || findQ('layers') || "");
-    const bbox = String(findQ('BBOX') || findQ('bbox') || "");
-    const width = parseInt(findQ('WIDTH') || findQ('width') || "256", 10);
-    const height = parseInt(findQ('HEIGHT') || findQ('height') || "256", 10);
-    const crs = String(findQ('CRS') || findQ('crs') || findQ('SRS') || findQ('srs') || "EPSG:3857");
-    const format = String(findQ('FORMAT') || findQ('format') || "image/png");
-
-    if (!layers) {
-      return res.status(400).json({ error: "missing_layers", details: "LAYERS parameter required" });
-    }
-
-    if (!bbox) {
-      return res.status(400).json({ error: "missing_bbox", details: "BBOX parameter required" });
-    }
-
-    // Parse bbox
-    const bboxParts = bbox.split(',').map(v => parseFloat(v));
-    if (bboxParts.length !== 4 || bboxParts.some(v => !Number.isFinite(v))) {
-      return res.status(400).json({ error: "invalid_bbox", details: "BBOX must be minx,miny,maxx,maxy" });
-    }
-    const [minx, miny, maxx, maxy] = bboxParts;
-
-    // Parse layer identifier to get project and layer
-    const layerParts = layers.split('_');
-    if (layerParts.length < 2) {
-      return res.status(400).json({ error: "invalid_layer", details: "Layer format should be project_layer" });
-    }
-
-    const project = layerParts[0];
-    const layerIdentifier = layerParts.slice(1).join('_');
-
-    // Load project index to get tile matrix info
-    const projectDir = path.join(cacheDir, project);
-    const indexPath = path.join(projectDir, 'index.json');
-    
-    let indexData;
-    try {
-      const indexContent = await fs.promises.readFile(indexPath, 'utf-8');
-      indexData = JSON.parse(indexContent);
-    } catch (err) {
-      return res.status(404).json({ error: "project_not_found", details: `Project ${project} not found` });
-    }
-
-    // Find the layer by identifier or by normalizing the name
-    let layerInfo = indexData.layers?.find(l => l.name === layerIdentifier);
-    if (!layerInfo) {
-      // Try to find by normalizing layer names (spaces to underscores)
-      layerInfo = indexData.layers?.find(l => {
-        const normalizedName = l.name?.replace(/\s+/g, '_');
-        return normalizedName === layerIdentifier;
-      });
-    }
-    if (!layerInfo) {
-      return res.status(404).json({ error: "layer_not_found", details: `Layer ${layerIdentifier} not found in project ${project}` });
-    }
-
-    // Use the actual layer name (with spaces) for file paths
-    const layer = layerInfo.name;
-
-    // Get tile matrix set
-    const tileMatrixSet = indexData.tile_matrix_set;
-    if (!tileMatrixSet || !Array.isArray(tileMatrixSet.matrices)) {
-      return res.status(500).json({ error: "invalid_tile_matrix", details: "Tile matrix set not found" });
-    }
-
-    // Calculate which zoom level best matches the request resolution
-    const bboxWidth = maxx - minx;
-    const bboxHeight = maxy - miny;
-    const requestedResX = bboxWidth / width;
-    const requestedResY = bboxHeight / height;
-    const requestedRes = Math.max(requestedResX, requestedResY);
-
-    // Find closest zoom level
-    let bestZoom = 0;
-    let bestResDiff = Infinity;
-    for (const matrix of tileMatrixSet.matrices) {
-      const res = matrix.resolution || matrix.scaleDenominator * 0.00028;
-      const diff = Math.abs(res - requestedRes);
-      if (diff < bestResDiff) {
-        bestResDiff = diff;
-        bestZoom = matrix.zoom || matrix.identifier;
-      }
-    }
-
-    const matrix = tileMatrixSet.matrices.find(m => (m.zoom || m.identifier) === bestZoom);
-    if (!matrix) {
-      return res.status(500).json({ error: "matrix_not_found", details: `Matrix for zoom ${bestZoom} not found` });
-    }
-
-    // Get tile matrix info
-    const tileWidth = matrix.tile_width || 256;
-    const tileHeight = matrix.tile_height || 256;
-    const matrixWidth = matrix.matrix_width;
-    const matrixHeight = matrix.matrix_height;
-    const resolution = matrix.resolution || matrix.scaleDenominator * 0.00028;
-    
-    // Get top-left corner
-    let topLeftX, topLeftY;
-    if (matrix.top_left_corner) {
-      topLeftX = matrix.top_left_corner[0];
-      topLeftY = matrix.top_left_corner[1];
-    } else if (matrix.topLeftCorner) {
-      topLeftX = matrix.topLeftCorner[0];
-      topLeftY = matrix.topLeftCorner[1];
-    } else {
-      topLeftX = tileMatrixSet.extent[0];
-      topLeftY = tileMatrixSet.extent[3];
-    }
-
-    // Calculate tile coordinates for bbox center
-    const centerX = (minx + maxx) / 2;
-    const centerY = (miny + maxy) / 2;
-    
-    const tileX = Math.floor((centerX - topLeftX) / (tileWidth * resolution));
-    const tileY = Math.floor((topLeftY - centerY) / (tileHeight * resolution));
-
-    // Clamp to valid range
-    const clampedX = Math.max(0, Math.min(tileX, matrixWidth - 1));
-    const clampedY = Math.max(0, Math.min(tileY, matrixHeight - 1));
-
-    // Redirect to tile endpoint (which handles on-demand rendering)
-    const sid = normalizeViewerSessionId(findQ('sid'));
-    const tileUrl = `/wmts/${project}/${layer}/${bestZoom}/${clampedX}/${clampedY}.png${sid ? `?sid=${encodeURIComponent(sid)}` : ''}`;
-    
-    // Instead of redirect, proxy the request to maintain WMS compatibility
-    return res.redirect(tileUrl);
-
-  } catch (error) {
-    console.error("WMS GetMap error", error);
-    return res.status(500).json({ error: "wms_getmap_failed", details: String(error) });
-  }
-}
 
 const startServer = async () => {
   try {
@@ -9601,8 +9347,7 @@ if (cluster.isPrimary || cluster.isMaster) {
     }
 
     if (msg && msg.cmd === 'abortGenerateCacheJob' && msg.id) {
-      // Broadcast to all workers so the worker that owns the in-memory child
-      // process can abort it directly.
+      // Broadcast to all workers so the worker that owns the in-memory child process can abort it directly.
       for (const id in cluster.workers) {
         try {
           cluster.workers[id].process.send({ cmd: 'abortGenerateCacheJob', id: String(msg.id), sourcePid: msg.sourcePid || null });

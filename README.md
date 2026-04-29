@@ -28,6 +28,64 @@ Qtiler supports optional commercial plugins. Current bundled versions:
 - ProjectSearch: `0.1.0`
 - Qrigo: `0.1.0`
 - VectorTiles: `0.2.0`
+- Qtiler2qwc: `0.1.0`
+
+## Qtiler2qwc — QWC2 WebMap Integration
+
+**Qtiler2qwc** is a commercial plugin that embeds a full [QWC2](https://github.com/qgis/qwc2) (QGIS Web Client 2) webmap viewer inside Qtiler, enabling production-ready interactive web maps powered directly by your QGIS projects.
+
+### What it provides
+
+- **Hosted QWC2 viewer** — A fully configured QWC2 application served at `/Qtiler2qwc/webmap`, ready to use without a separate deployment.
+- **Project publishing workflow** — Publish any uploaded QGIS project as an interactive webmap with a single click from the Qtiler2qwc admin UI.
+- **Dynamic themes** — Generates and manages `themes.json` and `config.json` for QWC2, keeping published projects in sync with your QGIS layers, CRS, and extent.
+- **3D terrain viewer** — Projects with 3D data can be viewed with quantized-mesh terrain integration (requires Qtiler terrain endpoints).
+- **Search integration** — Attribute search powered by Qtiler's search service (`/Qtiler2qwc/search`).
+- **Configurable toolbar** — Supports Print and Identify tools in the QWC2 top bar out of the box.
+
+### Routes exposed by Qtiler2qwc
+
+| Route | Description |
+|---|---|
+| `GET /Qtiler2qwc/webmap` | Serve the QWC2 webmap viewer (redirect to published app) |
+| `GET /Qtiler2qwc/search` | Attribute search endpoint for QWC2 SearchBox |
+| `GET /Qtiler2qwc/terrain/:projectId/:file` | Terrain tile proxy for 3D viewer |
+| `GET /Qtiler2qwc/admin` | Admin UI for managing published webmaps |
+
+### Publishing a project as a QWC2 webmap
+
+1. Open the Qtiler dashboard and go to the **Plugins** section.
+2. Click **Qtiler2qwc** to open the admin panel.
+3. Use the **Publish project** button to select a QGIS project from your uploaded list.
+4. Configure the map name, description, and optional background layers.
+5. Click **Publish** — Qtiler2qwc generates the QWC2 theme, writes `themes.json` and `config.json`, and the webmap is immediately available at `/Qtiler2qwc/webmap`.
+
+### Data storage
+
+Published webmap configurations are stored under:
+```
+data/Qtiler2qwc/qwc2/current/   # Active config.json, themes.json
+data/Qtiler2qwc/qwc2/published/ # Per-project JSON files (one per published map)
+data/Qtiler2qwc/state.json      # Plugin state (active project, settings)
+```
+
+### Combining Qtiler2qwc with QtilerAuth
+
+When QtilerAuth is active, the webmap routes respect project-level access control:
+- Public projects are accessible without login.
+- Protected projects require the user to be authenticated (session cookie or API key).
+- The QWC2 viewer will prompt login automatically for protected projects.
+
+### Toolbar configuration (config.json)
+
+The QWC2 toolbar items are defined in `data/Qtiler2qwc/qwc2/current/config.json` under `plugins.desktop[TopBar].toolbarItems`. Default configuration:
+```json
+"toolbarItems": [
+  { "key": "Print", "icon": "print" },
+  { "key": "Identify", "icon": "identify_region", "mode": "Region" }
+]
+```
+Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc.).
 
 ## VectorTiles auth in QGIS (protected projects)
 If your project is protected by QtilerAuth, avoid shared URLs and use user-based credentials.

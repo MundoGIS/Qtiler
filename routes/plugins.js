@@ -29,6 +29,15 @@ export const registerPluginRoutes = ({
 }) => {
   const licenseStorePath = path.join(dataDir, 'licenses.json');
   const licenseSecret = process.env.LICENSE_SECRET || '';
+  const PUBLIC_KEY_PATH = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(process.cwd(), 'tools', 'licenses', 'public_key.pem');
+  let licensePublicKey = '';
+  try {
+    if (process.env.LICENSE_PUBLIC_KEY) licensePublicKey = process.env.LICENSE_PUBLIC_KEY;
+    else if (fs.existsSync(PUBLIC_KEY_PATH)) licensePublicKey = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+  } catch (err) {
+    licensePublicKey = '';
+  }
+
   const trialTamperWarning = 'Trial license data appears to be illegally modified. This action is illegal. The plugin will be removed. Please purchase a valid license from MundoGIS.';
     const pricing = {
     ProjectSearch: { price: 50, currency: 'EUR', period: 'year' },
@@ -72,18 +81,52 @@ export const registerPluginRoutes = ({
     return id;
   };
 
+  const base64urlToBase64 = (s) => {
+    // convert base64url to base64
+    let out = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+    const pad = out.length % 4;
+    if (pad === 2) out += '==';
+    else if (pad === 3) out += '=';
+    else if (pad !== 0) out += '===';
+    return out;
+  };
+
   const verifyLicenseKey = (key) => {
     try {
-      if (!licenseSecret) return null;
       const parts = String(key || '').split('.');
       if (parts.length !== 2) return null;
       const payloadB64 = parts[0];
       const signature = parts[1];
-      const expected = crypto.createHmac('sha256', licenseSecret).update(payloadB64).digest('base64url');
-      if (signature !== expected) return null;
-      const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
-      const payload = JSON.parse(payloadJson);
-      return payload && typeof payload === 'object' ? payload : null;
+
+      // Try public-key (RSA) verification first if public key available
+      if (licensePublicKey) {
+        try {
+          const sigB64 = base64urlToBase64(signature);
+          const verifier = crypto.createVerify('sha256');
+          verifier.update(payloadB64);
+          verifier.end();
+          const ok = verifier.verify(licensePublicKey, sigB64, 'base64');
+          if (ok) {
+            const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
+            const payload = JSON.parse(payloadJson);
+            return payload && typeof payload === 'object' ? payload : null;
+          }
+        } catch (err) {
+          // fallthrough to HMAC fallback
+        }
+      }
+
+      // Fallback: HMAC with LICENSE_SECRET (compat)
+      if (licenseSecret) {
+        const expected = crypto.createHmac('sha256', licenseSecret).update(payloadB64).digest('base64url');
+        if (signature === expected) {
+          const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
+          const payload = JSON.parse(payloadJson);
+          return payload && typeof payload === 'object' ? payload : null;
+        }
+      }
+
+      return null;
     } catch {
       return null;
     }

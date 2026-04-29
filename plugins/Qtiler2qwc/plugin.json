@@ -1,0 +1,39 @@
+{
+  "name": "Qtiler2qwc",
+  "version": "0.1.0",
+  "displayName": "QTWC (QWC2 Bridge)",
+  "description": "Install and serve QWC2 from Qtiler with project visibility synced from QtilerAuth.",
+  "docs": {
+    "en": {
+      "description": "Installs QWC2 from GitHub and serves it from Qtiler while honoring project access rules.",
+      "readme": [
+        "Use the admin console to install or uninstall QWC2 from a pinned GitHub tag.",
+        "QWC2 static files are served by Qtiler at /plugins/Qtiler2qwc/qwc2.",
+        "Project visibility is synced from QtilerAuth public/authenticated/private rules.",
+        "Use the generated projects catalog endpoint for bridge integrations."
+      ]
+    },
+    "es": {
+      "description": "Instala QWC2 desde GitHub y lo sirve desde Qtiler respetando reglas de acceso de proyectos.",
+      "readme": [
+        "Usa la consola de administración para instalar o desinstalar QWC2 con una versión etiquetada.",
+        "Los archivos estáticos de QWC2 se sirven desde Qtiler en /plugins/Qtiler2qwc/qwc2.",
+        "La visibilidad de proyectos se sincroniza con las reglas public/authenticated/private de QtilerAuth.",
+        "Usa el endpoint del catálogo de proyectos para integraciones tipo bridge."
+      ]
+    },
+    "sv": {
+      "description": "Installerar QWC2 från GitHub och serverar den via Qtiler med projektbehörighet från QtilerAuth.",
+      "readme": [
+        "Använd adminpanelen för att installera eller avinstallera QWC2 från en pinnad tagg.",
+        "QWC2 statiska filer serveras av Qtiler på /plugins/Qtiler2qwc/qwc2.",
+        "Projektbehörighet synkas med public/authenticated/private-regler i QtilerAuth.",
+        "Använd projektkatalog-endpointen för bridge-integrationer."
+      ]
+    }
+  },
+  "autoEnable": false,
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "supportContact": "support@mundogis.se"
+}

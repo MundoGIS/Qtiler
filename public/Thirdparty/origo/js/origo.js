@@ -174392,6 +174392,8 @@ class ExecutorGroup {
       this.hitDetectionContext_ = (0,_dom_js__WEBPACK_IMPORTED_MODULE_1__.createCanvasContext2D)(
         contextSize,
         contextSize,
+        undefined,
+        {willReadFrequently: true},
       );
     }
     const context = this.hitDetectionContext_;

@@ -324,6 +324,31 @@ def _gml_geometry_property_type(layer):
         pass
     return 'gml:GeometryPropertyType'
 
+def _geojson_type_from_qgs_geometry(geom):
+    """Best-effort GeoJSON geometry type from a QgsGeometry instance."""
+    try:
+        if QgsWkbTypes is None or geom is None or not hasattr(geom, 'wkbType'):
+            return None
+        wkb = geom.wkbType()
+        try:
+            is_multi = bool(QgsWkbTypes.isMultiType(wkb))
+        except Exception:
+            is_multi = False
+        try:
+            gtype = QgsWkbTypes.geometryType(wkb)
+        except Exception:
+            gtype = None
+
+        if gtype == QgsWkbTypes.PointGeometry:
+            return 'MultiPoint' if is_multi else 'Point'
+        if gtype == QgsWkbTypes.LineGeometry:
+            return 'MultiLineString' if is_multi else 'LineString'
+        if gtype == QgsWkbTypes.PolygonGeometry:
+            return 'MultiPolygon' if is_multi else 'Polygon'
+    except Exception:
+        pass
+    return None
+
 def _field_type_to_xsd(field):
     try:
         tname = ''
@@ -1016,6 +1041,7 @@ def process_task(params):
             max_features = params.get('max_features')
             hard_limit_override = params.get('hard_limit_override')
             start_index = params.get('start_index')
+            feature_id = params.get('feature_id') or params.get('featureid') or params.get('FEATUREID')
             env_default = os.getenv('WFS_DEFAULT_MAX_FEATURES')
             env_hard_limit = os.getenv('WFS_MAX_FEATURES_LIMIT')
             env_absolute_limit = os.getenv('WFS_MAX_FEATURES_ABSOLUTE_LIMIT')
@@ -1109,6 +1135,14 @@ def process_task(params):
                     pass
 
             req = QgsFeatureRequest()
+            if feature_id is not None and str(feature_id).strip() != '':
+                fid_num = _fid_to_int(feature_id)
+                if fid_num is None:
+                    return { 'status': 'error', 'code': 'InvalidParameterValue', 'message': 'Invalid FEATUREID' }
+                try:
+                    req = req.setFilterFid(int(fid_num))
+                except Exception:
+                    pass
             if rect is not None:
                 req = req.setFilterRect(rect)
             if max_features is not None:
@@ -1152,6 +1186,10 @@ def process_task(params):
                                 except Exception:
                                     geom_obj = feat.geometry()
                             geom_json = json.loads(geom_obj.asJson())
+                            if isinstance(geom_json, dict) and not geom_json.get('type'):
+                                inferred = _geojson_type_from_qgs_geometry(geom_obj)
+                                if inferred:
+                                    geom_json['type'] = inferred
                     except Exception:
                         geom_json = None
                     fid = None
@@ -1877,6 +1915,193 @@ def process_task(params):
                 f.write(''.join(parts))
             return { 'status': 'success', 'file': output_file, 'inserted': inserted, 'updated': updated, 'deleted': deleted, 'errors': errors }
 
+        
+        # --- Print action -----------------------------------------------------
+        if action in ('list_print_layouts', 'project_settings'):
+            from qgis.core import QgsLayoutItemMap, QgsLayoutItemLabel
+
+            layouts = []
+            for layout in proj.layoutManager().layouts():
+                if not layout:
+                    continue
+
+                width = 0.0
+                height = 0.0
+                try:
+                    page = layout.pageCollection().page(0)
+                    if page:
+                        page_size = page.pageSize()
+                        width = float(page_size.width())
+                        height = float(page_size.height())
+                except Exception:
+                    pass
+
+                map_item = layout.referenceMap()
+                if not map_item:
+                    for item in layout.items():
+                        if isinstance(item, QgsLayoutItemMap):
+                            map_item = item
+                            break
+
+                map_meta = None
+                if map_item:
+                    try:
+                        from qgis.core import QgsUnitTypes
+
+                        def _to_mm(val, unit):
+                            v = float(val)
+                            if unit == QgsUnitTypes.LayoutCentimeters:
+                                return v * 10.0
+                            elif unit == QgsUnitTypes.LayoutMeters:
+                                return v * 1000.0
+                            elif unit == QgsUnitTypes.LayoutInches:
+                                return v * 25.4
+                            elif unit == QgsUnitTypes.LayoutPoints:
+                                return v * 25.4 / 72.0
+                            return v  # LayoutMillimeters or unknown
+
+                        size = map_item.sizeWithUnits()
+                        map_w = _to_mm(size.width(), size.units())
+                        map_h = _to_mm(size.height(), size.units())
+
+                        try:
+                            pos = map_item.pagePositionWithUnits()
+                            map_x = _to_mm(pos.x(), pos.units())
+                            map_y = _to_mm(pos.y(), pos.units())
+                        except Exception:
+                            map_x, map_y = 0.0, 0.0
+
+                        # Last resort: if still zero, fall back to page size
+                        if map_w == 0.0 or map_h == 0.0:
+                            map_w = map_w or width
+                            map_h = map_h or height
+
+                        map_meta = {
+                            'name': map_item.id() or 'map0',
+                            'x': map_x,
+                            'y': map_y,
+                            'width': map_w,
+                            'height': map_h
+                        }
+                    except Exception:
+                        map_meta = {
+                            'name': map_item.id() or 'map0',
+                            'x': 0.0,
+                            'y': 0.0,
+                            'width': width,
+                            'height': height
+                        }
+
+                labels = []
+                for item in layout.items():
+                    if isinstance(item, QgsLayoutItemLabel):
+                        item_id = item.id()
+                        if item_id:
+                            labels.append(str(item_id))
+
+                layouts.append({
+                    'name': str(layout.name()),
+                    'width': width,
+                    'height': height,
+                    'map': map_meta,
+                    'labels': labels
+                })
+
+            return {'status': 'success', 'layouts': layouts}
+
+        if action in ('print_layout', 'getprint'):
+            from qgis.core import QgsLayoutExporter, QgsLayoutItemLabel, QgsLayoutItemMap
+            
+            output_file = params.get('output_file')
+            layout_name = params.get('layout_name') or params.get('template')
+            bbox_list = params.get('bbox')
+            layers_list = params.get('layers')
+            crs_raw = params.get('crs') or params.get('srs')
+            map_name = params.get('map_name')
+            rotation = params.get('rotation')
+            dpi = params.get('dpi')
+            labels_dict = params.get('labels') or {}
+            
+            if not output_file:
+                raise ValueError('Falta output_file')
+            if not layout_name:
+                raise ValueError('Falta layout_name (TEMPLATE)')
+            if not bbox_list or len(bbox_list) != 4:
+                raise ValueError('Falta bbox valido')
+                
+            layout = proj.layoutManager().layoutByName(str(layout_name))
+            if not layout:
+                raise ValueError('Plantilla no encontrada: ' + str(layout_name))
+                
+            rect = QgsRectangle(*bbox_list)
+            map_item = layout.referenceMap()
+            if not map_item and map_name:
+                for item in layout.items():
+                    if isinstance(item, QgsLayoutItemMap) and str(item.id() or '') == str(map_name):
+                        map_item = item
+                        break
+            if not map_item:
+                for item in layout.items():
+                    if isinstance(item, QgsLayoutItemMap):
+                        map_item = item
+                        break
+
+            if map_item:
+                map_item.setExtent(rect)
+                if crs_raw:
+                    crs_cand = QgsCoordinateReferenceSystem(crs_raw.strip())
+                    if crs_cand.isValid():
+                        map_item.setCrs(crs_cand)
+                try:
+                    rotation_num = float(rotation)
+                    if rotation_num == rotation_num:
+                        map_item.setMapRotation(rotation_num)
+                except Exception:
+                    pass
+                        
+                if isinstance(layers_list, list) and layers_list:
+                    render_layers = []
+                    for lname in layers_list:
+                        lyr = None
+                        matches = proj.mapLayersByName(str(lname))
+                        if matches: 
+                            lyr = matches[0]
+                        else:
+                            if str(lname) in proj.mapLayers():
+                                lyr = proj.mapLayers()[str(lname)]
+                        if lyr:
+                            render_layers.append(lyr)
+                    
+                    if render_layers:
+                        map_item.setLayers(render_layers)
+                        map_item.setKeepLayerSet(True)
+            
+            lower_labels = {str(k).lower(): v for k, v in labels_dict.items()}
+            for item in layout.items():
+                if isinstance(item, QgsLayoutItemLabel):
+                    iid = item.id()
+                    if iid:
+                        direct = labels_dict.get(iid)
+                        if direct is None:
+                            direct = lower_labels.get(str(iid).lower())
+                        if direct is not None:
+                            item.setText(str(direct))
+                        
+            exporter = QgsLayoutExporter(layout)
+            settings = QgsLayoutExporter.PdfExportSettings()
+            if dpi:
+                try:
+                    settings.dpi = int(dpi)
+                except Exception:
+                    pass
+            
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            res = exporter.exportToPdf(output_file, settings)
+            if res == QgsLayoutExporter.Success:
+                return {'status': 'success', 'file': output_file}
+            else:
+                raise ValueError('Fallo al exportar el PDF, error code: ' + str(res))
+
         # --- Legend action -------------------------------------------------
         if action in ('legend', 'getlegendgraphic'):
             if not output_file:
@@ -2005,6 +2230,24 @@ def process_task(params):
             tol = max(abs(mupp_x), abs(mupp_y)) * 2.0
             hit = QgsRectangle(x - tol, y - tol, x + tol, y + tol)
 
+            filter_geom_raw = params.get('filter_geom')
+            if isinstance(filter_geom_raw, str) and filter_geom_raw.strip():
+                try:
+                    nums = []
+                    for m in re.finditer(r'(-?\d+(?:\.\d+)?)', filter_geom_raw):
+                        nums.append(float(m.group(1)))
+                    if len(nums) >= 4 and len(nums) % 2 == 0:
+                        xs = nums[0::2]
+                        ys = nums[1::2]
+                        minx = min(xs)
+                        miny = min(ys)
+                        maxx = max(xs)
+                        maxy = max(ys)
+                        if maxx > minx and maxy > miny:
+                            hit = QgsRectangle(minx, miny, maxx, maxy)
+                except Exception:
+                    pass
+
             query_layers = params.get('query_layers')
             if not isinstance(query_layers, list):
                 query_layers = []
@@ -2057,7 +2300,29 @@ def process_task(params):
                                 attrs = feat.attributes()
                                 for idx, fname in enumerate(names):
                                     try:
-                                        props[fname] = attrs[idx]
+                                        val = attrs[idx]
+                                        # Normalize Qt/QGIS values to JSON-safe Python scalars.
+                                        try:
+                                            if hasattr(val, 'toPyObject'):
+                                                val = val.toPyObject()
+                                        except Exception:
+                                            pass
+                                        try:
+                                            if hasattr(val, 'isNull') and callable(getattr(val, 'isNull')) and val.isNull():
+                                                val = None
+                                        except Exception:
+                                            pass
+                                        if isinstance(val, (bytes, bytearray)):
+                                            try:
+                                                val = bytes(val).decode('utf-8', errors='replace')
+                                            except Exception:
+                                                val = str(val)
+                                        elif val is not None and not isinstance(val, (str, int, float, bool, list, dict)):
+                                            try:
+                                                json.dumps(val)
+                                            except Exception:
+                                                val = str(val)
+                                        props[fname] = val
                                     except Exception:
                                         props[fname] = None
                                 geom_wkt = None

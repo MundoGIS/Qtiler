@@ -73,8 +73,8 @@ const expandFormPanel = () => {
 
 initCollapsible();
 
-/* Start Projects and License sections collapsed */
-['projects-body', 'license-body'].forEach((id) => {
+/* Start Users, Projects and License sections collapsed */
+['users-body', 'projects-body', 'license-body'].forEach((id) => {
   const el = document.getElementById(id);
   if (el) {
     el.classList.add('collapsed');
@@ -86,7 +86,7 @@ initCollapsible();
   }
 });
 
-const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'MundoGIS-2026';
+const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'adminnuevo321';
 const urlParams = new URLSearchParams(window.location.search);
 const justInstalledFlag = urlParams.has('justInstalled');
 if (justInstalledFlag && typeof window !== 'undefined' && window.history?.replaceState) {
@@ -385,11 +385,7 @@ async function api(url, options = {}) {
   if (Object.keys(opts.headers).length === 0) {
     delete opts.headers;
   }
-  const requestMethod = String(opts.method || 'GET').toUpperCase();
-  let response = await fetch(url, opts);
-  if ((response.status === 403 || response.status === 404 || response.status === 405 || response.status === 501) && requestMethod === 'PATCH') {
-    response = await fetch(url, { ...opts, method: 'POST' });
-  }
+  const response = await fetch(url, opts);
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const payload = isJson ? await response.json().catch(() => null) : null;
@@ -579,12 +575,9 @@ function renderPublicProjects() {
   projectList.forEach((project) => {
     const projectId = project.id;
     const access = state.permissions[projectId] || {};
-    const searchableEntries = Array.isArray(state.searchableByProject?.[projectId]) ? state.searchableByProject[projectId] : [];
-    const projectLayers = Array.isArray(state.layersByProject?.[projectId]) ? state.layersByProject[projectId] : [];
-    const layerAttributes = state.layerAttributesByProject?.[projectId] || {};
 
     const card = document.createElement('article');
-    card.className = 'project-card searchable-project-card';
+    card.className = 'project-card';
     card.dataset.projectId = projectId;
 
     const header = document.createElement('header');
@@ -616,149 +609,8 @@ function renderPublicProjects() {
     toggleText.textContent = 'Public';
     toggleWrap.append(checkbox, toggleText);
 
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'secondary-button';
-    saveBtn.textContent = 'Save searchable';
-
-    header.append(heading, toggleWrap, saveBtn);
+    header.append(heading, toggleWrap);
     card.appendChild(header);
-
-    const searchableIntro = document.createElement('p');
-    searchableIntro.className = 'help';
-    searchableIntro.textContent = 'Sokbara lager for this project:';
-    card.appendChild(searchableIntro);
-
-    const list = document.createElement('div');
-    list.className = 'project-searchable-list';
-
-    if (!projectLayers.length) {
-      const empty = document.createElement('p');
-      empty.className = 'help';
-      empty.textContent = 'No searchable vector layers found.';
-      list.appendChild(empty);
-    } else {
-      projectLayers.forEach((layer) => {
-        const config = searchableEntries.find((entry) => String(entry?.name || '') === String(layer.name || '')) || {};
-        const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
-        const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
-          ? layerMeta.nonGeometry
-          : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
-        const enabled = !!config.name;
-        const selectedSearch = pickPreferredAttribute(
-          [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
-          availableColumns
-        );
-        const selectedId = pickPreferredAttribute(
-          [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
-          availableColumns
-        );
-        const selectedGeom = detectGeometryAttribute(layer, layerMeta, config.geometryAttribute);
-        const hintText = String(config.hintText || '').trim() || 'Search...';
-
-        const row = document.createElement('div');
-        row.className = 'searchable-layer-row';
-        row.dataset.layerName = layer.name;
-        row.dataset.geometryAttribute = selectedGeom;
-
-        const head = document.createElement('div');
-        head.className = 'searchable-layer-head';
-        const onOff = document.createElement('label');
-        onOff.className = 'public-project-toggle';
-        const layerCheck = document.createElement('input');
-        layerCheck.type = 'checkbox';
-        layerCheck.checked = enabled;
-        const layerLabel = document.createElement('span');
-        layerLabel.textContent = layer.title || layer.name;
-        onOff.append(layerCheck, layerLabel);
-        head.appendChild(onOff);
-
-        const body = document.createElement('div');
-        body.className = `searchable-layer-controls${enabled ? '' : ' is-hidden'}`;
-
-        const searchField = document.createElement('label');
-        searchField.className = 'mini-field';
-        searchField.innerHTML = '<span>searchAttribute</span>';
-        const searchSelect = document.createElement('select');
-        searchSelect.className = 'search-select';
-        searchSelect.innerHTML = availableColumns.map((col) => {
-          const sel = selectedSearch === col ? ' selected' : '';
-          return `<option value="${col}"${sel}>${col}</option>`;
-        }).join('');
-        searchField.appendChild(searchSelect);
-
-        const idField = document.createElement('label');
-        idField.className = 'mini-field';
-        idField.innerHTML = '<span>idAttribute</span>';
-        const idSelect = document.createElement('select');
-        idSelect.className = 'id-select';
-        idSelect.innerHTML = availableColumns.map((col) => {
-          const sel = selectedId === col ? ' selected' : '';
-          return `<option value="${col}"${sel}>${col}</option>`;
-        }).join('');
-        idField.appendChild(idSelect);
-
-        const hintField = document.createElement('label');
-        hintField.className = 'mini-field';
-        hintField.innerHTML = '<span>hintText</span>';
-        const hintInput = document.createElement('input');
-        hintInput.type = 'text';
-        hintInput.className = 'hint-input';
-        hintInput.value = hintText;
-        hintInput.placeholder = 'Search...';
-        hintField.appendChild(hintInput);
-
-        const geomField = document.createElement('div');
-        geomField.className = 'mini-field';
-        geomField.innerHTML = `<span>geometryAttribute</span><div class="searchable-geometry-auto">${selectedGeom || 'not detected'}</div>`;
-
-        layerCheck.addEventListener('change', () => {
-          body.classList.toggle('is-hidden', !layerCheck.checked);
-        });
-
-        body.append(searchField, idField, hintField, geomField);
-        row.append(head, body);
-        list.appendChild(row);
-      });
-    }
-
-    saveBtn.addEventListener('click', async () => {
-      const rows = Array.from(list.querySelectorAll('.searchable-layer-row'));
-      const payload = rows
-        .map((row) => {
-          const layerName = String(row.dataset.layerName || '');
-          const checked = !!row.querySelector('input[type="checkbox"]')?.checked;
-          if (!checked) return null;
-          const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
-          const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
-          const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
-          const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
-          if (!layerName || !searchAttribute || !idAttribute) return null;
-          return {
-            name: layerName,
-            idAttribute,
-            searchAttribute,
-            geometryAttribute,
-            hintText: hint,
-            fields: [searchAttribute],
-            titleField: searchAttribute
-          };
-        })
-        .filter(Boolean);
-
-      try {
-        await api(`/projects/${encodeURIComponent(projectId)}/searchable`, {
-          method: 'POST',
-          body: payload
-        });
-        state.searchableByProject[projectId] = payload;
-        showMessage('success', `Searchable layers saved for ${project.name || projectId}.`);
-      } catch (err) {
-        showMessage('error', parseError(err, 'Unable to save searchable layers.'));
-      }
-    });
-
-    card.appendChild(list);
     container.appendChild(card);
   });
 }

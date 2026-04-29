@@ -37,26 +37,17 @@
         <div id="plugin-sections-container" class="plugin-console-grid"></div>
       </section>
 
-      <section class="admin-card" id="searchable-layers-section" aria-labelledby="searchable-heading" hidden>
-        <div class="admin-card__header">
-          <div>
-            <h2 id="searchable-heading" data-i18n="searchableTitle">Searchable layers</h2>
-            <p data-i18n="searchableSubtitle">Enable searchable layers and select which columns are used for searching and labels.</p>
-          </div>
-          <div class="admin-hero-actions">
-            <button type="button" class="button" id="save-searchable-layers" data-i18n="searchableSaveBtn">Save searchable config</button>
-          </div>
-        </div>
-        <div id="searchable-layers-container" class="searchable-layers-grid"></div>
-      </section>
 
-      <section class="admin-card" aria-labelledby="plugins-heading">
-        <div class="admin-card__header">
+
+      <section class="admin-card" id="installed-plugins-section" aria-labelledby="plugins-heading">
+        <div class="admin-card__header admin-card__header--collapsible" id="installed-plugins-head" data-collapse-target="installed-plugins-body" style="cursor:pointer;" role="button" tabindex="0" aria-expanded="false">
           <div>
             <h2 id="plugins-heading" data-i18n="installedPlugins">Installed plugins</h2>
             <p data-i18n="installedSubtitle">Enabled plugins expose their admin console below. Uninstall to remove files.</p>
           </div>
+          <button type="button" class="collapse-toggle collapsed" id="installed-plugins-toggle" aria-label="Toggle installed plugins" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:4px 8px;" tabindex="-1">&#9660;</button>
         </div>
+        <div id="installed-plugins-body" style="display:none;">
         <div id="plugins-container" class="plugin-list"></div>
 
         <hr class="admin-divider">
@@ -77,6 +68,7 @@
             Visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a> to browse available plugins.
           </p>
         </div>
+        </div><!-- /installed-plugins-body -->
       </section>
     </main>
 

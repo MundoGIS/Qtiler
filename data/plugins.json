@@ -1,7 +1,7 @@
 {
   "enabled": [
+    "Qtiler2qwc",
     "QtilerAuth",
-    "ProjectSearch",
     "Qrigo",
     "VectorTiles"
   ]
