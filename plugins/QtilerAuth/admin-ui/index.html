@@ -1,0 +1,624 @@
+<!--
+  QtilerAuth Commercial License
+  See LICENSE_QtilerAuth.txt for terms and restrictions.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>QtilerAuth Administration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/plugins/auth-admin/assets/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-top">
+      <div class="header-copy">
+        <h1>QtilerAuth Administration</h1>
+        <p>Manage access control for your deployment.</p>
+      </div>
+      <div class="header-actions">
+        <button id="open-howitworks" type="button" class="header-button header-button-secondary" data-doc-i18n="hiw.button">How it works &amp; Security</button>
+        <button id="go-dashboard" type="button" class="header-button" hidden>Back to dashboard</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="howitworks-modal" class="qa-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="hiw-title">
+    <div class="qa-modal-backdrop" data-close="howitworks"></div>
+    <div class="qa-modal-card" role="document">
+      <header class="qa-modal-head">
+        <h2 id="hiw-title" data-doc-i18n="hiw.title">How QtilerAuth works &amp; why it is secure</h2>
+        <button type="button" class="qa-modal-close" data-close="howitworks" aria-label="Close">&times;</button>
+      </header>
+      <div class="qa-modal-body">
+        <p data-doc-i18n="hiw.lead">QtilerAuth is the security layer for Qtiler. It adds users, roles, project ACLs, API keys, brute-force protection and a built-in proof-of-work captcha &mdash; all without sending any data to third parties.</p>
+
+        <h3 data-doc-i18n="hiw.arch.title">1. Architecture</h3>
+        <ul>
+          <li data-doc-i18n="hiw.arch.1">Express middleware mounted on every protected route. Authentication is evaluated per request.</li>
+          <li data-doc-i18n="hiw.arch.2">Persistence in a local SQLite database (<code>data/auth.db</code>, WAL mode) &mdash; no external database required.</li>
+          <li data-doc-i18n="hiw.arch.3">Project ACLs stored in <code>data/project-access.json</code>; users in <code>data/auth-users.json</code> (mirrored to SQLite).</li>
+          <li data-doc-i18n="hiw.arch.4">Stateless JWT sessions signed with a server-side secret; revocation list (jti) stored in SQLite.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.authn.title">2. Authentication methods</h3>
+        <ul>
+          <li data-doc-i18n="hiw.authn.1"><strong>Cookie session:</strong> HttpOnly, SameSite=Lax, Secure when behind HTTPS. Used by the dashboard and admin pages.</li>
+          <li data-doc-i18n="hiw.authn.2"><strong>Bearer token (JWT):</strong> for SPA and external service-to-service callers.</li>
+          <li data-doc-i18n="hiw.authn.3"><strong>Basic auth:</strong> standard HTTP basic for QGIS Desktop and OGC clients.</li>
+          <li data-doc-i18n="hiw.authn.4"><strong>API key:</strong> per-user keys passed via <code>?api_key=</code> or <code>X-API-Key</code> header for WMTS/WMS/WFS/VectorTiles clients.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.crypto.title">3. Cryptography &amp; secrets</h3>
+        <ul>
+          <li data-doc-i18n="hiw.crypto.1"><strong>Passwords:</strong> hashed with <code>bcryptjs</code> (cost 10). Plain-text passwords are never stored or logged.</li>
+          <li data-doc-i18n="hiw.crypto.2"><strong>API keys:</strong> stored as SHA-256 hashes. The plain key is shown only at creation; rotating produces a new value.</li>
+          <li data-doc-i18n="hiw.crypto.3"><strong>JWT:</strong> HMAC-SHA256, signed with <code>AUTH_JWT_SECRET</code>; revocable per <code>jti</code>.</li>
+          <li data-doc-i18n="hiw.crypto.4"><strong>Constant-time comparisons</strong> for secrets and HMAC signatures (<code>crypto.timingSafeEqual</code>).</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.brute.title">4. Brute-force protection</h3>
+        <ul>
+          <li data-doc-i18n="hiw.brute.1">Per-(user, IP) lockout window: defaults to 8 failed attempts in 15 minutes &rarr; 15 minute lockout with <code>Retry-After</code>.</li>
+          <li data-doc-i18n="hiw.brute.2">Per-attempt audit row in SQLite (<code>login_attempts</code>) with timestamp, IP, user-agent and outcome &mdash; visible to administrators.</li>
+          <li data-doc-i18n="hiw.brute.3">Lockout is scoped per (username, IP) so legitimate admins working from multiple offices are never globally locked out by a remote attacker.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.pow.title">5. Built-in proof-of-work captcha</h3>
+        <ul>
+          <li data-doc-i18n="hiw.pow.1">Triggered automatically after the configured number of failed attempts (default 3) &mdash; never on a normal correct login.</li>
+          <li data-doc-i18n="hiw.pow.2">100% local: no Google reCAPTCHA, no Cloudflare Turnstile, no third-party JavaScript, no tracking. Safe for GDPR-sensitive deployments.</li>
+          <li data-doc-i18n="hiw.pow.3">Server issues a stateless HMAC-signed challenge. The browser computes a SHA-256 nonce in WebCrypto until it finds N leading zero bits.</li>
+          <li data-doc-i18n="hiw.pow.4">Difficulty is configurable via <code>AUTH_CAPTCHA_POW_DIFFICULTY</code> (default 18 ~ 1&ndash;2 s on a laptop). Cloudflare Turnstile, hCaptcha and Google reCAPTCHA are also supported as drop-in alternatives.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.acl.title">6. Project access control</h3>
+        <ul>
+          <li data-doc-i18n="hiw.acl.1"><strong>Public projects:</strong> WMTS/WMS/WFS open to everybody &mdash; ideal for the public services your organisation already publishes.</li>
+          <li data-doc-i18n="hiw.acl.2"><strong>Authenticated projects:</strong> any logged-in or API-keyed user may access.</li>
+          <li data-doc-i18n="hiw.acl.3"><strong>Private projects:</strong> only the explicitly listed users (and admins) can access. Enforced at the route level for every OGC and tile call.</li>
+          <li data-doc-i18n="hiw.acl.4">Copied service URLs can include <code>api_key</code> for QGIS Desktop, but the parameter is stripped from cached <code>GetCapabilities</code> responses to prevent leaks.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.transport.title">7. Transport &amp; HTTP hardening</h3>
+        <ul>
+          <li data-doc-i18n="hiw.transport.1">Strict HTTP headers via <strong>Helmet</strong>: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.</li>
+          <li data-doc-i18n="hiw.transport.2">CORS allow-list configurable via <code>AUTH_CORS_ALLOWLIST</code>; same-origin by default.</li>
+          <li data-doc-i18n="hiw.transport.3"><code>Cache-Control: no-store</code> on every response that may carry an <code>api_key</code> in its body.</li>
+          <li data-doc-i18n="hiw.transport.4">Designed to run behind IIS / Apache / Nginx as a reverse proxy with TLS termination.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.privacy.title">8. Privacy &amp; data residency</h3>
+        <ul>
+          <li data-doc-i18n="hiw.privacy.1">All authentication state lives on your server. No SaaS dependency, no remote &laquo;phone home&raquo;.</li>
+          <li data-doc-i18n="hiw.privacy.2">License validation is offline: an RSA-signed key file activated locally; the plugin verifies the signature without network access.</li>
+          <li data-doc-i18n="hiw.privacy.3">Compatible with Swedish/EU public-sector data residency requirements (data stays inside your perimeter).</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.ops.title">9. Operations</h3>
+        <ul>
+          <li data-doc-i18n="hiw.ops.1">Auditable login history visible from the admin UI (<em>Login audit</em>).</li>
+          <li data-doc-i18n="hiw.ops.2">Single SQLite file to back up; safe to copy while the service runs (WAL mode).</li>
+          <li data-doc-i18n="hiw.ops.3">Trial and commercial license states are clearly displayed; expired plugins are auto-disabled and the base server keeps running.</li>
+        </ul>
+
+        <h3 data-doc-i18n="hiw.cfg.title">10. Configuration (.env)</h3>
+        <p data-doc-i18n="hiw.cfg.intro">All security parameters are loaded from the server <code>.env</code> file at startup. Restart Qtiler after changing any value. The <code>data/</code> folder (users, ACLs, login audit, license) is the only state that changes at runtime through this admin UI.</p>
+        <ul>
+          <li data-doc-i18n-html="hiw.cfg.jwt"><code>AUTH_JWT_SECRET</code> &mdash; HMAC secret for JWT sessions. Set to a long random value; rotating it invalidates every active session.</li>
+          <li data-doc-i18n-html="hiw.cfg.lockout"><code>AUTH_LOGIN_MAX_ATTEMPTS=8</code>, <code>AUTH_LOGIN_WINDOW_SECONDS=900</code>, <code>AUTH_LOGIN_LOCKOUT_SECONDS=900</code> &mdash; brute-force lockout per (user, IP).</li>
+          <li data-doc-i18n-html="hiw.cfg.captcha"><code>AUTH_LOGIN_CAPTCHA_AFTER=3</code> &mdash; failed attempts before a captcha is required on the next login.</li>
+          <li data-doc-i18n-html="hiw.cfg.provider"><code>AUTH_CAPTCHA_PROVIDER</code> &mdash; <code>pow</code> (built-in, recommended), <code>turnstile</code>, <code>hcaptcha</code>, <code>recaptcha</code>, or empty to disable. External providers also need <code>AUTH_CAPTCHA_SITE_KEY</code> + <code>AUTH_CAPTCHA_SECRET_KEY</code>.</li>
+          <li data-doc-i18n-html="hiw.cfg.pow"><code>AUTH_CAPTCHA_POW_DIFFICULTY=18</code> &mdash; leading zero bits required for the built-in PoW. Raise to 20/22 to slow bots further (1&ndash;2 s &rarr; 4&ndash;30 s on a laptop). <code>AUTH_CAPTCHA_POW_TTL_SECONDS=300</code> sets challenge lifetime.</li>
+          <li data-doc-i18n-html="hiw.cfg.rate"><code>AUTH_API_RATE_LIMIT_PER_MINUTE=0</code> &mdash; per-API-key rate limit. <code>0</code> = unlimited. Recommended in production: 600&ndash;2000.</li>
+          <li data-doc-i18n-html="hiw.cfg.cors"><code>QTILER_CORS_ALLOWED_ORIGINS</code> &mdash; comma-separated allow-list (e.g. <code>https://map.example.com,https://portal.example.com</code>). Empty keeps the legacy permissive behavior. <code>QTILER_CORS_ALLOW_CREDENTIALS=1</code> enables cookie sharing across listed origins.</li>
+          <li data-doc-i18n-html="hiw.cfg.helmet"><code>QTILER_ENABLE_HSTS=1</code> &mdash; turn on HSTS (only behind HTTPS). <code>QTILER_DISABLE_HELMET=1</code> &mdash; disables Helmet (NOT recommended). <code>QTILER_ALLOW_FRAMING=1</code> allows the dashboard to be embedded.</li>
+          <li data-doc-i18n-html="hiw.cfg.wmts"><code>QTILER_WMTS_REQUIRE_AUTH=1</code> &mdash; refuse anonymous WMTS GetCapabilities discovery; per-project capabilities still respect the public/authenticated/private flag.</li>
+        </ul>
+        <p data-doc-i18n-html="hiw.cfg.tip"><strong>Tip:</strong> the bundled <code>.env.example</code> documents every variable. Copy it as <code>.env</code>, set <code>AUTH_JWT_SECRET</code> to a long random string, and you have a hardened production baseline.</p>
+
+        <p class="qa-modal-footer" data-doc-i18n="hiw.contact">Questions or security review requests? Contact <a href="mailto:support@mundogis.se">support@mundogis.se</a>.</p>
+      </div>
+    </div>
+  </div>
+  <main>
+    <section id="messages" aria-live="polite"></section>
+
+    <section id="users-section" class="card">
+      <div class="section-head" data-collapse="users-body">
+        <h2>Users</h2>
+        <div class="section-head-actions">
+          <button id="refresh-users" type="button">Refresh</button>
+          <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+        </div>
+      </div>
+      <div class="section-body" id="users-body">
+        <div class="form-panel" id="user-form-panel">
+          <div class="form-panel-header" data-collapse="user-form-inner">
+            <h3 id="user-form-title">Create user</h3>
+            <button class="collapse-toggle" type="button" aria-label="Toggle form">&#9660;</button>
+          </div>
+          <form id="user-form" autocomplete="off">
+          <div class="form-collapsible" id="user-form-inner">
+            <input type="hidden" name="userId" id="user-id">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+
+            <label for="password">Password</label>
+            <div class="password-row">
+              <div class="password-input-wrap">
+                <input type="password" id="password" name="password" placeholder="Leave blank to keep" autocomplete="new-password">
+                <button type="button" id="password-toggle" class="secondary-button" aria-pressed="false">Show</button>
+              </div>
+              <button type="button" id="password-generate" class="secondary-button">Generate</button>
+            </div>
+
+            <label for="role">Role</label>
+            <select id="role" name="role">
+              <option value="authenticated">User</option>
+              <option value="admin">Administrator</option>
+            </select>
+
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="active">Active</option>
+              <option value="disabled">Suspended</option>
+            </select>
+
+            <div class="form-actions">
+              <button type="submit" id="user-form-submit">Save</button>
+              <button type="button" id="user-form-reset">Cancel</button>
+            </div>
+          </div>
+          </form>
+        </div>
+        <div class="table-panel">
+          <table id="users-table">
+            <colgroup>
+              <col style="width: 10%">
+              <col style="width: 7%">
+              <col style="width: 7%">
+              <col style="width: 28%">
+              <col style="width: 14%">
+              <col style="width: 11%">
+              <col style="width: 11%">
+              <col style="width: 12%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>API key</th>
+                <th>Projects</th>
+                <th>Created</th>
+                <th>Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="projects-section" class="card">
+      <div class="section-head" data-collapse="projects-body">
+        <h2>Project access</h2>
+        <div class="section-head-actions">
+          <button id="refresh-projects" type="button">Refresh</button>
+          <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+        </div>
+      </div>
+      <div class="section-body" id="projects-body">
+        <div class="public-projects-panel">
+          <h3>Public projects</h3>
+          <p class="help">Public projects are accessible to everyone without authentication.</p>
+          <div id="public-projects-list"></div>
+        </div>
+        <div class="access-controls">
+          <h3>User-specific access</h3>
+          <p class="help">Assign private projects to specific users. Admins always have access to all projects.</p>
+          <table id="project-access-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Projects</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="license-section" class="card license-card">
+      <div class="section-head" data-collapse="license-body">
+        <h2>License &amp; support</h2>
+        <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+      </div>
+      <div class="section-body" id="license-body">
+        <p>QtilerAuth is distributed under the proprietary <strong>QtilerAuth Commercial License</strong>. Purchase grants a perpetual, non-transferable right to deploy the plugin inside your own Qtiler environments.</p>
+        <ul>
+          <li>Redistribution, resale, or public sharing of the ZIP is not allowed.</li>
+          <li>Refer to <code>LICENSE_QtilerAuth.txt</code> in this package for the complete agreement.</li>
+          <li>Need help with deployment or license questions? Contact <a href="mailto:support@mundogis.se">support@mundogis.se</a> or visit <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>.</li>
+        </ul>
+        <hr>
+        <h3 data-doc-i18n="readme.title">QtilerAuth README</h3>
+        <p data-doc-i18n="readme.intro">QtilerAuth secures Qtiler deployments with users, roles, project access rules, and API-key based authentication for GIS/web clients.</p>
+        <ul>
+          <li data-doc-i18n="readme.1">Users and roles: create administrators and authenticated users, suspend accounts, rotate passwords and API keys.</li>
+          <li data-doc-i18n="readme.2">Project permissions: mark projects as public/private and assign user-specific access from this backend.</li>
+          <li data-doc-i18n="readme.3">Authentication methods: cookie session, bearer token, basic auth, and api_key query/header support.</li>
+          <li data-doc-i18n="readme.4">Integration: copied WMTS/WMS/WFS/VectorTiles URLs can include api_key for QGIS and other external clients.</li>
+          <li data-doc-i18n="readme.5">Persistence: user accounts, plugin trial state, and project access rules are stored in SQLite.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      const HIW_EN = {
+        'hiw.button': 'How it works & Security',
+        'hiw.title': 'How QtilerAuth works & why it is secure',
+        'hiw.lead': 'QtilerAuth is the security layer for Qtiler. It adds users, roles, project ACLs, API keys, brute-force protection and a built-in proof-of-work captcha — all without sending any data to third parties.',
+        'hiw.arch.title': '1. Architecture',
+        'hiw.arch.1': 'Express middleware mounted on every protected route. Authentication is evaluated per request.',
+        'hiw.arch.2': 'Persistence in a local SQLite database (data/auth.db, WAL mode) — no external database required.',
+        'hiw.arch.3': 'Project ACLs stored in data/project-access.json; users in data/auth-users.json (mirrored to SQLite).',
+        'hiw.arch.4': 'Stateless JWT sessions signed with a server-side secret; revocation list (jti) stored in SQLite.',
+        'hiw.authn.title': '2. Authentication methods',
+        'hiw.authn.1': 'Cookie session: HttpOnly, SameSite=Lax, Secure when behind HTTPS. Used by the dashboard and admin pages.',
+        'hiw.authn.2': 'Bearer token (JWT): for SPA and external service-to-service callers.',
+        'hiw.authn.3': 'Basic auth: standard HTTP basic for QGIS Desktop and OGC clients.',
+        'hiw.authn.4': 'API key: per-user keys passed via ?api_key= or X-API-Key header for WMTS/WMS/WFS/VectorTiles clients.',
+        'hiw.crypto.title': '3. Cryptography & secrets',
+        'hiw.crypto.1': 'Passwords: hashed with bcryptjs (cost 10). Plain-text passwords are never stored or logged.',
+        'hiw.crypto.2': 'API keys: stored as SHA-256 hashes. The plain key is shown only at creation; rotating produces a new value.',
+        'hiw.crypto.3': 'JWT: HMAC-SHA256, signed with AUTH_JWT_SECRET; revocable per jti.',
+        'hiw.crypto.4': 'Constant-time comparisons for secrets and HMAC signatures (crypto.timingSafeEqual).',
+        'hiw.brute.title': '4. Brute-force protection',
+        'hiw.brute.1': 'Per-(user, IP) lockout window: defaults to 8 failed attempts in 15 minutes → 15 minute lockout with Retry-After.',
+        'hiw.brute.2': 'Per-attempt audit row in SQLite (login_attempts) with timestamp, IP, user-agent and outcome — visible to administrators.',
+        'hiw.brute.3': 'Lockout is scoped per (username, IP) so legitimate admins working from multiple offices are never globally locked out by a remote attacker.',
+        'hiw.pow.title': '5. Built-in proof-of-work captcha',
+        'hiw.pow.1': 'Triggered automatically after the configured number of failed attempts (default 3) — never on a normal correct login.',
+        'hiw.pow.2': '100% local: no Google reCAPTCHA, no Cloudflare Turnstile, no third-party JavaScript, no tracking. Safe for GDPR-sensitive deployments.',
+        'hiw.pow.3': 'Server issues a stateless HMAC-signed challenge. The browser computes a SHA-256 nonce in WebCrypto until it finds N leading zero bits.',
+        'hiw.pow.4': 'Difficulty is configurable via AUTH_CAPTCHA_POW_DIFFICULTY (default 18 ~ 1–2 s on a laptop). Cloudflare Turnstile, hCaptcha and Google reCAPTCHA are also supported as drop-in alternatives.',
+        'hiw.acl.title': '6. Project access control',
+        'hiw.acl.1': 'Public projects: WMTS/WMS/WFS open to everybody — ideal for the public services your organisation already publishes.',
+        'hiw.acl.2': 'Authenticated projects: any logged-in or API-keyed user may access.',
+        'hiw.acl.3': 'Private projects: only the explicitly listed users (and admins) can access. Enforced at the route level for every OGC and tile call.',
+        'hiw.acl.4': 'Copied service URLs can include api_key for QGIS Desktop, but the parameter is stripped from cached GetCapabilities responses to prevent leaks.',
+        'hiw.transport.title': '7. Transport & HTTP hardening',
+        'hiw.transport.1': 'Strict HTTP headers via Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
+        'hiw.transport.2': 'CORS allow-list configurable via AUTH_CORS_ALLOWLIST; same-origin by default.',
+        'hiw.transport.3': 'Cache-Control: no-store on every response that may carry an api_key in its body.',
+        'hiw.transport.4': 'Designed to run behind IIS / Apache / Nginx as a reverse proxy with TLS termination.',
+        'hiw.privacy.title': '8. Privacy & data residency',
+        'hiw.privacy.1': 'All authentication state lives on your server. No SaaS dependency, no remote “phone home”.',
+        'hiw.privacy.2': 'License validation is offline: an RSA-signed key file activated locally; the plugin verifies the signature without network access.',
+        'hiw.privacy.3': 'Compatible with Swedish/EU public-sector data residency requirements (data stays inside your perimeter).',
+        'hiw.ops.title': '9. Operations',
+        'hiw.ops.1': 'Auditable login history visible from the admin UI (Login audit).',
+        'hiw.ops.2': 'Single SQLite file to back up; safe to copy while the service runs (WAL mode).',
+        'hiw.ops.3': 'Trial and commercial license states are clearly displayed; expired plugins are auto-disabled and the base server keeps running.',
+        'hiw.cfg.title': '10. Configuration (.env)',
+        'hiw.cfg.intro': 'All security parameters are loaded from the server .env file at startup. Restart Qtiler after changing any value. The data/ folder (users, ACLs, login audit, license) is the only state that changes at runtime through this admin UI.',
+        'hiw.cfg.jwt': '<code>AUTH_JWT_SECRET</code> — HMAC secret for JWT sessions. Set to a long random value; rotating it invalidates every active session.',
+        'hiw.cfg.lockout': '<code>AUTH_LOGIN_MAX_ATTEMPTS=8</code>, <code>AUTH_LOGIN_WINDOW_SECONDS=900</code>, <code>AUTH_LOGIN_LOCKOUT_SECONDS=900</code> — brute-force lockout per (user, IP).',
+        'hiw.cfg.captcha': '<code>AUTH_LOGIN_CAPTCHA_AFTER=3</code> — failed attempts before a captcha is required on the next login.',
+        'hiw.cfg.provider': '<code>AUTH_CAPTCHA_PROVIDER</code> — <code>pow</code> (built-in, recommended), <code>turnstile</code>, <code>hcaptcha</code>, <code>recaptcha</code>, or empty to disable. External providers also need <code>AUTH_CAPTCHA_SITE_KEY</code> + <code>AUTH_CAPTCHA_SECRET_KEY</code>.',
+        'hiw.cfg.pow': '<code>AUTH_CAPTCHA_POW_DIFFICULTY=18</code> — leading zero bits required for the built-in PoW. Raise to 20/22 to slow bots further (1–2 s → 4–30 s on a laptop). <code>AUTH_CAPTCHA_POW_TTL_SECONDS=300</code> sets challenge lifetime.',
+        'hiw.cfg.rate': '<code>AUTH_API_RATE_LIMIT_PER_MINUTE=0</code> — per-API-key rate limit. <code>0</code> = unlimited. Recommended in production: 600–2000.',
+        'hiw.cfg.cors': '<code>QTILER_CORS_ALLOWED_ORIGINS</code> — comma-separated allow-list (e.g. <code>https://map.example.com,https://portal.example.com</code>). Empty keeps the legacy permissive behavior. <code>QTILER_CORS_ALLOW_CREDENTIALS=1</code> enables cookie sharing across listed origins.',
+        'hiw.cfg.helmet': '<code>QTILER_ENABLE_HSTS=1</code> — turn on HSTS (only behind HTTPS). <code>QTILER_DISABLE_HELMET=1</code> — disables Helmet (NOT recommended). <code>QTILER_ALLOW_FRAMING=1</code> allows the dashboard to be embedded.',
+        'hiw.cfg.wmts': '<code>QTILER_WMTS_REQUIRE_AUTH=1</code> — refuse anonymous WMTS GetCapabilities discovery; per-project capabilities still respect the public/authenticated/private flag.',
+        'hiw.cfg.tip': '<strong>Tip:</strong> the bundled <code>.env.example</code> documents every variable. Copy it as <code>.env</code>, set <code>AUTH_JWT_SECRET</code> to a long random string, and you have a hardened production baseline.',
+        'hiw.contact': 'Questions or security review requests? Contact support@mundogis.se.'
+      };
+      const HIW_ES = {
+        'hiw.button': 'Cómo funciona y seguridad',
+        'hiw.title': 'Cómo funciona QtilerAuth y por qué es seguro',
+        'hiw.lead': 'QtilerAuth es la capa de seguridad de Qtiler. Añade usuarios, roles, ACL por proyecto, API keys, protección anti fuerza bruta y un captcha de prueba de trabajo integrado, sin enviar ningún dato a terceros.',
+        'hiw.arch.title': '1. Arquitectura',
+        'hiw.arch.1': 'Middleware Express montado en cada ruta protegida. La autenticación se evalúa por petición.',
+        'hiw.arch.2': 'Persistencia en SQLite local (data/auth.db, modo WAL) — no requiere base de datos externa.',
+        'hiw.arch.3': 'ACL de proyectos en data/project-access.json; usuarios en data/auth-users.json (replicados en SQLite).',
+        'hiw.arch.4': 'Sesiones JWT sin estado firmadas con un secreto del servidor; lista de revocación (jti) en SQLite.',
+        'hiw.authn.title': '2. Métodos de autenticación',
+        'hiw.authn.1': 'Sesión por cookie: HttpOnly, SameSite=Lax, Secure tras HTTPS. Usada por el dashboard y páginas de admin.',
+        'hiw.authn.2': 'Bearer token (JWT): para SPA y llamadas servicio a servicio.',
+        'hiw.authn.3': 'Basic auth: HTTP basic estándar para QGIS Desktop y clientes OGC.',
+        'hiw.authn.4': 'API key: claves por usuario en ?api_key= o cabecera X-API-Key para clientes WMTS/WMS/WFS/VectorTiles.',
+        'hiw.crypto.title': '3. Criptografía y secretos',
+        'hiw.crypto.1': 'Contraseñas: hash con bcryptjs (coste 10). Nunca se almacenan ni se registran en texto plano.',
+        'hiw.crypto.2': 'API keys: almacenadas como hash SHA-256. La clave en claro solo se muestra al crearla; rotar genera un nuevo valor.',
+        'hiw.crypto.3': 'JWT: HMAC-SHA256, firmado con AUTH_JWT_SECRET; revocable por jti.',
+        'hiw.crypto.4': 'Comparaciones en tiempo constante para secretos y firmas HMAC (crypto.timingSafeEqual).',
+        'hiw.brute.title': '4. Protección anti fuerza bruta',
+        'hiw.brute.1': 'Bloqueo por (usuario, IP): por defecto 8 fallos en 15 min → 15 min de bloqueo con Retry-After.',
+        'hiw.brute.2': 'Auditoría por intento en SQLite (login_attempts) con timestamp, IP, user-agent y resultado, visible para administradores.',
+        'hiw.brute.3': 'El bloqueo es por (usuario, IP), de modo que un admin legítimo que trabaje desde varias oficinas nunca queda bloqueado globalmente por un atacante remoto.',
+        'hiw.pow.title': '5. Captcha de prueba de trabajo integrado',
+        'hiw.pow.1': 'Se activa automáticamente tras el número configurado de fallos (por defecto 3) — nunca en un login correcto normal.',
+        'hiw.pow.2': '100% local: sin Google reCAPTCHA, sin Cloudflare Turnstile, sin JS de terceros, sin tracking. Apto para despliegues sensibles a GDPR.',
+        'hiw.pow.3': 'El servidor emite un reto firmado con HMAC sin estado. El navegador calcula un nonce SHA-256 con WebCrypto hasta encontrar N bits a cero por delante.',
+        'hiw.pow.4': 'La dificultad se configura con AUTH_CAPTCHA_POW_DIFFICULTY (por defecto 18 ~ 1–2 s en un portátil). También se soportan Cloudflare Turnstile, hCaptcha y reCAPTCHA como alternativas.',
+        'hiw.acl.title': '6. Control de acceso por proyecto',
+        'hiw.acl.1': 'Proyectos públicos: WMTS/WMS/WFS abiertos a todos — ideal para los servicios públicos que ya publica tu organización.',
+        'hiw.acl.2': 'Proyectos autenticados: cualquier usuario logado o con API key puede acceder.',
+        'hiw.acl.3': 'Proyectos privados: solo los usuarios listados (y los administradores) pueden acceder. Se aplica en cada llamada OGC y tile.',
+        'hiw.acl.4': 'Las URLs de servicio copiadas pueden incluir api_key para QGIS Desktop, pero el parámetro se elimina de las respuestas GetCapabilities cacheadas para evitar fugas.',
+        'hiw.transport.title': '7. Endurecimiento de transporte y HTTP',
+        'hiw.transport.1': 'Cabeceras HTTP estrictas vía Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
+        'hiw.transport.2': 'Lista blanca CORS configurable con AUTH_CORS_ALLOWLIST; mismo origen por defecto.',
+        'hiw.transport.3': 'Cache-Control: no-store en toda respuesta que pueda llevar api_key en el cuerpo.',
+        'hiw.transport.4': 'Diseñado para correr detrás de IIS / Apache / Nginx como proxy inverso con terminación TLS.',
+        'hiw.privacy.title': '8. Privacidad y residencia de datos',
+        'hiw.privacy.1': 'Todo el estado de autenticación vive en tu servidor. Sin dependencia SaaS, sin “phone home”.',
+        'hiw.privacy.2': 'La validación de licencia es offline: archivo de clave firmado con RSA activado localmente; el plugin verifica la firma sin acceso a red.',
+        'hiw.privacy.3': 'Compatible con requisitos suecos/UE de residencia de datos del sector público (los datos no salen de tu perímetro).',
+        'hiw.ops.title': '9. Operación',
+        'hiw.ops.1': 'Historial de logins auditable desde la UI de admin (Login audit).',
+        'hiw.ops.2': 'Un único archivo SQLite para respaldar; seguro de copiar mientras el servicio corre (modo WAL).',
+        'hiw.ops.3': 'El estado de trial y de licencia comercial se muestra claramente; los plugins caducados se desactivan y el servidor base sigue funcionando.',
+        'hiw.cfg.title': '10. Configuración (.env)',
+        'hiw.cfg.intro': 'Todos los parámetros de seguridad se cargan desde el archivo .env del servidor al arrancar. Reinicia Qtiler tras cambiar cualquier valor. La carpeta data/ (usuarios, ACLs, auditoría de logins, licencia) es el único estado que cambia en caliente desde esta admin UI.',
+        'hiw.cfg.jwt': '<code>AUTH_JWT_SECRET</code> — secreto HMAC para sesiones JWT. Pon un valor aleatorio largo; rotarlo invalida todas las sesiones activas.',
+        'hiw.cfg.lockout': '<code>AUTH_LOGIN_MAX_ATTEMPTS=8</code>, <code>AUTH_LOGIN_WINDOW_SECONDS=900</code>, <code>AUTH_LOGIN_LOCKOUT_SECONDS=900</code> — bloqueo anti fuerza bruta por (usuario, IP).',
+        'hiw.cfg.captcha': '<code>AUTH_LOGIN_CAPTCHA_AFTER=3</code> — fallos antes de exigir captcha en el siguiente login.',
+        'hiw.cfg.provider': '<code>AUTH_CAPTCHA_PROVIDER</code> — <code>pow</code> (integrado, recomendado), <code>turnstile</code>, <code>hcaptcha</code>, <code>recaptcha</code>, o vacío para desactivar. Los proveedores externos requieren también <code>AUTH_CAPTCHA_SITE_KEY</code> + <code>AUTH_CAPTCHA_SECRET_KEY</code>.',
+        'hiw.cfg.pow': '<code>AUTH_CAPTCHA_POW_DIFFICULTY=18</code> — bits a cero por delante exigidos al PoW. Sube a 20/22 para frenar aún más a los bots (1–2 s → 4–30 s en portátil). <code>AUTH_CAPTCHA_POW_TTL_SECONDS=300</code> fija la vida del reto.',
+        'hiw.cfg.rate': '<code>AUTH_API_RATE_LIMIT_PER_MINUTE=0</code> — límite de peticiones por API key/minuto. <code>0</code> = ilimitado. En producción se recomienda 600–2000.',
+        'hiw.cfg.cors': '<code>QTILER_CORS_ALLOWED_ORIGINS</code> — lista blanca separada por comas (p.ej. <code>https://map.example.com,https://portal.example.com</code>). Vacío conserva el comportamiento permisivo legacy. <code>QTILER_CORS_ALLOW_CREDENTIALS=1</code> habilita compartir cookies entre los orígenes listados.',
+        'hiw.cfg.helmet': '<code>QTILER_ENABLE_HSTS=1</code> — activa HSTS (solo bajo HTTPS). <code>QTILER_DISABLE_HELMET=1</code> — desactiva Helmet (NO recomendado). <code>QTILER_ALLOW_FRAMING=1</code> permite embeber el dashboard.',
+        'hiw.cfg.wmts': '<code>QTILER_WMTS_REQUIRE_AUTH=1</code> — deniega el descubrimiento anónimo de WMTS GetCapabilities; las capacidades por proyecto siguen respetando el flag público/autenticado/privado.',
+        'hiw.cfg.tip': '<strong>Tip:</strong> el archivo <code>.env.example</code> incluido documenta todas las variables. Cópialo como <code>.env</code>, fija <code>AUTH_JWT_SECRET</code> a un valor aleatorio largo y ya tienes una base de producción endurecida.',
+        'hiw.contact': '¿Dudas o solicitud de revisión de seguridad? Escribe a support@mundogis.se.'
+      };
+      const HIW_SV = {
+        'hiw.button': 'Så fungerar det & säkerhet',
+        'hiw.title': 'Så fungerar QtilerAuth och varför det är säkert',
+        'hiw.lead': 'QtilerAuth är säkerhetslagret för Qtiler. Det lägger till användare, roller, projekt-ACL, API-nycklar, skydd mot brute force och en inbyggd proof-of-work-captcha — utan att skicka data till tredje part.',
+        'hiw.arch.title': '1. Arkitektur',
+        'hiw.arch.1': 'Express-middleware monteras på varje skyddad rutt. Autentisering utvärderas per förfrågan.',
+        'hiw.arch.2': 'Persistens i lokal SQLite (data/auth.db, WAL-läge) — ingen extern databas krävs.',
+        'hiw.arch.3': 'Projekt-ACL i data/project-access.json; användare i data/auth-users.json (speglade i SQLite).',
+        'hiw.arch.4': 'Statlösa JWT-sessioner signerade med en server-hemlighet; revokeringslista (jti) lagras i SQLite.',
+        'hiw.authn.title': '2. Autentiseringsmetoder',
+        'hiw.authn.1': 'Cookie-session: HttpOnly, SameSite=Lax, Secure bakom HTTPS. Används av dashboard och admin-sidor.',
+        'hiw.authn.2': 'Bearer-token (JWT): för SPA och tjänst-till-tjänst-anrop.',
+        'hiw.authn.3': 'Basic auth: standard HTTP basic för QGIS Desktop och OGC-klienter.',
+        'hiw.authn.4': 'API-nyckel: per-användare via ?api_key= eller X-API-Key för WMTS/WMS/WFS/VectorTiles.',
+        'hiw.crypto.title': '3. Kryptografi & hemligheter',
+        'hiw.crypto.1': 'Lösenord: hashas med bcryptjs (cost 10). Klartextlösenord lagras eller loggas aldrig.',
+        'hiw.crypto.2': 'API-nycklar: lagras som SHA-256-hash. Klartextnyckeln visas bara vid skapande; rotering ger ett nytt värde.',
+        'hiw.crypto.3': 'JWT: HMAC-SHA256, signerad med AUTH_JWT_SECRET; revokerbar per jti.',
+        'hiw.crypto.4': 'Konstant-tids-jämförelser för hemligheter och HMAC-signaturer (crypto.timingSafeEqual).',
+        'hiw.brute.title': '4. Skydd mot brute force',
+        'hiw.brute.1': 'Spärr per (användare, IP): som standard 8 misslyckade försök på 15 min → 15 min spärr med Retry-After.',
+        'hiw.brute.2': 'Försöksrad i SQLite (login_attempts) med tidsstämpel, IP, user-agent och resultat — synlig för administratörer.',
+        'hiw.brute.3': 'Spärren är per (användare, IP) så att legitima administratörer som arbetar från flera kontor aldrig spärras globalt av en angripare.',
+        'hiw.pow.title': '5. Inbyggd proof-of-work-captcha',
+        'hiw.pow.1': 'Triggas automatiskt efter konfigurerat antal misslyckanden (standard 3) — aldrig vid en korrekt inloggning.',
+        'hiw.pow.2': '100% lokalt: ingen Google reCAPTCHA, ingen Cloudflare Turnstile, ingen tredjepartsskript, ingen spårning. Lämpligt för GDPR-känsliga miljöer.',
+        'hiw.pow.3': 'Servern utfärdar en statlös HMAC-signerad utmaning. Webbläsaren räknar ut ett SHA-256-nonce med WebCrypto tills den hittar N inledande nollbitar.',
+        'hiw.pow.4': 'Svårighet konfigureras via AUTH_CAPTCHA_POW_DIFFICULTY (standard 18 ~ 1–2 s på en bärbar). Cloudflare Turnstile, hCaptcha och reCAPTCHA stöds också.',
+        'hiw.acl.title': '6. Projektbehörighet',
+        'hiw.acl.1': 'Publika projekt: WMTS/WMS/WFS öppna för alla — perfekt för publika tjänster som ni redan publicerar.',
+        'hiw.acl.2': 'Autentiserade projekt: vilken inloggad eller API-nyckelförsedd användare som helst får åtkomst.',
+        'hiw.acl.3': 'Privata projekt: endast de listade användarna (och admin) får åtkomst. Verkställs på rutt-nivå för varje OGC- och tile-anrop.',
+        'hiw.acl.4': 'Kopierade tjänst-URL:er kan innehålla api_key för QGIS Desktop, men parametern tas bort från cachade GetCapabilities-svar för att undvika läckor.',
+        'hiw.transport.title': '7. Transport- & HTTP-härdning',
+        'hiw.transport.1': 'Strikta HTTP-headers via Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
+        'hiw.transport.2': 'CORS-vitlistning konfigureras via AUTH_CORS_ALLOWLIST; same-origin som standard.',
+        'hiw.transport.3': 'Cache-Control: no-store på alla svar som kan innehålla api_key i kroppen.',
+        'hiw.transport.4': 'Designad att köras bakom IIS / Apache / Nginx som omvänd proxy med TLS-terminering.',
+        'hiw.privacy.title': '8. Integritet & dataresidens',
+        'hiw.privacy.1': 'All autentiseringsstatus ligger på er server. Ingen SaaS-bero, ingen ”phone home”.',
+        'hiw.privacy.2': 'Licensvalidering sker offline: en RSA-signerad nyckelfil aktiveras lokalt; pluginet verifierar signaturen utan nätverk.',
+        'hiw.privacy.3': 'Kompatibel med svenska/EU-krav på dataresidens i offentlig sektor (data lämnar inte er perimeter).',
+        'hiw.ops.title': '9. Drift',
+        'hiw.ops.1': 'Granskbar inloggningshistorik i admin-UI (Login audit).',
+        'hiw.ops.2': 'En enda SQLite-fil att backa upp; säker att kopiera medan tjänsten kör (WAL-läge).',
+        'hiw.ops.3': 'Trial- och licensstatus visas tydligt; utgångna plugins inaktiveras automatiskt och basservern fortsätter att köra.',
+        'hiw.cfg.title': '10. Konfiguration (.env)',
+        'hiw.cfg.intro': 'Alla säkerhetsparametrar laddas från serverns .env-fil vid start. Starta om Qtiler efter ändringar. Mappen data/ (användare, ACL:er, login-audit, licens) är det enda tillstånd som ändras i drift via denna admin-UI.',
+        'hiw.cfg.jwt': '<code>AUTH_JWT_SECRET</code> — HMAC-hemlighet för JWT-sessioner. Sätt till ett långt slumpvärde; rotering ogiltigförklarar alla aktiva sessioner.',
+        'hiw.cfg.lockout': '<code>AUTH_LOGIN_MAX_ATTEMPTS=8</code>, <code>AUTH_LOGIN_WINDOW_SECONDS=900</code>, <code>AUTH_LOGIN_LOCKOUT_SECONDS=900</code> — brute-force-spärr per (användare, IP).',
+        'hiw.cfg.captcha': '<code>AUTH_LOGIN_CAPTCHA_AFTER=3</code> — misslyckade försök innan captcha krävs nästa inloggning.',
+        'hiw.cfg.provider': '<code>AUTH_CAPTCHA_PROVIDER</code> — <code>pow</code> (inbyggd, rekommenderas), <code>turnstile</code>, <code>hcaptcha</code>, <code>recaptcha</code>, eller tomt för att avaktivera. Externa leverantörer kräver även <code>AUTH_CAPTCHA_SITE_KEY</code> + <code>AUTH_CAPTCHA_SECRET_KEY</code>.',
+        'hiw.cfg.pow': '<code>AUTH_CAPTCHA_POW_DIFFICULTY=18</code> — antal inledande nollbitar PoW kräver. Höj till 20/22 för att bromsa botar mer (1–2 s → 4–30 s på bärbar). <code>AUTH_CAPTCHA_POW_TTL_SECONDS=300</code> sätter utmaningens livslängd.',
+        'hiw.cfg.rate': '<code>AUTH_API_RATE_LIMIT_PER_MINUTE=0</code> — anrop per API-nyckel och minut. <code>0</code> = obegränsat. I produktion rekommenderas 600–2000.',
+        'hiw.cfg.cors': '<code>QTILER_CORS_ALLOWED_ORIGINS</code> — kommaseparerad vitlista (t.ex. <code>https://map.example.com,https://portal.example.com</code>). Tomt behåller legacy-permissivt beteende. <code>QTILER_CORS_ALLOW_CREDENTIALS=1</code> aktiverar cookie-delning mellan listade origins.',
+        'hiw.cfg.helmet': '<code>QTILER_ENABLE_HSTS=1</code> — aktivera HSTS (endast bakom HTTPS). <code>QTILER_DISABLE_HELMET=1</code> — inaktiverar Helmet (rekommenderas EJ). <code>QTILER_ALLOW_FRAMING=1</code> tillåter dashboarden att bäddas in.',
+        'hiw.cfg.wmts': '<code>QTILER_WMTS_REQUIRE_AUTH=1</code> — neka anonym WMTS GetCapabilities; per-projekt-kapabilitet respekterar fortfarande flaggan publik/autentiserad/privat.',
+        'hiw.cfg.tip': '<strong>Tips:</strong> medföljande <code>.env.example</code> dokumenterar varje variabel. Kopiera den som <code>.env</code>, sätt <code>AUTH_JWT_SECRET</code> till ett långt slumpvärde, så har du en härdad produktionsbasläge.',
+        'hiw.contact': 'Frågor eller säkerhetsgranskning? Kontakta support@mundogis.se.'
+      };
+      const HIW_NB = {
+        'hiw.button': 'Slik fungerer det & sikkerhet',
+        'hiw.title': 'Slik fungerer QtilerAuth og hvorfor det er sikkert',
+        'hiw.lead': 'QtilerAuth er sikkerhetslaget i Qtiler. Det legger til brukere, roller, prosjekt-ACL, API-nøkler, brute-force-beskyttelse og en innebygd proof-of-work-captcha — uten å sende data til tredjeparter.',
+        'hiw.arch.title': '1. Arkitektur',
+        'hiw.arch.1': 'Express-middleware på hver beskyttede rute. Autentisering evalueres per forespørsel.',
+        'hiw.arch.2': 'Lagring i lokal SQLite (data/auth.db, WAL-modus) — ingen ekstern database kreves.',
+        'hiw.arch.3': 'Prosjekt-ACL i data/project-access.json; brukere i data/auth-users.json (speilet i SQLite).',
+        'hiw.arch.4': 'Tilstandsløse JWT-økter signert med en server-hemmelighet; revokeringsliste (jti) i SQLite.',
+        'hiw.authn.title': '2. Autentiseringsmetoder',
+        'hiw.authn.1': 'Cookie-økt: HttpOnly, SameSite=Lax, Secure bak HTTPS. Brukes av dashbord og admin-sider.',
+        'hiw.authn.2': 'Bearer-token (JWT): for SPA og tjeneste-til-tjeneste-kall.',
+        'hiw.authn.3': 'Basic auth: standard HTTP basic for QGIS Desktop og OGC-klienter.',
+        'hiw.authn.4': 'API-nøkkel: per bruker via ?api_key= eller X-API-Key for WMTS/WMS/WFS/VectorTiles.',
+        'hiw.crypto.title': '3. Kryptografi & hemmeligheter',
+        'hiw.crypto.1': 'Passord: hashes med bcryptjs (cost 10). Klartekstpassord lagres eller logges aldri.',
+        'hiw.crypto.2': 'API-nøkler: lagres som SHA-256-hash. Klartekstnøkkelen vises kun ved opprettelse; rotering gir ny verdi.',
+        'hiw.crypto.3': 'JWT: HMAC-SHA256, signert med AUTH_JWT_SECRET; revokerbar per jti.',
+        'hiw.crypto.4': 'Konstant-tids-sammenligning for hemmeligheter og HMAC-signaturer (crypto.timingSafeEqual).',
+        'hiw.brute.title': '4. Brute-force-beskyttelse',
+        'hiw.brute.1': 'Sperre per (bruker, IP): standard 8 mislykkede forsøk på 15 min → 15 min sperre med Retry-After.',
+        'hiw.brute.2': 'Forsøksrad i SQLite (login_attempts) med tidsstempel, IP, user-agent og resultat — synlig for administratorer.',
+        'hiw.brute.3': 'Sperren er per (bruker, IP) slik at legitime admins som jobber fra flere kontorer aldri sperres globalt av en angriper.',
+        'hiw.pow.title': '5. Innebygd proof-of-work-captcha',
+        'hiw.pow.1': 'Aktiveres automatisk etter konfigurert antall feil (standard 3) — aldri ved korrekt innlogging.',
+        'hiw.pow.2': '100% lokalt: ingen Google reCAPTCHA, ingen Cloudflare Turnstile, ingen tredjeparts-JS, ingen sporing. Egnet for GDPR-sensitive miljøer.',
+        'hiw.pow.3': 'Serveren utsteder en tilstandsløs HMAC-signert utfordring. Nettleseren regner ut et SHA-256-nonce med WebCrypto til den finner N innledende null-bits.',
+        'hiw.pow.4': 'Vanskelighetsgraden konfigureres via AUTH_CAPTCHA_POW_DIFFICULTY (standard 18 ~ 1–2 s på en bærbar). Cloudflare Turnstile, hCaptcha og reCAPTCHA støttes også.',
+        'hiw.acl.title': '6. Prosjekttilgang',
+        'hiw.acl.1': 'Offentlige prosjekter: WMTS/WMS/WFS åpne for alle — ideelt for offentlige tjenester organisasjonen allerede publiserer.',
+        'hiw.acl.2': 'Autentiserte prosjekter: enhver innlogget eller API-nøkkel-bruker får tilgang.',
+        'hiw.acl.3': 'Private prosjekter: kun de eksplisitt listede brukerne (og admin) får tilgang. Håndheves på rute-nivå for hvert OGC- og tile-kall.',
+        'hiw.acl.4': 'Kopierte tjeneste-URL-er kan inkludere api_key for QGIS Desktop, men parameteren fjernes fra hurtigbufrede GetCapabilities-svar for å unngå lekkasjer.',
+        'hiw.transport.title': '7. Transport- & HTTP-herding',
+        'hiw.transport.1': 'Strenge HTTP-headere via Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
+        'hiw.transport.2': 'CORS-tillatelsesliste via AUTH_CORS_ALLOWLIST; samme opphav som standard.',
+        'hiw.transport.3': 'Cache-Control: no-store på alle svar som kan inneholde api_key i kroppen.',
+        'hiw.transport.4': 'Designet for å kjøre bak IIS / Apache / Nginx som omvendt proxy med TLS-terminering.',
+        'hiw.privacy.title': '8. Personvern & data-residens',
+        'hiw.privacy.1': 'All autentiseringstilstand ligger på din server. Ingen SaaS-avhengighet, ingen «phone home».',
+        'hiw.privacy.2': 'Lisensvalidering er offline: en RSA-signert nøkkelfil aktiveres lokalt; pluginet verifiserer signaturen uten nettverk.',
+        'hiw.privacy.3': 'Kompatibel med EØS/EU-krav om data-residens i offentlig sektor (data forlater ikke perimeteret).',
+        'hiw.ops.title': '9. Drift',
+        'hiw.ops.1': 'Reviderbar innloggingshistorikk i admin-UI (Login audit).',
+        'hiw.ops.2': 'Én SQLite-fil å sikkerhetskopiere; trygt å kopiere mens tjenesten kjører (WAL-modus).',
+        'hiw.ops.3': 'Prøve- og lisensstatus vises tydelig; utløpte plugins deaktiveres automatisk og base-serveren fortsetter å kjøre.',
+        'hiw.cfg.title': '10. Konfigurasjon (.env)',
+        'hiw.cfg.intro': 'Alle sikkerhetsparametre lastes fra serverens .env-fil ved oppstart. Start Qtiler på nytt etter endringer. Mappen data/ (brukere, ACL-er, login-revisjon, lisens) er den eneste tilstanden som endres i drift via denne admin-UI-en.',
+        'hiw.cfg.jwt': '<code>AUTH_JWT_SECRET</code> — HMAC-hemmelighet for JWT-økter. Sett til en lang tilfeldig verdi; rotering ugyldiggjør alle aktive økter.',
+        'hiw.cfg.lockout': '<code>AUTH_LOGIN_MAX_ATTEMPTS=8</code>, <code>AUTH_LOGIN_WINDOW_SECONDS=900</code>, <code>AUTH_LOGIN_LOCKOUT_SECONDS=900</code> — brute-force-sperre per (bruker, IP).',
+        'hiw.cfg.captcha': '<code>AUTH_LOGIN_CAPTCHA_AFTER=3</code> — mislykkede forsøk før captcha kreves ved neste innlogging.',
+        'hiw.cfg.provider': '<code>AUTH_CAPTCHA_PROVIDER</code> — <code>pow</code> (innebygd, anbefalt), <code>turnstile</code>, <code>hcaptcha</code>, <code>recaptcha</code>, eller tom for å deaktivere. Eksterne leverandører krever også <code>AUTH_CAPTCHA_SITE_KEY</code> + <code>AUTH_CAPTCHA_SECRET_KEY</code>.',
+        'hiw.cfg.pow': '<code>AUTH_CAPTCHA_POW_DIFFICULTY=18</code> — antall innledende null-bits PoW krever. Øk til 20/22 for å bremse boter ytterligere (1–2 s → 4–30 s på bærbar). <code>AUTH_CAPTCHA_POW_TTL_SECONDS=300</code> setter utfordringens levetid.',
+        'hiw.cfg.rate': '<code>AUTH_API_RATE_LIMIT_PER_MINUTE=0</code> — anrop per API-nøkkel per minutt. <code>0</code> = ubegrenset. I produksjon anbefales 600–2000.',
+        'hiw.cfg.cors': '<code>QTILER_CORS_ALLOWED_ORIGINS</code> — kommaseparert tillatelsesliste (f.eks. <code>https://map.example.com,https://portal.example.com</code>). Tom beholder legacy-permissiv oppførsel. <code>QTILER_CORS_ALLOW_CREDENTIALS=1</code> aktiverer cookie-deling på tvers av listede origins.',
+        'hiw.cfg.helmet': '<code>QTILER_ENABLE_HSTS=1</code> — aktiver HSTS (kun bak HTTPS). <code>QTILER_DISABLE_HELMET=1</code> — deaktiverer Helmet (anbefales IKKE). <code>QTILER_ALLOW_FRAMING=1</code> tillater at dashbordet bygges inn.',
+        'hiw.cfg.wmts': '<code>QTILER_WMTS_REQUIRE_AUTH=1</code> — nekt anonym WMTS GetCapabilities; per-prosjekt-kapabilitet respekterer fortsatt flagget offentlig/autentisert/privat.',
+        'hiw.cfg.tip': '<strong>Tips:</strong> medfølgende <code>.env.example</code> dokumenterer hver variabel. Kopier den som <code>.env</code>, sett <code>AUTH_JWT_SECRET</code> til en lang tilfeldig verdi, så har du et herdet produksjonsutgangspunkt.',
+        'hiw.contact': 'Spørsmål eller sikkerhetsgjennomgang? Kontakt support@mundogis.se.'
+      };
+
+      const README_EN = {
+        'readme.title': 'QtilerAuth README',
+        'readme.intro': 'QtilerAuth secures Qtiler deployments with users, roles, project access rules, and API-key based authentication for GIS/web clients.',
+        'readme.1': 'Users and roles: create administrators and authenticated users, suspend accounts, rotate passwords and API keys.',
+        'readme.2': 'Project permissions: mark projects as public/private and assign user-specific access from this backend.',
+        'readme.3': 'Authentication methods: cookie session, bearer token, basic auth, and api_key query/header support.',
+        'readme.4': 'Integration: copied WMTS/WMS/WFS/VectorTiles URLs can include api_key for QGIS and other external clients.',
+        'readme.5': 'Persistence: user accounts, plugin trial state, and project access rules are stored in SQLite.'
+      };
+      const README_ES = {
+        'readme.title': 'README de QtilerAuth',
+        'readme.intro': 'QtilerAuth asegura despliegues de Qtiler con usuarios, roles, reglas de acceso a proyectos y autenticación por API key para clientes GIS/web.',
+        'readme.1': 'Usuarios y roles: crea administradores y usuarios autenticados, suspende cuentas y rota contraseñas y API keys.',
+        'readme.2': 'Permisos de proyecto: marca proyectos como públicos/privados y asigna acceso por usuario desde este backend.',
+        'readme.3': 'Métodos de autenticación: sesión por cookie, bearer token, basic auth y soporte api_key por query/header.',
+        'readme.4': 'Integración: las URLs copiadas de WMTS/WMS/WFS/VectorTiles pueden incluir api_key para QGIS y clientes externos.',
+        'readme.5': 'Persistencia: cuentas de usuario, estado de trial de plugins y reglas de acceso se almacenan en SQLite.'
+      };
+      const README_SV = {
+        'readme.title': 'QtilerAuth README',
+        'readme.intro': 'QtilerAuth säkrar Qtiler-installationer med användare, roller, projektregler och API-nyckelbaserad autentisering för GIS/webbklienter.',
+        'readme.1': 'Användare och roller: skapa administratörer och autentiserade användare, pausa konton och rotera lösenord/API-nycklar.',
+        'readme.2': 'Projektbehörighet: markera projekt som publika/privata och tilldela användarspecifik åtkomst i denna backend.',
+        'readme.3': 'Autentiseringsmetoder: cookiesession, bearer-token, basic auth och stöd för api_key i query/header.',
+        'readme.4': 'Integration: kopierade WMTS/WMS/WFS/VectorTiles-URL:er kan inkludera api_key för QGIS och andra externa klienter.',
+        'readme.5': 'Persistens: användarkonton, plugin-trialstatus och projektregler lagras i SQLite.'
+      };
+      const README_NB = {
+        'readme.title': 'QtilerAuth README',
+        'readme.intro': 'QtilerAuth sikrer Qtiler-installasjoner med brukere, roller, prosjektregler og API-nøkkel-basert autentisering for GIS/webklienter.',
+        'readme.1': 'Brukere og roller: opprett administratorer og autentiserte brukere, suspender kontoer, rotér passord og API-nøkler.',
+        'readme.2': 'Prosjekttilgang: merk prosjekter som offentlige/private og tildel brukerspesifikk tilgang fra denne backenden.',
+        'readme.3': 'Autentiseringsmetoder: cookie-økt, bearer-token, basic auth og api_key via query/header.',
+        'readme.4': 'Integrasjon: kopierte WMTS/WMS/WFS/VectorTiles-URL-er kan inkludere api_key for QGIS og andre eksterne klienter.',
+        'readme.5': 'Lagring: brukerkontoer, plugin-prøvestatus og prosjekttilgangsregler lagres i SQLite.'
+      };
+
+      const DOC_I18N = {
+        en: Object.assign({}, README_EN, HIW_EN),
+        es: Object.assign({}, README_ES, HIW_ES),
+        sv: Object.assign({}, README_SV, HIW_SV),
+        nb: Object.assign({}, README_NB, HIW_NB)
+      };
+
+      const normalizeLang = (value) => {
+        const raw = String(value || '').toLowerCase();
+        if (raw.startsWith('es')) return 'es';
+        if (raw.startsWith('sv')) return 'sv';
+        if (raw.startsWith('nb') || raw.startsWith('nn') || raw.startsWith('no')) return 'nb';
+        return 'en';
+      };
+
+      const readLang = () => {
+        return window.parent?.qtilerLang?.get?.() || localStorage.getItem('qtiler.lang') || navigator.language || 'en';
+      };
+
+      let currentLang = normalizeLang(readLang());
+
+      const applyDocTranslations = () => {
+        const table = DOC_I18N[currentLang] || DOC_I18N.en;
+        const enTable = DOC_I18N.en;
+        document.querySelectorAll('[data-doc-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-doc-i18n');
+          if (!key) return;
+          el.textContent = table[key] || enTable[key] || key;
+        });
+        document.querySelectorAll('[data-doc-i18n-html]').forEach((el) => {
+          const key = el.getAttribute('data-doc-i18n-html');
+          if (!key) return;
+          el.innerHTML = table[key] || enTable[key] || key;
+        });
+      };
+
+      const syncLang = () => {
+        const next = normalizeLang(readLang());
+        if (next === currentLang) return;
+        currentLang = next;
+        applyDocTranslations();
+      };
+
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'qtiler.lang') syncLang();
+      });
+
+      setInterval(syncLang, 1000);
+      applyDocTranslations();
+
+      // How-it-works modal open/close wiring.
+      const modal = document.getElementById('howitworks-modal');
+      const openBtn = document.getElementById('open-howitworks');
+      const openModal = () => {
+        if (!modal) return;
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      };
+      const closeModal = () => {
+        if (!modal) return;
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      };
+      if (openBtn) openBtn.addEventListener('click', openModal);
+      if (modal) {
+        modal.addEventListener('click', (event) => {
+          if (event.target && event.target.getAttribute && event.target.getAttribute('data-close') === 'howitworks') {
+            closeModal();
+          }
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && modal && !modal.hidden) closeModal();
+      });
+    })();
+  </script>
+  <script type="module" src="/plugins/auth-admin/assets/app.js"></script>
+</body>
+</html>
