@@ -50,7 +50,148 @@
   const ERROR_KEY_MAP = {
     'invalid_credentials': 'login.error.invalidCredentials',
     'user_disabled': 'login.error.userDisabled',
-    'missing_credentials': 'login.error.invalidCredentials'
+    'missing_credentials': 'login.error.invalidCredentials',
+    'too_many_attempts': 'login.error.tooManyAttempts',
+    'captcha_required': 'login.error.captchaRequired',
+    'captcha_failed': 'login.error.captchaRequired',
+    'captcha_missing': 'login.error.captchaRequired'
+  };
+
+  /* ----- Captcha (Cloudflare Turnstile / hCaptcha) lazy loader ----- */
+  const captchaSlot = document.getElementById('login_captcha_slot');
+  let captchaState = {
+    provider: null,
+    siteKey: null,
+    widgetId: null,
+    scriptLoaded: false,
+    token: null
+  };
+
+  const loadCaptchaScript = (provider) => new Promise((resolve, reject) => {
+    if (provider === 'pow') return resolve(); // No external script for built-in PoW.
+    if (captchaState.scriptLoaded) return resolve();
+    const urls = {
+      turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+      hcaptcha: 'https://hcaptcha.com/1/api.js?render=explicit',
+      recaptcha: 'https://www.google.com/recaptcha/api.js?render=explicit'
+    };
+    const src = urls[provider];
+    if (!src) return reject(new Error('unknown_captcha_provider'));
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.defer = true;
+    s.onload = () => { captchaState.scriptLoaded = true; resolve(); };
+    s.onerror = () => reject(new Error('captcha_script_error'));
+    document.head.appendChild(s);
+  });
+
+  const renderCaptcha = async (provider, siteKey) => {
+    if (!captchaSlot) return;
+    captchaState.provider = provider;
+    captchaState.siteKey = siteKey;
+    captchaSlot.hidden = false;
+    try {
+      await loadCaptchaScript(provider);
+    } catch {
+      return;
+    }
+    const tries = 20;
+    let i = 0;
+    const lib = () => provider === 'turnstile' ? window.turnstile
+      : provider === 'hcaptcha' ? window.hcaptcha
+      : window.grecaptcha;
+    const tick = () => {
+      if (lib() && typeof lib().render === 'function') {
+        captchaSlot.innerHTML = '';
+        try {
+          captchaState.widgetId = lib().render(captchaSlot, {
+            sitekey: siteKey,
+            callback: (token) => { captchaState.token = token; }
+          });
+        } catch {}
+        return;
+      }
+      if (++i < tries) setTimeout(tick, 200);
+    };
+    tick();
+  };
+
+  /* ---- Built-in proof-of-work solver (no external dependencies) ---- */
+  const _powTextEnc = new TextEncoder();
+  const _hexBytes = (buf) => {
+    const a = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < a.length; i++) s += a[i].toString(16).padStart(2, '0');
+    return s;
+  };
+  const _powHasLeadingZeros = (hex, bits) => {
+    let r = bits;
+    for (let i = 0; i < hex.length && r > 0; i++) {
+      const n = parseInt(hex[i], 16);
+      if (r >= 4) { if (n !== 0) return false; r -= 4; }
+      else { const mask = (0xf << (4 - r)) & 0xf; return (n & mask) === 0; }
+    }
+    return true;
+  };
+  const solvePow = async (challenge, difficulty) => {
+    if (!window.crypto?.subtle) throw new Error('crypto_subtle_unavailable');
+    let nonce = 0;
+    while (true) {
+      const candidate = String(nonce);
+      const buf = await window.crypto.subtle.digest('SHA-256', _powTextEnc.encode(challenge + ':' + candidate));
+      if (_powHasLeadingZeros(_hexBytes(buf), difficulty)) return candidate;
+      nonce++;
+      // Yield to the event loop occasionally so the page stays responsive.
+      if ((nonce & 0xff) === 0) await new Promise((r) => setTimeout(r, 0));
+    }
+  };
+  const ensurePowToken = async () => {
+    try {
+      const r = await fetch('/auth/captcha-challenge', { credentials: 'include' });
+      if (!r.ok) return;
+      const c = await r.json();
+      if (!c?.challenge || !c?.sig || !Number.isFinite(c.exp) || !Number.isFinite(c.difficulty)) return;
+      if (captchaSlot) {
+        captchaSlot.hidden = false;
+        captchaSlot.textContent = '…';
+      }
+      const nonce = await solvePow(c.challenge, c.difficulty);
+      captchaState.token = `${c.challenge}.${c.exp}.${c.difficulty}.${c.sig}.${nonce}`;
+      if (captchaSlot) captchaSlot.textContent = '✓';
+    } catch {
+      // Leave captchaState.token null — the server will reject and the user
+      // will see the standard captcha-required error.
+    }
+  };
+
+  const ensureCaptcha = async (provider, siteKey) => {
+    if (!provider) return;
+    if (provider === 'pow') {
+      // Always fetch a fresh challenge per submit — they're single-use.
+      captchaState.provider = 'pow';
+      await ensurePowToken();
+      return;
+    }
+    if (!siteKey) return;
+    if (captchaState.provider === provider && captchaState.widgetId !== null) return;
+    await renderCaptcha(provider, siteKey);
+  };
+
+  const consumeCaptchaToken = () => {
+    const t = captchaState.token || '';
+    captchaState.token = null;
+    if (captchaState.provider === 'pow') {
+      if (captchaSlot) { captchaSlot.textContent = ''; captchaSlot.hidden = true; }
+      return t;
+    }
+    if (captchaState.widgetId !== null) {
+      const lib = captchaState.provider === 'turnstile' ? window.turnstile
+        : captchaState.provider === 'hcaptcha' ? window.hcaptcha
+        : window.grecaptcha;
+      try { lib?.reset?.(captchaState.widgetId); } catch {}
+    }
+    return t;
   };
 
   let busy = false;
@@ -150,12 +291,21 @@
     let detailText = '';
     try {
       const data = await response.json();
-      if (data && (data.error || data.message)) {
-        const mappedKey = ERROR_KEY_MAP[data.error] || ERROR_KEY_MAP[data.message];
-        if (mappedKey) {
-          key = mappedKey;
-        } else {
-          detailText = data.message || data.error;
+      if (data) {
+        // Server is asking us to render a captcha for the next attempt.
+        if ((data.error === 'captcha_required' || response.status === 400) && data.captchaProvider && data.captchaSiteKey) {
+          await ensureCaptcha(data.captchaProvider, data.captchaSiteKey);
+        }
+        if (data.error || data.message) {
+          const mappedKey = ERROR_KEY_MAP[data.error] || ERROR_KEY_MAP[data.message];
+          if (mappedKey) {
+            key = mappedKey;
+          } else {
+            detailText = data.message || data.error;
+          }
+        }
+        if (response.status === 429 && data.retryAfterSeconds) {
+          detailText = ` (${Math.ceil(data.retryAfterSeconds / 60)} min)`;
         }
       }
     } catch (err) {
@@ -164,13 +314,39 @@
     setStatus({ key, text: detailText, state: 'error' });
   };
 
+  const fetchLoginStatus = async (username) => {
+    try {
+      const res = await fetch('/auth/login-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username })
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  };
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     setBusy(true);
     try {
+      const username = usernameInput.value.trim();
+      // Preflight: ask the server whether captcha is needed (and load widget if so).
+      const status = await fetchLoginStatus(username);
+      if (status && status.requireCaptcha && status.captchaProvider && status.captchaSiteKey) {
+        await ensureCaptcha(status.captchaProvider, status.captchaSiteKey);
+        if (!captchaState.token) {
+          setStatus({ key: 'login.error.captchaRequired', state: 'error' });
+          return;
+        }
+      }
       const payload = {
-        username: usernameInput.value.trim(),
-        password: passwordInput.value
+        username,
+        password: passwordInput.value,
+        // Honeypot — must always be empty for real users.
+        email_confirm: document.getElementById('login_email_confirm')?.value || '',
+        captchaToken: consumeCaptchaToken() || null
       };
       if (rememberCheckbox) {
         if (rememberCheckbox.checked) {

@@ -15,24 +15,19 @@ from typing import Any
 # --- Cargar .env (intenta python-dotenv, fallback manual) ---
 def load_dotenv_file(path: Path):
     try:
-        import dotenv
-        dotenv.load_dotenv(dotenv_path=str(path))
+        with open(path, "r", encoding="utf8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    v = v.strip().strip('"').strip("'")
+                    if k and v is not None:
+                        os.environ.setdefault(k, v)
         return True
     except Exception:
-        try:
-            with open(path, "r", encoding="utf8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    if "=" in line:
-                        k, v = line.split("=", 1)
-                        v = v.strip().strip('"').strip("'")
-                        if k and v is not None:
-                            os.environ.setdefault(k, v)
-            return True
-        except Exception:
-            return False
+        return False
 
 # buscar .env hacia arriba (hasta 4 niveles)
 env_path = None
@@ -49,12 +44,37 @@ for _ in range(4):
 if env_path:
     load_dotenv_file(env_path)
 
+# Add DLL directories to PATH for Python >= 3.8
+def setup_dll_paths():
+    if hasattr(os, "add_dll_directory"):
+        qgis_prefix = os.environ.get("QGIS_PREFIX")
+        o4w_bin = os.environ.get("OSGEO4W_BIN")
+        if o4w_bin:
+            os.add_dll_directory(o4w_bin)
+            # Try to add Qt5 and Qt6 bin if they exist next to OSGEO4W_BIN
+            qt5 = Path(o4w_bin).parent / 'apps' / 'Qt5' / 'bin'
+            if qt5.exists(): os.add_dll_directory(str(qt5))
+            qt6 = Path(o4w_bin).parent / 'apps' / 'Qt6' / 'bin'
+            if qt6.exists(): os.add_dll_directory(str(qt6))
+            # standalone QGIS bin
+            o4w_root = Path(o4w_bin).parent
+            qgis_base_bin = o4w_root / 'bin'
+            if qgis_base_bin.exists(): os.add_dll_directory(str(qgis_base_bin))
+        if qgis_prefix:
+            qgis_prefix_path = Path(qgis_prefix)
+            qgis_bin = qgis_prefix_path / 'bin'
+            if qgis_bin.exists(): os.add_dll_directory(str(qgis_bin))
+            qtplugins = qgis_prefix_path / 'qtplugins'
+            if qtplugins.exists(): os.add_dll_directory(str(qtplugins))
+
+setup_dll_paths()
+
 # --- Force Qt cache directory to repo-local path to avoid using user AppData paths ---
 try:
     repo_root = Path(__file__).resolve().parent.parent
     cache_dir = repo_root / 'cache' / 'python'
     cache_dir.mkdir(parents=True, exist_ok=True)
-    from PyQt5.QtCore import QStandardPaths
+    from qgis.PyQt.QtCore import QStandardPaths
     QStandardPaths.setPath(QStandardPaths.CacheLocation, str(cache_dir))
     sys.stderr.write(json.dumps({"info": "qt_cache_location_set", "path": str(cache_dir)}) + "\n")
 except Exception:
@@ -102,12 +122,15 @@ if not DEFAULT_PROJECT_PATH:
 # Añadir rutas de binarios (DLLs) a PATH y registrar con add_dll_directory en Windows
 if os.name == "nt":
     qgis_bin = os.path.join(QGIS_PREFIX, "bin")
+    qt6_bin = os.path.join(QGIS_PREFIX, "..", "Qt6", "bin")
+    qt5_bin = os.path.join(QGIS_PREFIX, "..", "Qt5", "bin")
+    
     # Prepend to PATH
-    path_parts = [OSGEO4W_BIN, qgis_bin, os.environ.get("PATH", "")]
+    path_parts = [OSGEO4W_BIN, qgis_bin, qt6_bin, qt5_bin, os.environ.get("PATH", "")]
     os.environ["PATH"] = ";".join([p for p in path_parts if p])
     # desde Python 3.8 se recomienda add_dll_directory
     try:
-        for d in (OSGEO4W_BIN, qgis_bin):
+        for d in (OSGEO4W_BIN, qgis_bin, qt6_bin, qt5_bin):
             if os.path.isdir(d):
                 os.add_dll_directory(d)
     except Exception:
@@ -121,8 +144,12 @@ if os.path.isdir(qgis_python) and qgis_python not in sys.path:
 
 # Ahora importar QGIS
 try:
+    from qgis.core import QgsApplication
+    QgsApplication.setPrefixPath(QGIS_PREFIX, True)
+    qgs = QgsApplication([], False)
+    qgs.initQgis()
+
     from qgis.core import (
-        QgsApplication,
         QgsProject,
         QgsCoordinateReferenceSystem,
         QgsCoordinateTransform,
@@ -134,9 +161,6 @@ except Exception as e:
     _sys.exit(1)
 
 # --- Inicialización y resto del script ---
-QgsApplication.setPrefixPath(QGIS_PREFIX, True)
-qgs = QgsApplication([], False)
-qgs.initQgis()
 
 try:
     from qgis.core import QgsMapLayerType, QgsWkbTypes
@@ -187,6 +211,94 @@ layers = []
 wgs84 = QgsCoordinateReferenceSystem('EPSG:4326')
 themes = []
 
+
+def extract_origo_style(layer):
+    if getattr(layer, 'type', lambda: None)() != QgsMapLayerType.VectorLayer:
+        return None
+    try:
+        renderer = layer.renderer()
+        if not renderer: return None
+        
+        def rgba(color):
+            if not color or not color.isValid(): return "rgba(0,0,0,0)"
+            return f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha() / 255.0})"
+
+        def parse_symbol(symbol):
+            if not symbol: return {}
+            origo_style = {}
+            for i in range(symbol.symbolLayerCount()):
+                sl = symbol.symbolLayer(i)
+                layer_type = sl.layerType()
+                
+                if layer_type in ("SimpleFill", "LinePatternFill"):
+                    if "fill" not in origo_style: origo_style["fill"] = {}
+                    if hasattr(sl, 'color'): origo_style["fill"]["color"] = rgba(sl.color())
+                    
+                    if "stroke" not in origo_style: origo_style["stroke"] = {}
+                    if hasattr(sl, 'strokeColor'): origo_style["stroke"]["color"] = rgba(sl.strokeColor())
+                    if hasattr(sl, 'strokeWidth'): origo_style["stroke"]["width"] = sl.strokeWidth()
+                    
+                elif layer_type == "SimpleLine":
+                    if "stroke" not in origo_style: origo_style["stroke"] = {}
+                    if hasattr(sl, 'color'): origo_style["stroke"]["color"] = rgba(sl.color())
+                    if hasattr(sl, 'width'): origo_style["stroke"]["width"] = sl.width()
+                    
+                elif layer_type == "SimpleMarker":
+                    if "circle" not in origo_style: origo_style["circle"] = {"fill": {}, "stroke": {}}
+                    if hasattr(sl, 'size'): origo_style["circle"]["radius"] = sl.size() / 2
+                    if hasattr(sl, 'color'): origo_style["circle"]["fill"]["color"] = rgba(sl.color())
+                    if hasattr(sl, 'strokeColor'): origo_style["circle"]["stroke"]["color"] = rgba(sl.strokeColor())
+                    if hasattr(sl, 'strokeWidth'): origo_style["circle"]["stroke"]["width"] = sl.strokeWidth()
+                    
+                elif layer_type == "SvgMarker":
+                    path = sl.path()
+                    
+                    # Fix Windows SVG paths pointing to QGIS installation so Origo can fetch them
+                    if QGIS_PREFIX:
+                        qgis_svg = os.path.join(QGIS_PREFIX, "svg").replace('\\', '/')
+                        path_str = str(path).replace('\\', '/')
+                        if qgis_svg in path_str:
+                            path = "/qgis-svg/" + path_str.split(qgis_svg)[1].lstrip('/')
+                    
+                    origo_style["icon"] = {
+                        "src": path,
+                        "scale": (sl.size() / 20.0) if hasattr(sl, 'size') else 1,
+                        "anchor": [0.5, 0.5],
+                        "opacity": 1
+                    }
+                    
+            return origo_style
+
+        r_type = renderer.type()
+        styles = []
+        if r_type == "singleSymbol":
+            s = parse_symbol(renderer.symbol())
+            if s: styles.append([s])
+        elif r_type == "categorizedSymbol":
+            for cat in renderer.categories():
+                s = parse_symbol(cat.symbol())
+                if s:
+                    s["label"] = cat.label()
+                    val = cat.value()
+                    attr = renderer.classAttribute()
+                    if isinstance(val, str): s["filter"] = f"[{attr}] == '{val}'"
+                    else: s["filter"] = f"[{attr}] == {val}"
+                    styles.append([s])
+        elif r_type == "RuleRenderer":
+            for rule in renderer.rootRule().children():
+                s = parse_symbol(rule.symbol())
+                if s:
+                    s["label"] = rule.label()
+                    fe = rule.filterExpression()
+                    if fe:
+                        # Convert "field" = 'Value' from QGIS to [field] == 'Value' for Origo if possible
+                        # For simple usage, just assign it.
+                        s["filter"] = fe
+                    styles.append([s])
+        
+        return styles if styles else None
+    except Exception as e:
+        return None
 
 def safe_get_attribution(layer):
     """Return a attribution string using newer metadata API if available,
@@ -398,6 +510,12 @@ for layer in project.mapLayers().values():
         try:
             if QgsWkbTypes is not None and hasattr(layer, 'wkbType'):
                 geom_type = QgsWkbTypes.displayString(layer.wkbType())
+            
+            # Extract style!
+            o_style = extract_origo_style(layer)
+            if o_style:
+                layer_payload['origoStyle'] = o_style
+                
         except Exception:
             geom_type = None
 

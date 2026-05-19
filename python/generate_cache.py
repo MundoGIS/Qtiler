@@ -113,7 +113,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 try:
     cache_dir = REPO_ROOT / 'cache' / 'python'
     cache_dir.mkdir(parents=True, exist_ok=True)
-    from PyQt5.QtCore import QStandardPaths
+    from qgis.PyQt.QtCore import QStandardPaths
     QStandardPaths.setPath(QStandardPaths.CacheLocation, str(cache_dir))
     sys.stderr.write(json.dumps({"info": "qt_cache_location_set", "path": str(cache_dir)}) + "\n")
 except Exception:

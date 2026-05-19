@@ -1545,11 +1545,14 @@ export const registerProjectRoutes = ({
       const line = s.trim();
       if (line) console.error("[py stderr]", redactSecrets(line));
     });
+    let sent = false;
     proc.on("error", (err) => {
       console.error("Failed to spawn python:", err);
-      res.status(500).json({ error: "spawn_error", details: String(err) });
+      if (!sent) { sent = true; res.status(500).json({ error: "spawn_error", details: String(err) }); }
     });
     proc.on("close", (code) => {
+      if (sent) return;
+      sent = true;
       let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
       if (raw) {
         const candidate = extractJsonLike(raw);

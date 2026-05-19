@@ -98,6 +98,19 @@ body {
   gap: 10px;
   margin-top: 12px;
 }
+.login-honeypot {
+  position: absolute !important;
+  left: -10000px !important;
+  top: auto !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+.login-captcha {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
 .login-button {
   display: inline-flex;
   justify-content: center;

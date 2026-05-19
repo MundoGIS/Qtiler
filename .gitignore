@@ -59,22 +59,51 @@ tools/licenses/
 
 # Runtime data (generated at runtime, not for repo)
 data/Qtiler2qwc/
+data/Qtiler2Origo/
 data/searchable-layers/
 data/project-access.json.bak
+data/thumbs/
 qgisprojects/
+config/tile-grids/
+
+# Python bytecode caches
+__pycache__/
+*.pyc
 
 # License server (private/commercial tool)
 license-server/
 
 # Temporary debug/patch scripts
-.tmp_*.js
-.tmp_*.json
-tmp_*.mjs
+.tmp_*
+tmp_*
+temp_*
+fix_*
+patch_*
 patch.js
-patch_print.cjs
 debug*.json
 out.json
 test.json
+test_*.cjs
+test_*.mjs
+test_*.js
+test_*.py
+test_*.db
+test.txt
+bracket-check.js
+*_grep.txt
+# Root-level ad-hoc debug scripts (not part of the product)
+/p.js
+/inspect_b3dm.cjs
+/convert_tileset_region_to_box.cjs
+err*.txt
+out*.txt
+err.log
+out.log
+server_err.log
+server_out.log
+
+# Build staging dirs (mirrored from plugins/<Name>/ by tools/sync-plugin-staging.mjs)
+temp_zip_*/
 
 # Backup and copy files
 *.bak
@@ -118,3 +147,6 @@ tools/package-qtwc-plugin.mjs
 tools/package-Qtiler2qwc-plugin.mjs
 tools/generate-license-ui.mjs
 tools/generate-license.mjs
+tools/package-Qtiler2Origo-plugin.mjs
+tools/sync-plugin-staging.mjs
+tools/deploy-Qtiler-3D-eye.bat

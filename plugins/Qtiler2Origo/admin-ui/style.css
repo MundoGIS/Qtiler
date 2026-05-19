@@ -1,0 +1,1049 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #4b5563;
+  --line: #dbe2ea;
+  --primary: #0057d8;
+  --danger: #c81e1e;
+  --ok: #059669;
+  --warn: #d97706;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Noto Sans", sans-serif;
+  background: radial-gradient(circle at 0 0, #d9e4ff 0, var(--bg) 40%);
+  color: var(--ink);
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.hero h1 {
+  margin: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+/* ── Tabs ── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.tab-btn:hover {
+  background: #f0f3f8;
+  color: var(--ink);
+}
+
+.tab-btn--active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.tab-btn--active:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+.tab-btn__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.25);
+  color: inherit;
+}
+
+.tab-btn--active .tab-badge {
+  background: rgba(255,255,255,0.3);
+  color: #fff;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel--active {
+  display: grid;
+  gap: 16px;
+}
+
+/* ── Cards ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.card--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge--danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge--muted {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* ── Info box ── */
+.info-box {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+}
+
+.info-box--ok {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.info-box--warn {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.info-box--danger {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.info-box--muted {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* ── Grid / form ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.grid--logo {
+  align-items: end;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Buttons ── */
+.button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #eef2f7;
+  color: var(--ink);
+  padding: 9px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.button.small {
+  padding: 5px 10px;
+  font-size: 0.82rem;
+}
+
+.button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.button.danger.small {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.button.ghost {
+  background: transparent;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button.is-disabled {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ── Logo preview ── */
+.logo-preview-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #f9fbff;
+  padding: 8px;
+}
+
+.logo-preview-box img {
+  max-height: 56px;
+  max-width: 100%;
+}
+
+/* ── Activity log ── */
+.log-container {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0b1220;
+  color: #d5deed;
+  padding: 12px;
+  min-height: 120px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.log-empty {
+  margin: 0;
+  color: #6b7b93;
+}
+
+.log-entry {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.log-entry--ok {
+  color: #6ee7b7;
+}
+
+.log-entry--error {
+  color: #fca5a5;
+}
+
+.log-entry--info {
+  color: #d5deed;
+}
+
+.log-time {
+  color: #6b7b93;
+  margin-right: 8px;
+}
+
+/* ── Modal ── */
+/* Force ALL modals to be fixed full-screen so they don't drift when the
+   underlying page is scrolled. Bulma's default already uses position:fixed
+   but we re-assert it here in case of overrides, and lock the body. */
+.modal.is-active {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1500;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.modal.is-active .modal-background {
+  position: fixed !important;
+  inset: 0 !important;
+}
+.modal.is-active .modal-card {
+  position: relative;
+  margin: 0 auto;
+  max-height: 96vh;
+  width: min(1200px, 96vw);
+}
+body.modal-open { overflow: hidden; }
+
+#wfs-style-modal {
+  /* Stay above the publish-editor overlay (z-index 1000) so the WFS style
+     editor opens on top of the publish wizard, not behind it. */
+  z-index: 2000;
+}
+
+#svg-picker-modal {
+  /* Stay above WFS style modal */
+  z-index: 2100;
+}
+
+.Qtiler2origo-modal-card {
+  width: min(1200px, 98vw);
+  height: 96vh;
+  max-height: 96vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.Qtiler2origo-modal-card > .modal-card-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.publish-editor[hidden] {
+  display: none !important;
+}
+
+/* When opened, render as a full-viewport overlay so the parent iframe
+   doesn't keep auto-resizing while content slides in/out. */
+.publish-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.publish-editor__header,
+.publish-editor__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  background: #f8fbff;
+}
+
+.publish-editor__header {
+  border-bottom: 1px solid var(--line);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.publish-editor__footer {
+  border-top: 1px solid var(--line);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.publish-editor__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.publish-editor__body {
+  padding: 18px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  background: #fff;
+}
+
+/* Inner card */
+.publish-editor > .publish-editor__header,
+.publish-editor > .publish-editor__body,
+.publish-editor > .publish-editor__footer {
+  width: min(1180px, 96vw);
+  margin-left: auto;
+  margin-right: auto;
+}
+.publish-editor {
+  /* stack header / body / footer vertically inside the overlay */
+  flex-direction: column;
+  padding: 24px 0;
+}
+.publish-editor > .publish-editor__header { margin-top: 0; }
+.publish-editor > .publish-editor__footer { margin-bottom: 0; }
+
+.modal-step {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #fafbfe;
+}
+
+.modal-step__legend {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--primary);
+  padding: 0 8px;
+}
+
+.Qtiler2origo-checklist {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fbff;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.Qtiler2origo-layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.Qtiler2origo-layer-item input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.Qtiler2origo-layer-item span {
+  min-width: 0;
+  flex: 1 1 auto;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.Qtiler2Origo-layer-row {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.Qtiler2Origo-layer-row:last-child { border-bottom: 0; }
+
+.Qtiler2Origo-layer-row__check {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.Qtiler2Origo-layer-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+.Qtiler2Origo-layer-row__name {
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* Controls grid: vertical column, one checkbox per row, text wraps */
+.Qtiler2origo-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px 18px;
+  align-items: start;
+}
+.Qtiler2origo-control-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+.Qtiler2origo-control-item:hover { background: #f1f5fb; }
+.Qtiler2origo-control-item input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+.Qtiler2origo-control-item span {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* HTML uses the capital-O class name (`Qtiler2Origo-controls-grid` /
+   `Qtiler2Origo-control-item`). Mirror the lowercase rules so the grid
+   layout actually applies. Also style the wrapper row inserted by
+   `renderControlConfigPanels` so it behaves as a proper grid cell. */
+.Qtiler2Origo-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px 18px;
+  align-items: start;
+  justify-content: center;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.Qtiler2Origo-control-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+.Qtiler2Origo-control-item:hover { background: #f1f5fb; }
+.Qtiler2Origo-control-item input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+.Qtiler2Origo-control-item span {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+/* Wrapper inserted around each label by JS so the gear ⚙ button and the
+   config panel can sit together. Make sure it fills its grid cell rather
+   than collapsing to content width. */
+.Qtiler2Origo-controls-grid > .Qtiler2origo-control-row,
+.Qtiler2origo-controls-grid > .Qtiler2origo-control-row {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ── Background map list with default radio ── */
+.Qtiler2origo-bg-list {
+  display: grid;
+  gap: 6px;
+}
+
+.Qtiler2origo-bg-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.92rem;
+  transition: border-color .15s, background .15s;
+}
+
+.Qtiler2origo-bg-item input[type="radio"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.Qtiler2origo-bg-item__name {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  font-weight: 600;
+}
+
+.Qtiler2origo-bg-item:has(input:checked),
+.Qtiler2origo-bg-item.is-checked {
+  border-color: var(--primary);
+  background: #edf3ff;
+}
+
+.Qtiler2origo-bg-item__thumb {
+  width: 48px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--line);
+  display: block;
+}
+
+.Qtiler2origo-bg-item__thumb--placeholder {
+  background: linear-gradient(135deg, #d1d5db 25%, #e5e7eb 50%, #d1d5db 75%);
+}
+
+.Qtiler2origo-bg-item__default-tag {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: #dbeafe;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ── Tools grid ── */
+.Qtiler2origo-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.Qtiler2origo-tool-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: normal;
+  transition: border-color .15s, background .15s;
+}
+
+.Qtiler2origo-tool-card:has(input:checked),
+.Qtiler2origo-tool-card.is-checked {
+  border-color: var(--primary);
+  background: #edf3ff;
+}
+
+.Qtiler2origo-tool-card input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.Qtiler2origo-tool-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.Qtiler2origo-tool-card__name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.Qtiler2origo-tool-card__desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.Qtiler2origo-style-modal-card {
+  width: min(1120px, 96vw);
+}
+
+.Qtiler2origo-style-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.Qtiler2origo-style-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 360px);
+  gap: 18px;
+  align-items: start;
+}
+
+.Qtiler2origo-style-sidebar,
+.Qtiler2origo-style-preview-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+}
+
+.Qtiler2origo-style-preview-card {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.Qtiler2origo-style-modal-card {
+  width: 96vw;
+  max-width: 1280px;
+  min-height: 60vh;
+}
+
+.Qtiler2origo-style-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.Qtiler2origo-style-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.Qtiler2origo-style-toolbar .button.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* Bulma's `hidden` attribute is sometimes overridden by display:flex/grid
+   on the same element. Force it for the style editor panels. */
+[hidden] { display: none !important; }
+.Qtiler2origo-style-panel { display: block; }
+.Qtiler2origo-style-panel[hidden] { display: none !important; }
+
+.Qtiler2origo-style-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.Qtiler2origo-style-grid label,
+.Qtiler2origo-style-json-label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.Qtiler2origo-style-grid select,
+.Qtiler2origo-style-grid input,
+.Qtiler2origo-style-json-label + textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.Qtiler2origo-style-json-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.Qtiler2origo-style-preview-card h3 {
+  margin: 0 0 10px;
+}
+
+.Qtiler2origo-style-preview {
+  min-height: 240px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(45deg, #eef2f7 25%, transparent 25%),
+    linear-gradient(-45deg, #eef2f7 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #eef2f7 75%),
+    linear-gradient(-45deg, transparent 75%, #eef2f7 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.Qtiler2origo-style-preview .sample-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid #d8dde3;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+.Qtiler2origo-style-preview .sample-row .sample-svg {
+  flex: 0 0 80px;
+  height: 48px;
+  background:#fff;
+  border-radius:4px;
+}
+.Qtiler2origo-style-preview .sample-row .sample-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.Qtiler2origo-style-preview .sample-row .sample-meta strong {
+  display:block;
+  font-size:0.78rem;
+}
+.Qtiler2origo-style-preview .sample-row .sample-meta code {
+  display:block;
+  font-size:0.7rem;
+  color:#475;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+@media (max-width: 900px) {
+  .Qtiler2origo-style-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Tool config panels ── */
+.Qtiler2origo-tool-card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.Qtiler2origo-tool-card-wrapper .Qtiler2origo-tool-card {
+  border-radius: 8px 8px 0 0;
+}
+
+.Qtiler2origo-tool-config {
+  display: none;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--primary);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: #f0f5ff;
+}
+
+.Qtiler2origo-tool-config.is-visible {
+  display: block;
+}
+
+.Qtiler2origo-tool-config__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.Qtiler2origo-tool-config .input {
+  font-size: 0.82rem;
+  pointer-events: auto;
+}
+
+/* When wrapper has no visible config, restore full border-radius */
+.Qtiler2origo-tool-card-wrapper:not(:has(.Qtiler2origo-tool-config.is-visible)) .Qtiler2origo-tool-card {
+  border-radius: 8px;
+}
+
+.Qtiler2origo-tags {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.Qtiler2origo-tags > span {
+  background: #e7efff;
+  border: 1px solid #c5d8ff;
+  color: #123878;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+/* ── Published list ── */
+.published-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.published-item {
+  display: flex;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 10px;
+}
+
+.published-item__preview {
+  flex-shrink: 0;
+  width: 140px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.published-item__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.published-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.published-item__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.published-item__name {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.published-item__desc {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.Qtiler2origo-modal-header-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+
+/* How-it-works panel */
+.how-list { margin: 0.5rem 0 0.75rem 1.25rem; padding: 0; line-height: 1.45; }
+.how-list li { margin-bottom: 0.4rem; }
+.how-list code { background: rgba(0,0,0,0.05); padding: 0 0.25rem; border-radius: 3px; font-size: 0.92em; }
+
+/* ── Qtiler2Origo control config row ── */
+.q2o-config-row {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin-bottom: 0.4rem;
+}
+.q2o-config-row label {
+  min-width: 120px;
+  margin: 0;
+  font-weight: 500;
+  font-size: 0.95em;
+  display: block;
+}
+.q2o-config-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-left: 0.5rem;
+}
+.q2o-config-row input[type="text"],
+.q2o-config-row input[type="number"] {
+  width: 220px;
+}
+.q2o-config-row textarea {
+  width: 260px;
+}

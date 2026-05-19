@@ -10,6 +10,24 @@ import path from "path";
 import AdmZip from "adm-zip";
 import crypto from "crypto";
 import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
+import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
+
+// Hard-coded MundoGIS RSA-2048 license verification public key. This ships
+// inside the source code (and any installer ZIP) so customers can verify
+// signed licenses without ever holding the developer's private key. To rotate
+// the keypair, regenerate with `node license-server/generate_keys.js`, copy
+// the new public_key.pem contents in here, and re-issue licenses signed by
+// the matching new private key.
+const DEVELOPER_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvgSPBNK0LnqSofV2fKtQ
+LLmsolLd7hego3opGEHrG5k/p1JP1K5Ug42wvonGDTnJMSRnacaUaW7b8A30EA/M
+dInGqkCHS4mb9wUjPaub3iGCxS0WU84D61+SNsuy9/N9pp2qnc9wITr1ZOXaaokj
+1jDCAuY/UgwslooCv1YtqlXc+gpmXrk19Jh61xJv2Pf5h2W3JQw/Nd7bVmS8UfNG
+LV1bB+GctiobKGOH2zLRN5K+o6OjU/EYYAjn1eXSj4G3Eh83XeeeHmWwL8YESknH
+Lm0uVlU2kbbXNfn7tkNxf42sKkyRaLJ8QCHp2a/CXC4ItBgo7zdTuZX3uBaathnm
+kwIDAQAB
+-----END PUBLIC KEY-----
+`;
 
 export const registerPluginRoutes = ({
   app,
@@ -28,24 +46,47 @@ export const registerPluginRoutes = ({
   removeRecursive
 }) => {
   const licenseStorePath = path.join(dataDir, 'licenses.json');
+  // LICENSE_SECRET is now ONLY used for signing locally-generated trial
+  // metadata (so customers can't extend their own trial by editing
+  // data/licenses.json). It is NEVER required to verify commercial license
+  // keys — those are verified with the embedded RSA public key below.
+  // If absent, trial activation timestamps simply aren't tamper-protected.
   const licenseSecret = process.env.LICENSE_SECRET || '';
+  // Allow the developer machine to override the embedded key (so we can test
+  // a freshly rotated key without rebuilding) and to point at an external
+  // PEM file. Customers should leave both unset and rely on DEVELOPER_PUBLIC_KEY.
   const PUBLIC_KEY_PATH = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(process.cwd(), 'tools', 'licenses', 'public_key.pem');
-  let licensePublicKey = '';
+  let licensePublicKey = DEVELOPER_PUBLIC_KEY;
   try {
-    if (process.env.LICENSE_PUBLIC_KEY) licensePublicKey = process.env.LICENSE_PUBLIC_KEY;
-    else if (fs.existsSync(PUBLIC_KEY_PATH)) licensePublicKey = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+    if (process.env.LICENSE_PUBLIC_KEY) {
+      licensePublicKey = process.env.LICENSE_PUBLIC_KEY;
+    } else if (fs.existsSync(PUBLIC_KEY_PATH)) {
+      // Only override if the file is a valid key — silently keep the embedded
+      // one otherwise (prevents an empty/corrupt file from breaking verify).
+      try {
+        const candidate = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+        crypto.createPublicKey(candidate); // throws if invalid
+        licensePublicKey = candidate;
+      } catch { /* keep embedded */ }
+    }
   } catch (err) {
-    licensePublicKey = '';
+    licensePublicKey = DEVELOPER_PUBLIC_KEY;
   }
+  // When set to "1"/"true", verifyLicenseKey() also accepts HMAC-signed keys
+  // using LICENSE_SECRET (legacy behaviour). This is intended for the
+  // developer machine during migration only — DO NOT enable on customer
+  // installs, otherwise anyone with the .env can forge licenses.
+  const allowHmacLegacy = ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.LICENSE_ALLOW_HMAC_LEGACY || '').toLowerCase()
+  );
 
   const trialTamperWarning = 'Trial license data appears to be illegally modified. This action is illegal. The plugin will be removed. Please purchase a valid license from MundoGIS.';
-    const pricing = {
-    ProjectSearch: { price: 50, currency: 'EUR', period: 'year' },
-    Qrigo: { price: 2500, currency: 'SEK', period: 'year' },
-    QtilerAuth: { price: 250, currency: 'EUR', period: 'year' },
-    QuantizedMesh: { price: 300, currency: 'EUR', period: 'year' },
-    VectorTiles: { price: 200, currency: 'EUR', period: 'year' },
-    WmsCache: { price: 100, currency: 'EUR', period: 'year' },
+  // Plugins listed here require a commercial license issued by MundoGIS.
+  // Plugins NOT listed here are open source (MPL-2.0) and the licensing UI
+  // (price tag, "Request license" button, "Add license key" button) is
+  // hidden because /licenses/status only iterates Object.keys(pricing).
+  const pricing = {
+    QtilerAuth: { price: 250, currency: 'EUR', period: 'year' }
   };
 
   const loadLicenseStore = () => {
@@ -73,12 +114,20 @@ export const registerPluginRoutes = ({
     }
   };
 
+  // The instanceId is now derived from a stable hardware/OS fingerprint
+  // (see lib/machineFingerprint.js). The first call also persists the value
+  // and stores any legacy random id under `legacyInstanceId` so old
+  // commercial licenses keep validating during the migration period.
   const ensureInstanceId = (store) => {
-    if (store.instanceId) return store.instanceId;
-    const id = crypto.randomBytes(16).toString('hex');
-    store.instanceId = id;
-    saveLicenseStore(store);
-    return id;
+    const fp = getMachineFingerprint();
+    if (store.instanceId !== fp) {
+      if (store.instanceId && store.instanceId !== fp && !store.legacyInstanceId) {
+        store.legacyInstanceId = store.instanceId;
+      }
+      store.instanceId = fp;
+      saveLicenseStore(store);
+    }
+    return fp;
   };
 
   const base64urlToBase64 = (s) => {
@@ -116,8 +165,11 @@ export const registerPluginRoutes = ({
         }
       }
 
-      // Fallback: HMAC with LICENSE_SECRET (compat)
-      if (licenseSecret) {
+      // Fallback: HMAC with LICENSE_SECRET. SECURITY: only enabled when the
+      // operator explicitly opts in via LICENSE_ALLOW_HMAC_LEGACY=1, because
+      // any customer holding both the .env LICENSE_SECRET and a single valid
+      // license could otherwise forge new ones. Off by default.
+      if (allowHmacLegacy && licenseSecret) {
         const expected = crypto.createHmac('sha256', licenseSecret).update(payloadB64).digest('base64url');
         if (signature === expected) {
           const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
@@ -130,6 +182,26 @@ export const registerPluginRoutes = ({
     } catch {
       return null;
     }
+  };
+
+  // Check whether a verified license payload is bound to THIS server.
+  // Modern licenses carry payload.machineFingerprint (RSA-signed and tied to
+  // the OS/hardware); legacy licenses only carry payload.instanceId. Trial
+  // licenses are NOT machine-bound by design.
+  const isLicenseBoundToThisMachine = (payload, store) => {
+    if (!payload || payload.trial) return true;
+    const fp = getMachineFingerprint();
+    if (payload.machineFingerprint) {
+      return String(payload.machineFingerprint).toLowerCase() === fp;
+    }
+    if (payload.instanceId) {
+      const id = String(payload.instanceId);
+      if (id === store.instanceId) return true;
+      if (store.legacyInstanceId && id === store.legacyInstanceId) return true;
+      return false;
+    }
+    // No binding info at all → reject for safety.
+    return false;
   };
 
   const signTrial = (pluginName, instanceId, startedAt, expiresAt) => {
@@ -246,10 +318,10 @@ export const registerPluginRoutes = ({
         daysLeft = 0;
         return { status, expiresAt: null, daysLeft };
       }
-      if (!isTrial && (!payload.instanceId || payload.instanceId !== store.instanceId)) {
+      if (!isTrial && !isLicenseBoundToThisMachine(payload, store)) {
         status = 'expired';
         daysLeft = 0;
-        return { status, expiresAt: effectiveExpiresAt, daysLeft, license: payload };
+        return { status, expiresAt: effectiveExpiresAt, daysLeft, license: payload, reason: 'machine_mismatch' };
       }
       expiresAt = effectiveExpiresAt;
       const expMs = Date.parse(effectiveExpiresAt);
@@ -298,7 +370,7 @@ export const registerPluginRoutes = ({
       throw Object.assign(new Error('license_invalid'), { statusCode: 400, code: 'license_invalid' });
     }
     ensureInstanceId(store);
-    if (!payload.trial && (!payload.instanceId || payload.instanceId !== store.instanceId)) {
+    if (!payload.trial && !isLicenseBoundToThisMachine(payload, store)) {
       throw Object.assign(new Error('license_instance_mismatch'), { statusCode: 400, code: 'license_instance_mismatch' });
     }
     let expMs = Date.parse(payload.expiresAt || '');
@@ -464,6 +536,31 @@ export const registerPluginRoutes = ({
     }
   });
 
+  // Returns everything MundoGIS needs to issue a commercial license for THIS
+  // server: the hardware fingerprint (used as instanceId), some non-secret
+  // descriptive info, and the requested plugin. The customer downloads/copies
+  // this JSON from the admin UI and sends it to support; MundoGIS pastes it
+  // into the license-server UI which signs it with the private RSA key.
+  app.get('/licenses/request-info', requireAdminIfEnabled, (req, res) => {
+    const store = loadLicenseStore();
+    ensureInstanceId(store);
+    const plugin = sanitizePluginName(req.query?.plugin || '');
+    const desc = describeMachineFingerprint();
+    const knownPlugins = Object.keys(pricing);
+    res.json({
+      plugin: plugin || null,
+      knownPlugins,
+      machineFingerprint: desc.fingerprint,
+      instanceId: store.instanceId,
+      legacyInstanceId: store.legacyInstanceId || null,
+      hostname: desc.hostname,
+      platform: desc.platform,
+      arch: desc.arch,
+      requestedAt: new Date().toISOString(),
+      productVersion: process.env.QTILER_VERSION || null
+    });
+  });
+
   app.get('/licenses/status', requireAdminIfEnabled, (req, res) => {
     const store = loadLicenseStore();
     ensureInstanceId(store);
@@ -500,7 +597,7 @@ export const registerPluginRoutes = ({
     }
     const store = loadLicenseStore();
     ensureInstanceId(store);
-    if (!payload.trial && (!payload.instanceId || payload.instanceId !== store.instanceId)) {
+    if (!payload.trial && !isLicenseBoundToThisMachine(payload, store)) {
       return res.status(400).json({ error: 'license_instance_mismatch' });
     }
     let expMs = Date.parse(payload.expiresAt || '');

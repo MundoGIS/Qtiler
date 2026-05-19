@@ -14,6 +14,11 @@
         <h1 id="login_title" data-i18n="login.heading">Sign in to Qtiler</h1>
         <p data-i18n="login.intro">Authenticate with your credentials to access the dashboard.</p>
         <form id="login_form" autocomplete="off">
+          <!-- Honeypot: hidden via CSS, real users never fill this. -->
+          <div class="login-honeypot" aria-hidden="true">
+            <label for="login_email_confirm">Leave this field empty</label>
+            <input id="login_email_confirm" name="email_confirm" type="text" tabindex="-1" autocomplete="off">
+          </div>
           <div class="login-field">
             <label for="login_username" data-i18n="login.label.username">Username</label>
             <input id="login_username" name="username" type="text" required autofocus autocomplete="off" data-i18n-placeholder="login.label.username">
@@ -36,6 +41,7 @@
               <span data-i18n="login.remember.label">Remember me next time</span>
             </label>
           </div>
+          <div id="login_captcha_slot" class="login-captcha" hidden></div>
           <div class="login-actions">
             <button type="submit" class="login-button" id="login_submit" data-i18n="login.button.submit">Sign in</button>
             <button type="button" class="login-button" id="login_reset" style="background:#334155" hidden data-i18n="login.button.reset">Return to sign in</button>

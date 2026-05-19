@@ -17,8 +17,17 @@ const svc = new Service({
 });
 
 svc.on('uninstall', () => {
-  console.log('Service uninstalled');
+  console.log('QTiler service uninstalled.');
+  process.exit(0);
 });
-svc.on('error', e => console.error('Service error', e));
+svc.on('alreadyuninstalled', () => {
+  console.log('QTiler service was not installed.');
+  process.exit(0);
+});
+svc.on('error', e => {
+  console.error('Service error:', e);
+  process.exit(1);
+});
 
+console.log('Stopping and removing QTiler service...');
 svc.uninstall();

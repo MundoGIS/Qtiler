@@ -1,8 +1,7 @@
 {
   "enabled": [
     "Qtiler2qwc",
-    "QtilerAuth",
     "Qrigo",
-    "VectorTiles"
+    "Qtiler2Origo"
   ]
 }

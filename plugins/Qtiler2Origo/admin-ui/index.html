@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qtiler2Origo Admin</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/eclipse.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.css" />
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldcode.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/brace-fold.js"></script>
+    <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css" />
+    <style>
+      .hiw-actions { margin-top: 0.75rem; }
+      .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .hiw-btn:hover { background: #f4f6fb; }
+      .hiw-modal[hidden] { display: none; }
+      .hiw-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+      .hiw-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+      .hiw-card { position: relative; background: #fff; max-width: 760px; width: 100%; max-height: 88vh; overflow: hidden; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,0.35); display: flex; flex-direction: column; }
+      .hiw-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #e3e8f0; }
+      .hiw-head h2 { margin: 0; font-size: 1.15rem; color: #1f2a44; }
+      .hiw-close { background: transparent; border: 0; font-size: 1.4rem; line-height: 1; cursor: pointer; color: #64748b; }
+      .hiw-close:hover { color: #1f2a44; }
+      .hiw-body { padding: 1rem 1.25rem; overflow: auto; color: #334155; line-height: 1.5; }
+      .hiw-body h3 { margin: 1.1rem 0 0.4rem; font-size: 1rem; color: #1f2a44; }
+      .hiw-body h3:first-child { margin-top: 0; }
+      .hiw-body ul { margin: 0.25rem 0 0.75rem 1.1rem; padding: 0; }
+      .hiw-body li { margin: 0.2rem 0; }
+      .hiw-lead { font-size: 0.95rem; color: #1f2a44; margin-bottom: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">Qtiler2Origo</p>
+        <h1 data-i18n="Qtiler2Origo.title">origo2 Bridge for Qtiler</h1>
+        <p class="subtitle" data-i18n="Qtiler2Origo.subtitle">Install origo2 from GitHub and sync project visibility from QtilerAuth.</p>
+        <div class="hiw-actions">
+          <button type="button" id="q2o-open-hiw" class="hiw-btn" data-i18n="Qtiler2Origo.hiw.button">How it works &amp; Security</button>
+        </div>
+      </header>
+
+      <!-- ═══════════ Tab bar ═══════════ -->
+      <nav class="tab-bar">
+        <button class="tab-btn tab-btn--active" data-tab="maps">
+          <span class="tab-btn__icon">🗺</span>
+          <span data-i18n="Qtiler2Origo.tab_maps">Maps</span>
+          <span id="tabMapsBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="log">
+          <span class="tab-btn__icon">📋</span>
+          <span data-i18n="Qtiler2Origo.tab_log">Log</span>
+        </button>
+        <button class="tab-btn" data-tab="setup">
+          <span class="tab-btn__icon">⚙</span>
+          <span data-i18n="Qtiler2Origo.tab_setup">Setup</span>
+        </button>
+      </nav>
+
+      <!-- ════════════════════════════════════
+           TAB: Setup
+           ════════════════════════════════════ -->
+      <div class="tab-panel" data-panel="setup">
+
+        <!-- ── How it works ── -->
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.how_title">How Qtiler2Origo works</h2>
+          </div>
+          <p data-i18n="Qtiler2Origo.how_intro">
+            Qtiler2Origo is a bridge plugin: it embeds the Origo web map viewer inside Qtiler so you can publish background-tagged QGIS projects as Origo maps without leaving the admin console.
+          </p>
+          <ol class="how-list">
+            <li data-i18n="Qtiler2Origo.how_step_install">
+              <strong>Install Origo</strong> — pick a release tag from the official GitHub repository. Qtiler downloads the build and serves it from <code>/plugins/Qtiler2Origo/Origo</code>.
+            </li>
+            <li data-i18n="Qtiler2Origo.how_step_publish">
+              <strong>Publish a map</strong> — open the Maps tab, choose a project tagged as <em>background</em> (managed by QtilerAuth), set CRS, zoom and centre, then save. Qtiler generates the Origo configuration file automatically.
+            </li>
+            <li data-i18n="Qtiler2Origo.how_step_share">
+              <strong>Share the URL</strong> — published maps are reachable at <code>/plugins/Qtiler2Origo/Origo/?map=&lt;name&gt;</code>. Visibility is enforced through QtilerAuth, so users only see projects they have access to.
+            </li>
+            <li data-i18n="Qtiler2Origo.how_step_brand">
+              <strong>Brand and customise</strong> — upload a logo, pick a base map and the controls you want enabled (search, measure, draw, print…). Edits hot-reload without restarting Qtiler.
+            </li>
+          </ol>
+          <p class="muted" data-i18n="Qtiler2Origo.how_outro">
+            Open source under MPL-2.0. The plugin only talks to GitHub during install and to QtilerAuth for project ACLs; no data leaves your server at runtime.
+          </p>
+        </section>
+
+        <!-- ── Installation ── -->
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.installation">Installation</h2>
+            <span id="installBadge" class="badge badge--muted" data-i18n="Qtiler2Origo.checking">Checking…</span>
+          </div>
+          <div id="installInfo" class="info-box info-box--muted">
+            <span data-i18n="Qtiler2Origo.loading">Loading...</span>
+          </div>
+          <div class="grid">
+            <label>
+              <span data-i18n="Qtiler2Origo.github_repo">GitHub repo</span>
+              <input id="repo" type="text" placeholder="qgis/origo2" />
+            </label>
+            <label>
+              <span data-i18n="Qtiler2Origo.version_tag">Version</span>
+              <div style="display:flex;gap:.35rem;align-items:center">
+                <select id="version" style="flex:1"></select>
+                <button id="refreshReleasesBtn" class="button small" title="Refresh" style="white-space:nowrap" data-i18n="Qtiler2Origo.refresh">↻</button>
+              </div>
+              <label style="font-size:.82rem;margin-top:.25rem;display:flex;align-items:center;gap:.35rem;cursor:pointer">
+                <input id="includePrerelease" type="checkbox" /> <span data-i18n="Qtiler2Origo.include_prerelease">Include pre-releases</span>
+              </label>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="installBtn" class="button primary" data-i18n="Qtiler2Origo.install_origo2">Install Origo-map</button>
+            <button id="uninstallBtn" class="button danger" disabled data-i18n="Qtiler2Origo.uninstall_origo2">Uninstall Origo-map</button>
+          </div>
+        </section>
+
+        <!-- Link to webmap (same-origin) -->
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.webmap_link">Open webmap</h2>
+          </div>
+          <div class="actions">
+            <a id="openWebmapBtn" class="button primary" href="/plugins/Qtiler2Origo/origo2/" target="_blank" rel="noreferrer">Open webmap</a>
+            <button id="removeDemoBtn" class="button" style="margin-left:.5rem">Remove demo theme</button>
+          </div>
+        </section>
+
+        <!-- ── Logo ── -->
+        <section id="logoSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.logo_section">Webmap logo</h2>
+            <span id="logoBadge" class="badge badge--muted" data-i18n="Qtiler2Origo.no_logo">No logo</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Origo.logo_desc">Upload a logo for the origo2 TopBar. Allowed formats: PNG, JPG, SVG, WEBP.</p>
+          <div class="grid grid--logo">
+            <label>
+              <span data-i18n="Qtiler2Origo.logo_file">Logo file</span>
+              <input id="logoFileInput" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" />
+            </label>
+            <div class="logo-preview-box">
+              <img id="logoPreview" alt="" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="uploadLogoBtn" class="button primary" data-i18n="Qtiler2Origo.upload_logo">Upload logo</button>
+            <button id="removeLogoBtn" class="button" disabled data-i18n="Qtiler2Origo.remove_logo">Remove logo</button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ════════════════════════════════════
+           TAB: Maps
+           ════════════════════════════════════ -->
+      <div class="tab-panel tab-panel--active" data-panel="maps">
+
+        <section id="publishSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.profiles_section">Published profiles</h2>
+            <span id="profilesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Origo.profiles_desc">Manage generated profiles and launch links for origo2 (webmap).</p>
+          <div class="actions">
+            <button id="openPublishModalBtn" class="button primary" data-i18n="Qtiler2Origo.publish_new">New profile</button>
+            <a id="catalogLink" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer" data-i18n="Qtiler2Origo.open_viewer">Open origo2 viewer</a>
+          </div>
+          <div id="publishedProfilesList" class="published-list"></div>
+        </section>
+
+        <section id="publishModal" class="card publish-editor" hidden>
+          <header class="publish-editor__header">
+            <div>
+              <p id="modalTitle" class="publish-editor__title" data-i18n="Qtiler2Origo.modal_title">Publish project in origo2</p>
+              <p class="help">Editor fijo para crear y editar mapas de Origo.</p>
+            </div>
+            <button id="closePublishModalTop" class="button ghost small" type="button" data-i18n="Qtiler2Origo.cancel">Cancel</button>
+          </header>
+          <section class="modal-card-body publish-editor__body">
+
+            <div class="Qtiler2Origo-modal-header-fields">
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Origo.map_name">Map name</label>
+                <div class="control">
+                  <input id="publishName" class="input" type="text" maxlength="120" placeholder="" data-i18n-placeholder="Qtiler2Origo.map_name_placeholder" />
+                </div>
+                <p id="publishNameError" class="help is-danger" style="display:none"></p>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Origo.map_description">Description</label>
+                <div class="control">
+                  <textarea id="publishDescription" class="textarea" rows="2" maxlength="500" placeholder="" data-i18n-placeholder="Qtiler2Origo.map_desc_placeholder"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <fieldset class="modal-step">
+              <legend class="modal-step__legend" data-i18n="Qtiler2Origo.step_layers">1. Layers</legend>
+              <div class="columns is-variable is-4">
+                <div class="column">
+                  <div class="field">
+                    <label class="label" data-i18n="Qtiler2Origo.main_project">Main project</label>
+                    <div class="control"><div class="select is-fullwidth"><select id="publishProjectSelect"></select></div></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="Qtiler2Origo.project_layers">Project layers</label>
+                    <div id="projectLayersList" class="Qtiler2Origo-checklist"></div>
+                  </div>
+                </div>
+                <div class="column">
+                  <div class="field">
+                    <label class="label" data-i18n="Qtiler2Origo.bg_project">Background project (optional)</label>
+                    <div class="control"><div class="select is-fullwidth"><select id="backgroundProjectSelect"></select></div></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="Qtiler2Origo.bg_layers">Background layers</label>
+                    <div id="backgroundLayersList" class="Qtiler2Origo-checklist"></div>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="modal-step">
+              <legend class="modal-step__legend" data-i18n="Qtiler2Origo.step_backgrounds">2. Background maps</legend>
+              <p class="help" style="margin-bottom:.6rem" data-i18n="Qtiler2Origo.default_bg_help">OSM and No background are always available. Choose one as default.</p>
+              <div id="defaultBackgroundList" class="Qtiler2Origo-bg-list"></div>
+            </fieldset>
+
+            <fieldset class="modal-step">
+              <legend class="modal-step__legend" data-i18n="Qtiler2Origo.step_controls">3. Map controls</legend>
+              <p class="help" style="margin-bottom:0.6rem" data-i18n="Qtiler2Origo.step_controls_help">Select the tools to show in the viewer. Click the gear icon next to a control to configure its options.</p>
+              <div class="Qtiler2Origo-controls-grid">
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-home" checked /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_home">Home (zoom to extent)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-zoom" checked /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_zoom">Zoom (+/−)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-rotate" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_rotate">Rotate map</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-fullscreen" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_fullscreen">Full screen</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-geoposition" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_geoposition">My location (GPS)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-mapmenu" checked /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_mapmenu">Layer menu</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-legend" checked /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_legend">Legend</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-search" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_search">Search (geocoding)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-editor" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_editor">Feature editor (WFS)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-draw" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_draw">Draw (redlining)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-measure" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_measure">Measure distances/areas</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-position" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_position">Cursor coordinates</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-print" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_print">Print</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-sharemap" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_sharemap">Share map</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-progressbar" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_progressbar">Progress bar</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-scaleline" checked /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_scaleline">Scale bar</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-attribution" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_attribution">Attribution</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-about" /> <span data-ctrl-label data-i18n="Qtiler2Origo.ctrl_about">About</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-bookmarks" /> <span data-ctrl-label>Bookmarks</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-draganddrop" /> <span data-ctrl-label>Drag &amp; drop files</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-externalurl" /> <span data-ctrl-label>External URL links</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-link" /> <span data-ctrl-label>Link button</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-splash" /> <span data-ctrl-label>Splash dialog</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-scale" /> <span data-ctrl-label>Scale (text)</span></label>
+                <label class="Qtiler2Origo-control-item"><input type="checkbox" id="ctrl-scalepicker" /> <span data-ctrl-label>Scale picker</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="modal-step">
+              <legend class="modal-step__legend">4. Origo Configuration</legend>
+
+              <div class="columns" style="padding-top: 1rem;">
+                <div class="column is-half">
+                  <h4 class="title is-6" style="margin-bottom: 0.5rem;">Interactive Map</h4>
+                  <div id="origo-preview-container" style="width: 100%; height: 350px; background: #eee; border: 1px solid #ccc; position: relative; margin-bottom: 0.5rem;">
+                     <iframe id="origo-preview-iframe" src="" style="width:100%; height:100%; border:none;"></iframe>
+                     <div id="origo-preview-overlay" style="position: absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.7); pointer-events: none;">
+                       <span class="has-text-grey">Pulsa "Load Preview" para cargar el mapa</span>
+                     </div>
+                  </div>
+                  <div class="buttons is-centered">
+                    <button type="button" class="button is-small is-info" id="btn-load-map-preview" data-i18n="Qtiler2Origo.load_preview">Load Preview</button>
+                    <button type="button" class="button is-small is-primary" id="btn-fetch-map-extent" data-i18n="Qtiler2Origo.capture_view" title="Capture the current camera view from the iframe">Capture view (Center &amp; Zoom)</button>
+                  </div>
+
+                  <div class="field is-horizontal" style="margin-bottom: 0.5rem;">
+                    <div class="field-body">
+                      <div class="field">
+                        <label class="label is-small">Zoom</label>
+                        <input class="input is-small" type="number" step="0.1" id="origo-cfg-zoom">
+                      </div>
+                      <div class="field" style="flex-grow: 2;">
+                        <label class="label is-small">Center</label>
+                        <input class="input is-small" type="text" id="origo-cfg-center" placeholder="[x, y]">
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field" style="margin-bottom: 0.5rem;">
+                    <label class="label is-small">Extent</label>
+                    <input class="input is-small" type="text" id="origo-cfg-extent" placeholder="[minx, miny, maxx, maxy]">
+                  </div>
+                  <div class="field is-horizontal" style="margin-bottom: 0.5rem;">
+                    <div class="field-body">
+                      <div class="field">
+                        <label class="label is-small">Min Zoom (más alejado)</label>
+                        <div class="field has-addons">
+                          <div class="control is-expanded">
+                            <input class="input is-small" type="number" step="1" min="0" max="28" id="origo-cfg-min-zoom" placeholder="0">
+                          </div>
+                          <div class="control">
+                            <button type="button" class="button is-small is-primary" id="btn-capture-min-zoom" title="Aleja el preview hasta el nivel MÁS LEJANO que quieras permitir (p.ej. todo el país visible) y pulsa Capturar. Será el zoom-out límite.">Capturar</button>
+                          </div>
+                        </div>
+                        <p class="help is-size-7">Nivel más alejado permitido (número pequeño)</p>
+                      </div>
+                      <div class="field">
+                        <label class="label is-small">Max Zoom (más cercano)</label>
+                        <div class="field has-addons">
+                          <div class="control is-expanded">
+                            <input class="input is-small" type="number" step="1" min="0" max="28" id="origo-cfg-max-zoom" placeholder="28">
+                          </div>
+                          <div class="control">
+                            <button type="button" class="button is-small is-primary" id="btn-capture-max-zoom" title="Acerca el preview hasta el nivel MÁS PROFUNDO que quieras permitir (máximo detalle) y pulsa Capturar. Será el zoom-in límite.">Capturar</button>
+                          </div>
+                        </div>
+                        <p class="help is-size-7">Nivel más cercano permitido (número grande)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="column is-half">
+                   <div class="field" style="margin-bottom: 0.5rem;">
+                      <label class="label is-small">
+                        Controls Array (JSON)
+                        <button type="button" id="btn-load-advanced-controls" class="button is-small is-pulled-right">Plantilla Completa</button>
+                      </label>
+                      <div class="control">
+                        <textarea id="origo-cfg-controls" class="textarea is-small" rows="16" style="font-family: monospace;"></textarea>
+                      </div>
+                   </div>
+                   <div class="field">
+                      <label class="label is-small">Extra JSON (pageSettings, etc)</label>
+                      <div class="control">
+                        <textarea id="origo-cfg-extra" class="textarea is-small" rows="7" style="font-family: monospace;"></textarea>
+                      </div>
+                   </div>
+                </div>
+              </div>
+            </fieldset>
+
+          </section>
+          <footer class="publish-editor__footer modal-card-foot">
+            <button id="publishNowBtn" class="button is-primary" data-i18n="Qtiler2Origo.publish_now">Publish</button>
+            <button id="closePublishModalBottom" class="button" type="button" data-i18n="Qtiler2Origo.cancel">Cancel</button>
+          </footer>
+        </section>
+
+      </div>
+
+      <!-- ════════════════════════════════════
+           TAB: Log
+           ════════════════════════════════════ -->
+      <div class="tab-panel" data-panel="log">
+
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.activity_log">Activity log</h2>
+            <button id="clearLogBtn" class="button ghost small" data-i18n="Qtiler2Origo.clear">Clear</button>
+          </div>
+          <div id="logContainer" class="log-container">
+            <p class="log-empty" data-i18n="Qtiler2Origo.no_activity">No activity yet.</p>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- ═══════════ How it works modal ═══════════ -->
+    <div id="q2o-hiw-modal" class="hiw-modal" role="dialog" aria-modal="true" aria-labelledby="q2o-hiw-title" aria-hidden="true" hidden>
+      <div class="hiw-backdrop" data-hiw-close></div>
+      <div class="hiw-card">
+        <div class="hiw-head">
+          <h2 id="q2o-hiw-title" data-i18n="Qtiler2Origo.hiw.title">How Qtiler2Origo works &amp; security</h2>
+          <button type="button" class="hiw-close" data-hiw-close aria-label="Close">×</button>
+        </div>
+        <div class="hiw-body">
+          <p class="hiw-lead" data-i18n="Qtiler2Origo.hiw.lead"></p>
+          <h3 data-i18n="Qtiler2Origo.hiw.vs.title">Qrigo vs Qtiler2Origo</h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.vs.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.vs.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.arch.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.arch.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.arch.2"></li>
+            <li data-i18n="Qtiler2Origo.hiw.arch.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.flow.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.flow.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.flow.2"></li>
+            <li data-i18n="Qtiler2Origo.hiw.flow.3"></li>
+            <li data-i18n="Qtiler2Origo.hiw.flow.4"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.maps.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.maps.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.maps.2"></li>
+            <li data-i18n="Qtiler2Origo.hiw.maps.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.wfs.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.wfs.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.wfs.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.auth.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.auth.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.auth.2"></li>
+            <li data-i18n="Qtiler2Origo.hiw.auth.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Origo.hiw.security.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Origo.hiw.security.1"></li>
+            <li data-i18n="Qtiler2Origo.hiw.security.2"></li>
+            <li data-i18n="Qtiler2Origo.hiw.security.3"></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="wfs-style-modal" class="modal">
+      <div class="modal-background"></div>
+      <div class="modal-card Qtiler2Origo-style-modal-card">
+        <header class="modal-card-head">
+          <div>
+            <p class="modal-card-title" data-i18n="Qtiler2Origo.wfs_modal_title">Editor de estilo vectorial</p>
+            <p class="Qtiler2Origo-style-subtitle"><span data-i18n="Qtiler2Origo.wfs_layer">Capa</span>: <strong id="wfs-style-layer-title"></strong></p>
+          </div>
+          <span id="wfs-style-geometry-badge" class="badge badge--muted">Vector</span>
+          <button class="delete" aria-label="close" onclick="closeStyleEditor()"></button>
+        </header>
+        <section class="modal-card-body">
+          <div class="Qtiler2Origo-style-layout">
+            <div class="Qtiler2Origo-style-sidebar">
+              <div class="Qtiler2Origo-style-toolbar">
+                <div class="Qtiler2Origo-style-tabs">
+                  <button type="button" class="button small is-active" data-style-tab="rules" data-i18n="Qtiler2Origo.wfs_tab_rules">Diseño avanzado</button>
+                  <button type="button" class="button small" data-style-tab="designer" data-i18n="Qtiler2Origo.wfs_tab_designer">Diseño básico</button>
+                  <button type="button" class="button small" data-style-tab="json" data-i18n="Qtiler2Origo.wfs_tab_json">Editar JSON avanzado</button>
+                  <button type="button" class="button small is-info is-light" data-style-tab="attributes" data-i18n="Qtiler2Origo.wfs_tab_attributes">Atributos (Infoclick)</button>
+                </div>
+                <button type="button" class="button small is-warning is-light" id="wfs-style-reset" title="Limpia todo el estilo y vuelve al estilo básico por defecto" data-i18n="Qtiler2Origo.wfs_reset">↺ Restablecer estilo básico</button>
+              </div>
+
+              <section class="Qtiler2Origo-style-panel" data-style-panel="rules">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap">
+                  <div style="font-weight:600" data-i18n="Qtiler2Origo.wfs_rules_header">Reglas y filtros</div>
+                  <div style="display:flex;gap:0.4rem">
+                    <select id="wfs-rules-copy-select" class="select small">
+                      <option value="" data-i18n="Qtiler2Origo.wfs_copy_rules">-- Copiar reglas de capa --</option>
+                    </select>
+                    <button type="button" class="button small is-primary" id="wfs-rules-add" data-i18n="Qtiler2Origo.wfs_add_rule">+ Añadir regla</button>
+                  </div>
+                </div>
+                <div id="wfs-rules-container" style="display:flex;flex-direction:column;gap:0.6rem;max-height:520px;overflow:auto"></div>
+                <p class="help" data-i18n="Qtiler2Origo.wfs_rules_help">Cada regla se evalúa por orden. Si quieres una "por defecto", deja el filtro vacío en la última.</p>
+              </section>
+
+              <section class="Qtiler2Origo-style-panel" data-style-panel="designer" hidden>
+                <div class="Qtiler2Origo-style-grid">
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_symbol">Símbolo</span>
+                    <select id="wfsStyleShape">
+                      <option value="circle" data-i18n="Qtiler2Origo.wfs_circle">Círculo</option>
+                      <option value="square" data-i18n="Qtiler2Origo.wfs_square">Cuadrado</option>
+                      <option value="triangle" data-i18n="Qtiler2Origo.wfs_triangle">Triángulo</option>
+                      <option value="star" data-i18n="Qtiler2Origo.wfs_star">Estrella</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_radius_size">Radio / tamaño</span>
+                    <input id="wfsStyleRadius" type="range" min="2" max="24" step="1" value="6" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_fill_color">Color de relleno</span>
+                    <input id="wfsStyleFillColor" type="color" value="#3b82f6" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_fill_opacity">Opacidad relleno</span>
+                    <input id="wfsStyleFillOpacity" type="range" min="0" max="1" step="0.05" value="0.25" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_stroke_color">Color del borde</span>
+                    <input id="wfsStyleStrokeColor" type="color" value="#2563eb" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_stroke_opacity">Opacidad borde</span>
+                    <input id="wfsStyleStrokeOpacity" type="range" min="0" max="1" step="0.05" value="1" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_stroke_width">Grosor borde</span>
+                    <input id="wfsStyleStrokeWidth" type="range" min="0" max="12" step="0.5" value="2" />
+                  </label>
+                  <label>
+                    <span data-i18n="Qtiler2Origo.wfs_dash">Patrón de línea</span>
+                    <select id="wfsStyleDash">
+                      <option value="solid" data-i18n="Qtiler2Origo.wfs_solid">Sólida</option>
+                      <option value="dashed" data-i18n="Qtiler2Origo.wfs_dashed">Discontinua</option>
+                      <option value="dotted" data-i18n="Qtiler2Origo.wfs_dotted">Punteada</option>
+                      <option value="dashdot" data-i18n="Qtiler2Origo.wfs_dashdot">Punto y raya</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section class="Qtiler2Origo-style-panel" data-style-panel="attributes" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap">
+                  <div style="font-weight:600" data-i18n="Qtiler2Origo.wfs_attrs_header">Atributos del Popup (Infoclick)</div>
+                  <button type="button" class="button small is-primary" id="wfs-attributes-add" data-i18n="Qtiler2Origo.wfs_add_attr">+ Añadir atributo</button>
+                </div>
+                <div id="wfs-attributes-container" style="display:flex;flex-direction:column;gap:0.6rem;max-height:520px;overflow:auto"></div>
+                <p class="help" data-i18n="Qtiler2Origo.wfs_attrs_help">Define los atributos a mostrar. Si no llenas nada, se muestran todos.</p>
+              </section>
+
+              <section class="Qtiler2Origo-style-panel" data-style-panel="json" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.5rem;gap:0.5rem;flex-wrap:wrap">
+                  <div>
+                    <label class="Qtiler2Origo-style-json-label" for="wfs-style-json-editor" data-i18n="Qtiler2Origo.wfs_json_label">JSON completo de la capa (configuración + estilo)</label>
+                    <p class="help" style="margin:0">Edita aquí el objeto completo: <code>name</code>, <code>geometryType</code>, <code>wfsStyle</code>, <code>searchable</code>, etc.</p>
+                  </div>
+                  <div style="display:flex;gap:0.4rem;align-items:flex-end">
+                    <div class="select is-small">
+                      <select id="wfs-style-copy-select">
+                        <option value="" data-i18n="Qtiler2Origo.wfs_copy_layer">-- Copiar de capa --</option>
+                      </select>
+                    </div>
+                    <button type="button" class="button small" id="wfs-style-format-json" title="Formatear JSON">{ }</button>
+                  </div>
+                </div>
+                <div id="wfs-style-json-host" style="border:1px solid #d0d7de;border-radius:4px;min-height:380px;max-height:520px;overflow:auto;background:#fff"></div>
+                <textarea id="wfs-style-json-editor" class="textarea is-family-code" rows="18" style="display:none"></textarea>
+                <div class="Qtiler2Origo-style-json-actions" style="margin-top:0.5rem">
+                  <button type="button" class="button small" id="wfs-style-apply-json" data-i18n="Qtiler2Origo.wfs_apply_json">Aplicar JSON</button>
+                  <span id="wfs-style-json-status" class="help" style="margin-left:0.5rem"></span>
+                </div>
+              </section>
+            </div>
+
+            <aside class="Qtiler2Origo-style-preview-card">
+              <h3 data-i18n="Qtiler2Origo.wfs_preview">Vista previa</h3>
+              <div id="wfs-style-preview" class="Qtiler2Origo-style-preview"></div>
+              <p class="help" data-i18n="Qtiler2Origo.wfs_preview_help">La vista previa se actualiza en vivo mientras cambias color, grosor, opacidad y símbolo.</p>
+            </aside>
+          </div>
+          <div class="notification is-warning is-light is-hidden" id="wfs-style-error"></div>
+        </section>
+        <footer class="modal-card-foot" style="justify-content: flex-end;">
+          <button class="button" onclick="closeStyleEditor()" data-i18n="Qtiler2Origo.wfs_cancel">Cancelar</button>
+          <button class="button is-success" onclick="saveStyleEditor()" data-i18n="Qtiler2Origo.wfs_save">Guardar estilo</button>
+        </footer>
+      </div>
+    </div>
+    <!-- SVG Icon Picker Modal -->
+    <div class="modal" id="svg-picker-modal">
+      <div class="modal-background" onclick="closeSvgPicker()"></div>
+      <div class="modal-card" style="max-width:900px;width:90%">
+        <header class="modal-card-head">
+          <p class="modal-card-title">Seleccionar icono SVG (QGIS)</p>
+          <button class="delete" aria-label="close" onclick="closeSvgPicker()"></button>
+        </header>
+        <section class="modal-card-body" style="max-height:70vh;overflow:auto">
+          <input type="text" id="svg-picker-search" class="input" placeholder="Buscar..." style="margin-bottom:0.6rem" />
+          <div id="svg-picker-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+        </section>
+      </div>
+    </div>
+
+    <script src="/lang-support.js"></script>
+    <script src="/plugins/Qtiler2Origo/admin-ui/app.js"></script>
+</body>
+</html>
+
+

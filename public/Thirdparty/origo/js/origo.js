@@ -47789,6 +47789,72 @@ const Search = function Search(options = {}) {
     };
 
     const infowindowHandler = function func(list, searchVal) {
+      // Qtiler patch: option-3 fallback for search results whose source layers
+      // are NOT in viewer.getLayer() (e.g. cross-project search via Qtiler2Origo).
+      // Groups by `group` field (or titleAttribute) and renders each row to call
+      // showFeatureInfo using WKT in geometryAttribute and HTML in contentAttribute.
+      if (!layerNameAttribute && titleAttribute && contentAttribute && geometryAttribute) {
+        const byGroup = list.reduce((acc, item) => {
+          const k = item.group || item[titleAttribute] || 'Resultat';
+          (acc[k] = acc[k] || []).push(item);
+          return acc;
+        }, Object.create(null));
+        const groupsQ = [];
+        Object.keys(byGroup).forEach((gName) => {
+          const items = byGroup[gName];
+          const rowsQ = items.map((element) => (0,_ui__WEBPACK_IMPORTED_MODULE_3__.Component)({
+            addClick() {
+              document.getElementById(this.getId()).addEventListener('click', () => {
+                const feat = _maputils__WEBPACK_IMPORTED_MODULE_7__["default"].wktToFeature(element[geometryAttribute], projectionCode);
+                const contentEl = _utils__WEBPACK_IMPORTED_MODULE_9__["default"].createElement('div', element[contentAttribute]);
+                showFeatureInfo([feat], element[titleAttribute], contentEl);
+              });
+            },
+            onInit() {
+              this.addComponent((0,_ui__WEBPACK_IMPORTED_MODULE_3__.Element)({
+                cls: 'flex row align-center padding-left padding-right item',
+                tagName: 'div',
+                innerHTML: `${element[name]}`
+              }));
+            },
+            render() {
+              const c = this.getComponents().reduce((acc, it) => acc + it.render(), '');
+              return `<li class="flex row text-smaller align-center padding-x padding-y-smaller hover pointer" id="${this.getId()}">${c}</li>`;
+            }
+          }));
+          const contentComponentQ = (0,_ui__WEBPACK_IMPORTED_MODULE_3__.Component)({
+            onInit() { this.addComponents(rowsQ); },
+            onRender() { this.getComponents().forEach(c => c.addClick()); },
+            render() {
+              const c = this.getComponents().reduce((acc, it) => acc + it.render(), '');
+              this.dispatch('render');
+              return `<ul id="${this.getId()}">${c}</ul>`;
+            }
+          });
+          const groupCmpQ = (0,_ui__WEBPACK_IMPORTED_MODULE_3__.Collapse)({
+            cls: '',
+            expanded: false,
+            headerComponent: (0,_ui__WEBPACK_IMPORTED_MODULE_3__.CollapseHeader)({
+              cls: 'hover padding-x padding-y-small grey-lightest border-bottom text-small',
+              icon: '#ic_chevron_right_24px',
+              title: `${gName} (${items.length})`
+            }),
+            contentComponent: contentComponentQ,
+            collapseX: false
+          });
+          groupsQ.push(groupCmpQ);
+        });
+        const listcomponentQ = (0,_ui__WEBPACK_IMPORTED_MODULE_3__.Component)({
+          name: 'searchlist',
+          onInit() { this.addComponents(groupsQ); },
+          onAdd() { this.render(); },
+          render() { return this.getComponents().reduce((acc, it) => acc + it.render(), ''); }
+        });
+        const stTitleQ = searchlistOptions.title || `${localize('searchlistTitle')} "{{value}}"`;
+        infowindow.changeContent(listcomponentQ, `${stTitleQ.replace('{{value}}', searchVal)}`);
+        infowindow.show();
+        return;
+      }
       const result = list.reduce((r, a) => {
         /* eslint-disable-next-line no-param-reassign */
         r[a[layerNameAttribute]] = r[a[layerNameAttribute]] || [];

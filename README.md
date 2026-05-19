@@ -22,17 +22,79 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
 
 ## Commercial plugin support
-Qtiler supports optional commercial plugins. Current bundled versions:
+Qtiler ships with an optional plugin ecosystem. Most plugins are now open source under MPL-2.0; only **QtilerAuth** is sold under a commercial licence (machine-bound, RSA-verified). Bundled versions:
 
-- QtilerAuth: `0.2.0`
-- ProjectSearch: `0.1.0`
-- Qrigo: `0.1.0`
-- VectorTiles: `0.2.0`
-- Qtiler2qwc: `0.1.0`
+| Plugin | Version | Licence | Purpose |
+|---|---|---|---|
+| QtilerAuth | `0.2.0` | Commercial | Multi-user auth, project ACLs, API keys |
+| Qrigo | `0.1.0` | MPL-2.0 | Origo Map integration helpers |
+| Qtiler2qwc | `0.1.0` | MPL-2.0 | QWC2 webmap bridge |
+| Qtiler2Origo | `0.1.0` | MPL-2.0 | Origo webmap bridge |
+| VectorTiles | `0.2.0` | MPL-2.0 | MBTiles + TileJSON/Style endpoints |
+| ProjectSearch | `0.1.0` | MPL-2.0 | Cross-project attribute search |
+| QuantizedMesh | `0.1.0` | MPL-2.0 | Quantized-mesh terrain endpoints |
+
+## QtilerAuth — the only commercial plugin (recommended)
+
+If you are about to expose Qtiler outside an isolated LAN, **QtilerAuth** is the
+plugin you want. It turns Qtiler into a multi-tenant, audit-ready GIS server
+without forcing you to glue together half a dozen npm packages or rely on
+external SaaS providers.
+
+### Why GIS administrators buy QtilerAuth
+
+- **Multi-user with project ACLs.** Mark each QGIS project as *public*,
+  *authenticated* or *private*, and assign private projects to specific users.
+  ACLs are enforced on every WMTS, WMS, WFS, WFS-T and Vector-Tiles call.
+- **Multiple authentication methods on the same server.** Cookie sessions for
+  the dashboard, JWT bearer tokens for SPAs, HTTP Basic for QGIS Desktop, and
+  per-user **API keys** (query string `?api_key=` or `X-API-Key` header) for
+  long-lived OGC clients.
+- **Strong cryptography out of the box.** bcrypt password hashes (cost 10),
+  SHA-256-hashed API keys (the plain key is shown only once), HMAC-SHA256 JWTs
+  with a server-side revocation list (`jti`), and constant-time comparisons for
+  all secret material.
+- **Brute-force protection that respects real admins.** Per `(username, IP)`
+  lockout (default 8 failed attempts in 15 minutes → 15 minute lockout with a
+  proper `Retry-After`). A remote attacker hammering one account can never lock
+  out a legitimate admin who logs in correctly from another office.
+- **Built-in proof-of-work captcha — no third parties.** After the configured
+  number of failed attempts (default 3), the next login silently solves a
+  stateless HMAC-signed PoW challenge in the browser (~1–2 s with WebCrypto).
+  No Google reCAPTCHA, no Cloudflare Turnstile, no third-party JavaScript, no
+  tracking — perfect for **GDPR-sensitive deployments**. Cloudflare Turnstile,
+  hCaptcha and reCAPTCHA are still supported as drop-in alternatives.
+- **HTTP hardening with Helmet.** HSTS, X-Content-Type-Options, X-Frame-Options,
+  Referrer-Policy and Cross-Origin-Resource-Policy are applied automatically;
+  CORS is governed by an `AUTH_CORS_ALLOWLIST` (same-origin by default).
+  `Cache-Control: no-store` is set on every response that may carry an
+  `api_key`, and `api_key` is stripped from cached `GetCapabilities` documents
+  to prevent leaks through proxies.
+- **Auditable.** Every login attempt is recorded in SQLite (timestamp, IP,
+  user-agent, result) and visible from the admin UI.
+- **Offline licensing.** Activation is an RSA-signed key file verified locally
+  — no internet round-trip, no "phone home", suitable for air-gapped or
+  data-residency–constrained environments (Swedish/EU public sector, internal
+  municipal networks, etc.).
+- **Single SQLite file** (`data/auth.db`, WAL mode) for all auth state. Backup
+  is a file copy; no external Postgres / Redis required.
+
+### Try before you buy
+
+QtilerAuth ships with a **one-month full-feature trial**. During trial it works
+exactly like the licensed product so you can validate users, ACLs, brute-force
+protection, captcha and API-key flows in your own environment. After expiry the
+plugin auto-disables and the base Qtiler server keeps running.
+
+Open the QtilerAuth admin page and click **“How it works & Security”** for an
+in-product walkthrough of the architecture (available in English, Spanish,
+Swedish and Norwegian). For licensing and pricing contact
+[info@mundogis.se](mailto:info@mundogis.se) or visit
+[mundogis.se](https://mundogis.se).
 
 ## Qtiler2qwc — QWC2 WebMap Integration
 
-**Qtiler2qwc** is a commercial plugin that embeds a full [QWC2](https://github.com/qgis/qwc2) (QGIS Web Client 2) webmap viewer inside Qtiler, enabling production-ready interactive web maps powered directly by your QGIS projects.
+**Qtiler2qwc** is an open-source (MPL-2.0) plugin that embeds a full [QWC2](https://github.com/qgis/qwc2) (QGIS Web Client 2) webmap viewer inside Qtiler, enabling production-ready interactive web maps powered directly by your QGIS projects.
 
 ### What it provides
 
@@ -86,6 +148,57 @@ The QWC2 toolbar items are defined in `data/Qtiler2qwc/qwc2/current/config.json`
 ]
 ```
 Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc.).
+
+## Qtiler2Origo — Origo WebMap Integration
+
+**Qtiler2Origo** is an open-source (MPL-2.0) bridge plugin that embeds the [Origo](https://github.com/origo-map/origo) web map viewer inside Qtiler. It complements Qtiler2qwc by offering a lightweight, mobile-friendly viewer for users who don't need the full QWC2 stack.
+
+### Qrigo vs Qtiler2Origo
+
+Both plugins integrate with the [Origo](https://github.com/origo-map/origo) viewer, but they serve very different audiences:
+
+- **Qrigo** is for users who already run a **standard Origo-map installation on their own server**. It only generates ready-to-paste JSON snippets (source + layer entries) that you copy into your existing Origo `index.json` to add Qtiler WMS/WMTS/WFS layers. It does not host a viewer.
+- **Qtiler2Origo** is the plugin that **installs Origo on top of Qtiler itself**. It downloads a pinned Origo build, lets you create and configure each map graphically using the QGIS library, and reuses Qtiler's cache and the WMS/WFS layers from projects published in Qtiler. Choose this if you want a complete, in-Qtiler Origo experience without maintaining a separate Origo server.
+
+### What it provides
+
+- **Hosted Origo viewer** — Origo is downloaded from a pinned GitHub release and served at `/plugins/Qtiler2Origo/Origo`. No separate Origo deployment is required.
+- **Project publishing workflow** — Publish any QGIS project tagged as background as an Origo map directly from the Qtiler2Origo admin UI.
+- **Auto-generated configuration** — Qtiler2Origo writes the Origo configuration file for each published map (CRS, zoom, centre, base map, controls) and reloads it in place on edits.
+- **Per-map branding** — Upload a logo and choose which controls (search, measure, draw, print, ...) are exposed in the toolbar.
+- **QtilerAuth-aware visibility** — Public, authenticated, and private projects from QtilerAuth are honoured automatically; users only see maps they're allowed to open.
+- **Bridge-friendly catalog** — Exposes a JSON projects catalog endpoint for external integrations.
+
+### Routes exposed by Qtiler2Origo
+
+| Route | Description |
+|---|---|
+| `GET /plugins/Qtiler2Origo/Origo/` | Origo viewer entry point (requires `?map=<name>`) |
+| `GET /plugins/Qtiler2Origo/admin-ui/` | Admin UI for publishing and managing Origo maps |
+| `GET /plugins/Qtiler2Origo/api/maps` | JSON catalog of published Origo maps |
+
+### Publishing a project as an Origo map
+
+1. Open the Qtiler dashboard and go to **Plugins → Qtiler2Origo**.
+2. On the **Setup** tab, click **Install Origo** and pick a release tag from the GitHub release list.
+3. Switch to the **Maps** tab and select a project tagged as background.
+4. Configure the map name, CRS, zoom and centre, and choose the controls you want enabled.
+5. Click **Publish** — the map is immediately available at `/plugins/Qtiler2Origo/Origo/?map=<name>`.
+
+### Combining Qtiler2Origo with QtilerAuth
+
+When QtilerAuth is active:
+- **Public** projects are reachable without login.
+- **Authenticated** and **private** projects require a valid session or API key, and the catalog endpoint filters maps to those the caller is authorised to see.
+- Cookie-based sessions and `?api_key=` / `x-api-key` headers are both supported.
+
+### Data storage
+
+```
+data/Qtiler2Origo/state.json                # Plugin state (installed Origo version, settings)
+data/Qtiler2Origo/maps/<map-name>.json      # One file per published Origo map
+plugins/Qtiler2Origo/Origo/                 # Downloaded Origo build (filled by the installer)
+```
 
 ## VectorTiles auth in QGIS (protected projects)
 If your project is protected by QtilerAuth, avoid shared URLs and use user-based credentials.

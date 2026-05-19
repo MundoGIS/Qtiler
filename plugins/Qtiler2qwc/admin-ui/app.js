@@ -138,7 +138,34 @@ const QTWC_I18N = {
     'Qtiler2qwc.cfg_elevation_url': 'Elevation service URL',
     'Qtiler2qwc.cfg_elevation_url_ph': 'https://elevation.example.com',
     'Qtiler2qwc.cfg_dxf_url': 'DXF export service URL',
-    'Qtiler2qwc.cfg_dxf_url_ph': 'https://example.com/dxf'
+    'Qtiler2qwc.cfg_dxf_url_ph': 'https://example.com/dxf',
+    'Qtiler2qwc.hiw.button': 'How it works & Security',
+    'Qtiler2qwc.hiw.title': 'How QTWC works & security',
+    'Qtiler2qwc.hiw.lead': 'QTWC embeds the QWC2 web map viewer inside Qtiler. It downloads QWC2 from a pinned GitHub release, generates the themes catalog from your QGIS projects and lets QtilerAuth enforce per-user visibility.',
+    'Qtiler2qwc.hiw.arch.title': '1. Architecture',
+    'Qtiler2qwc.hiw.arch.1': 'Express plugin under plugins/Qtiler2qwc/. QWC2 build is downloaded from GitHub and served at /plugins/Qtiler2qwc/qwc2.',
+    'Qtiler2qwc.hiw.arch.2': 'Themes are generated from QGIS projects on disk; nested folders are scanned recursively.',
+    'Qtiler2qwc.hiw.arch.3': 'Edit configs and locales are gated at runtime so updates take effect without a server restart.',
+    'Qtiler2qwc.hiw.flow.title': '2. Step by step',
+    'Qtiler2qwc.hiw.flow.1': 'Setup tab: choose a GitHub tag (optionally including pre-releases) and click Install QWC2.',
+    'Qtiler2qwc.hiw.flow.2': 'Maps tab: published projects appear automatically. Configure the launch URL, default WMTS background, edit configs and locales per theme.',
+    'Qtiler2qwc.hiw.flow.3': 'Upload a logo and adjust branding for the QWC2 top bar.',
+    'Qtiler2qwc.hiw.flow.4': 'Open the live viewer at /plugins/Qtiler2qwc/qwc2 — themes refresh on demand.',
+    'Qtiler2qwc.hiw.themes.title': '3. Themes & projects',
+    'Qtiler2qwc.hiw.themes.1': 'A themes.json catalog is generated from QGIS projects; each theme inherits CRS, scales and layers from the project.',
+    'Qtiler2qwc.hiw.themes.2': 'launchUrl is built per theme so deep links open with the correct project pre-selected.',
+    'Qtiler2qwc.hiw.themes.3': 'Default WMTS background invariants are enforced so themes always have a working base layer.',
+    'Qtiler2qwc.hiw.print.title': '4. Print (serverless contract)',
+    'Qtiler2qwc.hiw.print.1': 'Print uses QGIS layouts/themes via a serverless contract — no separate print server.',
+    'Qtiler2qwc.hiw.print.2': 'Layouts are discovered per project and surfaced in the QWC2 print panel automatically.',
+    'Qtiler2qwc.hiw.auth.title': '5. Authentication & visibility',
+    'Qtiler2qwc.hiw.auth.1': 'Project visibility is synced live from QtilerAuth: public, authenticated and private rules are honoured.',
+    'Qtiler2qwc.hiw.auth.2': 'When QtilerAuth is enabled, theme catalog endpoints filter out projects the user cannot access.',
+    'Qtiler2qwc.hiw.auth.3': 'Mojibake-safe handling for tokens with non-ASCII characters — invalid tokens are rejected cleanly.',
+    'Qtiler2qwc.hiw.security.title': '6. Security & privacy',
+    'Qtiler2qwc.hiw.security.1': 'Network calls are limited to GitHub during install and to QtilerAuth for ACLs; no runtime telemetry.',
+    'Qtiler2qwc.hiw.security.2': 'Admin actions (install/uninstall, branding, configs) require an authenticated admin user.',
+    'Qtiler2qwc.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qtiler2qwc/.'
   },
   es: {
     'Qtiler2qwc.title': 'Puente QWC2 para Qtiler',
@@ -278,7 +305,34 @@ const QTWC_I18N = {
     'Qtiler2qwc.cfg_elevation_url': 'URL del servicio de elevación',
     'Qtiler2qwc.cfg_elevation_url_ph': 'https://elevation.ejemplo.com',
     'Qtiler2qwc.cfg_dxf_url': 'URL del servicio de exportación DXF',
-    'Qtiler2qwc.cfg_dxf_url_ph': 'https://ejemplo.com/dxf'
+    'Qtiler2qwc.cfg_dxf_url_ph': 'https://ejemplo.com/dxf',
+    'Qtiler2qwc.hiw.button': 'Cómo funciona y seguridad',
+    'Qtiler2qwc.hiw.title': 'Cómo funciona QTWC y por qué es seguro',
+    'Qtiler2qwc.hiw.lead': 'QTWC integra el visor web QWC2 dentro de Qtiler. Descarga QWC2 desde una release fija de GitHub, genera el catálogo de temas desde tus proyectos QGIS y deja que QtilerAuth aplique la visibilidad por usuario.',
+    'Qtiler2qwc.hiw.arch.title': '1. Arquitectura',
+    'Qtiler2qwc.hiw.arch.1': 'Plugin Express en plugins/Qtiler2qwc/. El build de QWC2 se descarga de GitHub y se sirve en /plugins/Qtiler2qwc/qwc2.',
+    'Qtiler2qwc.hiw.arch.2': 'Los temas se generan a partir de los proyectos QGIS en disco; las carpetas anidadas se exploran de forma recursiva.',
+    'Qtiler2qwc.hiw.arch.3': 'Las configuraciones de edición y los locales se gestionan en tiempo de ejecución sin reiniciar el servidor.',
+    'Qtiler2qwc.hiw.flow.title': '2. Paso a paso',
+    'Qtiler2qwc.hiw.flow.1': 'Pestaña Setup: elige un tag de GitHub (opcionalmente pre-releases) y pulsa Instalar QWC2.',
+    'Qtiler2qwc.hiw.flow.2': 'Pestaña Mapas: los proyectos publicados aparecen automáticamente. Configura launch URL, fondo WMTS por defecto, edit configs y locales por tema.',
+    'Qtiler2qwc.hiw.flow.3': 'Sube un logo y ajusta la marca para la barra superior de QWC2.',
+    'Qtiler2qwc.hiw.flow.4': 'Abre el visor en /plugins/Qtiler2qwc/qwc2 — los temas se refrescan bajo demanda.',
+    'Qtiler2qwc.hiw.themes.title': '3. Temas y proyectos',
+    'Qtiler2qwc.hiw.themes.1': 'Se genera un catálogo themes.json desde los proyectos QGIS; cada tema hereda CRS, escalas y capas del proyecto.',
+    'Qtiler2qwc.hiw.themes.2': 'launchUrl se construye por tema para que los enlaces directos abran el proyecto correcto preseleccionado.',
+    'Qtiler2qwc.hiw.themes.3': 'Se garantizan invariantes de fondo WMTS por defecto para que los temas tengan siempre una capa base válida.',
+    'Qtiler2qwc.hiw.print.title': '4. Impresión (contrato sin servidor)',
+    'Qtiler2qwc.hiw.print.1': 'La impresión usa layouts/temas de QGIS mediante un contrato serverless — sin servidor de impresión aparte.',
+    'Qtiler2qwc.hiw.print.2': 'Los layouts se descubren por proyecto y aparecen automáticamente en el panel de impresión de QWC2.',
+    'Qtiler2qwc.hiw.auth.title': '5. Autenticación y visibilidad',
+    'Qtiler2qwc.hiw.auth.1': 'La visibilidad de proyectos se sincroniza en vivo con QtilerAuth: se respetan las reglas public, authenticated y private.',
+    'Qtiler2qwc.hiw.auth.2': 'Con QtilerAuth activo, los endpoints del catálogo filtran los proyectos a los que el usuario no tiene acceso.',
+    'Qtiler2qwc.hiw.auth.3': 'Manejo seguro frente a mojibake en tokens con caracteres no ASCII — los tokens inválidos se rechazan limpiamente.',
+    'Qtiler2qwc.hiw.security.title': '6. Seguridad y privacidad',
+    'Qtiler2qwc.hiw.security.1': 'Las llamadas de red se limitan a GitHub al instalar y a QtilerAuth para ACLs; sin telemetría en tiempo de ejecución.',
+    'Qtiler2qwc.hiw.security.2': 'Las acciones de administración (instalar/desinstalar, branding, configs) requieren un usuario admin autenticado.',
+    'Qtiler2qwc.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qtiler2qwc/.'
   },
   sv: {
     'Qtiler2qwc.title': 'QWC2-brygga för Qtiler',
@@ -418,10 +472,37 @@ const QTWC_I18N = {
     'Qtiler2qwc.cfg_elevation_url': 'Höjddatatjänst-URL',
     'Qtiler2qwc.cfg_elevation_url_ph': 'https://elevation.example.com',
     'Qtiler2qwc.cfg_dxf_url': 'DXF-exporttjänst-URL',
-    'Qtiler2qwc.cfg_dxf_url_ph': 'https://example.com/dxf'
+    'Qtiler2qwc.cfg_dxf_url_ph': 'https://example.com/dxf',
+    'Qtiler2qwc.hiw.button': 'Så fungerar det & säkerhet',
+    'Qtiler2qwc.hiw.title': 'Så fungerar QTWC och varför det är säkert',
+    'Qtiler2qwc.hiw.lead': 'QTWC bäddar in webbkartvyn QWC2 i Qtiler. Det laddar ner QWC2 från en GitHub-release, genererar tema-katalogen från dina QGIS-projekt och låter QtilerAuth hantera synlighet per användare.',
+    'Qtiler2qwc.hiw.arch.title': '1. Arkitektur',
+    'Qtiler2qwc.hiw.arch.1': 'Express-plugin under plugins/Qtiler2qwc/. QWC2-bygget laddas ner från GitHub och serveras på /plugins/Qtiler2qwc/qwc2.',
+    'Qtiler2qwc.hiw.arch.2': 'Teman genereras från QGIS-projekt på disk; nestade mappar genomsöks rekursivt.',
+    'Qtiler2qwc.hiw.arch.3': 'Edit configs och locales hanteras vid körning så ändringar träder i kraft utan omstart av servern.',
+    'Qtiler2qwc.hiw.flow.title': '2. Steg för steg',
+    'Qtiler2qwc.hiw.flow.1': 'Setup-fliken: välj en GitHub-tagg (eventuellt inklusive pre-releases) och klicka Installera QWC2.',
+    'Qtiler2qwc.hiw.flow.2': 'Maps-fliken: publicerade projekt visas automatiskt. Konfigurera launch URL, standard-WMTS-bakgrund, edit configs och locales per tema.',
+    'Qtiler2qwc.hiw.flow.3': 'Ladda upp en logotyp och anpassa varumärket för QWC2:s topplist.',
+    'Qtiler2qwc.hiw.flow.4': 'Öppna visningen på /plugins/Qtiler2qwc/qwc2 — teman uppdateras vid behov.',
+    'Qtiler2qwc.hiw.themes.title': '3. Teman och projekt',
+    'Qtiler2qwc.hiw.themes.1': 'En themes.json-katalog genereras från QGIS-projekten; varje tema ärver CRS, skalor och lager från projektet.',
+    'Qtiler2qwc.hiw.themes.2': 'launchUrl byggs per tema så djupa länkar öppnas med rätt projekt förvalt.',
+    'Qtiler2qwc.hiw.themes.3': 'Standard-WMTS-bakgrund garanteras så att teman alltid har ett fungerande baslager.',
+    'Qtiler2qwc.hiw.print.title': '4. Utskrift (serverless)',
+    'Qtiler2qwc.hiw.print.1': 'Utskrift använder QGIS-layouter/teman via ett serverless-kontrakt — ingen separat utskriftsserver.',
+    'Qtiler2qwc.hiw.print.2': 'Layouter upptäcks per projekt och visas automatiskt i QWC2:s utskriftspanel.',
+    'Qtiler2qwc.hiw.auth.title': '5. Autentisering och synlighet',
+    'Qtiler2qwc.hiw.auth.1': 'Projektsynlighet synkas live från QtilerAuth: public-, authenticated- och private-regler respekteras.',
+    'Qtiler2qwc.hiw.auth.2': 'När QtilerAuth är aktivt filtrerar tema-katalogens endpoints bort projekt användaren inte har åtkomst till.',
+    'Qtiler2qwc.hiw.auth.3': 'Mojibake-säker hantering av tokens med icke-ASCII-tecken — ogiltiga tokens avvisas rent.',
+    'Qtiler2qwc.hiw.security.title': '6. Säkerhet och integritet',
+    'Qtiler2qwc.hiw.security.1': 'Nätverksanrop sker endast mot GitHub vid installation och mot QtilerAuth för ACL:er; ingen körtidstelemetri.',
+    'Qtiler2qwc.hiw.security.2': 'Adminhandlingar (installera/avinstallera, branding, configs) kräver en autentiserad adminanvändare.',
+    'Qtiler2qwc.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2qwc/.'
   }
 };
-QTWC_I18N.no = { ...QTWC_I18N.en };
+QTWC_I18N.no = { ...QTWC_I18N.sv };
 
 /* ── DOM refs ── */
 // CRITICAL FIX: Moved tabMapsBadge to the top so syncUI doesn't crash on load!
@@ -495,9 +576,13 @@ const TOOL_CONFIG_MAP = {
 
 /* ── i18n helpers ── */
 function getLang() {
-  if (window.qtilerLang && typeof window.qtilerLang.get === 'function') return window.qtilerLang.get();
-  try { const v = localStorage.getItem('qtiler.lang'); if (v) return v; } catch (_) {}
-  return (navigator.language || 'en').split('-')[0];
+  let raw = '';
+  if (window.qtilerLang && typeof window.qtilerLang.get === 'function') raw = window.qtilerLang.get();
+  if (!raw) { try { raw = localStorage.getItem('qtiler.lang') || ''; } catch (_) {} }
+  if (!raw) raw = (navigator.language || 'en');
+  raw = String(raw).toLowerCase();
+  if (raw.startsWith('nb') || raw.startsWith('nn') || raw.startsWith('no')) return 'sv';
+  return raw.split('-')[0];
 }
 
 function t(key, params) {
@@ -1393,3 +1478,15 @@ Promise.all([
   loadPublishedProfiles().catch(() => {}),
   loadReleases().catch(() => {})
 ]);
+/* === How it works modal wiring === */
+(function () {
+  const modal = document.getElementById('qtwc-hiw-modal');
+  const openBtn = document.getElementById('qtwc-open-hiw');
+  if (!modal || !openBtn) return;
+  const open = () => { modal.hidden = false; modal.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; };
+  const close = () => { modal.hidden = true; modal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; };
+  openBtn.addEventListener('click', open);
+  modal.querySelectorAll('[data-hiw-close]').forEach((el) => el.addEventListener('click', close));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
+

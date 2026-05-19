@@ -216,12 +216,13 @@
           </section>
 
           <section class="guide-section">
-            <h2><span>6</span> <span data-i18n="guide.section6Title">Service Matrix &amp; Commercial Plugins</span></h2>
-            <p style="margin-bottom:18px;color:var(--muted)" data-i18n="guide.servicesIntro">Qtiler base includes OGC publishing and cache workflows. Commercial plugins extend search, security, vector-tile publication, and external integrations.</p>
+            <h2><span>6</span> <span data-i18n="guide.section6Title">Service Matrix, Commercial &amp; Open-source Plugins</span></h2>
+            <p style="margin-bottom:18px;color:var(--muted)" data-i18n="guide.servicesIntro">Qtiler base includes OGC publishing and cache workflows. The commercial plugin (QtilerAuth) hardens security; open-source plugins extend search, vector-tile publication, and external integrations.</p>
 
             <div class="guide-tabs" role="tablist" data-i18n-aria-label="guide.tabs.aria" aria-label="Guide detail tabs">
               <button type="button" class="guide-tab-btn active" role="tab" aria-selected="true" aria-controls="guide-tab-services" id="guide-tab-btn-services" data-target="guide-tab-services" data-i18n="guide.tabs.services">Services and versions</button>
               <button type="button" class="guide-tab-btn" role="tab" aria-selected="false" aria-controls="guide-tab-plugins" id="guide-tab-btn-plugins" data-target="guide-tab-plugins" data-i18n="guide.tabs.plugins">Commercial plugins</button>
+              <button type="button" class="guide-tab-btn" role="tab" aria-selected="false" aria-controls="guide-tab-oss" id="guide-tab-btn-oss" data-target="guide-tab-oss" data-i18n="guide.tabs.oss">Open-source plugins</button>
             </div>
 
             <div id="guide-tab-services" class="guide-tab-panel active" role="tabpanel" aria-labelledby="guide-tab-btn-services">
@@ -257,21 +258,42 @@
             <div id="guide-tab-plugins" class="guide-tab-panel" role="tabpanel" aria-labelledby="guide-tab-btn-plugins" hidden>
               <div class="grid two">
                 <div class="card-mini">
-                  <h3 data-i18n="guide.plugins.blockTitle">Commercial plugins and typical usage</h3>
-                  <p data-i18n="guide.plugins.backendReadme">Each plugin backend page includes a complete README in English, Spanish, Swedish, and Norwegian with setup, usage, and troubleshooting notes.</p>
+                  <h3 data-i18n="guide.plugins.blockTitle">QtilerAuth — commercial security plugin</h3>
+                  <p data-i18n="guide.plugins.backendReadme">The QtilerAuth backend page includes a complete README and an in-product "How it works &amp; Security" modal in English, Spanish, Swedish, and Norwegian with setup, usage, and troubleshooting notes.</p>
                   <ul>
-                    <li data-i18n="guide.plugins.item.auth">QtilerAuth (v0.2.0): authentication, API keys, role-based access, public/authenticated/private project sharing.</li>
-                    <li data-i18n="guide.plugins.item.search">ProjectSearch (v0.1.0): searchable endpoints and UI helpers for attribute-based search.</li>
-                    <li data-i18n="guide.plugins.item.qrigo">Qrigo (v0.1.0): Origo-oriented integration helpers and publishing shortcuts.</li>
-                    <li data-i18n="guide.plugins.item.vectortiles">VectorTiles (v0.2.0): MBTiles generation plus TileJSON/Style/MVT endpoints for vector delivery. Copy Style-URL and Source-URL from the dashboard.</li>
-                    <li data-i18n="guide.plugins.item.qtiler2qwc">Qtiler2qwc (v0.1.0): embeds a full QWC2 (QGIS Web Client 2) webmap viewer inside Qtiler. Publish QGIS projects as interactive web maps with dynamic themes, attribute search, and optional 3D terrain. Access the viewer at <code>/Qtiler2qwc/webmap</code> and the admin panel at <code>/Qtiler2qwc/admin</code>.</li>
+                    <li data-i18n-html="guide.plugins.item.auth"><strong>QtilerAuth (v0.2.0):</strong> users, roles, project ACLs (public / authenticated / private), API keys, JWT sessions with revocation, per-(user, IP) brute-force lockout, login audit trail, and a built-in proof-of-work captcha (no Google, no Cloudflare, GDPR-friendly).</li>
+                    <li data-i18n-html="guide.plugins.item.auth.crypto"><strong>Cryptography:</strong> bcrypt password hashes, SHA-256 hashed API keys, HMAC-SHA256 JWTs, constant-time comparisons, Helmet HTTP-header hardening, configurable CORS allow-list.</li>
+                    <li data-i18n-html="guide.plugins.item.auth.ops"><strong>Operations:</strong> single SQLite file (WAL mode), offline RSA-signed license activation, drop-in support for Cloudflare Turnstile / hCaptcha / reCAPTCHA as captcha alternatives.</li>
                   </ul>
                 </div>
                 <div class="card-mini">
                   <h3 data-i18n="guide.plugins.trialTitle">Commercial licensing behavior</h3>
-                  <p data-i18n="guide.plugins.trialBody">Commercial plugins include a one-month trial. During trial they work normally so you can validate workflows in your own environment.</p>
+                  <p data-i18n="guide.plugins.trialBody">QtilerAuth includes a one-month trial. During trial it works normally so you can validate authentication, ACLs, captcha and API-key workflows in your own environment.</p>
                   <p data-i18n-html="guide.plugins.removalBody">After the trial expires, Qtiler automatically disables and removes the commercial plugin. The server continues running in base mode with core Qtiler features.</p>
-                  <div class="tip" data-i18n="guide.plugins.renewBody">To keep a plugin active after trial, apply a valid commercial license key from MundoGIS.</div>
+                  <div class="tip" data-i18n="guide.plugins.renewBody">To keep QtilerAuth active after trial, apply a valid commercial license key from MundoGIS.</div>
+                </div>
+              </div>
+            </div>
+
+            <div id="guide-tab-oss" class="guide-tab-panel" role="tabpanel" aria-labelledby="guide-tab-btn-oss" hidden>
+              <div class="grid two">
+                <div class="card-mini">
+                  <h3 data-i18n="guide.oss.blockTitle">Open-source plugins (MPL-2.0)</h3>
+                  <p data-i18n="guide.oss.intro">These plugins ship with Qtiler under the Mozilla Public License 2.0. Free to use, modify, and redistribute under the MPL terms.</p>
+                  <ul>
+                    <li data-i18n="guide.oss.item.search">ProjectSearch (v0.1.0): searchable endpoints and UI helpers for attribute-based search.</li>
+                    <li data-i18n="guide.oss.item.qrigo">Qrigo (v0.1.0): Origo Map integration helpers for users who already run a standard Origo-map installation on their own server &mdash; it generates ready-to-paste JSON snippets to add Qtiler WMS/WMTS/WFS layers to your existing Origo <code>index.json</code>.</li>
+                    <li data-i18n="guide.oss.item.qtiler2origo">Qtiler2Origo (v0.1.0): the plugin that installs Origo on top of Qtiler itself. It lets you create and configure each map graphically using the QGIS library, and reuses Qtiler's cache and the WMS/WFS layers from projects published in Qtiler.</li>
+                    <li data-i18n="guide.oss.item.vectortiles">VectorTiles (v0.2.0): MBTiles generation plus TileJSON/Style/MVT endpoints for vector delivery. Copy Style-URL and Source-URL from the dashboard.</li>
+                    <li data-i18n-html="guide.oss.item.qtiler2qwc">Qtiler2qwc (v0.1.0): embeds a full QWC2 (QGIS Web Client 2) webmap viewer inside Qtiler. Publish QGIS projects as interactive web maps with dynamic themes, attribute search, and optional 3D terrain. Access the viewer at <code>/Qtiler2qwc/webmap</code> and the admin panel at <code>/Qtiler2qwc/admin</code>.</li>
+                    <li data-i18n="guide.oss.item.quantizedmesh">QuantizedMesh (v0.1.0): quantized-mesh terrain endpoints for 3D viewers (Cesium, QWC2 3D).</li>
+                  </ul>
+                </div>
+                <div class="card-mini">
+                  <h3 data-i18n="guide.oss.licenseTitle">Open-source licensing</h3>
+                  <p data-i18n-html="guide.oss.licenseBody">Distributed under <strong>MPL-2.0</strong>. Redistribution and modification are permitted; modified files must remain under MPL-2.0 and credit the original authors.</p>
+                  <p data-i18n="guide.oss.supportBody">Source code is shipped together with the plugin. Community contributions and bug reports are welcome via the Qtiler repository.</p>
+                  <div class="tip" data-i18n="guide.oss.tip">No license key required — these plugins never expire and never disable themselves.</div>
                 </div>
               </div>
             </div>

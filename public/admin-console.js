@@ -66,7 +66,12 @@ const I18N = {
     licenseDaysLeft: 'Days left: {days}',
     licenseExpires: 'Expires: {date}',
     licenseExpiresSoon: 'License expires in {days} days. Contact MundoGIS (support@mundogis.se) to renew.',
-    licenseRenew: 'Renew license',
+    licenseRenew: 'Request license',
+    licenseRequestModalTitle: 'Request license from MundoGIS',
+    licenseRequestModalIntro: 'Send the JSON below to support@mundogis.se. It contains the hardware fingerprint MundoGIS needs to issue a license bound to THIS server. It contains no secrets.',
+    licenseRequestDownload: 'Download JSON',
+    licenseRequestSendEmail: 'Send by email',
+    licenseRequestLoading: 'Preparing request…',
     licenseAddKey: 'Add license key',
     licenseAddKeyPrompt: 'Paste license key',
     licenseActivated: 'License activated.',
@@ -159,7 +164,12 @@ const I18N = {
     licenseDaysLeft: 'Días restantes: {days}',
     licenseExpires: 'Caduca: {date}',
     licenseExpiresSoon: 'La licencia vence en {days} días. Contacta a MundoGIS (support@mundogis.se) para renovar.',
-    licenseRenew: 'Renovar licencia',
+    licenseRenew: 'Solicitar licencia',
+    licenseRequestModalTitle: 'Solicitar licencia a MundoGIS',
+    licenseRequestModalIntro: 'Envía el JSON de abajo a support@mundogis.se. Contiene la huella de hardware que MundoGIS necesita para emitir una licencia ligada a ESTE servidor. No incluye secretos.',
+    licenseRequestDownload: 'Descargar JSON',
+    licenseRequestSendEmail: 'Enviar por correo',
+    licenseRequestLoading: 'Preparando solicitud…',
     licenseAddKey: 'Agregar clave de licencia',
     licenseAddKeyPrompt: 'Pega la clave de licencia',
     licenseActivated: 'Licencia activada.',
@@ -252,7 +262,12 @@ const I18N = {
     licenseDaysLeft: 'Dagar kvar: {days}',
     licenseExpires: 'Går ut: {date}',
     licenseExpiresSoon: 'Licensen går ut om {days} dagar. Kontakta MundoGIS (support@mundogis.se) för att förnya.',
-    licenseRenew: 'Förnya licens',
+    licenseRenew: 'Begär licens',
+    licenseRequestModalTitle: 'Begär licens från MundoGIS',
+    licenseRequestModalIntro: 'Skicka JSON nedan till support@mundogis.se. Den innehåller hårdvarans fingeravtryck som MundoGIS behöver för att utfärda en licens kopplad till DENNA server. Inga hemligheter ingår.',
+    licenseRequestDownload: 'Ladda ner JSON',
+    licenseRequestSendEmail: 'Skicka via e-post',
+    licenseRequestLoading: 'Förbereder begäran…',
     licenseAddKey: 'Lägg till licensnyckel',
     licenseAddKeyPrompt: 'Klistra in licensnyckel',
     licenseActivated: 'Licensen är aktiverad.',
@@ -887,11 +902,10 @@ function parseError(err, fallback) {
   return finalFallback;
 }
 
-function openRenewalModal(pluginName, instanceId) {
-  const subject = t('licenseRenewSubject', { plugin: pluginName });
-  const body = t('licenseRenewBody', { plugin: pluginName, instanceId: instanceId || '-' });
-  const fullText = `${subject}\n\n${body}`;
-
+function openRenewalModal(pluginName /*, instanceId (legacy, no longer used) */) {
+  // Open immediately with a placeholder so the user gets feedback, then
+  // fetch the request-info JSON from the server (it embeds the stable
+  // hardware fingerprint MundoGIS needs to sign a binding license).
   const overlay = document.createElement('div');
   overlay.style.position = 'fixed';
   overlay.style.inset = '0';
@@ -913,19 +927,21 @@ function openRenewalModal(pluginName, instanceId) {
   modal.style.padding = '16px';
 
   const title = document.createElement('h3');
-  title.textContent = t('licenseRenewModalTitle');
+  title.textContent = t('licenseRequestModalTitle');
   title.style.margin = '0 0 8px 0';
 
   const intro = document.createElement('p');
-  intro.textContent = t('licenseRenewModalIntro');
+  intro.textContent = t('licenseRequestModalIntro');
   intro.style.margin = '0 0 10px 0';
   intro.style.color = '#9fb0ca';
 
   const area = document.createElement('textarea');
-  area.value = fullText;
+  area.value = t('licenseRequestLoading');
   area.readOnly = true;
   area.style.width = '100%';
-  area.style.minHeight = '220px';
+  area.style.minHeight = '260px';
+  area.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+  area.style.fontSize = '12px';
   area.style.background = '#0b1220';
   area.style.color = '#e6edf7';
   area.style.border = '1px solid #2a3955';
@@ -947,22 +963,36 @@ function openRenewalModal(pluginName, instanceId) {
   copyBtn.type = 'button';
   copyBtn.className = 'button';
   copyBtn.textContent = t('licenseRenewModalCopy');
+  copyBtn.disabled = true;
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.type = 'button';
+  downloadBtn.className = 'button';
+  downloadBtn.textContent = t('licenseRequestDownload');
+  downloadBtn.disabled = true;
+
+  const emailBtn = document.createElement('button');
+  emailBtn.type = 'button';
+  emailBtn.className = 'button button-secondary';
+  emailBtn.textContent = t('licenseRequestSendEmail');
+  emailBtn.disabled = true;
 
   const cleanup = () => {
     overlay.remove();
     document.removeEventListener('keydown', onKey);
   };
-  const onKey = (ev) => {
-    if (ev.key === 'Escape') cleanup();
-  };
+  const onKey = (ev) => { if (ev.key === 'Escape') cleanup(); };
 
   closeBtn.addEventListener('click', cleanup);
-  overlay.addEventListener('click', (ev) => {
-    if (ev.target === overlay) cleanup();
-  });
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) cleanup(); });
+
+  let currentText = '';
+  let currentFilename = `qtiler-license-request-${pluginName || 'plugin'}.json`;
+
   copyBtn.addEventListener('click', async () => {
+    if (!currentText) return;
     try {
-      await navigator.clipboard.writeText(fullText);
+      await navigator.clipboard.writeText(currentText);
       showMessage('success', t('licenseRenewModalCopy'));
     } catch {
       area.focus();
@@ -971,11 +1001,43 @@ function openRenewalModal(pluginName, instanceId) {
     }
   });
 
-  actions.append(copyBtn, closeBtn);
+  downloadBtn.addEventListener('click', () => {
+    if (!currentText) return;
+    const blob = new Blob([currentText], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  });
+
+  emailBtn.addEventListener('click', () => {
+    if (!currentText) return;
+    const subject = encodeURIComponent(`License request - ${pluginName || ''}`);
+    const body = encodeURIComponent(`Please issue a license for plugin "${pluginName}" using the JSON below:\n\n${currentText}`);
+    window.location.href = `mailto:support@mundogis.se?subject=${subject}&body=${body}`;
+  });
+
+  actions.append(downloadBtn, copyBtn, emailBtn, closeBtn);
   modal.append(title, intro, area, actions);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
   document.addEventListener('keydown', onKey);
+
+  // Fetch the actual request payload from the backend.
+  const url = `/licenses/request-info${pluginName ? `?plugin=${encodeURIComponent(pluginName)}` : ''}`;
+  api(url).then((info) => {
+    currentText = JSON.stringify(info, null, 2);
+    area.value = currentText;
+    copyBtn.disabled = false;
+    downloadBtn.disabled = false;
+    emailBtn.disabled = false;
+  }).catch((err) => {
+    area.value = parseError(err, 'Failed to load license request info');
+  });
 }
 
 async function api(url, options = {}) {
@@ -1712,7 +1774,6 @@ async function checkQrigoEnabled() {
 }
 
 async function loadSearchableLayers() {
-  return; // Searchable layers UI removed — managed within project access
   if (!hasSearchableUi()) return;
   if (!qrigoEnabled) {
     if (searchableLayersSection) searchableLayersSection.hidden = true;

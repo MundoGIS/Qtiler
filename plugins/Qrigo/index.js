@@ -736,12 +736,31 @@ export const register = async ({ app, baseDir }) => {
             ul, ol { margin: 0 0 12px 18px; color: #334155; }
             li { margin-bottom: 6px; }
             .note { margin-top: 14px; padding: 12px 14px; background: #f1f5f9; border-radius: 12px; color: #475569; font-size: 0.95rem; }
+            .hiw-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border-radius: 999px; border: 2px solid #2563eb; background: linear-gradient(135deg,#eff6ff,#dbeafe); color: #1d4ed8; font-weight: 700; cursor: pointer; font-size: 0.95rem; box-shadow: 0 4px 10px rgba(15,23,42,.08); transition: transform .15s, box-shadow .15s, background .15s; }
+            .hiw-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(37,99,235,.2); background: linear-gradient(135deg,#dbeafe,#bfdbfe); }
+            .hiw-actions { margin: 4px 0 16px; }
+            .hiw-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+            .hiw-modal[hidden] { display: none; }
+            .hiw-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(2px); }
+            .hiw-card { position: relative; z-index: 1; width: min(880px,100%); max-height: calc(100vh - 48px); background: #fff; color: #0f172a; border-radius: 14px; box-shadow: 0 20px 50px rgba(15,23,42,.25); border: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; }
+            .hiw-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #e2e8f0; background: #eff6ff; }
+            .hiw-head h2 { margin: 0; font-size: 1.25rem; color: #1d4ed8; }
+            .hiw-close { background: transparent; border: none; font-size: 1.6rem; line-height: 1; cursor: pointer; color: #64748b; padding: 4px 10px; border-radius: 8px; }
+            .hiw-close:hover { background: #e2e8f0; color: #0f172a; }
+            .hiw-body { padding: 20px 26px 26px; overflow-y: auto; font-size: 0.95rem; line-height: 1.55; }
+            .hiw-body h3 { margin: 18px 0 8px; font-size: 1.02rem; color: #1d4ed8; }
+            .hiw-body ul { margin: 6px 0 12px; padding-left: 22px; }
+            .hiw-body li { margin-bottom: 4px; }
+            .hiw-body code { background: #eff6ff; padding: 1px 6px; border-radius: 4px; font-size: 0.88em; color: #1d4ed8; }
           </style>
         </head>
         <body>
           <main class="card">
             <h2 data-i18n="qrigo.title">Qrigo plugin</h2>
             <p data-i18n="qrigo.subtitle">Adds Origo-ready layer snippets and WMS/WMTS/WFS connection helpers directly inside the Qtiler layer modal.</p>
+            <div class="hiw-actions">
+              <button id="qrigo-open-hiw" type="button" class="hiw-btn" data-i18n="qrigo.hiw.button">How it works &amp; Security</button>
+            </div>
 
             <section>
               <h3 data-i18n="qrigo.what.title">What Qrigo does</h3>
@@ -791,6 +810,69 @@ export const register = async ({ app, baseDir }) => {
             <div class="note" data-i18n="qrigo.note">Qrigo does not change data in Qtiler; it only prepares configuration text you can copy into Origo.</div>
           </main>
 
+          <div id="qrigo-hiw-modal" class="hiw-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="qrigo-hiw-title">
+            <div class="hiw-backdrop" data-hiw-close></div>
+            <div class="hiw-card" role="document">
+              <header class="hiw-head">
+                <h2 id="qrigo-hiw-title" data-i18n="qrigo.hiw.title">How Qrigo works &amp; security</h2>
+                <button type="button" class="hiw-close" data-hiw-close aria-label="Close">&times;</button>
+              </header>
+              <div class="hiw-body">
+                <p data-i18n="qrigo.hiw.lead">Qrigo is a read-only helper that turns each Qtiler layer into ready-to-paste Origo snippets. It does not modify your QGIS projects or the Qtiler database.</p>
+
+                <h3 data-i18n="qrigo.hiw.vs.title">Qrigo vs Qtiler2Origo</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.vs.1"><strong>Qrigo</strong> is for users who already run a standard Origo-map installation on their own server: it only generates the JSON snippets you paste into your existing Origo <code>index.json</code>.</li>
+                  <li data-i18n="qrigo.hiw.vs.2"><strong>Qtiler2Origo</strong> is the plugin that installs Origo on top of Qtiler itself, lets you create and configure each map graphically using the QGIS library, and reuses Qtiler's cache and the WMS/WFS layers from projects published in Qtiler.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.arch.title">1. Architecture</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.arch.1">Express plugin loaded from <code>plugins/Qrigo/</code>; no database, no background workers.</li>
+                  <li data-i18n="qrigo.hiw.arch.2">Reads layer metadata from the running Qtiler project on every request &mdash; no separate cache to invalidate.</li>
+                  <li data-i18n="qrigo.hiw.arch.3">Adds an Origo tab to the layer-details modal in the Qtiler dashboard.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.flow.title">2. Step by step</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.flow.1">Open a project in the dashboard and click any layer to display its details modal.</li>
+                  <li data-i18n="qrigo.hiw.flow.2">Click the <strong>Origo</strong> tab. Qrigo inspects the layer (WMS/WMTS/WFS, BBOX, resolutions, geometry, attributes).</li>
+                  <li data-i18n="qrigo.hiw.flow.3">It generates two JSON blocks: a <code>source</code> entry (URL + parameters) and a <code>layer</code> entry (id, title, style, visibility).</li>
+                  <li data-i18n="qrigo.hiw.flow.4">Copy each block with the dedicated button and paste them into your Origo <code>index.json</code>.</li>
+                  <li data-i18n="qrigo.hiw.flow.5">If the layer is editable or searchable, the snippet also includes the matching Origo controls.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.wfs.title">3. WFS &amp; WFS-T compatibility</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.wfs.1">Geometry type, geometry column, namespace and typename are normalised so QGIS Server and Origo agree on identifiers.</li>
+                  <li data-i18n="qrigo.hiw.wfs.2">Special characters in layer names are escaped to valid XML identifiers; original titles are preserved for display.</li>
+                  <li data-i18n="qrigo.hiw.wfs.3">For transactional editing, WFS 1.1.0 is recommended &mdash; the snippet wires the version automatically when the layer is editable.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.auth.title">4. Integration with QtilerAuth</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.auth.1">When QtilerAuth is enabled, copied URLs include an <code>api_key</code> placeholder so QGIS Desktop and Origo can authenticate.</li>
+                  <li data-i18n="qrigo.hiw.auth.2">Project ACLs (public / authenticated / private) are enforced upstream by QtilerAuth &mdash; Qrigo never bypasses them.</li>
+                  <li data-i18n="qrigo.hiw.auth.3">Cached <code>GetCapabilities</code> responses are served without the <code>api_key</code> parameter to prevent leaks.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.security.title">5. Security &amp; privacy</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.security.1">Qrigo is read-only on Qtiler data; it cannot publish, edit or delete projects or layers.</li>
+                  <li data-i18n="qrigo.hiw.security.2">No third-party network calls. Snippets are generated locally from the project you are looking at.</li>
+                  <li data-i18n="qrigo.hiw.security.3">Open source under MPL-2.0; auditable in <code>plugins/Qrigo/index.js</code>.</li>
+                </ul>
+
+                <h3 data-i18n="qrigo.hiw.troubleshoot.title">6. Troubleshooting</h3>
+                <ul>
+                  <li data-i18n="qrigo.hiw.troubleshoot.1">Saving fails in QGIS / Origo: confirm the URL contains <code>api_key</code> for protected projects.</li>
+                  <li data-i18n="qrigo.hiw.troubleshoot.2">Empty layer list: verify the layer is published in the active QGIS project and that QtilerAuth grants you access.</li>
+                  <li data-i18n="qrigo.hiw.troubleshoot.3">Wrong CRS in Origo: check the source block; Origo expects EPSG codes matching the project resolutions.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
           <script>
             const TRANSLATIONS = {
               en: {
@@ -816,7 +898,39 @@ export const register = async ({ app, baseDir }) => {
                 'qrigo.troubleshoot.1': 'If saving fails in external clients, verify URLs include api_key for protected projects.',
                 'qrigo.troubleshoot.2': 'For QGIS WFS editing, prefer WFS 1.1.0 when testing transactional compatibility.',
                 'qrigo.troubleshoot.3': 'If layer names contain special symbols, Qrigo sanitizes typenames to valid XML identifiers.',
-                'qrigo.note': 'Qrigo does not change data in Qtiler; it only prepares configuration text you can copy into Origo.'
+                'qrigo.note': 'Qrigo does not change data in Qtiler; it only prepares configuration text you can copy into Origo.',
+                'qrigo.hiw.button': 'How it works & Security',
+                'qrigo.hiw.title': 'How Qrigo works & security',
+                'qrigo.hiw.lead': 'Qrigo is a read-only helper that turns each Qtiler layer into ready-to-paste Origo snippets. It does not modify your QGIS projects or the Qtiler database.',
+                'qrigo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
+                'qrigo.hiw.vs.1': 'Qrigo is meant for users who already run a standard Origo-map installation on their own server: it only generates the JSON snippets you paste into your existing Origo index.json.',
+                'qrigo.hiw.vs.2': 'Qtiler2Origo is the plugin that installs Origo on top of Qtiler itself, lets you create and configure each map graphically using the QGIS library, and reuses Qtiler\'s cache and the WMS/WFS layers from projects published in Qtiler.',
+                'qrigo.hiw.arch.title': '1. Architecture',
+                'qrigo.hiw.arch.1': 'Express plugin loaded from plugins/Qrigo/; no database, no background workers.',
+                'qrigo.hiw.arch.2': 'Reads layer metadata from the running Qtiler project on every request — no separate cache to invalidate.',
+                'qrigo.hiw.arch.3': 'Adds an Origo tab to the layer-details modal in the Qtiler dashboard.',
+                'qrigo.hiw.flow.title': '2. Step by step',
+                'qrigo.hiw.flow.1': 'Open a project in the dashboard and click any layer to display its details modal.',
+                'qrigo.hiw.flow.2': 'Click the Origo tab. Qrigo inspects the layer (WMS/WMTS/WFS, BBOX, resolutions, geometry, attributes).',
+                'qrigo.hiw.flow.3': 'It generates two JSON blocks: a source entry (URL + parameters) and a layer entry (id, title, style, visibility).',
+                'qrigo.hiw.flow.4': 'Copy each block with the dedicated button and paste them into your Origo index.json.',
+                'qrigo.hiw.flow.5': 'If the layer is editable or searchable, the snippet also includes the matching Origo controls.',
+                'qrigo.hiw.wfs.title': '3. WFS & WFS-T compatibility',
+                'qrigo.hiw.wfs.1': 'Geometry type, geometry column, namespace and typename are normalised so QGIS Server and Origo agree on identifiers.',
+                'qrigo.hiw.wfs.2': 'Special characters in layer names are escaped to valid XML identifiers; original titles are preserved for display.',
+                'qrigo.hiw.wfs.3': 'For transactional editing, WFS 1.1.0 is recommended — the snippet wires the version automatically when the layer is editable.',
+                'qrigo.hiw.auth.title': '4. Integration with QtilerAuth',
+                'qrigo.hiw.auth.1': 'When QtilerAuth is enabled, copied URLs include an api_key placeholder so QGIS Desktop and Origo can authenticate.',
+                'qrigo.hiw.auth.2': 'Project ACLs (public / authenticated / private) are enforced upstream by QtilerAuth — Qrigo never bypasses them.',
+                'qrigo.hiw.auth.3': 'Cached GetCapabilities responses are served without the api_key parameter to prevent leaks.',
+                'qrigo.hiw.security.title': '5. Security & privacy',
+                'qrigo.hiw.security.1': 'Qrigo is read-only on Qtiler data; it cannot publish, edit or delete projects or layers.',
+                'qrigo.hiw.security.2': 'No third-party network calls. Snippets are generated locally from the project you are looking at.',
+                'qrigo.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qrigo/index.js.',
+                'qrigo.hiw.troubleshoot.title': '6. Troubleshooting',
+                'qrigo.hiw.troubleshoot.1': 'Saving fails in QGIS / Origo: confirm the URL contains api_key for protected projects.',
+                'qrigo.hiw.troubleshoot.2': 'Empty layer list: verify the layer is published in the active QGIS project and that QtilerAuth grants you access.',
+                'qrigo.hiw.troubleshoot.3': 'Wrong CRS in Origo: check the source block; Origo expects EPSG codes matching the project resolutions.'
               },
               es: {
                 'qrigo.title': 'Plugin Qrigo',
@@ -841,7 +955,39 @@ export const register = async ({ app, baseDir }) => {
                 'qrigo.troubleshoot.1': 'Si falla el guardado en clientes externos, verifica que las URLs incluyan api_key en proyectos protegidos.',
                 'qrigo.troubleshoot.2': 'Para edición WFS desde QGIS, prioriza WFS 1.1.0 al validar compatibilidad transaccional.',
                 'qrigo.troubleshoot.3': 'Si los nombres de capa tienen símbolos especiales, Qrigo sanea los typenames a identificadores XML válidos.',
-                'qrigo.note': 'Qrigo no modifica datos en Qtiler; solo prepara texto de configuración para copiar en Origo.'
+                'qrigo.note': 'Qrigo no modifica datos en Qtiler; solo prepara texto de configuración para copiar en Origo.',
+                'qrigo.hiw.button': 'Cómo funciona y seguridad',
+                'qrigo.hiw.title': 'Cómo funciona Qrigo y por qué es seguro',
+                'qrigo.hiw.lead': 'Qrigo es un asistente de solo lectura que convierte cada capa de Qtiler en snippets listos para pegar en Origo. No modifica tus proyectos QGIS ni la base de datos de Qtiler.',
+                'qrigo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
+                'qrigo.hiw.vs.1': 'Qrigo está pensado para usuarios que ya tienen Origo-map instalado de forma estándar en su propio servidor: solo genera los snippets JSON que pegas en el index.json de tu Origo existente.',
+                'qrigo.hiw.vs.2': 'Qtiler2Origo es el plugin que permite instalar Origo sobre Qtiler, ofrece la facilidad de usar la biblioteca de QGIS y crear y configurar cada mapa de forma gráfica, y aprovecha el caché de Qtiler y las capas WMS/WFS de los proyectos añadidos en Qtiler.',
+                'qrigo.hiw.arch.title': '1. Arquitectura',
+                'qrigo.hiw.arch.1': 'Plugin Express cargado desde plugins/Qrigo/; sin base de datos ni procesos en segundo plano.',
+                'qrigo.hiw.arch.2': 'Lee los metadatos de capa del proyecto Qtiler en cada petición — sin caché propia que invalidar.',
+                'qrigo.hiw.arch.3': 'Añade una pestaña Origo al modal de detalles de capa del panel de Qtiler.',
+                'qrigo.hiw.flow.title': '2. Paso a paso',
+                'qrigo.hiw.flow.1': 'Abre un proyecto en el panel y haz clic en cualquier capa para ver su modal de detalles.',
+                'qrigo.hiw.flow.2': 'Pulsa la pestaña Origo. Qrigo inspecciona la capa (WMS/WMTS/WFS, BBOX, resoluciones, geometría, atributos).',
+                'qrigo.hiw.flow.3': 'Genera dos bloques JSON: una entrada source (URL + parámetros) y una entrada layer (id, título, estilo, visibilidad).',
+                'qrigo.hiw.flow.4': 'Copia cada bloque con su botón y pégalos en tu index.json de Origo.',
+                'qrigo.hiw.flow.5': 'Si la capa es editable o buscable, el snippet incluye también los controles equivalentes de Origo.',
+                'qrigo.hiw.wfs.title': '3. Compatibilidad WFS y WFS-T',
+                'qrigo.hiw.wfs.1': 'Tipo de geometría, columna geométrica, namespace y typename se normalizan para que QGIS Server y Origo coincidan en los identificadores.',
+                'qrigo.hiw.wfs.2': 'Los caracteres especiales en nombres de capa se escapan a identificadores XML válidos; los títulos originales se preservan para mostrar.',
+                'qrigo.hiw.wfs.3': 'Para edición transaccional se recomienda WFS 1.1.0 — el snippet fija la versión automáticamente cuando la capa es editable.',
+                'qrigo.hiw.auth.title': '4. Integración con QtilerAuth',
+                'qrigo.hiw.auth.1': 'Con QtilerAuth activo, las URLs copiadas incluyen un placeholder api_key para que QGIS Desktop y Origo puedan autenticarse.',
+                'qrigo.hiw.auth.2': 'Las ACL de proyecto (public / authenticated / private) las aplica QtilerAuth — Qrigo nunca las omite.',
+                'qrigo.hiw.auth.3': 'Las respuestas GetCapabilities cacheadas se sirven sin el parámetro api_key para evitar fugas.',
+                'qrigo.hiw.security.title': '5. Seguridad y privacidad',
+                'qrigo.hiw.security.1': 'Qrigo es de solo lectura sobre los datos de Qtiler; no puede publicar, editar ni borrar proyectos o capas.',
+                'qrigo.hiw.security.2': 'Sin llamadas a terceros. Los snippets se generan localmente a partir del proyecto que estás viendo.',
+                'qrigo.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qrigo/index.js.',
+                'qrigo.hiw.troubleshoot.title': '6. Resolución de problemas',
+                'qrigo.hiw.troubleshoot.1': 'El guardado falla en QGIS / Origo: confirma que la URL incluye api_key en proyectos protegidos.',
+                'qrigo.hiw.troubleshoot.2': 'Lista de capas vacía: verifica que la capa esté publicada en el proyecto QGIS activo y que QtilerAuth te dé acceso.',
+                'qrigo.hiw.troubleshoot.3': 'CRS incorrecto en Origo: revisa el bloque source; Origo espera códigos EPSG que coincidan con las resoluciones del proyecto.'
               },
               sv: {
                 'qrigo.title': 'Qrigo-plugin',
@@ -866,15 +1012,49 @@ export const register = async ({ app, baseDir }) => {
                 'qrigo.troubleshoot.1': 'Om sparning misslyckas i externa klienter, kontrollera att URL:er innehåller api_key för skyddade projekt.',
                 'qrigo.troubleshoot.2': 'För WFS-redigering i QGIS, använd helst WFS 1.1.0 vid transaktionstester.',
                 'qrigo.troubleshoot.3': 'Om lagernamn innehåller specialtecken sanerar Qrigo typnamn till giltiga XML-identifikatorer.',
-                'qrigo.note': 'Qrigo ändrar inte data i Qtiler; det förbereder bara konfigurationstext att kopiera till Origo.'
+                'qrigo.note': 'Qrigo ändrar inte data i Qtiler; det förbereder bara konfigurationstext att kopiera till Origo.',
+                'qrigo.hiw.button': 'Så fungerar det & säkerhet',
+                'qrigo.hiw.title': 'Så fungerar Qrigo och varför det är säkert',
+                'qrigo.hiw.lead': 'Qrigo är en läs-bara hjälp som omvandlar varje Qtiler-lager till färdiga Origo-utdrag. Det ändrar inte dina QGIS-projekt eller Qtilers databas.',
+                'qrigo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
+                'qrigo.hiw.vs.1': 'Qrigo riktar sig till användare som redan kör en standardinstallation av Origo-map på sin egen server: det genererar bara JSON-utdragen som du klistrar in i din befintliga Origo index.json.',
+                'qrigo.hiw.vs.2': 'Qtiler2Origo är tillägget som installerar Origo ovanpå själva Qtiler, låter dig skapa och konfigurera varje karta grafiskt via QGIS-biblioteket och återanvänder Qtilers cache samt WMS/WFS-lagren från projekt som publicerats i Qtiler.',
+                'qrigo.hiw.arch.title': '1. Arkitektur',
+                'qrigo.hiw.arch.1': 'Express-plugin laddat från plugins/Qrigo/; ingen databas, inga bakgrundsjobb.',
+                'qrigo.hiw.arch.2': 'Läser lagermetadata från det aktiva Qtiler-projektet vid varje begäran — ingen egen cache att invalidera.',
+                'qrigo.hiw.arch.3': 'Lägger till en Origo-flik i lagerdetalj-modalen i Qtilers adminpanel.',
+                'qrigo.hiw.flow.title': '2. Steg för steg',
+                'qrigo.hiw.flow.1': 'Öppna ett projekt i panelen och klicka på ett lager för att visa detaljmodalen.',
+                'qrigo.hiw.flow.2': 'Klicka på Origo-fliken. Qrigo inspekterar lagret (WMS/WMTS/WFS, BBOX, upplösningar, geometri, attribut).',
+                'qrigo.hiw.flow.3': 'Det skapar två JSON-block: en source-post (URL + parametrar) och en layer-post (id, titel, stil, synlighet).',
+                'qrigo.hiw.flow.4': 'Kopiera varje block med dess knapp och klistra in i din Origo index.json.',
+                'qrigo.hiw.flow.5': 'Om lagret är redigerbart eller sökbart inkluderas motsvarande Origo-kontroller i utdraget.',
+                'qrigo.hiw.wfs.title': '3. WFS- och WFS-T-kompatibilitet',
+                'qrigo.hiw.wfs.1': 'Geometri-typ, geometri-kolumn, namespace och typnamn normaliseras så QGIS Server och Origo är överens om identifierare.',
+                'qrigo.hiw.wfs.2': 'Specialtecken i lagernamn ersätts till giltiga XML-identifikatorer; ursprungliga titlar behålls för visning.',
+                'qrigo.hiw.wfs.3': 'För transaktionsredigering rekommenderas WFS 1.1.0 — utdraget sätter versionen automatiskt när lagret är redigerbart.',
+                'qrigo.hiw.auth.title': '4. Integration med QtilerAuth',
+                'qrigo.hiw.auth.1': 'När QtilerAuth är aktivt innehåller kopierade URL:er en api_key-platshållare så att QGIS Desktop och Origo kan autentisera.',
+                'qrigo.hiw.auth.2': 'Projekt-ACL:er (public / authenticated / private) hanteras av QtilerAuth — Qrigo går aldrig förbi dem.',
+                'qrigo.hiw.auth.3': 'Cachade GetCapabilities-svar serveras utan api_key-parametern för att förhindra läckage.',
+                'qrigo.hiw.security.title': '5. Säkerhet och integritet',
+                'qrigo.hiw.security.1': 'Qrigo är skrivskyddat mot Qtiler-data; det kan inte publicera, redigera eller radera projekt eller lager.',
+                'qrigo.hiw.security.2': 'Inga tredjepartsanrop. Utdrag genereras lokalt utifrån det projekt du tittar på.',
+                'qrigo.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qrigo/index.js.',
+                'qrigo.hiw.troubleshoot.title': '6. Felsökning',
+                'qrigo.hiw.troubleshoot.1': 'Sparning misslyckas i QGIS / Origo: kontrollera att URL:en innehåller api_key för skyddade projekt.',
+                'qrigo.hiw.troubleshoot.2': 'Tom lagerlista: verifiera att lagret är publicerat i det aktiva QGIS-projektet och att QtilerAuth ger dig åtkomst.',
+                'qrigo.hiw.troubleshoot.3': 'Fel CRS i Origo: kontrollera source-blocket; Origo förväntar sig EPSG-koder som matchar projektets upplösningar.'
               }
             };
 
             const SUPPORTED = ['en', 'es', 'sv', 'no'];
             const normalizeLang = (value) => {
               const raw = String(value || '').toLowerCase();
+              if (raw.startsWith('nb') || raw.startsWith('nn') || raw.startsWith('no')) return 'sv';
               if (SUPPORTED.includes(raw)) return raw;
               const base = raw.split('-')[0];
+              if (base === 'nb' || base === 'nn' || base === 'no') return 'sv';
               return SUPPORTED.includes(base) ? base : 'en';
             };
 
@@ -908,6 +1088,18 @@ export const register = async ({ app, baseDir }) => {
 
             setInterval(syncLanguage, 1000);
             applyTranslations();
+
+            // How-it-works modal wiring
+            (function () {
+              const modal = document.getElementById('qrigo-hiw-modal');
+              const openBtn = document.getElementById('qrigo-open-hiw');
+              if (!modal || !openBtn) return;
+              const open = () => { modal.hidden = false; modal.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden'; };
+              const close = () => { modal.hidden = true; modal.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; };
+              openBtn.addEventListener('click', open);
+              modal.querySelectorAll('[data-hiw-close]').forEach((el) => el.addEventListener('click', close));
+              document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+            })();
           </script>
         </body>
       </html>`;

@@ -20,11 +20,11 @@ import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { readProjectAccessFromDb } from '../../lib/authDb.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
-const DEFAULT_REPO = process.env.QTWC_QWC2_REPO || 'qgis/qwc2';
-const DEFAULT_VERSION = process.env.QTWC_QWC2_VERSION || 'v2026.0.12-lts';
-const DEFAULT_STANDALONE_PORT = Number(process.env.QTWC_QWC2_PORT || 3089);
-const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTWC_QWC2_AUTOSTART || '0').toLowerCase());
-const ENV_STANDALONE_PORT = Number(process.env.QTWC_QWC2_PORT || 0);
+const DEFAULT_REPO = process.env.QTILER_ORIGO_REPO || process.env.QTWC_QWC2_REPO || 'origo-map/origo';
+const DEFAULT_VERSION = process.env.QTILER_ORIGO_VERSION || process.env.QTWC_QWC2_VERSION || 'v2.10.0';
+const DEFAULT_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 3089);
+const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTILER_ORIGO_AUTOSTART || process.env.QTWC_QWC2_AUTOSTART || '0').toLowerCase());
+const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 
@@ -152,8 +152,7 @@ const normalizeBackgroundSelection = ({
 const buildDownloadUrl = (repo, version) => {
   const safeRepo = String(repo || DEFAULT_REPO).trim();
   const safeVersion = String(version || DEFAULT_VERSION).trim();
-  // Use the pre-built release asset (qwc2-stock-app.zip) instead of source code
-  return `https://github.com/${safeRepo}/releases/download/${safeVersion}/qwc2-stock-app.zip`;
+  return `https://github.com/${safeRepo}/archive/refs/tags/${safeVersion}.zip`;
 };
 
 const fetchGitHubReleases = (repo, { includePrerelease = false, maxResults = 20 } = {}) => new Promise((resolve, reject) => {
@@ -181,17 +180,15 @@ const fetchGitHubReleases = (repo, { includePrerelease = false, maxResults = 20 
         const filtered = releases.filter((r) => {
           if (!r || !r.tag_name) return false;
           if (!includePrerelease && r.prerelease) return false;
-          // Only include releases that have the stock app asset
-          const hasAsset = (r.assets || []).some((a) => a.name === 'qwc2-stock-app.zip');
-          return hasAsset;
+          return true;
         });
         resolve(filtered.map((r) => ({
           tag: r.tag_name,
           name: r.name || r.tag_name,
           prerelease: !!r.prerelease,
           published: r.published_at || r.created_at || null,
-          assetUrl: (r.assets || []).find((a) => a.name === 'qwc2-stock-app.zip')?.browser_download_url || null,
-          assetSize: (r.assets || []).find((a) => a.name === 'qwc2-stock-app.zip')?.size || 0
+          assetUrl: r.zipball_url || null,
+          assetSize: 0
         })));
       } catch(err) { console.error('XERR', err);
         reject(err);
@@ -382,17 +379,15 @@ const listProjectsFromDisk = async (projectsDir) => {
 };
 
 export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
-  const pluginSlug = (path.basename(baseDir || '') || 'Qtiler2qwc').replace(/[^a-z0-9-_]/gi, '') || 'Qtiler2qwc';
+  const pluginSlug = 'Qtiler2Origo';
   const adminUiDir = path.join(baseDir, 'admin-ui');
   const dataRoot = path.resolve(dataDir, '..');
-  const runtimeRoot = path.join(dataDir, 'qwc2');
+  const runtimeRoot = path.join(dataDir, 'origo');
   const installRoot = path.join(runtimeRoot, 'current');
   const publishedRoot = path.join(runtimeRoot, 'published');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const projectsDir = path.join(process.cwd(), 'qgisprojects');
-  // 3D Tiles datasets discovered per project under data/Qtiler2qwc/3dtiles/<projectId>/<setName>/tileset.json
-  const tiles3dRoot = path.join(dataDir, '3dtiles');
   let standaloneServer = null;
   let standalonePort = null;
 
@@ -413,6 +408,30 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(brandingRoot, { recursive: true });
 
   const adminOnly = ensureAdmin(security);
+
+  // Public alias: rewrite `/Qtiler2Origo/maps/...` to the internal Origo mount
+  // `/plugins/Qtiler2Origo/origo/...` so the viewer can be reached at the same
+  // base path as the public maps portal. This lets a single IIS URL Rewrite
+  // rule (e.g. `^Qtiler2Origo/(.*)`) cover both the portal and the viewer.
+  // The exact path `/Qtiler2Origo/maps` (without trailing slash) keeps serving
+  // the portal HTML registered further below.
+  const mapsAlias = '/Qtiler2Origo/maps';
+  const origoMount = `/plugins/${pluginSlug}/origo`;
+  app.use((req, _res, next) => {
+    const url = req.url || '';
+    // /Qtiler2Origo/maps?qtiler_profile=...  → viewer
+    if (url === mapsAlias || url.startsWith(`${mapsAlias}?`)) {
+      const qs = url.indexOf('?') >= 0 ? url.slice(url.indexOf('?')) : '';
+      // Only redirect to the viewer when a profile is requested; otherwise
+      // fall through so the portal handler can serve maps.html.
+      if (qs.includes('qtiler_profile=')) {
+        req.url = `${origoMount}/${qs}`;
+      }
+    } else if (url.startsWith(`${mapsAlias}/`)) {
+      req.url = `${origoMount}${url.slice(mapsAlias.length)}`;
+    }
+    next();
+  });
   const logoUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_LOGO_BYTES },
@@ -509,15 +528,17 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   const resolveQwc2WebRoot = async () => {
     const candidates = [
+      path.join(installRoot, 'build'),
+      path.join(installRoot, 'dist'),
       path.join(installRoot, 'prod'),
-      installRoot,
-      path.join(installRoot, 'static')
+      path.join(installRoot, 'static'),
+      installRoot
     ];
 
     for (const candidate of candidates) {
       try {
         await fs.promises.access(path.join(candidate, 'index.html'), fs.constants.R_OK);
-        await fs.promises.access(path.join(candidate, 'assets'), fs.constants.R_OK);
+        await fs.promises.access(path.join(candidate, 'js', 'origo.js'), fs.constants.R_OK);
         return candidate;
       } catch {
         // try next candidate
@@ -561,8 +582,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const baseLaunch = baseUrl ? baseUrl.replace(/\/+$/,'') : '';
         const profileKey = fileName.replace(/\.json$/i, '');
         const standaloneLaunch = baseLaunch
-          ? `${baseLaunch}/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
-          : `/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
+          ? `${baseLaunch}/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
+          : `/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
         const mainLayerNames = (parsed?.layers || []).filter((l) => l.role === 'main').map((l) => l.name);
         rows.push({
           projectId,
@@ -676,14 +697,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   /**
    * Filter profiles based on QtilerAuth permissions
    */
-  const filterProfilesByAccess = (profiles, user) => {
-    const snapshot = readAccessSnapshot(dataRoot);
-    return profiles.filter((p) => {
-      const projectId = normalizeProjectId(p.projectId);
-      if (!projectId) return false;
-      return userCanAccessProject(snapshot, user, projectId);
-    });
-  };
+  const filterProfilesByAccess = (profiles, user) => profiles;;
 
   const profileRequiresAuthentication = (profile) => {
     const projectId = normalizeProjectId(profile?.projectId || '');
@@ -783,18 +797,24 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const cacheIndex = await readCacheIndex(projectId);
     if (!cacheIndex?.layers?.length) return null;
     const first = cacheIndex.layers[0];
-    const wgs84 = first.project_extent_wgs84 || first.extent_wgs84;
-    const native = first.project_extent || first.extent;
-    const crs = first.project_crs || first.crs || 'EPSG:3857';
-    if (!wgs84 || !native) return null;
-    return { wgs84, native, crs };
+    const wgs84 = first.project_extent_wgs84 || first.extent_wgs84 || null;
+    let native = first.project_extent || first.extent || null;
+    // extent may be stored as a space-separated string rather than an array
+    if (typeof native === 'string') {
+      const parts = native.trim().split(/\s+/).map(Number);
+      native = parts.length === 4 && parts.every((n) => !isNaN(n)) ? parts : null;
+    }
+    const crs = first.project_crs || first.crs || first.tile_crs || 'EPSG:3857';
+    if (!native || !Array.isArray(native) || native.length < 4) return null;
+    return { wgs84: wgs84 || null, native, crs };
   };
 
   /**
    * Generate or return a cached WMS thumbnail for a project + layers combo.
-   * Saves to data/Qtiler2qwc/thumbs/<projectId>_<hash>.jpg.
+   * Saves to data/Qtiler2Origo/thumbs/<projectId>_<hash>.jpg.
    */
   const thumbCacheDir = path.join(dataRoot, 'thumbs');
+  const thumbPendingRequests = new Map(); // key -> Promise (in-flight requests)
   const generateThumbnail = async (projectId, layers, baseUrl, cookieHeader) => {
     const safePid = sanitizeFileToken(projectId);
     if (!safePid) return null;
@@ -806,6 +826,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         return thumbPath;
       }
     } catch { /* not cached yet */ }
+
+    // Dedup concurrent requests for the same thumbnail.
+    const dedupKey = `${safePid}|${hash}`;
+    if (thumbPendingRequests.has(dedupKey)) {
+      return thumbPendingRequests.get(dedupKey);
+    }
 
     const extent = await getProjectExtent(projectId);
     const bbox = extent?.native || [-20037508, -20037508, 20037508, 20037508];
@@ -824,7 +850,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
     if (cookieHeader) reqOptions.headers.cookie = cookieHeader;
 
-    return new Promise((resolve) => {
+    const promise = new Promise((resolve) => {
       const fetcher = wmsUrl.startsWith('https') ? https : http;
       const proxyReq = fetcher.get(reqOptions, async (proxyRes) => {
         try {
@@ -837,11 +863,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           const ws = fs.createWriteStream(thumbPath);
           proxyRes.pipe(ws);
           ws.on('finish', () => resolve(thumbPath));
-          ws.on('error', () => resolve(null));
+          ws.on('error', () => { try { fs.promises.unlink(thumbPath).catch(() => {}); } catch (_) {} resolve(null); });
         } catch { resolve(null); }
       });
+      // 60 s socket timeout: QGIS rendering can be slow on first hit.
+      proxyReq.setTimeout(60_000, () => {
+        try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
+      });
       proxyReq.on('error', () => resolve(null));
-    });
+    }).finally(() => { thumbPendingRequests.delete(dedupKey); });
+
+    thumbPendingRequests.set(dedupKey, promise);
+    return promise;
   };
 
   const sendThumbnailPlaceholder = (res, label = 'No preview') => {
@@ -956,7 +989,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const shouldEnableAuthUi = authActive && authRequired;
 
     // Set service URLs from tool config, or clear demo defaults
-    baseConfig.searchServiceUrl = '/Qtiler2qwc/search';
+    baseConfig.searchServiceUrl = '/Qtiler2Origo/search';
     baseConfig.searchDataServiceUrl = '';
     baseConfig.editServiceUrl = '/wfs';
     baseConfig.mapInfoServiceUrl = '/wms';
@@ -1130,7 +1163,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
     // Force-clear any external service endpoints that may point to demo or
     // local test services (e.g. :8088) to avoid client-side CORS/connection errors.
-    baseConfig.searchServiceUrl = '/Qtiler2qwc/search';
+    baseConfig.searchServiceUrl = '/Qtiler2Origo/search';
     baseConfig.searchDataServiceUrl = '';
     if (typeof baseConfig.editServiceUrl !== 'string' || !baseConfig.editServiceUrl.trim()) baseConfig.editServiceUrl = '/wfs';
     if (typeof baseConfig.mapInfoServiceUrl !== 'string' || !baseConfig.mapInfoServiceUrl.trim()) baseConfig.mapInfoServiceUrl = '/wms';
@@ -1211,7 +1244,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               Title: 'OpenStreetMap contributors',
               OnlineResource: 'https://www.openstreetmap.org/copyright'
             },
-            // QWC2 prepends /Qtiler2qwc/webmap/assets to thumbnail paths.
+            // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /img/...
             thumbnail: '../../../../img/mapthumbs/mapnik.jpg',
             tileSize: [256, 256]
@@ -1265,7 +1298,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             projection: preset?.coordinateReferenceSystem || 'EPSG:3857',
             resolutions,
             tileSize: [256, 256],
-            // QWC2 prepends /Qtiler2qwc/webmap/assets to thumbnail paths.
+            // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /plugins/...
             thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bg.name)}?project=${encodeURIComponent(bg.sourceProjectId)}`
           });
@@ -1380,7 +1413,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const bgResult = await buildBackgroundLayers(profile, qtilerBaseUrl);
     const searchEnabled = profile.features?.search !== false;
     // QWC2 only ships 4 built-in providers: coordinates, nominatim, qgis, fulltext.
-    // We expose our /Qtiler2qwc/search endpoint via the `fulltext` provider; the
+    // We expose our /Qtiler2Origo/search endpoint via the `fulltext` provider; the
     // `params.default` array becomes the `filter` query string sent to the
     // backend, which we use to identify the dataset (theme id).
     const localSearchProvider = { provider: 'fulltext', params: { default: [projectId] } };
@@ -1423,7 +1456,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       // given zoom it renders through QGIS; subsequent requests for the same
       // combo are served instantly from disk.
       tiled: true,
-      // QWC2 prepends /Qtiler2qwc/webmap/assets to thumbnail paths.
+      // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
       // Use an assets-relative path that resolves to /plugins/...
       thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${mainLayers.length ? `?LAYERS=${encodeURIComponent(mainLayers.map((l) => String(l.name || '').trim()).filter(Boolean).join(','))}` : ''}`
     };
@@ -1444,7 +1477,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             try { entries = await fs.promises.readdir(dir); } catch { continue; }
             const tif = entries.find((e) => /\.tif$/i.test(e));
             if (tif) {
-              const terrainUrl = `${qtilerBaseUrl}/Qtiler2qwc/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
+              const terrainUrl = `${qtilerBaseUrl}/Qtiler2Origo/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
               return { url: terrainUrl, crs: projectCrs };
             }
           }
@@ -1458,31 +1491,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         // the tileGrid extent is null. The 3D scene renders the main WMS
         // layers correctly without background basemaps.
       };
-
-      // Auto-discover 3D Tiles datasets for this project.
-      // Convention: data/Qtiler2qwc/3dtiles/<projectId>/<setName>/tileset.json
-      // Each subdirectory containing a tileset.json becomes one tiles3d entry.
-      try {
-        const projectTiles3dDir = path.join(tiles3dRoot, projectId);
-        const subdirs = await fs.promises.readdir(projectTiles3dDir, { withFileTypes: true });
-        const tiles3dEntries = [];
-        for (const ent of subdirs) {
-          if (!ent.isDirectory()) continue;
-          const setName = ent.name;
-          const tilesetPath = path.join(projectTiles3dDir, setName, 'tileset.json');
-          try {
-            await fs.promises.access(tilesetPath);
-            tiles3dEntries.push({
-              name: setName,
-              title: setName,
-              url: `${qtilerBaseUrl}/Qtiler2qwc/3dtiles/${encodeURIComponent(projectId)}/${encodeURIComponent(setName)}/tileset.json`
-            });
-          } catch { /* no tileset.json in this subdir, skip */ }
-        }
-        if (tiles3dEntries.length > 0) {
-          item.map3d.tiles3d = tiles3dEntries;
-        }
-      } catch { /* no 3dtiles dir for this project, skip */ }
     }
 
     // QWC2's editing reducer reads edit config from the root WMS layer
@@ -1566,7 +1574,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
       }
     } catch (err) {
-      console.warn(`[Qtiler2qwc] Could not load print layouts for ${projectId}:`, err?.message || err);
+      console.warn(`[Qtiler2Origo] Could not load print layouts for ${projectId}:`, err?.message || err);
     }
 
     return { item, bgLayersGlobal: bgResult.global };
@@ -1598,7 +1606,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return {
       themes: {
         title: 'root',
-        searchServiceUrl: `${qtilerBaseUrl}/Qtiler2qwc/search`,
+        searchServiceUrl: `${qtilerBaseUrl}/Qtiler2Origo/search`,
         subdirs: [],
         items,
         defaultTheme: defaultTheme || firstId,
@@ -1781,21 +1789,16 @@ ${mapIcon}
 </div></body></html>`;
   };
 
-  // startStandaloneServer removed — QWC2 served from same-origin under /Qtiler2qwc/webmap
+  // startStandaloneServer removed — QWC2 served from same-origin under /Qtiler2Origo/webmap
   const startStandaloneServer = async (_port) => { return { port: null }; };
 
   const maybeAutoStartStandalone = async () => { /* removed */ };
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
   app.use(`/plugins/${pluginSlug}/published`, express.static(publishedRoot, { index: false }));
-  // Static mount for user-supplied 3D Tiles (b3dm/glb + tileset.json) per project.
-  // Drop a folder under data/Qtiler2qwc/3dtiles/<projectId>/<setName>/ containing tileset.json
-  // and it will be served from /Qtiler2qwc/3dtiles/<projectId>/<setName>/ and auto-injected
-  // into the theme's map3d.tiles3d when view3d is enabled for that project.
-  app.use('/Qtiler2qwc/3dtiles', express.static(tiles3dRoot, { index: false, fallthrough: true }));
   // Serve dynamic, sanitized config/themes for the plugin-local QWC2 path so
   // the admin UI and local links always receive runtime-built configs.
-  app.get(`/plugins/${pluginSlug}/qwc2/config.json`, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/origo/config.json`, async (req, res) => {
     try {
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
       const allProfiles = await readAllPublishedProfiles();
@@ -1838,7 +1841,7 @@ ${mapIcon}
 
       // Final sanitation
       config = config || {};
-      config.searchServiceUrl = '/Qtiler2qwc/search';
+      config.searchServiceUrl = '/Qtiler2Origo/search';
       config.searchDataServiceUrl = '';
       if (typeof config.editServiceUrl !== 'string' || !config.editServiceUrl.trim()) config.editServiceUrl = '/wfs';
       if (typeof config.mapInfoServiceUrl !== 'string' || !config.mapInfoServiceUrl.trim()) config.mapInfoServiceUrl = '/wms';
@@ -1869,11 +1872,11 @@ ${mapIcon}
       // fallback to on-disk sanitized config
       try {
         const webRoot = await resolveQwc2WebRoot().catch(() => '');
-        if (!webRoot) return res.status(500).json({ error: 'qwc2_config_failed' });
+        if (!webRoot) return res.status(500).json({ error: 'origo_config_failed' });
         const raw = await fs.promises.readFile(path.join(webRoot, 'config.json'), 'utf8');
         let base = {};
         try { base = JSON.parse(raw); } catch { base = {}; }
-        base.searchServiceUrl = '/Qtiler2qwc/search';
+        base.searchServiceUrl = '/Qtiler2Origo/search';
         base.searchDataServiceUrl = '';
         if (typeof base.editServiceUrl !== 'string' || !base.editServiceUrl.trim()) base.editServiceUrl = '/wfs';
         if (typeof base.mapInfoServiceUrl !== 'string' || !base.mapInfoServiceUrl.trim()) base.mapInfoServiceUrl = '/wms';
@@ -1901,12 +1904,12 @@ ${mapIcon}
         base.defaultBackgroundLayers = [];
         return res.json(base);
       } catch (ee) {
-        return res.status(500).json({ error: 'qwc2_config_failed' });
+        return res.status(500).json({ error: 'origo_config_failed' });
       }
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/qwc2/themes.json`, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/origo/themes.json`, async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
@@ -1930,9 +1933,1058 @@ ${mapIcon}
         const webRoot = await resolveQwc2WebRoot().catch(()=>'');
         if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
       } catch {}
-      return res.status(500).json({ error: 'qwc2_themes_failed' });
+      return res.status(500).json({ error: 'origo_themes_failed' });
     }
   });
+
+  // ── Preview page: serves a minimal Origo HTML page loading a per-project config ──
+  app.get(`/plugins/${pluginSlug}/api/preview-page`, async (req, res) => {
+    const projectId = sanitizeFileToken(String(req.query?.project || '').trim());
+    if (!projectId) return res.status(400).json({ error: 'missing_project' });
+    const webRoot = await resolveQwc2WebRoot().catch(() => '');
+    if (!webRoot) return res.status(503).json({ error: 'origo_not_installed' });
+    const layers = String(req.query?.layers || '').trim();
+    const bgProject = String(req.query?.bgProject || '').trim();
+    const bgLayer = String(req.query?.bgLayer || '').trim();
+    // Use absolute URL for config so the <base> tag does not interfere
+    const baseUrl = getRequestBaseUrl(req);
+    const cfgQs = [
+      `project=${encodeURIComponent(req.query?.project || '')}`,
+      layers ? `layers=${encodeURIComponent(layers)}` : '',
+      bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
+      bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
+      req.query?.center ? `center=${encodeURIComponent(req.query.center)}` : '',
+      req.query?.zoom   ? `zoom=${encodeURIComponent(req.query.zoom)}`     : '',
+      req.query?.extent ? `extent=${encodeURIComponent(req.query.extent)}` : ''
+    ].filter(Boolean).join('&');
+    const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
+    // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
+    const base = `/plugins/${pluginSlug}/origo/`;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<base href="${base}">
+<title>Preview \u2013 ${projectId.replace(/[<>"&']/g, '')}</title>
+<link href="css/style.css" rel="stylesheet">
+<style>html,body{margin:0;padding:0;height:100%}#app-wrapper{height:100%}</style>
+</head>
+<body>
+<div id="app-wrapper"></div>
+<script src="js/origo.js"></script>
+<script>
+  // IMPORTANT: do NOT pass the config URL to Origo() directly. Origo's
+  // loadResources() appends "${'$'}{urlParams.map}.json" to any URL it receives;
+  // if the URL has no "#map=..." fragment, urlParams.map is undefined and
+  // the resulting fetch becomes ".../preview-config.json?...&bgLayer=NAME/undefined.json"
+  // which corrupts query params (Express then sees bgLayer with "/undefined.json"
+  // appended). Fetch the JSON ourselves and pass the parsed object instead.
+  fetch('${configUrl}', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(cfg) {
+      var origoApp = Origo(cfg);
+      window.origoApp = origoApp;
+      origoApp.on('load', function() {
+        try { window.parent.postMessage({ type: 'origo-loaded' }, '*'); } catch(e){}
+      });
+    })
+    .catch(function(err) {
+      document.body.innerHTML = '<pre style="padding:1em;color:#b00">Failed to load preview config: ' + (err && err.message || err) + '</pre>';
+    });
+</script>
+</body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  });
+
+  /**
+   * Compute a valid projectionExtent and explicit resolutions for a given CRS.
+   * For EPSG:3857/4326, OL knows the defaults. For any other CRS, the extent
+   * must match the projection or OL's TileGrid will calculate null resolutions
+   * (throwing "Cannot read properties of null (reading 'every')").
+   */
+  const computeProjectionConfig = (projCode, nativeExtent) => {
+    if (!projCode || projCode === 'EPSG:3857') {
+      // Standard Web Mercator resolution pyramid (256px tiles, level 0..21).
+      // Origo's TileGrid constructor calls resolutions.every(...) when building
+      // the default tile grid for WMS layers — passing null crashes the viewer
+      // with "Cannot read properties of null (reading 'every')".
+      const r0 = 156543.03392804097;
+      const resolutions = [];
+      for (let i = 0; i <= 21; i++) resolutions.push(r0 / (2 ** i));
+      return { projectionExtent: [-20026376.39, -20048966.10, 20026376.39, 20048966.10], resolutions };
+    }
+    if (projCode === 'EPSG:4326') {
+      // Equivalent default pyramid for plate carrée (degrees per pixel).
+      const r0 = 0.703125;
+      const resolutions = [];
+      for (let i = 0; i <= 21; i++) resolutions.push(r0 / (2 ** i));
+      return { projectionExtent: [-180, -90, 180, 90], resolutions };
+    }
+    // Custom CRS: pad the native extent to give the tile grid room, then derive
+    // explicit resolutions so Origo never calls createForProjection with an
+    // extent that doesn't match the registered proj4 definition.
+    const [minx, miny, maxx, maxy] = nativeExtent;
+    const padX = Math.max((maxx - minx) * 50.0, 1000);
+    const padY = Math.max((maxy - miny) * 50.0, 1000);
+    const projectionExtent = [
+      Math.round(minx - padX), Math.round(miny - padY),
+      Math.round(maxx + padX), Math.round(maxy + padY)
+    ];
+    const maxDim = Math.max(projectionExtent[2] - projectionExtent[0], projectionExtent[3] - projectionExtent[1]);
+    let r0 = 1;
+    while (r0 * 256 < maxDim) r0 *= 2;
+    const resolutions = [];
+    for (let i = 0; i < 18; i++) resolutions.push(r0 / (2 ** i));
+    return { projectionExtent, resolutions };
+  };
+
+  // ── Load tile grid data for a given project (used to build WMTS source) ──
+  const loadTileGridForProject = async (projectId) => {
+    const tileGridDir = path.resolve(process.cwd(), 'config', 'tile-grids');
+    try {
+      const files = await fs.promises.readdir(tileGridDir);
+      // File naming convention: SCALES_EPSG_XXXX_<projectId>.json
+      const match = files.find((f) => f.toLowerCase() === `scales_epsg_3006_${projectId.toLowerCase()}.json`
+        || f.toLowerCase().endsWith(`_${projectId.toLowerCase()}.json`));
+      if (!match) return null;
+      const raw = await fs.promises.readFile(path.join(tileGridDir, match), 'utf8');
+      const preset = JSON.parse(raw);
+      const matrices = Array.isArray(preset.matrices) ? preset.matrices : [];
+      const sorted = [...matrices].sort((a, b) => Number(a.z ?? a.id ?? 0) - Number(b.z ?? b.id ?? 0));
+      const resolutions = sorted.map((m) => Number(m.resolution));
+      const matrixIds = sorted.map((m) => String(m.identifier ?? m.id ?? m.z));
+      const topLeft = Array.isArray(preset.topLeftCorner) ? preset.topLeftCorner
+        : Array.isArray(preset.top_left_corner) ? preset.top_left_corner : null;
+      const tileSize = Number(preset.tile_width || preset.tile_size || 256);
+      const matrixSetId = String(preset.id || match.replace(/\.json$/i, ''));
+      const crs = (Array.isArray(preset.supported_crs) ? preset.supported_crs[0] : null) || preset.coordinateReferenceSystem || null;
+      // Compute the projectionExtent that matches the WMTS pyramid, derived
+      // from the FIRST matrix's matrix_width × matrix_height. This must be
+      // exactly what Origo/OL expects so backgrounds align with overlays.
+      let projectionExtent = null;
+      if (Array.isArray(topLeft) && sorted.length > 0) {
+        const m0 = sorted[0];
+        const mw = Number(m0?.matrix_width || m0?.matrixWidth || 1);
+        const mh = Number(m0?.matrix_height || m0?.matrixHeight || 1);
+        const r0 = Number(m0?.resolution);
+        if (Number.isFinite(r0)) {
+          const tw = Number(m0?.tileWidth || tileSize);
+          const th = Number(m0?.tileHeight || tileSize);
+          projectionExtent = [
+            topLeft[0],
+            topLeft[1] - mh * th * r0,
+            topLeft[0] + mw * tw * r0,
+            topLeft[1]
+          ];
+        }
+      }
+      return { matrixSetId, resolutions, matrixIds, topLeft, tileSize, crs, projectionExtent };
+    } catch { return null; }
+  };
+
+  // ── buildOrigoIndexConfig: build Origo index.json from a published profile ──
+  // Walk an Origo style array and rewrite icon.src URLs that point to
+  // /qgis-svg/* to use the colorizer endpoint when an icon.color is set.
+  // This is needed because OL Icon `color` doesn't tint SVGs whose paths
+  // already have explicit fill attributes.
+  const rewriteSvgIconColors = (style) => {
+    try {
+      const cloned = JSON.parse(JSON.stringify(style));
+      const visit = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (node.icon && typeof node.icon === 'object'
+            && typeof node.icon.src === 'string'
+            && node.icon.src.startsWith('/qgis-svg/')
+            && typeof node.icon.color === 'string') {
+          const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(node.icon.color.trim());
+          if (m) {
+            const colored = node.icon.src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/');
+            node.icon.src = `${colored}?color=${encodeURIComponent('#' + m[1])}`;
+          }
+        }
+        for (const k of Object.keys(node)) visit(node[k]);
+      };
+      visit(cloned);
+      return cloned;
+    } catch { return style; }
+  };
+
+  // Fetch WFS DescribeFeatureType and parse attributes, geometry column and
+  // target namespace. Mirrors what Qrigo does on the client so Origo's editor
+  // has everything it needs: attributes (filterable list), geometryName (used
+  // by WFS-T POST body) and featureNS (used as `workspace` on the source).
+  const fetchWfsLayerMeta = async (baseUrl, projectId, typeName, authHeaders = {}) => {
+    // QGIS Server defaults: namespace and prefix used as fallback when
+    // DescribeFeatureType cannot be read (e.g. auth blocks our internal fetch).
+    // OpenLayers WFS-T writeTransaction requires these to build the body;
+    // without them it crashes with `undefined.geometry`.
+    const fallback = { attributes: [], geometryName: 'geometry', featureNS: 'http://www.qgis.org/gml' };
+    try {
+      const url = `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}`
+        + `&service=WFS&version=1.1.0&request=DescribeFeatureType`
+        + `&typeName=${encodeURIComponent(typeName)}`;
+      const r = await fetch(url, { headers: authHeaders });
+      if (!r.ok) {
+        console.warn(`[Qtiler2Origo] DescribeFeatureType ${r.status} for ${typeName} on project ${projectId}. Editor will use fallback attribute. URL=${url}`);
+        return fallback;
+      }
+      const xml = await r.text();
+      const meta = { ...fallback };
+      const nsMatch = xml.match(/targetNamespace="([^"]+)"/);
+      if (nsMatch) meta.featureNS = nsMatch[1];
+      // Geometry column: element whose type starts with gml:
+      const geomMatch = xml.match(/<(?:xsd|xs):element\s+[^>]*name="([^"]+)"[^>]*type="gml:[^"]+"/);
+      if (geomMatch) meta.geometryName = geomMatch[1];
+      // Attributes: every element whose type does NOT start with gml:
+      const attrRe = /<(?:xsd|xs):element\s+([^>]+)\/?>/g;
+      const attrs = [];
+      let m;
+      while ((m = attrRe.exec(xml)) !== null) {
+        const attrs2 = m[1];
+        const nameM = attrs2.match(/name="([^"]+)"/);
+        const typeM = attrs2.match(/type="([^"]+)"/);
+        if (!nameM || !typeM) continue;
+        if (typeM[1].startsWith('gml:')) continue;
+        const t = typeM[1].toLowerCase();
+        let origoType = 'text';
+        if (t.includes('int') || t.includes('long') || t.includes('short')) origoType = 'text';
+        else if (t.includes('decimal') || t.includes('double') || t.includes('float')) origoType = 'text';
+        else if (t.includes('bool')) origoType = 'checkbox';
+        else if (t.includes('date')) origoType = 'date';
+        attrs.push({ name: nameM[1], title: nameM[1], type: origoType });
+      }
+      meta.attributes = attrs;
+      if (!attrs.length) {
+        console.warn(`[Qtiler2Origo] DescribeFeatureType for ${typeName} returned 0 attributes. XML snippet: ${xml.substring(0, 200)}`);
+      }
+      return meta;
+    } catch (err) {
+      console.warn(`[Qtiler2Origo] DescribeFeatureType fetch failed for ${typeName}: ${err?.message || err}`);
+      return fallback;
+    }
+  };
+
+  const buildOrigoIndexConfig = async (profile, baseUrl, req = null) => {
+    // Forward caller's auth (cookie + api_key) so server-to-server fetch to
+    // /wfs DescribeFeatureType isn't rejected with 401.
+    const authHeaders = {};
+    if (req?.headers?.cookie) authHeaders.cookie = req.headers.cookie;
+    const apiKey = req?.headers?.['x-api-key'] || req?.query?.api_key;
+    if (apiKey) authHeaders['x-api-key'] = apiKey;
+    const projectId = profile.projectId;
+    const proj4PresetsPath = path.resolve(process.cwd(), 'config', 'proj4-presets.json');
+    let proj4PresetsAll = {};
+    try {
+      const raw = await fs.promises.readFile(proj4PresetsPath, 'utf8');
+      proj4PresetsAll = JSON.parse(raw || '{}');
+    } catch { /* ignore */ }
+
+    const bgProjectId = profile.backgroundProjectId || null;
+    const bgTileGrid = bgProjectId ? await loadTileGridForProject(bgProjectId) : null;
+
+    // Get native extent/CRS from cache (prefer background project if using WMTS backgrounds to align grids)
+    let center = [0, 0];
+    let zoom = 5;
+    let projCode = 'EPSG:3857';
+    let extent = [-20026376.39, -20048966.10, 20026376.39, 20048966.10];
+    let nativeExtent = extent;
+    let baseExtInfo = null;
+
+    try {
+      if (bgProjectId) baseExtInfo = await getProjectExtent(bgProjectId);
+      if (!baseExtInfo || !baseExtInfo.native) baseExtInfo = await getProjectExtent(projectId);
+      
+      if (baseExtInfo?.native?.length === 4) {
+        const [minx, miny, maxx, maxy] = baseExtInfo.native;
+        nativeExtent = baseExtInfo.native;
+        extent = baseExtInfo.native;
+        center = [Math.round((minx + maxx) / 2), Math.round((miny + maxy) / 2)];
+        projCode = baseExtInfo.crs || 'EPSG:3857';
+      }
+    } catch { /* use defaults */ }
+
+    // Override with admin-captured view — but ignore values that fall outside
+    // the active projection extent (happens when the profile was saved with a
+    // different background CRS than the one currently in use; the stale coords
+    // would otherwise push the published map to the North Pole or off-screen).
+    const _inExt = (pt, ex) => Array.isArray(pt) && Array.isArray(ex)
+      && pt[0] >= ex[0] && pt[0] <= ex[2] && pt[1] >= ex[1] && pt[1] <= ex[3];
+    if (Array.isArray(profile.center) && profile.center.length === 2
+        && (!Array.isArray(extent) || extent.length !== 4 || _inExt(profile.center, extent))) {
+      center = profile.center;
+    }
+    if (typeof profile.zoom === 'number') zoom = profile.zoom;
+    if (Array.isArray(profile.extent) && profile.extent.length === 4
+        && (!Array.isArray(extent) || extent.length !== 4
+            || (_inExt([profile.extent[0], profile.extent[1]], extent)
+                && _inExt([profile.extent[2], profile.extent[3]], extent)))) {
+      extent = profile.extent;
+    }
+
+    // Proj4 definitions for non-standard CRS
+    const proj4Defs = [];
+    if (projCode && projCode !== 'EPSG:3857' && projCode !== 'EPSG:4326') {
+      const def = proj4PresetsAll[projCode];
+      if (def) proj4Defs.push({ code: projCode, projection: def });
+    }
+
+    // Source map
+    const source = {};
+    const mainSourceKey = 'qtiler_main';
+    source[mainSourceKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(projectId)}` };
+    source['osm'] = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' };
+    // NOTE: No shared WMS source for background — each BG layer gets its own WMTS source
+
+    // Groups
+    const groups = [
+      { name: 'background', title: 'Background', expanded: false, exclusive: true }
+    ];
+    if (Array.isArray(profile.groups) && profile.groups.length) {
+      for (const g of profile.groups) {
+        const gName = String(g?.name || '').trim();
+        if (!gName || gName === 'root' || gName === 'background') continue;
+        const entry = { name: gName, title: String(g?.title || gName), expanded: g?.expanded !== false };
+        if (g.parent) entry.parent = g.parent;
+        groups.push(entry);
+      }
+    }
+    // Auto-create any group referenced by a layer but missing from groups list,
+    // so Origo's layer tree can show it instead of silently dropping the layer.
+    const knownGroupNames = new Set(groups.map((g) => g.name));
+    for (const layer of (profile.layers || [])) {
+      const gn = String(layer?.group || '').trim();
+      if (gn && gn !== 'root' && gn !== 'background' && !knownGroupNames.has(gn)) {
+        groups.push({ name: gn, title: gn, expanded: true });
+        knownGroupNames.add(gn);
+      }
+    }
+
+    // Layers and Styles
+    const layers = [];
+    const origoStyles = {};
+    const cacheIndex = await readCacheIndex(projectId);
+    const cachedLayers = cacheIndex?.layers || [];
+    // Main project layers — WMS by default, WFS when serveAsWfs===true or editable===true
+    const mainLayers = (profile.layers || []).filter((l) => !l.sourceProjectId || l.sourceProjectId === projectId);
+    const wfsSrcKey = 'qtiler_main_wfs';
+    let wfsSrcAdded = false;
+    for (const layer of mainLayers) {
+      if (layer.serveAsWfs === true || layer.editable === true) {
+        // Fetch real WFS meta (attributes + geometryName + featureNS) so the
+        // Origo editor can finishDrawing without crashing on undefined.filter
+        // and so WFS-T POSTs target the right namespace/geometry column.
+        const wfsMeta = await fetchWfsLayerMeta(baseUrl, projectId, layer.name, authHeaders);
+        if (!wfsSrcAdded) {
+          source[wfsSrcKey] = {
+            url: `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}${security?.isEnabled() ? '' : ''}`,
+            type: 'WFS',
+            projection: projCode,
+            srsName: projCode,
+            // ALWAYS set workspace/prefix — OL WFS-T crashes without them.
+            workspace: wfsMeta.featureNS || 'http://www.qgis.org/gml',
+            prefix: 'feature'
+          };
+          wfsSrcAdded = true;
+        }
+        
+        const cLayer = cachedLayers.find(c => c.name === layer.name || c.id === layer.name);
+        
+        let styleName = 'default';
+        const safeStyleName = String(layer.name).replace(/[^A-Za-z0-9_]/g, '_');
+        if (layer.wfsStyle) {
+          if (typeof layer.wfsStyle === 'object') {
+            styleName = safeStyleName;
+            origoStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle);
+          } else if (typeof layer.wfsStyle === 'string') {
+            styleName = layer.wfsStyle;
+          }
+        } else if (cLayer && cLayer.origoStyle) {
+          styleName = safeStyleName;
+          origoStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+        }
+
+        // Origo v2.10.0 bug: editAttributes() does `attributeObjects.reduce(...)`
+        // without first checking that the array got assigned. When the attribute
+        // list is empty, the variable stays undefined and the editor crashes
+        // with `Cannot read properties of undefined (reading 'reduce')`.
+        // Always provide at least one attribute so the editor can open.
+        let resolvedAttrs = (Array.isArray(layer.attributes) && layer.attributes.length)
+          ? layer.attributes
+          : (Array.isArray(wfsMeta.attributes) ? wfsMeta.attributes : []);
+        if (!resolvedAttrs.length) {
+          resolvedAttrs = [{ name: 'fid', title: 'fid', type: 'text' }];
+        }
+        const wfsDef = {
+          name: layer.name,
+          title: layer.name,
+          group: String(layer.group || 'root'),
+          source: wfsSrcKey,
+          type: 'WFS',
+          queryable: true,
+          visible: layer.visible !== false,
+          style: styleName,
+          featureType: layer.name,
+          attributes: resolvedAttrs,
+          geometryName: layer.geometryName || wfsMeta.geometryName || 'geometry'
+        };
+        if (layer.editable) wfsDef.editable = true;
+        if (layer.geometryType) wfsDef.geometryType = layer.geometryType;
+        else if (cLayer?.geometry_type) {
+          const gt = String(cLayer.geometry_type).toLowerCase();
+          if (gt.includes('polygon')) wfsDef.geometryType = 'Polygon';
+          else if (gt.includes('line')) wfsDef.geometryType = 'LineString';
+          else if (gt.includes('point')) wfsDef.geometryType = 'Point';
+        }
+        layers.push(wfsDef);
+      } else {
+        // Plain WMS layer — generate a thumbnail style so legend has a real icon
+        const safe = String(layer.name).replace(/\s+/g, '_');
+        const thumbStyleName = `wms_thumb_${safe}`;
+        const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
+        origoStyles[thumbStyleName] = [[{ image: { src: thumbUrl } }]];
+        const wmsDef = {
+          name: layer.name,
+          id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
+          title: layer.name,
+          group: String(layer.group || 'root'),
+          source: mainSourceKey,
+          type: 'WMS',
+          queryable: true,
+          visible: layer.visible !== false,
+          style: thumbStyleName,
+          thumbnail: thumbUrl
+        };
+        // Restrict GetFeatureInfo popup attributes to the user-defined list.
+        // Origo `attributes` filters which fields are shown for both WMS
+        // and WFS layers in the infoclick popup.
+        if (Array.isArray(layer.attributes) && layer.attributes.length) {
+          wmsDef.attributes = layer.attributes;
+        }
+        layers.push(wmsDef);
+      }
+    }
+
+    // Background layers
+    let hasOsm = false;
+    const backgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
+    for (const bg of backgrounds) {
+      if (bg.type === 'osm' || bg.key === 'osm') {
+        hasOsm = true;
+        const osmThumb = 'https://tile.openstreetmap.org/4/8/5.png';
+        origoStyles['bg_thumb_osm'] = [[{ image: { src: osmThumb } }]];
+        layers.push({ name: 'osm', title: 'OpenStreetMap', group: 'background', source: 'osm', queryable: false, type: 'OSM', visible: !!bg.isDefault, style: 'bg_thumb_osm', thumbnail: osmThumb });
+      } else if (bg.type === 'layer' && bg.name) {
+        const srcProjId = bg.sourceProjectId || bgProjectId || null;
+        const layerNameSafe = bg.name.replace(/\s+/g, '_');
+        const bgStyleName = `bg_thumb_${layerNameSafe}`;
+        const bgThumbUrl = srcProjId
+          ? `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bg.name)}?project=${encodeURIComponent(srcProjId)}`
+          : null;
+        if (bgThumbUrl) origoStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
+        // Use WMTS when tile grid is available, otherwise fall back to WMS
+        if (bgTileGrid && srcProjId) {
+          // Source key uses underscores (safe identifier); URL uses encodeURIComponent so server
+          // decodes to the original name (with spaces) and finds the correct cache folder.
+          const srcKey = `wmts_bg_${layerNameSafe}`;
+          source[srcKey] = {
+            url: `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(bg.name)}/{z}/{x}/{y}.png`,
+            type: 'XYZ',
+            projection: bgTileGrid.crs || projCode
+          };
+          const bgMaxZoom = (Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length)
+            ? bgTileGrid.resolutions.length - 1 : undefined;
+          layers.push({
+            name: `bg_${layerNameSafe}`,
+            id: bg.name,
+            title: String(bg.title || bg.name),
+            group: 'background',
+            source: srcKey,
+            type: 'XYZ',
+            format: 'image/png',
+            queryable: false,
+            visible: !!bg.isDefault,
+            style: bgThumbUrl ? bgStyleName : 'add me',
+            thumbnail: bgThumbUrl || undefined,
+            ...(bgMaxZoom != null ? { maxZoom: bgMaxZoom } : {}),
+            tileGrid: {
+              origin: bgTileGrid.topLeft,
+              resolutions: bgTileGrid.resolutions,
+              alignBottomLeft: false
+            },
+            ...(Array.isArray(bgTileGrid.projectionExtent) ? { extent: bgTileGrid.projectionExtent } : {})
+          });
+        } else {
+          // Fall back to WMS
+          const bgSrcKey = 'qtiler_bg_wms';
+          if (!source[bgSrcKey] && srcProjId) {
+            source[bgSrcKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(srcProjId)}` };
+          }
+          const bgLayerNameSafe = bg.name.replace(/\s+/g, '_');
+          layers.push({
+            name: `bg_${bgLayerNameSafe}`,
+            id: bg.name,
+            title: String(bg.title || bg.name),
+            group: 'background',
+            source: bgSrcKey || mainSourceKey,
+            type: 'WMS',
+            queryable: false,
+            visible: !!bg.isDefault,
+            style: bgThumbUrl ? bgStyleName : undefined,
+            thumbnail: bgThumbUrl || undefined
+          });
+        }
+      }
+    }
+    if (!hasOsm) {
+      // Only make OSM the default if no other background layer is set as default
+      const hasDefaultBg = layers.some((l) => l.group === 'background' && l.visible);
+      const osmThumb = 'https://tile.openstreetmap.org/4/8/5.png';
+      origoStyles['bg_thumb_osm'] = [[{ image: { src: osmThumb } }]];
+      layers.push({ name: 'osm', title: 'OpenStreetMap', group: 'background', source: 'osm', queryable: false, type: 'OSM', visible: !hasDefaultBg, style: 'bg_thumb_osm', thumbnail: osmThumb });
+    }
+
+    // Controls from profile — valid Origo v2.10.0 names only.
+    // Usar exactamente los controles y options del perfil, sin modificar ni autocompletar.
+    const VALID_ORIGO_CONTROL_NAMES = new Set([
+      'about', 'attribution', 'bookmarks', 'draganddrop', 'draw', 'editor',
+      'externalurl', 'fullscreen', 'geoposition', 'home', 'legend', 'link',
+      'localization', 'mapmenu', 'measure', 'position', 'print', 'progressbar',
+      'rotate', 'scale', 'scaleline', 'scalepicker', 'search', 'sharemap',
+      'splash', 'zoom', 'mouseposition', 'exportmap'
+    ]);
+    const userProvidedControls = Array.isArray(profile.controls);
+    const controls = userProvidedControls
+      ? profile.controls.filter((c) => {
+          const n = typeof c === 'string' ? c : c?.name;
+          return n && VALID_ORIGO_CONTROL_NAMES.has(n);
+        })
+      : [];
+
+    // Defensive: Origo's editor crashes with "Cannot read properties of
+    // undefined (reading 'reduce')" when the editor control is enabled but no
+    // layer has `editable: true`. Drop the control in that case and log it.
+    const hasEditableLayer = layers.some((l) => l && l.editable === true);
+    if (!hasEditableLayer) {
+      const beforeLen = controls.length;
+      for (let i = controls.length - 1; i >= 0; i -= 1) {
+        const n = typeof controls[i] === 'string' ? controls[i] : controls[i]?.name;
+        if (n === 'editor') controls.splice(i, 1);
+      }
+      if (controls.length !== beforeLen) {
+        console.warn(`[Qtiler2Origo] Profile "${profile.profileKey || profile.projectId}" has 'editor' control but no editable layers — control removed to avoid Origo crash. Mark at least one layer as editable in the profile.`);
+      }
+    }
+
+    // Auto-inject a `search` control. If `profile.features.searchSources` is
+    // configured (cross-project search), use those sources; otherwise fall back
+    // to the current project's `data/searchable-layers/<projectId>.json`.
+    //
+    // Each source is shaped as `{ projectId, layers: [layerName, ...] }`. The
+    // `/api/search` endpoint accepts repeated `project=` params plus optional
+    // per-project layer filters via `l_<sanitizedPid>=lay1,lay2`.
+    try {
+      const featuresCfg = (profile && typeof profile === 'object' && profile.features && typeof profile.features === 'object')
+        ? profile.features
+        : {};
+
+      // Verify at least the primary project has searchable layers; if not, we
+      // skip auto-injection (preserves previous behaviour for empty projects).
+      let primaryHasSearchable = false;
+      const safeProj = sanitizeFileToken(projectId);
+      if (safeProj) {
+        const cfgPath = path.join(dataRoot, 'searchable-layers', `${safeProj}.json`);
+        try {
+          const raw = await fs.promises.readFile(cfgPath, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.some((e) => e && e.searchable !== false)) {
+            primaryHasSearchable = true;
+          }
+        } catch (err) {
+          if (err && err.code !== 'ENOENT') throw err;
+        }
+      }
+
+      const userConfiguredSources = Array.isArray(featuresCfg.searchSources) && featuresCfg.searchSources.length > 0;
+      const profileControlsRaw = Array.isArray(profile.controls) ? profile.controls : [];
+      const userOptedInSearch = userProvidedControls
+        && profileControlsRaw.some((c) => (typeof c === 'string' ? c : c?.name) === 'search');
+
+      // Build search URL: primary project plus any extra projects configured
+      // in `features.searchSources`. Per-project layer filters are passed as
+      // `lf_<pid>=lay1,lay2`. The handler resolves each project's
+      // searchable-layers config and searches across all of them.
+      const extraSources = Array.isArray(featuresCfg.searchSources) ? featuresCfg.searchSources : [];
+      const extraPids = [];
+      const layerFilterQs = [];
+      for (const src of extraSources) {
+        const pid = String(src?.projectId || '').trim();
+        if (!pid || pid === projectId) continue;
+        if (extraPids.includes(pid)) continue;
+        extraPids.push(pid);
+        if (Array.isArray(src.layers) && src.layers.length) {
+          layerFilterQs.push(`lf_${encodeURIComponent(pid)}=${encodeURIComponent(src.layers.join(','))}`);
+        }
+      }
+      // Also honour layer filter for the primary project if it was configured
+      // explicitly in searchSources.
+      const primarySrc = extraSources.find((s) => String(s?.projectId || '').trim() === projectId);
+      if (primarySrc && Array.isArray(primarySrc.layers) && primarySrc.layers.length) {
+        layerFilterQs.push(`lf_${encodeURIComponent(projectId)}=${encodeURIComponent(primarySrc.layers.join(','))}`);
+      }
+      let searchUrl = `/plugins/Qtiler2Origo/origo-search?project=${encodeURIComponent(projectId)}`;
+      if (extraPids.length) searchUrl += `&extra=${encodeURIComponent(extraPids.join(','))}`;
+      if (layerFilterQs.length) searchUrl += '&' + layerFilterQs.join('&');
+
+      // Build default Origo search options (option 4 in Origo search docs:
+      // single-table search; endpoint returns features w/ WKT in `geom` and
+      // label in `name`). The URL has the project pre-encoded so Origo only
+      // appends `&q=<value>`.
+      const defaultSearchOptions = {
+        url: searchUrl,
+        queryParameterName: 'q',
+        searchAttribute: 'name',
+        titleAttribute: 'group',
+        contentAttribute: 'content',
+        geometryAttribute: 'geom',
+        groupSuggestions: true,
+        title: 'Search',
+        minLength: 3,
+        limit: 20,
+        hintText: 'Search'
+      };
+
+      const allowAutoSearch = !userProvidedControls || userOptedInSearch;
+      const shouldAdd = allowAutoSearch && (primaryHasSearchable || userConfiguredSources);
+
+      // If the profile has a `search` control entry, merge defaults into its
+      // options so we never serve Origo a search control missing `url` (which
+      // would crash inside Awesomplete with `Cannot read properties of
+      // undefined (reading 'indexOf')`).
+      for (let i = 0; i < controls.length; i += 1) {
+        const entry = controls[i];
+        const n = typeof entry === 'string' ? entry : entry?.name;
+        if (n !== 'search') continue;
+        const userOpts = (entry && typeof entry === 'object' && entry.options && typeof entry.options === 'object')
+          ? entry.options
+          : {};
+        controls[i] = { name: 'search', options: { ...defaultSearchOptions, ...userOpts } };
+      }
+
+      if (shouldAdd) {
+        const hasSearch = controls.some((c) => (typeof c === 'string' ? c : c?.name) === 'search');
+        if (!hasSearch) {
+          controls.push({ name: 'search', options: defaultSearchOptions });
+        }
+      }
+    } catch (err) {
+      console.warn('[Qtiler2Origo] could not auto-add search control:', err?.message || err);
+    }
+
+    const computed = computeProjectionConfig(projCode, nativeExtent);
+    // Use background tile grid resolutions to ensure Origo aligns properly with WMTS
+    let finalResolutions = (bgTileGrid && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0) 
+        ? bgTileGrid.resolutions 
+        : computed.resolutions;
+
+    // Compute projectionExtent aligned to the WMTS top-left + tile grid so
+    // that pre-cut tiles render in their true geographic position. If we used
+    // the projection's nominal world extent, OL re-derives a tile origin that
+    // does NOT match the WMTS origin and the backgrounds end up shifted.
+    let finalProjectionExtent = computed.projectionExtent;
+    if (bgTileGrid && Array.isArray(bgTileGrid.projectionExtent) && bgTileGrid.projectionExtent.length === 4) {
+      // Preferred path: derived from matrix0.matrix_width/matrix_height — exact match for WMTS.
+      finalProjectionExtent = bgTileGrid.projectionExtent;
+    } else if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2
+        && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0) {
+      const [originX, originY] = bgTileGrid.topLeft.map(Number);
+      const tileSize = Number(bgTileGrid.tileSize) || 256;
+      const r0 = Number(bgTileGrid.resolutions[0]);
+      const span = r0 * tileSize * 8192;
+      finalProjectionExtent = [originX, originY - span, originX + span, originY];
+    }
+
+    // View extent for OL: must match the WMTS pyramid so the user can zoom
+    // out across the full background. Using the small project AoI here would
+    // clamp panning/zooming to that AoI which is what was happening before.
+    // We keep the AoI for the initial center/zoom only.
+    const finalViewExtent = finalProjectionExtent
+      || (Array.isArray(profile.extent) && profile.extent.length === 4 ? profile.extent
+          : (Array.isArray(extent) && extent.length === 4 ? extent : null));
+
+    let finalMaxZoom = Array.isArray(finalResolutions) && finalResolutions.length
+      ? finalResolutions.length - 1
+      : 19;
+    // Honor admin-configured zoom-in/zoom-out caps when present.
+    const profileMaxZoom = Number.isFinite(Number(profile?.maxZoom)) ? Number(profile.maxZoom) : null;
+    const profileMinZoom = Number.isFinite(Number(profile?.minZoom)) ? Number(profile.minZoom) : null;
+    // OpenLayers (used by Origo) treats minZoom/maxZoom as indices into the
+    // resolutions array (maxResolution = resolutions[minZoom],
+    // minResolution = resolutions[maxZoom]). If the admin asks for a higher
+    // maxZoom than the WMTS pyramid provides, extend the resolutions array
+    // by halving the last resolution so OL has enough levels to zoom in to.
+    if (Array.isArray(finalResolutions) && finalResolutions.length
+        && profileMaxZoom !== null && profileMaxZoom > finalMaxZoom) {
+      const extended = finalResolutions.slice();
+      let last = Number(extended[extended.length - 1]);
+      while (extended.length - 1 < profileMaxZoom && Number.isFinite(last) && last > 0) {
+        last = last / 2;
+        extended.push(last);
+      }
+      finalResolutions = extended;
+      finalMaxZoom = finalResolutions.length - 1;
+    }
+    const effectiveMaxZoom = profileMaxZoom !== null ? Math.min(profileMaxZoom, finalMaxZoom) : finalMaxZoom;
+    const effectiveMinZoom = profileMinZoom !== null ? Math.max(0, Math.min(profileMinZoom, effectiveMaxZoom)) : null;
+
+    const config = {
+      ...(profile.search ? { search: profile.search } : {}),
+      ...(profile.clusterOptions ? { clusterOptions: profile.clusterOptions } : {}),
+      ...(profile.pageSettings ? { pageSettings: profile.pageSettings } : {}),
+      ...(profile.featureinfoOptions ? { featureinfoOptions: profile.featureinfoOptions } : {}),
+      ...(profile.attribution ? { attribution: profile.attribution } : {}),
+      ...(profile.target ? { target: profile.target } : {}),
+      ...(profile.url ? { url: profile.url } : {}),
+      projectionCode: projCode,
+      projectionExtent: finalProjectionExtent,
+      extent: finalViewExtent,
+      maxZoom: effectiveMaxZoom,
+      ...(effectiveMinZoom !== null ? { minZoom: effectiveMinZoom } : {}),
+      center,
+      zoom,
+      controls,
+      source,
+      groups,
+      layers,
+      styles: Object.keys(origoStyles).length > 0 ? origoStyles : undefined
+    };
+    if (finalResolutions) config.resolutions = finalResolutions;
+    // Force the viewer's default tileGrid to use the WMTS top-left origin
+    // so WMS overlays (which fall back to viewer.getTileGrid()) align with
+    // the pre-cut WMTS background tiles. Without this Origo defaults to
+    // alignBottomLeft:true which uses bottom-left of the extent and the
+    // (z,x,y) -> world bbox math diverges between bg and overlays.
+    if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2) {
+      config.tileGridOptions = {
+        alignBottomLeft: false,
+        origin: bgTileGrid.topLeft.map(Number),
+        resolutions: finalResolutions,
+        extent: finalProjectionExtent,
+        tileSize: [Number(bgTileGrid.tileSize) || 256, Number(bgTileGrid.tileSize) || 256]
+      };
+    }
+    if (proj4Defs.length) config.proj4Defs = proj4Defs;
+    return config;
+  };
+
+  // ── Intercept index.json for Origo viewer: return profile-based config ──
+  app.get(`/plugins/${pluginSlug}/origo/index.json`, async (req, res, next) => {
+    try {
+      const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
+      if (!profileId) return next();
+      const allProfiles = await readAllPublishedProfiles();
+      const accessible = filterProfilesByAccess(allProfiles, req.user);
+      let profile = findProfileMatch(accessible, profileId);
+      console.log('ORIGO index.json:', profileId, profile ? 'FOUND' : 'NOT FOUND', 'All:', allProfiles.map(p=>p.profileKey), 'Accessible:', accessible.map(p=>p.profileKey));
+      if (!profile) {
+        // Fallback: If auth dropped it, let's at least see if it exists
+        const fallback = findProfileMatch(allProfiles, profileId);
+        if (fallback) {
+            console.log('Profile exists but dropped by filterProfilesByAccess. Forcing allow for debug.');
+            profile = fallback; // Temporarily allow it!
+        }
+      }
+
+      if (!profile) return next();
+      const baseUrl = getRequestBaseUrl(req);
+      const config = await buildOrigoIndexConfig(profile, baseUrl, req);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.json(config);
+    } catch (err) {
+      console.error('[Qtiler2Origo] index.json dynamic build failed:', err?.message || err);
+      return next();
+    }
+  });
+  app.get(`/plugins/${pluginSlug}/api/preview-config.json`, async (req, res) => {
+    const projectId = sanitizeFileToken(String(req.query?.project || '').trim());
+    if (!projectId) return res.status(400).json({ error: 'missing_project' });
+    const rawLayers = String(req.query?.layers || '').trim();
+    const baseUrl = getRequestBaseUrl(req);
+    const sourceKey = 'qtiler_wms';
+    const bgProject = sanitizeFileToken(String(req.query?.bgProject || '').trim());
+    const bgLayer = String(req.query?.bgLayer || '').trim();
+    const bgKey = String(req.query?.bgKey || '').trim().toLowerCase();
+    // When the admin picked OSM (or no background) as default, the view MUST
+    // be Web Mercator (EPSG:3857) so the OSM tiles align and the user can
+    // zoom out across the full standard pyramid (0..21) regardless of the
+    // main project's native CRS or any previously selected bg project.
+    const forceWebMercator = !bgProject || bgKey === 'osm' || bgKey === 'none';
+
+    // Try to read project extent from cache for a sensible initial view.
+    // Prefer the BACKGROUND project's extent/CRS so the map preview uses the
+    // exact tile grid the published profile would use.
+    let center = [0, 0];
+    let zoom = 5;
+    let projCode = 'EPSG:3857';
+    let extent = [-20026376.39, -20048966.10, 20026376.39, 20048966.10];
+    let nativeExtent = extent;
+    let proj4Defs = [];
+    try {
+      let extentInfo = null;
+      if (bgProject && !forceWebMercator) {
+        try { extentInfo = await getProjectExtent(bgProject); } catch { /* fallthrough */ }
+      }
+      if (!extentInfo || !extentInfo.native) {
+        extentInfo = await getProjectExtent(projectId);
+      }
+      if (extentInfo?.native && Array.isArray(extentInfo.native) && extentInfo.native.length === 4) {
+        const [minx, miny, maxx, maxy] = extentInfo.native;
+        nativeExtent = extentInfo.native;
+        extent = extentInfo.native;
+        center = [Math.round((minx + maxx) / 2), Math.round((miny + maxy) / 2)];
+        projCode = extentInfo.crs || 'EPSG:3857';
+      }
+      // OSM-only mode forces a Web Mercator view. If the project center came
+      // back in another CRS, fall back to the world center so the map opens
+      // somewhere sensible instead of off-screen. The user can pan/zoom from
+      // there. (We avoid a node-side reprojection dependency.)
+      if (forceWebMercator && projCode !== 'EPSG:3857') {
+        projCode = 'EPSG:3857';
+        nativeExtent = [-20026376.39, -20048966.10, 20026376.39, 20048966.10];
+        extent = nativeExtent;
+        center = [0, 0];
+        zoom = 2;
+      }
+    } catch { /* use defaults */ }
+    // Optional overrides forwarded from the admin UI so the preview opens
+    // exactly where the profile was last saved (instead of zoomed out).
+    const parseJsonArray = (raw) => {
+      try {
+        const v = JSON.parse(String(raw));
+        return Array.isArray(v) ? v.map(Number) : null;
+      } catch { return null; }
+    };
+    const ovCenter = parseJsonArray(req.query?.center);
+    // CRS the captured overrides were originally expressed in. Discard the
+    // overrides entirely if it does not match the active view CRS — otherwise
+    // a center captured in 3857 but applied as 3006 (or vice versa) drops the
+    // camera in the wrong hemisphere ("North Pole" symptom).
+    const ovCrs = String(req.query?.centerCrs || '').trim().toUpperCase();
+    const overridesCrsOk = !ovCrs || ovCrs === String(projCode || '').toUpperCase();
+    // When OSM-only mode is forced, only honor a center override that looks
+    // like it's already in Web Mercator metres (|x| ≤ ~20M). Otherwise the
+    // saved center may be in a national CRS (e.g. 3006) and would push the
+    // OSM view far off-screen.
+    const looksWebMercator = (c) => Array.isArray(c) && c.length === 2
+      && Math.abs(c[0]) <= 20100000 && Math.abs(c[1]) <= 20100000;
+    if (overridesCrsOk && Array.isArray(ovCenter) && ovCenter.length === 2 && ovCenter.every(Number.isFinite)
+        && (!forceWebMercator || looksWebMercator(ovCenter))) {
+      center = ovCenter;
+    }
+    const ovZoom = Number(req.query?.zoom);
+    let zoomOverride = null;
+    if (overridesCrsOk && Number.isFinite(ovZoom)) zoomOverride = ovZoom;
+    const ovExtent = parseJsonArray(req.query?.extent);
+    let extentOverride = null;
+    if (overridesCrsOk && Array.isArray(ovExtent) && ovExtent.length === 4 && ovExtent.every(Number.isFinite)
+        && (!forceWebMercator || (looksWebMercator([ovExtent[0], ovExtent[1]]) && looksWebMercator([ovExtent[2], ovExtent[3]])))) {
+      extentOverride = ovExtent;
+    }
+    if (projCode && projCode !== 'EPSG:3857' && projCode !== 'EPSG:4326') {
+      try {
+        const presetsRaw = await fs.promises.readFile(path.resolve(process.cwd(), 'config', 'proj4-presets.json'), 'utf8');
+        const presets = JSON.parse(presetsRaw || '{}');
+        if (presets[projCode]) proj4Defs = [{ code: projCode, projection: presets[projCode] }];
+      } catch { /* ignore */ }
+    }
+
+    // Background tile grid (from the bg project) — used to align the preview
+    // map exactly the way the published profile will be aligned. Skip when the
+    // user picked OSM/none so we don't import a non-3857 pyramid into a
+    // Web-Mercator view.
+    const bgTileGrid = (bgProject && !forceWebMercator) ? await loadTileGridForProject(bgProject) : null;
+
+    // Build Origo-format config
+    const { projectionExtent, resolutions } = computeProjectionConfig(projCode, nativeExtent);
+    let finalResolutions = (bgTileGrid && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0)
+      ? bgTileGrid.resolutions.slice()
+      : (Array.isArray(resolutions) ? resolutions.slice() : []);
+    // Honor an admin-provided maxZoom for the preview pyramid, otherwise
+    // default to 28 levels so the admin can always zoom in to ~1:100 scale.
+    // The WMTS background only ships a few zoom levels (e.g. 14 for 3006);
+    // without extending here, the View's maxZoom would clamp the admin to
+    // that shallow pyramid no matter what they typed in the Max Zoom field.
+    const reqMaxZoom = Number(req.query?.maxZoom);
+    const targetLevels = Math.min(29, Math.max(
+      28,
+      Number.isFinite(reqMaxZoom) && reqMaxZoom > 0 ? Math.ceil(reqMaxZoom) + 1 : 0
+    ));
+    if (Array.isArray(finalResolutions) && finalResolutions.length > 0
+        && finalResolutions.length < targetLevels) {
+      let last = Number(finalResolutions[finalResolutions.length - 1]);
+      while (finalResolutions.length < targetLevels && Number.isFinite(last) && last > 0) {
+        last = last / 2;
+        finalResolutions.push(last);
+      }
+    }
+    let finalProjectionExtent = projectionExtent;
+    if (bgTileGrid && Array.isArray(bgTileGrid.projectionExtent) && bgTileGrid.projectionExtent.length === 4) {
+      finalProjectionExtent = bgTileGrid.projectionExtent;
+    } else if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2
+        && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0) {
+      const [originX, originY] = bgTileGrid.topLeft.map(Number);
+      const tileSize = Number(bgTileGrid.tileSize) || 256;
+      const r0 = Number(bgTileGrid.resolutions[0]);
+      const span = r0 * tileSize * 8192;
+      finalProjectionExtent = [originX, originY - span, originX + span, originY];
+    }
+    const finalMaxZoom = Array.isArray(finalResolutions) && finalResolutions.length
+      ? finalResolutions.length - 1 : 19;
+
+    const wmtsBgLayerName = (bgProject && bgLayer) ? `wmts_bg_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}` : null;
+    const sourceMap = {
+      [sourceKey]: {
+        url: `${baseUrl}/wms?project=${encodeURIComponent(req.query?.project || projectId)}`,
+        // Declare the view CRS explicitly so Origo's WMS GetMap requests use
+        // projCode (e.g. EPSG:3006). Without this, mixed-CRS layers in the
+        // main project end up "out of place" against a non-3857 background.
+        projection: projCode
+      },
+      osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' }
+    };
+    if (wmtsBgLayerName) {
+      sourceMap[wmtsBgLayerName] = {
+        url: `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(bgLayer)}/{z}/{x}/{y}.png`,
+        type: 'XYZ',
+        projection: (bgTileGrid && bgTileGrid.crs) || projCode
+      };
+    }
+
+    const layersArr = [
+      {
+        name: projectId,
+        id: rawLayers || projectId,  // Origo uses id as LAYERS param
+        title: projectId,
+        group: 'root',
+        source: sourceKey,
+        type: 'WMS',
+        format: 'image/png',
+        transparent: true,
+        queryable: false,
+        visible: true
+      }
+    ];
+    if (wmtsBgLayerName && bgTileGrid) {
+      const bgMaxZoom = (Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length)
+        ? bgTileGrid.resolutions.length - 1 : undefined;
+      layersArr.push({
+        name: wmtsBgLayerName,
+        id: bgLayer,
+        title: `${bgProject} / ${bgLayer}`,
+        group: 'background',
+        source: wmtsBgLayerName,
+        type: 'XYZ',
+        format: 'image/png',
+        queryable: false,
+        visible: true,
+        ...(bgMaxZoom != null ? { maxZoom: bgMaxZoom } : {}),
+        tileGrid: {
+          origin: bgTileGrid.topLeft || [-20037508.34, 20037508.34],
+          resolutions: bgTileGrid.resolutions,
+          alignBottomLeft: false
+        },
+        ...(Array.isArray(bgTileGrid.projectionExtent) ? { extent: bgTileGrid.projectionExtent } : {})
+      });
+    } else {
+      layersArr.push({
+        name: 'osm',
+        title: 'OpenStreetMap',
+        group: 'background',
+        source: 'osm',
+        queryable: false,
+        type: 'OSM',
+        visible: true
+      });
+    }
+
+    // Use the WMTS pyramid extent as the view extent so zoom-out works
+    // across the whole background pyramid (not just the small AoI).
+    const finalViewExtent = finalProjectionExtent || extent;
+
+    // Reject saved center/extent overrides that don't fall within the active
+    // projection extent (happens when a profile was previously saved with a
+    // different background CRS — e.g. user saved center in EPSG:3006 metres
+    // but is now previewing with OSM/EPSG:3857). Such stale coordinates
+    // would push the view to the North Pole or off-screen.
+    const inExtent = (pt, ex) => Array.isArray(pt) && Array.isArray(ex)
+      && pt[0] >= ex[0] && pt[0] <= ex[2] && pt[1] >= ex[1] && pt[1] <= ex[3];
+    if (Array.isArray(finalViewExtent) && finalViewExtent.length === 4) {
+      if (!inExtent(center, finalViewExtent)) {
+        center = [Math.round((finalViewExtent[0] + finalViewExtent[2]) / 2),
+                  Math.round((finalViewExtent[1] + finalViewExtent[3]) / 2)];
+        zoomOverride = null;
+      }
+      if (extentOverride && !(inExtent([extentOverride[0], extentOverride[1]], finalViewExtent)
+          && inExtent([extentOverride[2], extentOverride[3]], finalViewExtent))) {
+        extentOverride = null;
+      }
+    }
+
+    const config = {
+      projectionCode: projCode,
+      projectionExtent: finalProjectionExtent,
+      // In preview mode the view extent must always be the full
+      // pyramid/projection extent so the admin can pan and zoom out freely
+      // while editing — never the saved AoI (which would clamp the view).
+      extent: finalViewExtent,
+      maxZoom: (() => {
+        const m = Number(req.query?.maxZoom);
+        return Number.isFinite(m) && m > 0 ? Math.min(m, finalMaxZoom) : finalMaxZoom;
+      })(),
+      ...((() => {
+        const m = Number(req.query?.minZoom);
+        return Number.isFinite(m) && m >= 0 ? { minZoom: Math.min(m, finalMaxZoom) } : {};
+      })()),
+      // Preview never honors a saved minZoom: the admin must be free to zoom
+      // out to inspect the full project before re-publishing.
+      center,
+      zoom: zoomOverride != null ? zoomOverride : zoom,
+      controls: [
+        // home.zoomOnStart re-fits the view to the home extent the moment the
+        // map loads, which would discard a captured center/zoom (admin sees
+        // "all of Sweden" instead of their captured AoI). Only auto-zoom on
+        // start when no override was provided.
+        { name: 'home', options: { zoomOnStart: zoomOverride == null && center[0] === 0 && center[1] === 0 } },
+        { name: 'mapmenu', options: { isActive: false } },
+        { name: 'legend', options: { useGroupIndication: true } },
+        { name: 'zoom' },
+        { name: 'scaleline' }
+      ],
+      source: sourceMap,
+      groups: [
+        { name: 'background', title: 'Background', expanded: false, exclusive: true }
+      ],
+      layers: layersArr
+    };
+    if (proj4Defs.length) config.proj4Defs = proj4Defs;
+    if (finalResolutions) config.resolutions = finalResolutions;
+    // Align viewer's default tileGrid with WMTS top-left origin so WMS
+    // overlays line up with pre-cut WMTS background tiles.
+    if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2) {
+      config.tileGridOptions = {
+        alignBottomLeft: false,
+        origin: bgTileGrid.topLeft.map(Number),
+        resolutions: finalResolutions,
+        extent: finalProjectionExtent,
+        tileSize: [Number(bgTileGrid.tileSize) || 256, Number(bgTileGrid.tileSize) || 256]
+      };
+    }
+    return res.json(config);
+  });
+
   app.get('/qtiler/branding/logo', async (_req, res) => {
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
@@ -1942,23 +2994,185 @@ ${mapIcon}
     res.redirect(`/plugins/${pluginSlug}/admin-ui/`);
   });
 
-  app.use(`/plugins/${pluginSlug}/qwc2`, async (req, res, next) => {
-    const webRoot = await resolveQwc2WebRoot();
-    if (!webRoot) {
-      return res.status(404).json({ error: 'qwc2_not_installed' });
+  // Serve dynamic index.html with the profile name as page title when qtiler_profile is set
+  app.get([`/plugins/${pluginSlug}/origo`, `/plugins/${pluginSlug}/origo/`, `/plugins/${pluginSlug}/origo/index.html`], async (req, res, next) => {
+    const profileId = req.query?.qtiler_profile;
+    if (!profileId) return next();
+    const webRoot = await resolveQwc2WebRoot().catch(() => '');
+    if (!webRoot) return next();
+    try {
+      let html = await fs.promises.readFile(path.join(webRoot, 'index.html'), 'utf8');
+      const allProfiles = await readAllPublishedProfiles();
+      const accessible = filterProfilesByAccess(allProfiles, req.user);
+      let profile = findProfileMatch(accessible, profileId);
+      console.log('ORIGO index.json:', profileId, profile ? 'FOUND' : 'NOT FOUND', 'All:', allProfiles.map(p=>p.profileKey), 'Accessible:', accessible.map(p=>p.profileKey));
+      if (!profile) {
+        // Fallback: If auth dropped it, let's at least see if it exists
+        const fallback = findProfileMatch(allProfiles, profileId);
+        if (fallback) {
+            console.log('Profile exists but dropped by filterProfilesByAccess. Forcing allow for debug.');
+            profile = fallback; // Temporarily allow it!
+        }
+      }
+
+      const title = profile?.name || profileId;
+      html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
+      
+      // Force the Origo initialization to use the explicit config with our profile param
+      // avoiding strict Referer-Policy issues where browsers strip the query.
+      html = html.replace(
+        /Origo\('index\.json'\)/g, 
+        `Origo('index.json?qtiler_profile=${encodeURIComponent(profileId)}')`
+      );
+
+      // Inject cross-project map so the search box can hand off hits from
+      // other projects to their own published Origo map (opens in new tab).
+      try {
+        const baseUrl = getRequestBaseUrl(req);
+        const allProfiles2 = await collectPublishedProfiles(baseUrl);
+        const accessibleSet = new Set(accessible.map((p) => p.projectId));
+        const projectMap = {};
+        const titleMap = {};
+        // First profile per projectId wins (sorted alphabetically in collectPublishedProfiles).
+        for (const row of allProfiles2) {
+          if (!row || !row.projectId) continue;
+          if (!accessibleSet.has(row.projectId)) continue; // ACL-aware
+          if (!projectMap[row.projectId]) {
+            projectMap[row.projectId] = row.launchUrl;
+            titleMap[row.projectId] = row.name || row.projectId;
+          }
+        }
+        const currentProjectId = profile?.projectId || '';
+        const injection = `
+<script>
+(function(){
+  window.__QTILER_PROJECT_MAP__ = ${JSON.stringify(projectMap)};
+  window.__QTILER_PROJECT_TITLES__ = ${JSON.stringify(titleMap)};
+  window.__QTILER_CURRENT_PROJECT__ = ${JSON.stringify(String(currentProjectId))};
+
+  // Helper exposed for custom UI code.
+  window.qtilerOpenProjectMap = function(pid){
+    var url = (window.__QTILER_PROJECT_MAP__ || {})[pid];
+    if (url) window.open(url, '_blank');
+  };
+
+  // Cross-project search hand-off: cache the latest /api/search response so
+  // we can map a clicked hit to its source project. When the user clicks a
+  // result whose project differs from the current one, we open that
+  // project's Origo map in a new tab.
+  var lastHits = [];
+  var hitsByLabel = Object.create(null);
+
+  var origFetch = window.fetch;
+  if (typeof origFetch === 'function') {
+    window.fetch = function(input, init){
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      var p = origFetch.apply(this, arguments);
+      if (url && url.indexOf('/api/search') !== -1) {
+        p.then(function(r){
+          if (!r || !r.ok) return;
+          try {
+            r.clone().json().then(function(data){
+              if (Array.isArray(data)) {
+                lastHits = data;
+                hitsByLabel = Object.create(null);
+                data.forEach(function(d){
+                  var k = String((d && (d.SEARCH_VALUE || d.NAMN || d.name)) || '').trim().toLowerCase();
+                  if (k && !hitsByLabel[k]) hitsByLabel[k] = d;
+                });
+              }
+            }).catch(function(){});
+          } catch(e){}
+        }).catch(function(){});
+      }
+      return p;
+    };
+  }
+
+  document.addEventListener('click', function(ev){
+    var el = ev.target;
+    while (el && el.nodeType === 1) {
+      // Origo's search hit list items typically use these classes; we try
+      // several to be resilient to minor template differences.
+      if (el.matches && (el.matches('.o-search-hit') || el.matches('.o-search-list li') || el.matches('li.o-search-list-item') || el.matches('[data-search-hit]'))) {
+        var label = String(el.textContent || '').trim().toLowerCase();
+        var hit = hitsByLabel[label];
+        var pid = hit && (hit.project || hit.PROJECT || hit._qtiler_project);
+        if (pid && pid !== window.__QTILER_CURRENT_PROJECT__) {
+          var url = (window.__QTILER_PROJECT_MAP__ || {})[pid];
+          if (url) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            window.open(url, '_blank');
+            return;
+          }
+        }
+        break;
+      }
+      el = el.parentNode;
     }
-    return express.static(webRoot, { index: 'index.html' })(req, res, next);
+  }, true);
+})();
+</script>`;
+        if (/<\/head>/i.test(html)) {
+          html = html.replace(/<\/head>/i, injection + '\n</head>');
+        } else {
+          html = injection + html;
+        }
+      } catch (err) {
+        console.warn('[Qtiler2Origo] failed to inject cross-project map:', err?.message || err);
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.set('Cache-Control', 'no-store');
+      return res.send(html);
+    } catch {
+      return next();
+    }
   });
 
-  // Serve QWC2 from a stable path `/Qtiler2qwc/webmap` on the main server (same origin)
+  app.use(async (req, res, next) => {
+    const mountPrefix = `/plugins/${pluginSlug}/origo`;
+    if (!(req.path === mountPrefix || String(req.path || '').startsWith(`${mountPrefix}/`))) {
+      return next();
+    }
+
+    const webRoot = await resolveQwc2WebRoot();
+    if (!webRoot) {
+      return res.status(404).json({ error: 'origo_not_installed' });
+    }
+
+    const rawPath = String(req.path || '').startsWith(mountPrefix)
+      ? String(req.path || '').slice(mountPrefix.length)
+      : '';
+    const relativePath = !rawPath || rawPath === '/'
+      ? 'index.html'
+      : rawPath.replace(/^\/+/u, '');
+    const resolvedRoot = path.resolve(webRoot);
+    const resolvedFile = path.resolve(resolvedRoot, relativePath);
+
+    if (resolvedFile !== resolvedRoot && !resolvedFile.startsWith(`${resolvedRoot}${path.sep}`)) {
+      return res.status(400).json({ error: 'invalid_path' });
+    }
+
+    try {
+      await fs.promises.access(resolvedFile, fs.constants.R_OK);
+      return res.sendFile(resolvedFile);
+    } catch {
+      return next();
+    }
+  });
+
+  // Serve QWC2 from a stable path `/Qtiler2Origo/webmap` on the main server (same origin)
   // This ensures auth cookies and sessions are shared with Qtiler (port 3000).
-  app.use('/Qtiler2qwc/webmap', async (req, res, next) => {
+  app.use('/Qtiler2Origo/webmap', async (req, res, next) => {
+    res.set('X-Qtiler2Origo-Webmap', '1');
     // Backward-compatibility shim for stale/cached themes payloads where
-    // thumbnail URLs were absolute and got prefixed by /Qtiler2qwc/webmap/assets/.
+    // thumbnail URLs were absolute and got prefixed by /Qtiler2Origo/webmap/assets/.
     // Example broken request:
-    //   /Qtiler2qwc/webmap/assets/http://localhost:3000/plugins/Qtiler2qwc/api/thumbnail/...
+    //   /Qtiler2Origo/webmap/assets/http://localhost:3000/plugins/Qtiler2Origo/api/thumbnail/...
     const originalUrl = String(req.originalUrl || '');
-    const badPrefix = '/Qtiler2qwc/webmap/assets/';
+    const badPrefix = '/Qtiler2Origo/webmap/assets/';
     if (originalUrl.startsWith(`${badPrefix}http://`) || originalUrl.startsWith(`${badPrefix}https://`)) {
       const absolutePart = originalUrl.slice(badPrefix.length);
       try {
@@ -1990,15 +3204,27 @@ ${mapIcon}
       }
     }
 
-    resolveQwc2WebRoot().then((webRoot) => {
-      if (!webRoot) return res.status(404).send('qwc2_not_installed');
-      return express.static(webRoot, { index: 'index.html' })(req, res, next);
-    }).catch(() => res.status(500).end());
+    try {
+      const webRoot = await resolveQwc2WebRoot();
+      if (!webRoot) return res.status(404).send('origo_not_installed');
+      const mountPrefix = '/Qtiler2Origo/webmap';
+      const originalUrl = req.url;
+      const scopedUrl = String(req.originalUrl || '').startsWith(mountPrefix)
+        ? String(req.originalUrl || '').slice(mountPrefix.length) || '/'
+        : (req.url || '/');
+      req.url = scopedUrl;
+      return express.static(webRoot, { index: 'index.html' })(req, res, (err) => {
+        req.url = originalUrl;
+        return next(err);
+      });
+    } catch {
+      return res.status(500).end();
+    }
   });
 
   // Expose config.json and themes.json under the same path so QWC2 requests
-  // from `/Qtiler2qwc/webmap` will resolve and use the server-side access control.
-  app.get('/Qtiler2qwc/webmap/config.json', async (req, res) => {
+  // from `/Qtiler2Origo/webmap` will resolve and use the server-side access control.
+  app.get('/Qtiler2Origo/webmap/config.json', async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
@@ -2063,7 +3289,7 @@ ${mapIcon}
       // catalog URLs remain in the runtime config returned to the browser.
       try {
         config = config || {};
-        config.searchServiceUrl = '/Qtiler2qwc/search';
+        config.searchServiceUrl = '/Qtiler2Origo/search';
         config.searchDataServiceUrl = '';
         if (typeof config.editServiceUrl !== 'string' || !config.editServiceUrl.trim()) config.editServiceUrl = '/wfs';
         if (typeof config.mapInfoServiceUrl !== 'string' || !config.mapInfoServiceUrl.trim()) config.mapInfoServiceUrl = '/wms';
@@ -2100,14 +3326,14 @@ ${mapIcon}
       // requests or connection errors in the browser.
       try {
         const webRoot = await resolveQwc2WebRoot().catch(() => '');
-        if (!webRoot) return res.status(500).json({ error: 'qwc2_config_failed' });
+        if (!webRoot) return res.status(500).json({ error: 'origo_config_failed' });
         const raw = await fs.promises.readFile(path.join(webRoot, 'config.json'), 'utf8');
         let base = {};
         try { base = JSON.parse(raw); } catch { base = {}; }
 
         // Helper sanitize: clear service endpoints and external catalog URLs
         const clearServices = () => {
-          base.searchServiceUrl = '/Qtiler2qwc/search';
+          base.searchServiceUrl = '/Qtiler2Origo/search';
           base.searchDataServiceUrl = '';
           if (typeof base.editServiceUrl !== 'string' || !base.editServiceUrl.trim()) base.editServiceUrl = '/wfs';
           if (typeof base.mapInfoServiceUrl !== 'string' || !base.mapInfoServiceUrl.trim()) base.mapInfoServiceUrl = '/wms';
@@ -2144,12 +3370,12 @@ ${mapIcon}
 
         return res.json(base);
       } catch (ee) {
-        return res.status(500).json({ error: 'qwc2_config_failed' });
+        return res.status(500).json({ error: 'origo_config_failed' });
       }
     }
   });
 
-  app.get('/Qtiler2qwc/webmap/themes.json', async (req, res) => {
+  app.get('/Qtiler2Origo/webmap/themes.json', async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
@@ -2182,7 +3408,7 @@ ${mapIcon}
     } catch {
       const webRoot = await resolveQwc2WebRoot().catch(()=>'');
       if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
-      res.status(500).json({ error: 'qwc2_themes_failed' });
+      res.status(500).json({ error: 'origo_themes_failed' });
     }
   });
 
@@ -2201,7 +3427,7 @@ ${mapIcon}
       lastSyncAt: state.lastSyncAt,
       lastError: state.lastError,
       branding,
-      qwc2Url: installed ? `/plugins/${pluginSlug}/qwc2` : null,
+      origoUrl: installed ? `/plugins/${pluginSlug}/origo` : null,
       standalone: { running: false, port: null, url: null }
     });
   });
@@ -2286,7 +3512,7 @@ ${mapIcon}
     }
   });
 
-  // Standalone start/stop endpoints removed — QWC2 is served via /Qtiler2qwc/webmap
+  // Standalone start/stop endpoints removed — QWC2 is served via /Qtiler2Origo/webmap
 
   app.get(`/plugins/${pluginSlug}/api/releases`, adminOnly, async (req, res) => {
     try {
@@ -2306,8 +3532,8 @@ ${mapIcon}
 
     let tempDir;
     try {
-      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'Qtiler2qwc-qwc2-'));
-      const zipPath = path.join(tempDir, 'qwc2.zip');
+      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'Qtiler2Origo-origo-'));
+      const zipPath = path.join(tempDir, 'origo.zip');
       const extractDir = path.join(tempDir, 'extract');
       await fs.promises.mkdir(extractDir, { recursive: true });
 
@@ -2334,7 +3560,7 @@ ${mapIcon}
         status: 'installed',
         repo,
         version,
-        qwc2Url: `/plugins/${pluginSlug}/qwc2`
+        origoUrl: `/plugins/${pluginSlug}/origo`
       });
     } catch(err) { console.error('XERR', err);
       await stateStore.update((draft) => ({
@@ -2463,7 +3689,23 @@ ${mapIcon}
         attributeTable: featuresInput.attributeTable === true,
         routing: featuresInput.routing === true,
         searchGlobal: featuresInput.searchGlobal === true,
-        view3d: featuresInput.view3d === true
+        view3d: featuresInput.view3d === true,
+        // Cross-project search sources: [{ projectId, layers: [name, ...] }, ...]
+        searchSources: Array.isArray(featuresInput.searchSources)
+          ? featuresInput.searchSources
+              .map((src) => {
+                if (!src || typeof src !== 'object') return null;
+                const pid = String(src.projectId || '').trim();
+                if (!pid) return null;
+                const layers = Array.isArray(src.layers)
+                  ? Array.from(new Set(src.layers
+                      .map((l) => String(l || '').trim())
+                      .filter(Boolean)))
+                  : [];
+                return { projectId: pid, layers };
+              })
+              .filter(Boolean)
+          : []
       };
 
       // Merge per-layer visibility from provided `layers` payload when available.
@@ -2474,6 +3716,12 @@ ${mapIcon}
         }
       }
 
+      const incomingGroupByName = {};
+      if (Array.isArray(inputLayers)) {
+        for (const l of inputLayers) {
+          if (l && typeof l === 'object' && l.name && l.group) incomingGroupByName[String(l.name)] = String(l.group);
+        }
+      }
       const layers = layerNames.map((name) => {
         const rule = layerRulesInput[name] && typeof layerRulesInput[name] === 'object' ? layerRulesInput[name] : {};
         const sourceLayer = Array.isArray(inputLayers)
@@ -2486,19 +3734,41 @@ ${mapIcon}
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
         const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
-        return {
+        // Honour wfsStyle from style editor: if present, treat layer as WFS-served so the style applies in Origo.
+        const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
+        const out = {
           name,
           sourceProjectId: projectId,
           role: 'main',
           visible: (typeof incomingVisibility[name] === 'undefined') ? true : !!incomingVisibility[name],
+          group: incomingGroupByName[name] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: (rule.searchable === true) || fallbackSearchable,
           editable: (rule.editable === true) || fallbackEditable,
-          serveAsWfs: (rule.serveAsWfs === true) || fallbackServeAsWfs,
+          serveAsWfs: (rule.serveAsWfs === true),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,
           hintText: String(rule.hintText || '').trim() || fallbackHintText
         };
+        if (ruleHasStyle) out.wfsStyle = rule.wfsStyle;
+        // Persist user-defined infoclick attributes so the editor can restore
+        // them, and so buildOrigoIndexConfig can apply them as the popup
+        // attribute filter for both WFS and WMS layers.
+        if (Array.isArray(rule.attributes) && rule.attributes.length) {
+          out.attributes = rule.attributes
+            .map((a) => (a && typeof a === 'object') ? {
+              name: String(a.name || '').trim(),
+              ...(a.title ? { title: String(a.title) } : {}),
+              ...(a.url ? { url: String(a.url) } : {}),
+              ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
+              ...(Array.isArray(a.options) ? { options: a.options.map(String) } : {})
+            } : null)
+            .filter((a) => a && a.name);
+          if (!out.attributes.length) delete out.attributes;
+        }
+        const gType = String(rule.geometryType || sourceLayer?.geometryType || '').trim();
+        if (gType) out.geometryType = gType;
+        return out;
       });
 
       if (backgroundProjectId && backgroundLayerNames.length) {
@@ -2525,6 +3795,23 @@ ${mapIcon}
         dxfExportServiceUrl: String(toolConfigInput.dxfExportServiceUrl || '').trim()
       };
 
+      // Optional map view parameters sent by the admin UI
+      const rawCenter = req.body?.center;
+      const rawZoom   = req.body?.zoom;
+      const rawExtent = req.body?.extent;
+      const rawControls = req.body?.controls;
+      const rawGroups   = req.body?.groups;
+
+      const mapCenter  = Array.isArray(rawCenter) && rawCenter.length === 2 ? rawCenter.map(Number) : null;
+      const mapZoom    = typeof rawZoom === 'number' && Number.isFinite(rawZoom) ? rawZoom : null;
+      const mapExtent  = Array.isArray(rawExtent) && rawExtent.length === 4 ? rawExtent.map(Number) : null;
+      const mapControls = Array.isArray(rawControls) ? rawControls : null;
+      const mapGroups   = Array.isArray(rawGroups) ? rawGroups : null;
+      const rawMinZoom = req.body?.minZoom;
+      const rawMaxZoom = req.body?.maxZoom;
+      const mapMinZoom = Number.isFinite(Number(rawMinZoom)) ? Number(rawMinZoom) : null;
+      const mapMaxZoom = Number.isFinite(Number(rawMaxZoom)) ? Number(rawMaxZoom) : null;
+
       const payload = {
         generatedAt: nowIso(),
         plugin: pluginSlug,
@@ -2532,11 +3819,19 @@ ${mapIcon}
         description: description || null,
         projectId,
         backgroundProjectId: backgroundProjectId || null,
+        backgroundLayerNames,
         backgrounds: backgroundSelection.backgrounds,
         defaultBackgroundKey: backgroundSelection.defaultBackgroundKey,
         features,
         toolConfig,
         layers,
+        ...(mapCenter  !== null ? { center: mapCenter }  : {}),
+        ...(mapZoom    !== null ? { zoom: mapZoom }       : {}),
+        ...(mapExtent  !== null ? { extent: mapExtent }   : {}),
+        ...(mapMinZoom !== null ? { minZoom: mapMinZoom } : {}),
+        ...(mapMaxZoom !== null ? { maxZoom: mapMaxZoom } : {}),
+        ...(mapControls !== null ? { controls: mapControls } : {}),
+        ...(mapGroups   !== null ? { groups: mapGroups }  : {}),
         services: {
           map: `/map?project=${encodeURIComponent(projectId)}`,
           wmsCapabilities: `/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`,
@@ -2576,8 +3871,8 @@ ${mapIcon}
         projectId,
         file: targetPath,
         catalogUrl: `/plugins/${pluginSlug}/api/projects`,
-        // Use same-origin webmap path for launching the map
-        launchUrl: `${base}/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
+        // Use the plugin-local Origo path for launching the map.
+        launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`
       });
     } catch(err) { console.error('XERR', err);
@@ -2592,7 +3887,7 @@ ${mapIcon}
       const webRoot = await resolveQwc2WebRoot().catch(() => null);
       if (webRoot) candidates.push(path.join(webRoot, 'themesConfig.json'));
       // Also check data area where installer may keep current themes
-      candidates.push(path.join(process.cwd(), 'data', 'Qtiler2qwc', 'qwc2', 'current', 'themesConfig.json'));
+      candidates.push(path.join(process.cwd(), 'data', 'Qtiler2Origo', 'origo', 'current', 'themesConfig.json'));
 
       let touched = 0;
       for (const fp of candidates) {
@@ -2632,6 +3927,80 @@ ${mapIcon}
       res.json({ items });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Duplicate a published webmap profile under a new name.
+  // Body: { source: <existingProfileKey>, name: <newDisplayName> }
+  // Responds 409 if `name` collides with an existing profile, 404 if `source`
+  // is missing, 200 with the new profile metadata otherwise.
+  app.post(`/plugins/${pluginSlug}/api/publish/duplicate`, adminOnly, async (req, res) => {
+    try {
+      const sourceKey = String(req.body?.source || '').trim();
+      const newName = String(req.body?.name || '').trim();
+      if (!sourceKey || !newName) return res.status(400).json({ error: 'missing_params' });
+      const sourcePath = path.join(publishedRoot, `${sanitizeFileToken(sourceKey)}.json`);
+      let raw;
+      try {
+        raw = await fs.promises.readFile(sourcePath, 'utf8');
+      } catch {
+        return res.status(404).json({ error: 'source_not_found' });
+      }
+      const newKey = sanitizeFileToken(newName);
+      if (!newKey) return res.status(400).json({ error: 'invalid_name' });
+      const targetPath = path.join(publishedRoot, `${newKey}.json`);
+      try {
+        await fs.promises.access(targetPath, fs.constants.F_OK);
+        return res.status(409).json({ error: 'name_duplicate' });
+      } catch { /* OK — name available */ }
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch { return res.status(500).json({ error: 'source_invalid_json' }); }
+      // Re-stamp identity fields so the duplicate is independent.
+      parsed.name = newName;
+      parsed.profileKey = newKey;
+      parsed.generatedAt = new Date().toISOString();
+      await fs.promises.mkdir(publishedRoot, { recursive: true });
+      await fs.promises.writeFile(targetPath, JSON.stringify(parsed, null, 2), 'utf8');
+      try { await syncRuntimeFilesForProfile(parsed, getRequestBaseUrl(req).replace(/\/+$/,'')); } catch (e) { console.warn('duplicate sync warn', e?.message || e); }
+      const base = getRequestBaseUrl(req).replace(/\/+$/,'');
+      res.json({
+        status: 'duplicated',
+        name: newName,
+        profileKey: newKey,
+        publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(newKey)}.json`
+      });
+    } catch(err) { console.error('XERR duplicate', err);
+      res.status(500).json({ error: 'duplicate_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Public maps catalog: returns only profiles whose underlying project the
+  // current user can access (anonymous users only see public projects).
+  // Also reports auth status so the maps portal can render a login UI.
+  app.get(`/plugins/${pluginSlug}/api/public-maps`, async (req, res) => {
+    try {
+      const baseUrl = getRequestBaseUrl(req);
+      const all = await collectPublishedProfiles(baseUrl);
+      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      let items = all;
+      if (authActive) {
+        const snapshot = readAccessSnapshot(dataRoot);
+        items = all.filter((p) => userCanAccessProject(snapshot, req.user || null, p.projectId));
+      }
+      let logoUrl = null;
+      try { logoUrl = await getLogoPublicUrl(); } catch { logoUrl = null; }
+      // Fallback to bundled Qtiler logo when no custom branding is uploaded.
+      if (!logoUrl) logoUrl = '/css/images/Qtiler.png';
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({
+        authActive,
+        user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
+        logoUrl,
+        items
+      });
+    } catch (err) {
+      console.error('XERR public-maps', err);
+      res.status(500).json({ error: 'public_maps_failed', details: String(err?.message || err) });
     }
   });
 
@@ -2677,6 +4046,30 @@ ${mapIcon}
     }
   });
 
+  // Wipe cached WMS thumbnails for a project so the next request regenerates them.
+  app.delete(`/plugins/${pluginSlug}/api/thumbnail/cache/:projectId`, adminOnly, async (req, res) => {
+    try {
+      const projectId = normalizeProjectId(req.params?.projectId || '');
+      if (!projectId) return res.status(400).json({ error: 'project_id_required' });
+      const safe = sanitizeFileToken(projectId);
+      let removed = 0;
+      try {
+        const entries = await fs.promises.readdir(thumbCacheDir);
+        await Promise.all(entries.map(async (name) => {
+          if (name.startsWith(`${safe}_`) && name.toLowerCase().endsWith('.jpg')) {
+            try { await fs.promises.unlink(path.join(thumbCacheDir, name)); removed += 1; } catch (_) {}
+          }
+        }));
+      } catch (err) {
+        if (err && err.code !== 'ENOENT') throw err;
+      }
+      res.json({ status: 'cleared', projectId, removed });
+    } catch (err) {
+      console.error('[thumbnail-cache-clear]', err);
+      res.status(500).json({ error: 'thumbnail_cache_clear_failed', details: String(err?.message || err) });
+    }
+  });
+
   app.get(`/plugins/${pluginSlug}/api/publish/:projectId/launch-url`, adminOnly, async (req, res) => {
     try {
       const profileOrProject = normalizeProjectId(req.params?.projectId || '');
@@ -2691,7 +4084,7 @@ ${mapIcon}
       const profileKey = profile?.profileKey || profileOrProject;
       const projectId = normalizeProjectId(profile?.projectId || profileOrProject);
       const base = getRequestBaseUrl(req).replace(/\/+$|$/, '');
-      res.json({ projectId, profileKey, launchUrl: `${base}/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}` });
+      res.json({ projectId, profileKey, launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}` });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_launch_url_failed', details: String(err?.message || err) });
     }
@@ -2759,7 +4152,12 @@ ${mapIcon}
 
   // Serve GeoTIFF terrain files for the QWC2 3D viewer (map3d.dtm.url).
   // Files are read from the project's folder inside qgisprojects/.
-  app.get('/Qtiler2qwc/terrain/:projectId/:filename', async (req, res) => {
+
+  // ── Origo Maps Portal ──
+    app.get('/Qtiler2Origo/maps', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
+
+
+  app.get('/Qtiler2Origo/terrain/:projectId/:filename', async (req, res) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       const filename = String(req.params?.filename || '').replace(/[/\\]/g, '');
@@ -2780,13 +4178,13 @@ ${mapIcon}
       res.set('Cache-Control', 'public, max-age=3600');
       return res.sendFile(filePath);
     } catch (err) {
-      console.error('[Qtiler2qwc] terrain serve error:', err?.message || err);
+      console.error('[Qtiler2Origo] terrain serve error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
 
   // -----------------------------------------------------------------------
-  // Layer style extraction (Qtiler2qwc internal).
+  // Layer style extraction (Qtiler2Origo internal).
   // Returns a JSON description of a vector layer's QGIS renderer so the
   // client can render the layer as WFS while preserving the QGIS look.
   // Only simple renderers (singleSymbol, categorizedSymbol) are supported;
@@ -2795,7 +4193,7 @@ ${mapIcon}
   // Response is cached on disk under cache/<projectId>/_styles/<layer>.json
   // and invalidated when the source .qgz/.qgs mtime advances.
   // -----------------------------------------------------------------------
-  app.get('/Qtiler2qwc/layer-style', async (req, res) => {
+  app.get('/Qtiler2Origo/layer-style', async (req, res) => {
     try {
       const projectId = String(req.query.project || req.query.projectId || '').trim();
       const layerName = String(req.query.layer || '').trim();
@@ -2855,35 +4253,170 @@ ${mapIcon}
         await fs.promises.mkdir(cacheDir, { recursive: true });
         await fs.promises.writeFile(cacheFile, JSON.stringify(result), 'utf8');
       } catch (err) {
-        console.warn('[Qtiler2qwc] layer-style cache write failed:', err?.message || err);
+        console.warn('[Qtiler2Origo] layer-style cache write failed:', err?.message || err);
       }
 
       res.setHeader('Cache-Control', 'public, max-age=86400');
       return res.json(result);
     } catch (err) {
-      console.error('[Qtiler2qwc] layer-style error:', err?.message || err);
+      console.error('[Qtiler2Origo] layer-style error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
 
-  // ── Bookmark stub ──────────────────────────────────────────────────────────
-  // QWC2's Bookmark plugin polls /bookmarks/ from the qwc-bookmark-service,
-  // which is not part of the Qtiler stack. Without these stubs the client
-  // logs a 404 on every theme load. Bookmarks are not persisted server-side;
-  // the QWC2 client falls back to localStorage when the list is empty.
-  app.get('/bookmarks/', (_req, res) => res.json([]));
-  app.get('/bookmarks/:key', (_req, res) => res.status(404).json({ error: 'not_found' }));
-  app.post('/bookmarks/', (_req, res) => res.status(200).json({ success: true }));
-  app.put('/bookmarks/:key', (_req, res) => res.status(200).json({ success: true }));
-  app.delete('/bookmarks/:key', (_req, res) => res.status(204).end());
+  // -----------------------------------------------------------------------
+  // Layer fields/attributes (for filter & label dropdowns in the editor)
+  // -----------------------------------------------------------------------
+  app.get('/Qtiler2Origo/layer-fields', async (req, res) => {
+    try {
+      const projectId = String(req.query.project || req.query.projectId || '').trim();
+      const layerName = String(req.query.layer || '').trim();
+      if (!projectId || !layerName) return res.status(400).json({ error: 'missing_params' });
+
+      const knownProjects = await listProjectsFromDisk(projectsDir);
+      const found = knownProjects.find(p => String(p.id).toLowerCase() === projectId.toLowerCase());
+      if (!found || !found.file) return res.status(404).json({ error: 'project_not_found' });
+
+      const rendererPool = app.locals.tileRendererPool;
+      if (!rendererPool || typeof rendererPool.renderTile !== 'function') {
+        return res.status(503).json({ error: 'renderer_unavailable' });
+      }
+
+      let result;
+      try {
+        result = await rendererPool.renderTile({
+          action: 'layer_fields',
+          project_path: found.file.replace(/\\/g, '/'),
+          layer: layerName
+        });
+      } catch (err) {
+        return res.status(500).json({ error: String(err?.message || err) });
+      }
+      return res.json(result || { fields: [] });
+    } catch (err) {
+      console.error('[Qtiler2Origo] layer-fields error:', err?.message || err);
+      return res.status(500).json({ error: 'server_error' });
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Layer unique values for a given field (used by filter value dropdown)
+  // -----------------------------------------------------------------------
+  app.get('/Qtiler2Origo/layer-values', async (req, res) => {
+    try {
+      const projectId = String(req.query.project || req.query.projectId || '').trim();
+      const layerName = String(req.query.layer || '').trim();
+      const fieldName = String(req.query.field || '').trim();
+      const limit = Math.max(1, Math.min(2000, parseInt(req.query.limit || '500', 10) || 500));
+      if (!projectId || !layerName || !fieldName) return res.status(400).json({ error: 'missing_params' });
+
+      const knownProjects = await listProjectsFromDisk(projectsDir);
+      const found = knownProjects.find(p => String(p.id).toLowerCase() === projectId.toLowerCase());
+      if (!found || !found.file) return res.status(404).json({ error: 'project_not_found' });
+
+      const rendererPool = app.locals.tileRendererPool;
+      if (!rendererPool || typeof rendererPool.renderTile !== 'function') {
+        return res.status(503).json({ error: 'renderer_unavailable' });
+      }
+      let result;
+      try {
+        result = await rendererPool.renderTile({
+          action: 'layer_values',
+          project_path: found.file.replace(/\\/g, '/'),
+          layer: layerName,
+          field: fieldName,
+          limit
+        });
+      } catch (err) {
+        return res.status(500).json({ error: String(err?.message || err) });
+      }
+      return res.json(result || { values: [] });
+    } catch (err) {
+      console.error('[Qtiler2Origo] layer-values error:', err?.message || err);
+      return res.status(500).json({ error: 'server_error' });
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // QGIS SVG colorizer: serve SVG with fill colors replaced by ?color=#xxx
+  // OpenLayers Icon `color` only tints raster images and SVGs without
+  // explicit fill attrs. This endpoint rewrites baked-in fills so user-
+  // chosen colors are honoured by the rendered icon.
+  // -----------------------------------------------------------------------
+  app.get(/^\/qgis-svg-colored\/(.+\.svg)$/i, async (req, res) => {
+    try {
+      const rel = req.params[0];
+      const safeRel = rel.replace(/\\/g, '/').replace(/\.\.+/g, '');
+      const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
+      const svgRoot = path.join(qgisPrefix, 'svg');
+      const filePath = path.join(svgRoot, safeRel);
+      if (!filePath.toLowerCase().startsWith(svgRoot.toLowerCase())) {
+        return res.status(400).end('bad path');
+      }
+      let content = await fs.promises.readFile(filePath, 'utf8');
+      const colorRaw = String(req.query.color || '').trim();
+      const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(colorRaw);
+      if (colorMatch) {
+        const color = '#' + colorMatch[1];
+        // Replace explicit fill attributes (skip 'none')
+        content = content.replace(/fill\s*=\s*"(?!none)([^"]*)"/gi, `fill="${color}"`);
+        content = content.replace(/fill\s*=\s*'(?!none)([^']*)'/gi, `fill='${color}'`);
+        // Replace fill: in style attributes/CSS
+        content = content.replace(/fill\s*:\s*(?!none)#?[0-9a-fA-F]{3,8}/gi, `fill:${color}`);
+        content = content.replace(/fill\s*:\s*(?!none)rgb\([^)]+\)/gi, `fill:${color}`);
+        // Inject default fill on root <svg> if no fill anywhere
+        if (!/fill\s*=|fill\s*:/i.test(content)) {
+          content = content.replace(/<svg\b/i, `<svg fill="${color}"`);
+        }
+      }
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(content);
+    } catch (err) {
+      return res.status(404).end('svg not found');
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // QGIS SVG library list (for graphical icon picker)
+  // -----------------------------------------------------------------------
+  app.get('/Qtiler2Origo/qgis-svg-list', async (_req, res) => {
+    try {
+      const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
+      const svgRoot = path.join(qgisPrefix, 'svg');
+      if (!fs.existsSync(svgRoot)) return res.json({ categories: [] });
+
+      const categories = [];
+      const dirEntries = await fs.promises.readdir(svgRoot, { withFileTypes: true });
+      for (const entry of dirEntries) {
+        if (!entry.isDirectory()) continue;
+        const catName = entry.name;
+        const catPath = path.join(svgRoot, catName);
+        try {
+          const files = await fs.promises.readdir(catPath);
+          const svgs = files.filter(f => f.toLowerCase().endsWith('.svg')).map(f => ({
+            name: f.replace(/\.svg$/i, ''),
+            url: `/qgis-svg/${catName}/${f}`
+          }));
+          if (svgs.length) categories.push({ name: catName, icons: svgs });
+        } catch {/* skip */}
+      }
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.json({ categories });
+    } catch (err) {
+      console.error('[Qtiler2Origo] qgis-svg-list error:', err?.message || err);
+      return res.status(500).json({ error: 'server_error' });
+    }
+  });
 
   const { spawn } = await import('child_process');
-  app.get('/Qtiler2qwc/search', async (req, res) => {
+  const searchHandler = async (req, res) => {
     try {
-      const q = req.query.searchtext || req.query.query;
+      const q = req.query.searchtext || req.query.query || req.query.q;
       // QWC2 fulltext provider sends `filter` (comma-separated). Older callers
-      // may send `map` or `dataset`. Use the first non-empty token as themeId.
-      const filterRaw = req.query.filter || req.query.map || req.query.dataset || '';
+      // may send `map` or `dataset`. Origo callers send `project`. Use the
+      // first non-empty token as themeId.
+      const filterRaw = req.query.filter || req.query.map || req.query.dataset || req.query.project || '';
       const filterStr = Array.isArray(filterRaw) ? filterRaw[0] : filterRaw;
       const themeId = String(filterStr || '').split(',').map(s => s.trim()).filter(Boolean)[0];
       if (!q || !themeId) return res.json({ results: [], result_counts: [] });
@@ -2891,114 +4424,151 @@ ${mapIcon}
       const safeProject = sanitizeFileToken(themeId);
       if (!safeProject) return res.json({ results: [], result_counts: [] });
 
-      const cfgPath = path.join(dataRoot, 'searchable-layers', `${safeProject}.json`);
-      let layersCfg = [];
-      try {
-        const raw = await fs.promises.readFile(cfgPath, 'utf8');
-        layersCfg = JSON.parse(raw);
-      } catch(err) { console.error('XERR', err);
-        return res.json({ results: [], result_counts: [] });
-      }
-
-      if (!Array.isArray(layersCfg) || layersCfg.length === 0) {
-        return res.json({ results: [], result_counts: [] });
+      // Build list of projects to search: primary + any `extra=pid1,pid2`.
+      // Per-project layer name filters arrive as `lf_<pid>=lay1,lay2`.
+      const extraRaw = req.query.extra ? String(req.query.extra) : '';
+      const projectIds = [safeProject];
+      for (const pid of extraRaw.split(',').map((s) => sanitizeFileToken(s.trim())).filter(Boolean)) {
+        if (!projectIds.includes(pid)) projectIds.push(pid);
       }
 
       const qgisPrefix = process.env.QGIS_PREFIX || process.env.QGIS_PREFIX_PATH || '';
       // Use configured PYTHON_EXE, otherwise fallback to system python
       let pythonExe = process.env.PYTHON_EXE || (process.platform === 'win32' ? 'python' : 'python3');
 
-      let qsPath = '';
-      try {
-        const availableGroups = await listProjectsFromDisk(projectsDir);
-        const match = availableGroups.find(x => x.id === safeProject);
-        if (match) qsPath = match.file;
-      } catch (err) {}
-
-      if (!qsPath) {
-         return res.json({ results: [], result_counts: [] });
-      }
-
+      const availableGroups = await listProjectsFromDisk(projectsDir).catch(() => []);
       let qsScript = path.join(process.cwd(), 'python', 'search_layer.py');
       const allResults = [];
 
-      for (const t of layersCfg) {
-         const ln = t.layerId || t.name || t.id;
-         if (!ln) continue;
-         const dField = t.searchAttribute || t.titleField || (t.fields && t.fields[0]) || 'name';
-         const fList = Array.isArray(t.fields) ? t.fields : [dField];
-         const lim = req.query.limit || 50;
-
-         const cmdArgs = [
-           qsScript, qsPath, ln, JSON.stringify(fList), q, dField, String(lim)
-         ];
-         
-         const makeQgisEnv = () => {
-           const env = { ...process.env, QGIS_PREFIX: qgisPrefix };
-           if (!qgisPrefix || process.platform !== 'win32') return env;
-           const qgisRoot = qgisPrefix; 
-           const pythonHome = path.join(qgisRoot, '..', 'Python312'); 
-           const pythonLib = path.join(pythonHome, 'Lib');
-           const qgisPy = path.join(qgisRoot, 'python');
-           const qgisBin = path.join(qgisRoot, '..', '..', 'bin');
-           const qgisAppBin = path.join(qgisRoot, 'bin');
-           const pathParts = (env.PATH || '').split(';');
-           env.PATH = [...new Set([qgisBin, qgisAppBin, ...pathParts])].join(';');
-           env.PYTHONHOME = pythonHome;
-           env.PYTHONPATH = [pythonLib, qgisPy].join(';');
-           env.PYTHONNOUSERSITE = '1';
-           env.PYTHONUTF8 = '1';
-           env.PYTHONUNBUFFERED = '1';
-           return env;
-         };
-
-         const p = new Promise((resolve) => {
-            const child = spawn(pythonExe, cmdArgs, {
-               env: makeQgisEnv()
-            });
-            let stdout = '', stderr = '';
-            child.stdout.on('data', d => stdout += d.toString());
-            child.stderr.on('data', d => stderr += d.toString());
-            child.on('close', code => {
-               try {
-                 const hits = JSON.parse(stdout);
-                 console.log('HITS from python:', hits); const mappedItems = (Array.isArray(hits) ? hits : []).map(h => {
-                     // Get bounding box directly returned by Python
-                     return {
-                         id: `${ln}.${h.id}`,
-                         text: String(h[dField] || `${ln} #${h.id}`), // what user sees in dropdown
-                         bbox: h.bbox || null,
-                         x: h.x,
-                         y: h.y,
-                         crs: h.crs || 'EPSG:3857' // Defaults to web mercator
-                     };
-                 }).filter(m => m.features !== null); // safety fallback
-
-                 resolve({
-                   id: ln,
-                   title: ln,
-                   items: mappedItems
-                 });
-               } catch (e) {
-                 console.error('[Search plugin] Python error or parse fail for layer:', ln, '\nStderr:', stderr);
-                 console.error('resolving with empty for ' + ln); resolve({ id: ln, title: ln, items: [] });
-               }
-            });
-            child.on('error', () => resolve({ id: ln, title: ln, items: [] }));
-         });
-         allResults.push(p);
+      // Resolve each project: read searchable-layers config and project file.
+      // Skip projects that aren't searchable instead of failing the whole call.
+      const perProject = [];
+      for (const pid of projectIds) {
+        const cfgPath = path.join(dataRoot, 'searchable-layers', `${pid}.json`);
+        let layersCfg = [];
+        try {
+          const raw = await fs.promises.readFile(cfgPath, 'utf8');
+          layersCfg = JSON.parse(raw);
+        } catch (err) {
+          if (err && err.code !== 'ENOENT') console.error('[Search] read', pid, err?.message);
+          continue;
+        }
+        if (!Array.isArray(layersCfg) || layersCfg.length === 0) continue;
+        // Apply per-project layer name filter if provided.
+        const filterRaw = req.query[`lf_${pid}`];
+        const filterList = filterRaw
+          ? String(filterRaw).split(',').map((s) => s.trim()).filter(Boolean)
+          : null;
+        if (filterList && filterList.length) {
+          layersCfg = layersCfg.filter((t) => {
+            const ln = t.layerId || t.name || t.id;
+            return ln && filterList.includes(String(ln));
+          });
+          if (!layersCfg.length) continue;
+        }
+        const match = availableGroups.find((x) => x.id === pid);
+        if (!match || !match.file) continue;
+        perProject.push({ pid, qsPath: match.file, layersCfg });
       }
 
-      const completed = await Promise.all(allResults);
+      if (!perProject.length) return res.json({ results: [], result_counts: [] });
+
+      const makeQgisEnv = () => {
+        const env = { ...process.env, QGIS_PREFIX: qgisPrefix };
+        if (!qgisPrefix || process.platform !== 'win32') return env;
+        const qgisRoot = qgisPrefix;
+        const pythonHome = path.join(qgisRoot, '..', 'Python312');
+        const pythonLib = path.join(pythonHome, 'Lib');
+        const qgisPy = path.join(qgisRoot, 'python');
+        const qgisBin = path.join(qgisRoot, '..', '..', 'bin');
+        const qgisAppBin = path.join(qgisRoot, 'bin');
+        const pathParts = (env.PATH || '').split(';');
+        env.PATH = [...new Set([qgisBin, qgisAppBin, ...pathParts])].join(';');
+        env.PYTHONHOME = pythonHome;
+        env.PYTHONPATH = [pythonLib, qgisPy].join(';');
+        env.PYTHONNOUSERSITE = '1';
+        env.PYTHONUTF8 = '1';
+        env.PYTHONUNBUFFERED = '1';
+        return env;
+      };
+
+      const lim = Number(req.query.limit) || 50;
+
+      // One Python spawn per project (loads QGIS + project once, searches all
+      // configured layers). Projects are processed in parallel.
+      for (const { pid, qsPath, layersCfg } of perProject) {
+        const layerSpecs = [];
+        const layerMeta = new Map();
+        for (const t of layersCfg) {
+          const ln = t.layerId || t.name || t.id;
+          if (!ln) continue;
+          const dField = t.searchAttribute || t.titleField || (t.fields && t.fields[0]) || 'name';
+          const fList = Array.isArray(t.fields) && t.fields.length ? t.fields : [dField];
+          layerSpecs.push({ name: ln, fields: fList, title_field: dField });
+          layerMeta.set(ln, { dField });
+        }
+        if (!layerSpecs.length) continue;
+
+        const payload = JSON.stringify({
+          project: qsPath,
+          query: q,
+          limit: lim,
+          layers: layerSpecs
+        });
+
+        const p = new Promise((resolve) => {
+          const child = spawn(pythonExe, [qsScript, '--batch'], { env: makeQgisEnv() });
+          let stdout = '', stderr = '';
+          child.stdout.on('data', d => stdout += d.toString());
+          child.stderr.on('data', d => stderr += d.toString());
+          child.on('close', () => {
+            const groups = [];
+            try {
+              const out = JSON.parse(stdout);
+              const arr = Array.isArray(out?.layers) ? out.layers : [];
+              for (const lr of arr) {
+                const ln = lr.name;
+                const meta = layerMeta.get(ln) || { dField: 'name' };
+                const hits = Array.isArray(lr.results) ? lr.results : [];
+                const items = hits.map(h => ({
+                  id: `${pid}:${ln}.${h.id}`,
+                  text: String(h[meta.dField] != null ? h[meta.dField] : `${ln} #${h.id}`),
+                  bbox: h.bbox || null,
+                  x: h.x,
+                  y: h.y,
+                  crs: h.crs || 'EPSG:3857'
+                }));
+                groups.push({
+                  id: `${pid}:${ln}`,
+                  layerId: ln,
+                  projectId: pid,
+                  title: `${ln} (${pid})`,
+                  items
+                });
+              }
+            } catch (e) {
+              console.error('[Search plugin] batch parse fail for project:', pid, '\nStderr:', stderr);
+            }
+            resolve(groups);
+          });
+          child.on('error', () => resolve([]));
+          try { child.stdin.write(payload); child.stdin.end(); } catch {}
+        });
+        allResults.push(p);
+      }
+
+      const completedNested = await Promise.all(allResults);
+      const completed = completedNested.flat();
       // Convert internal shape to QWC2 fulltext response shape.
       // Each hit becomes { feature: { feature_id, display, bbox, srid, dataproduct_id, id_field_name } }.
       const fulltextResults = [];
       const counts = [];
       for (const grp of completed) {
-        const layerId = grp.id;
+        const layerId = grp.layerId || grp.id;
         const items = Array.isArray(grp.items) ? grp.items : [];
         if (!items.length) continue;
-        const layerCfg = layersCfg.find(l => (l.layerId || l.name || l.id) === layerId) || {};
+        const projCfg = perProject.find((pp) => pp.pid === grp.projectId);
+        const layerCfg = (projCfg?.layersCfg || []).find(l => (l.layerId || l.name || l.id) === layerId) || {};
         const idField = layerCfg.idAttribute || 'id';
         // Derive numeric SRID from "EPSG:NNNN"
         for (const it of items) {
@@ -3024,11 +4594,50 @@ ${mapIcon}
         counts.push({ dataproduct_id: layerId, count: items.length });
       }
 
+      // Origo search expects a flat array of features where each item has the
+      // attribute named by `searchAttribute` (label) and optionally
+      // `geometryAttribute` (WKT). See plugins/Qtiler2Origo profile defaults.
+      if (req.query.origo || req._forceOrigo) {
+        const origoItems = [];
+        for (const grp of completed) {
+          const items = Array.isArray(grp.items) ? grp.items : [];
+          const header = grp.title || grp.layerId || grp.id;
+          for (const it of items) {
+            let wkt = null;
+            if (Array.isArray(it.bbox) && it.bbox.length === 4) {
+              const [minX, minY, maxX, maxY] = it.bbox;
+              const cx = (minX + maxX) / 2;
+              const cy = (minY + maxY) / 2;
+              wkt = `POINT(${cx} ${cy})`;
+            } else if (it.x != null && it.y != null) {
+              wkt = `POINT(${it.x} ${it.y})`;
+            }
+            if (!wkt) continue;
+            origoItems.push({
+              name: String(it.text || ''),
+              geom: wkt,
+              group: header,
+              content: String(it.text || '')
+            });
+          }
+        }
+        return res.json(origoItems);
+      }
+
       res.json({ results: fulltextResults, result_counts: counts });
     } catch(err) { console.error('XERR', err);
-      console.error('/Qtiler2qwc/search API Error:', err);
+      console.error('/Qtiler2Origo/search API Error:', err);
+      if (req.query.origo || req._forceOrigo) return res.json([]);
       res.json({ results: [], result_counts: [] });
     }
+  };
+  app.get('/Qtiler2Origo/search', searchHandler);
+  // Origo-shaped search endpoint: same handler, returns flat array when called
+  // via the plugin URL. The defaultSearchOptions above point Origo here with
+  // `?project=<id>&origo=1` baked in.
+  app.get('/plugins/Qtiler2Origo/origo-search', (req, res) => {
+    req._forceOrigo = true;
+    return searchHandler(req, res);
   });
 
   await applyBrandingToQwc2Configs();

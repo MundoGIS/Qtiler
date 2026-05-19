@@ -38,7 +38,144 @@ def build_expression(fields, query):
     return " OR ".join(parts)
 
 
+def init_qgis():
+    qgis_prefix = os.environ.get("QGIS_PREFIX") or os.environ.get("QGIS_PREFIX_PATH")
+    if not qgis_prefix:
+        raise RuntimeError("QGIS_PREFIX not set")
+    from qgis.core import QgsApplication
+    QgsApplication.setPrefixPath(qgis_prefix, True)
+    qgs = QgsApplication([], False)
+    qgs.initQgis()
+    return qgs
+
+
+def search_layer(layer, fields, query, title_field, limit):
+    from qgis.core import QgsExpression, QgsFeatureRequest
+
+    available = [f.name() for f in layer.fields()]
+    available_lower = {f.name().lower(): f.name() for f in layer.fields()}
+    normalized_fields = []
+    for f in fields:
+        if f in available:
+            normalized_fields.append(f)
+        else:
+            key = str(f).lower()
+            if key in available_lower:
+                normalized_fields.append(available_lower[key])
+    if not normalized_fields:
+        normalized_fields = available
+
+    expr_str = build_expression(normalized_fields, query)
+    if not expr_str:
+        return []
+
+    expr = QgsExpression(expr_str)
+    if expr.hasParserError():
+        return []
+
+    req = QgsFeatureRequest(expr)
+    if limit and limit > 0:
+        req.setLimit(limit)
+
+    field_names = [f.name() for f in layer.fields()]
+    layer_name = layer.name()
+    results = []
+
+    def append_feature(feature):
+        row = {"id": feature.id(), "_layer": layer_name}
+        for fname in field_names:
+            row[fname] = json_safe(feature[fname])
+        try:
+            geom = feature.geometry()
+            if geom is not None and not geom.isNull():
+                bb = geom.boundingBox()
+                row["bbox"] = [bb.xMinimum(), bb.yMinimum(), bb.xMaximum(), bb.yMaximum()]
+                try:
+                    pt = geom.centroid().asPoint()
+                    row["x"] = pt.x()
+                    row["y"] = pt.y()
+                except Exception:
+                    row["x"] = (bb.xMinimum() + bb.xMaximum()) / 2.0
+                    row["y"] = (bb.yMinimum() + bb.yMaximum()) / 2.0
+                try:
+                    row["crs"] = layer.crs().authid()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if title_field and title_field not in row:
+            row[title_field] = None
+        results.append(row)
+
+    for feature in layer.getFeatures(req):
+        append_feature(feature)
+
+    if not results:
+        q = (query or "").lower()
+        if q:
+            for feature in layer.getFeatures():
+                for fname in normalized_fields:
+                    try:
+                        val = feature[fname]
+                        if val is not None and str(val).lower().startswith(q):
+                            append_feature(feature)
+                            break
+                    except Exception:
+                        continue
+                if limit and len(results) >= limit:
+                    break
+
+    return results
+
+
+def run_batch():
+    """Read JSON spec from stdin: {project, query, limit, layers:[{name,fields,title_field}]}
+    Output: {layers:[{name, results:[...]}]}"""
+    raw = sys.stdin.read()
+    spec = json.loads(raw)
+    project_path = spec.get("project")
+    query = spec.get("query", "")
+    limit = int(spec.get("limit", 50))
+    layer_specs = spec.get("layers", [])
+
+    qgs = init_qgis()
+    try:
+        from qgis.core import QgsProject
+        project = QgsProject.instance()
+        if not project.read(project_path):
+            print(json.dumps({"error": "project_load_failed", "layers": []}))
+            return 0
+
+        out_layers = []
+        for ls in layer_specs:
+            lname = ls.get("name")
+            fields = ls.get("fields") or []
+            title_field = ls.get("title_field") or (fields[0] if fields else "name")
+            layers = project.mapLayersByName(lname) if lname else []
+            if not layers:
+                out_layers.append({"name": lname, "results": []})
+                continue
+            layer = layers[0]
+            if not layer.isValid():
+                out_layers.append({"name": lname, "results": []})
+                continue
+            try:
+                results = search_layer(layer, fields, query, title_field, limit)
+            except Exception as e:
+                sys.stderr.write(f"search_layer error for {lname}: {e}\n")
+                results = []
+            out_layers.append({"name": lname, "results": results})
+
+        print(json.dumps({"layers": out_layers}))
+        return 0
+    finally:
+        qgs.exitQgis()
+
+
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--batch":
+        return run_batch()
+
     if len(sys.argv) < 7:
         print(json.dumps({"error": "missing_args"}))
         return 1
@@ -70,14 +207,15 @@ def main():
         return 1
 
     try:
-        from qgis.core import QgsApplication, QgsProject, QgsExpression, QgsFeatureRequest
+        from qgis.core import QgsApplication
+        QgsApplication.setPrefixPath(qgis_prefix, True)
+        qgs = QgsApplication([], False)
+        qgs.initQgis()
+
+        from qgis.core import QgsProject, QgsExpression, QgsFeatureRequest
     except Exception as e:
         print(json.dumps({"error": f"QGIS import failed: {e}"}))
         return 1
-
-    QgsApplication.setPrefixPath(qgis_prefix, True)
-    qgs = QgsApplication([], False)
-    qgs.initQgis()
 
     try:
         project = QgsProject.instance()

@@ -6,6 +6,25 @@
     <title>QTWC Admin</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
     <link rel="stylesheet" href="/plugins/Qtiler2qwc/admin-ui/style.css" />
+    <style>
+      .hiw-actions { margin-top: 0.75rem; }
+      .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .hiw-btn:hover { background: #f4f6fb; }
+      .hiw-modal[hidden] { display: none; }
+      .hiw-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+      .hiw-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+      .hiw-card { position: relative; background: #fff; max-width: 760px; width: 100%; max-height: 88vh; overflow: hidden; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,0.35); display: flex; flex-direction: column; }
+      .hiw-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #e3e8f0; }
+      .hiw-head h2 { margin: 0; font-size: 1.15rem; color: #1f2a44; }
+      .hiw-close { background: transparent; border: 0; font-size: 1.4rem; line-height: 1; cursor: pointer; color: #64748b; }
+      .hiw-close:hover { color: #1f2a44; }
+      .hiw-body { padding: 1rem 1.25rem; overflow: auto; color: #334155; line-height: 1.5; }
+      .hiw-body h3 { margin: 1.1rem 0 0.4rem; font-size: 1rem; color: #1f2a44; }
+      .hiw-body h3:first-child { margin-top: 0; }
+      .hiw-body ul { margin: 0.25rem 0 0.75rem 1.1rem; padding: 0; }
+      .hiw-body li { margin: 0.2rem 0; }
+      .hiw-lead { font-size: 0.95rem; color: #1f2a44; margin-bottom: 0.5rem; }
+    </style>
   </head>
   <body>
     <main class="page">
@@ -13,6 +32,9 @@
         <p class="eyebrow">QTWC</p>
         <h1 data-i18n="Qtiler2qwc.title">QWC2 Bridge for Qtiler</h1>
         <p class="subtitle" data-i18n="Qtiler2qwc.subtitle">Install QWC2 from GitHub and sync project visibility from QtilerAuth.</p>
+        <div class="hiw-actions">
+          <button type="button" id="qtwc-open-hiw" class="hiw-btn" data-i18n="Qtiler2qwc.hiw.button">How it works &amp; Security</button>
+        </div>
       </header>
 
       <!-- ═══════════ Tab bar ═══════════ -->
@@ -141,6 +163,56 @@
       </div>
 
     </main>
+
+    <!-- ═══════════ How it works modal ═══════════ -->
+    <div id="qtwc-hiw-modal" class="hiw-modal" role="dialog" aria-modal="true" aria-labelledby="qtwc-hiw-title" aria-hidden="true" hidden>
+      <div class="hiw-backdrop" data-hiw-close></div>
+      <div class="hiw-card">
+        <div class="hiw-head">
+          <h2 id="qtwc-hiw-title" data-i18n="Qtiler2qwc.hiw.title">How QTWC works &amp; security</h2>
+          <button type="button" class="hiw-close" data-hiw-close aria-label="Close">×</button>
+        </div>
+        <div class="hiw-body">
+          <p class="hiw-lead" data-i18n="Qtiler2qwc.hiw.lead"></p>
+          <h3 data-i18n="Qtiler2qwc.hiw.arch.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.arch.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.arch.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.arch.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.flow.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.flow.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.3"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.4"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.themes.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.themes.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.themes.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.themes.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.print.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.print.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.print.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.auth.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.auth.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.auth.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.auth.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.security.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.security.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.security.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.security.3"></li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
     <!-- ═══════════ Publish / Edit modal ═══════════ -->
     <div id="publishModal" class="modal">

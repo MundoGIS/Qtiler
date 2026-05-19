@@ -6,6 +6,7 @@
 
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -37,7 +38,7 @@ import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removePr
 
 
 
-dotenv.config();
+dotenv.config({ override: true });
 const ensureLicenseSecret = () => {
   const current = process.env.LICENSE_SECRET || '';
   if (current && current !== 'CHANGE_ME') return;
@@ -384,7 +385,42 @@ const renderPage = (req, res, viewName, locals = {}, options = {}) => {
 const pluginManager = new PluginManager({ app, baseDir: pluginsDir, dataDir, security });
 app.locals.pluginManager = pluginManager;
 
-app.use(cors());
+// Security headers (helmet). CSP is opt-in because the admin UIs and embedded
+// viewers (Qtiler2QWC2/Qtiler2Origo) load assets from many origins; set
+// QTILER_ENABLE_CSP=1 only after you have curated a policy for them.
+const HELMET_DISABLED = String(process.env.QTILER_DISABLE_HELMET || '').trim() === '1';
+if (!HELMET_DISABLED) {
+  app.use(helmet({
+    contentSecurityPolicy: String(process.env.QTILER_ENABLE_CSP || '').trim() === '1' ? undefined : false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false,
+    // OGC clients (QGIS, Origo, QWC2) embed images from this server in their canvases.
+    // Allow framing only when explicitly opted-in via env.
+    frameguard: String(process.env.QTILER_ALLOW_FRAMING || '').trim() === '1' ? false : { action: 'sameorigin' },
+    // HSTS only useful behind HTTPS. Off by default; enable on the reverse proxy or with the env flag.
+    hsts: String(process.env.QTILER_ENABLE_HSTS || '').trim() === '1' ? { maxAge: 31536000, includeSubDomains: true } : false,
+    referrerPolicy: { policy: 'no-referrer-when-downgrade' }
+  }));
+}
+
+// CORS allowlist. By default reflect any origin (legacy behavior) so existing
+// integrations keep working. In production set QTILER_CORS_ALLOWED_ORIGINS to
+// a comma-separated list of trusted origins (e.g. "https://map.example.com").
+const CORS_ALLOW_ALL = !process.env.QTILER_CORS_ALLOWED_ORIGINS;
+const CORS_ALLOWED_ORIGINS = String(process.env.QTILER_CORS_ALLOWED_ORIGINS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const CORS_ALLOW_CREDENTIALS = String(process.env.QTILER_CORS_ALLOW_CREDENTIALS || '').trim() === '1';
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin / curl / server-to-server
+    if (CORS_ALLOW_ALL) return cb(null, true);
+    if (CORS_ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  },
+  credentials: CORS_ALLOW_CREDENTIALS,
+  exposedHeaders: ['Content-Disposition', 'Retry-After']
+}));
 app.use(express.json());
 // WFS-T Transaction uses XML payloads; parse them as raw text.
 app.use(
@@ -405,6 +441,23 @@ app.use(
 );
 app.use(cookieParser());
 app.use((req, res, next) => security.attachUser(req, res, next));
+
+// Any request authenticated via api_key (header or query) must NEVER be cached
+// by intermediaries. The key value itself is sensitive; tile/feature responses
+// are also user-scoped (project ACLs) so a shared cache could leak data.
+app.use((req, res, next) => {
+  try {
+    const hasKeyHeader = !!(req.get && (req.get('x-api-key') || req.get('x-qtiler-key') || req.get('x-api_key')));
+    const q = req.query || {};
+    const hasKeyQuery = !!(q.api_key || q.apikey || q.apiKey || q.API_KEY);
+    if (hasKeyHeader || hasKeyQuery) {
+      res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Vary', 'Authorization, X-API-Key, Cookie');
+    }
+  } catch {}
+  next();
+});
 
 // If the auth plugin is not enabled, proactively clear any lingering auth cookie.
 // This prevents clients from appearing "logged in" after uninstall and avoids
@@ -582,8 +635,14 @@ registerProj4Routes({
 
 app.use(express.static(publicDir, { index: false }));
 
-// Plugin routes are registered after upload middleware initialization.
-
+  // Serve QGIS SVGs directly so Origo can load them
+  const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
+  const qgisSvgPath = path.join(qgisPrefix, 'svg');
+  if (fs.existsSync(qgisSvgPath)) {
+    console.log(`Serving QGIS SVGs at/from: ${qgisSvgPath}`);
+    app.use('/qgis-svg', express.static(qgisSvgPath, { maxAge: '1d' }));
+  }
+  
 const cacheDir = path.resolve(__dirname, "cache");
 const pythonDir = path.resolve(__dirname, "python");
 const projectsDir = path.resolve(__dirname, "qgisprojects");
@@ -1146,7 +1205,12 @@ const writeFileAtomicWithBackup = (filePath, content) => {
     if (fs.existsSync(filePath)) {
       try { fs.rmSync(filePath, { force: true }); } catch { }
     }
-    fs.renameSync(tempPath, filePath);
+    try {
+      fs.renameSync(tempPath, filePath);
+    } catch {
+      // Windows EPERM fallback: file locked by another process, write directly.
+      fs.writeFileSync(filePath, content, 'utf8');
+    }
   } finally {
     if (fs.existsSync(tempPath)) {
       try { fs.rmSync(tempPath, { force: true }); } catch { }
@@ -2123,7 +2187,9 @@ const recordOnDemandRequest = (projectId, targetMode, targetName) => {
   const layerConfig = normalizedMode === "theme"
     ? configSnapshot?.themes?.[targetName]
     : configSnapshot?.layers?.[targetName];
-  const lastParams = layerConfig && typeof layerConfig.lastParams === "object" ? layerConfig.lastParams : {};
+  const lastParams = layerConfig && layerConfig.lastParams && typeof layerConfig.lastParams === "object"
+    ? layerConfig.lastParams
+    : {};
 
   const normalizeCrs = (value) => {
     if (typeof value !== "string") return null;
@@ -4073,7 +4139,24 @@ const makeChildEnv = () => {
     }
   } catch (e) {}
   if (process.env.OSGEO4W_BIN) {
-    env.PATH = `${process.env.OSGEO4W_BIN};${env.PATH || ""}`;
+    const qgisRoot = path.join(process.env.OSGEO4W_BIN, '..');
+    const qt6Bin = path.join(qgisRoot, 'apps', 'Qt6', 'bin');
+    const qt5Bin = path.join(qgisRoot, 'apps', 'Qt5', 'bin');
+    const qgisAppBin = path.join(qgisRoot, 'apps', 'qgis', 'bin');
+    env.PATH = `${process.env.OSGEO4W_BIN};${qt6Bin};${qt5Bin};${qgisAppBin};${env.PATH || ""}`;
+    
+    // Add variables replicating o4w_env.bat / python-qgis.bat
+    const pythonHome = path.join(qgisRoot, 'apps', 'Python312');
+    const pythonLib = path.join(pythonHome, 'Lib');
+    const qgisPy = path.join(qgisRoot, 'apps', 'qgis', 'python');
+    env.PYTHONHOME = pythonHome;
+    env.PYTHONPATH = `${pythonLib};${qgisPy}`;
+    
+    // Qt Plugins para evitar error "Could not find the Qt platform plugin windows"
+    const qt6Plugins = path.join(qgisRoot, 'apps', 'Qt6', 'plugins');
+    const qgisPlugins = path.join(qgisRoot, 'apps', 'qgis', 'qtplugins');
+    env.QT_PLUGIN_PATH = `${qgisPlugins};${qt6Plugins}`;
+    env.QT_QPA_PLATFORM_PLUGIN_PATH = `${qt6Plugins}\\platforms`;
   }
   if (process.env.QGIS_PREFIX) env.QGIS_PREFIX_PATH = process.env.QGIS_PREFIX;
   if (process.env.QT_PLUGIN_PATH) env.QT_PLUGIN_PATH = process.env.QT_PLUGIN_PATH;
@@ -4081,45 +4164,39 @@ const makeChildEnv = () => {
 };
 
 // helper: ejecutar comando dentro de la shell de OSGeo4W (o4w_env.bat)
-// No usar hardcoded fallbacks. Si no hay O4W_BATCH y tampoco OSGEO4W_BIN, será null.
-const o4wBatch = process.env.O4W_BATCH || (process.env.OSGEO4W_BIN ? path.join(process.env.OSGEO4W_BIN, "o4w_env.bat") : null);
-
 const runPythonViaOSGeo4W = (script, args = [], options = {}) => {
-  // Ejecutar el batch (o4w_env) y luego python en la misma cmd para heredar el entorno.
-  // Por defecto suprimimos la salida del batch para mantener los logs limpios.
-  // El batch siempre se ejecuta en modo silencioso (>nul 2>&1) para evitar ruido
-  // en los registros del servidor. Si necesitas depuración explícita, establece
-  // manualmente la variable en el entorno antes de arrancar el servidor.
-  if (!pythonExe && !o4wBatch) {
-    throw new Error('OSGeo4W/Python no configurado: define PYTHON_EXE o OSGEO4W_BIN (o O4W_BATCH) en .env');
-  }
-  // By default prefer running inside the OSGeo4W batch environment when
-  // available because it sets up PYTHONHOME, PATH and other variables that
-  // QGIS's Python runtime expects. If you intentionally want to spawn the
-  // python executable directly, set `FORCE_DIRECT=1` in your environment.
-  if (!pythonExe) {
-    throw new Error('PYTHON_EXE no definido y no se pudo resolver desde OSGEO4W_BIN; revisa .env');
-  }
-
   const baseEnv = makeChildEnv();
   const mergedEnv = options && options.env && typeof options.env === 'object'
     ? { ...baseEnv, ...options.env }
     : baseEnv;
   const spawnOpts = { env: mergedEnv, cwd: __dirname, stdio: 'pipe', ...options, env: mergedEnv };
 
+  // Always re-resolve paths from the mergedEnv explicitly so we don't use stale top-level scope variables
+  const resolvedPythonExe = mergedEnv.PYTHON_EXE || (mergedEnv.OSGEO4W_BIN ? path.join(mergedEnv.OSGEO4W_BIN, "python.exe") : null);
+  const resolvedO4wBatch = mergedEnv.O4W_BATCH || (mergedEnv.OSGEO4W_BIN ? path.join(mergedEnv.OSGEO4W_BIN, "o4w_env.bat") : null);
+
+  if (!resolvedPythonExe && !resolvedO4wBatch) {
+    throw new Error('OSGeo4W/Python no configurado: define PYTHON_EXE o OSGEO4W_BIN (o O4W_BATCH) en .env');
+  }
+  if (!resolvedPythonExe) {
+    throw new Error('PYTHON_EXE no definido y no se pudo resolver desde OSGEO4W_BIN; revisa .env');
+  }
+
   // If an OSGeo4W batch wrapper exists and the user didn't force direct spawn,
   // run the batch and python in a shell so the QGIS python environment is valid.
-  const wantBatch = !!o4wBatch && !process.env.FORCE_DIRECT;
+  const wantBatch = !!resolvedO4wBatch && !mergedEnv.FORCE_DIRECT;
   if (wantBatch) {
-    const o4wPart = `"${o4wBatch}" >nul 2>&1`;
-    const cmdParts = [o4wPart, '&&', `"${pythonExe}"`, `"${script}"`, ...args.map(a => `"${String(a)}"`)];
-    const cmd = cmdParts.join(' ');
-    return spawn(cmd, { shell: true, env: mergedEnv, cwd: __dirname, ...options, env: mergedEnv });
+    // Instead of using cmd.exe /c string concatenation, spawn cmd.exe directly
+    // and pass the command array. This dodges the deprecation warning and protects
+    // against CLI parsing bugs for paths with spaces (e.g. C:\QGIS 4.0).
+    const o4wPart = `call "${resolvedO4wBatch}" >nul 2>&1`;
+    const pyPart = `"${resolvedPythonExe}" "${script}" ${args.map(a => `"${String(a).replace(/"/g, '""')}"`).join(' ')}`;
+    return spawn(process.env.ComSpec || 'cmd.exe', ['/s', '/c', `"${o4wPart} && ${pyPart}"`], { windowsVerbatimArguments: true, env: mergedEnv, cwd: __dirname, ...options, env: mergedEnv });
   }
 
   // Otherwise spawn python directly (useful for pure-Python setups / venvs).
   const procArgs = [script, ...args.map(a => String(a))];
-  return spawn(pythonExe, procArgs, spawnOpts);
+  return spawn(resolvedPythonExe, procArgs, spawnOpts);
 };
 
 // Hard kill helper: best-effort terminate processes associated with a cache job/layer
@@ -7353,7 +7430,18 @@ function processTileQueue() {
 // ...existing code...
 
 // API endpoint for search functionality (Origo-compatible response)
-app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res) => {
+//
+// Multi-project support:
+//   ?project=A&project=B               → search across projects A and B
+//   ?projects=A,B,C                    → CSV form
+//   ?l=lay1,lay2                       → layer filter (applies to single-project mode)
+//   ?l_<projectId>=lay1,lay2           → per-project layer filter (multi-project mode)
+//
+// Security: each requested project is checked individually with deriveProjectAccess.
+// Projects the user cannot access are silently skipped (so the response never
+// leaks the existence of private projects). If ALL requested projects are denied
+// and auth is enabled, the response is 403.
+app.get('/api/search', async (req, res) => {
   const query = String(req.query.q || '').trim();
   if (!query) {
     return res.status(400).json({ error: 'Query parameter `q` is required.' });
@@ -7369,77 +7457,66 @@ app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res)
   } catch {}
 
   try {
-    const requestedProject = String(req.query.project || '').trim();
-    let projectId = requestedProject || '';
+    // Collect requested project IDs from ?project=A&project=B or ?projects=A,B
+    const rawProjectParam = req.query.project;
+    const rawProjectsCsv = String(req.query.projects || '').trim();
+    const requestedProjects = [];
+    if (Array.isArray(rawProjectParam)) {
+      for (const v of rawProjectParam) {
+        const s = String(v || '').trim();
+        if (s) requestedProjects.push(s);
+      }
+    } else if (rawProjectParam != null) {
+      const s = String(rawProjectParam).trim();
+      if (s) requestedProjects.push(s);
+    }
+    if (rawProjectsCsv) {
+      for (const s of rawProjectsCsv.split(',').map((v) => v.trim()).filter(Boolean)) {
+        requestedProjects.push(s);
+      }
+    }
 
-    if (!projectId) {
+    let projectIds = Array.from(new Set(requestedProjects));
+
+    if (!projectIds.length) {
       // If there's only one cached project, default to it
       try {
         const candidates = fs.readdirSync(cacheDir)
           .filter((p) => fs.existsSync(path.join(cacheDir, p, 'index.json')));
         if (candidates.length === 1) {
-          projectId = candidates[0];
+          projectIds = [candidates[0]];
         }
       } catch {}
     }
 
-    if (!projectId) {
+    if (!projectIds.length) {
       return res.status(400).json({
         error: 'project_required',
-        message: 'Add ?project=<id> to the search URL or configure a single project.'
+        message: 'Add ?project=<id> (repeatable) or ?projects=A,B to the search URL.'
       });
     }
 
-    const project = findProjectById(projectId);
-    if (!project) {
-      return res.status(404).json({ error: 'project_not_found', details: projectId });
+    // Per-project ACL filter (silent skip for denied projects)
+    const authEnabled = !!(security.isEnabled && security.isEnabled());
+    let accessSnapshot = null;
+    if (authEnabled) {
+      try { accessSnapshot = readProjectAccessSnapshot(); } catch { accessSnapshot = null; }
     }
-
-    // Load searchable layers configuration (per project)
-    const searchableLayersDir = path.resolve(dataDir, 'searchable-layers');
-    const searchableLayersPath = path.join(searchableLayersDir, `${projectId}.json`);
-    let searchableLayers = [];
-    const hasSearchableConfig = fs.existsSync(searchableLayersPath);
-    if (hasSearchableConfig) {
-      searchableLayers = JSON.parse(fs.readFileSync(searchableLayersPath, 'utf-8'));
-    }
-
-    // Respect per-layer wfsSearchable=false in project-config
-    let wfsSearchableFlags = null;
-    try {
-      const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
-      if (fs.existsSync(cfgPath)) {
-        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-        const layerCfg = cfg?.layers && typeof cfg.layers === 'object' ? cfg.layers : {};
-        wfsSearchableFlags = new Map();
-        Object.keys(layerCfg).forEach((key) => {
-          const entry = layerCfg[key] || {};
-          if (typeof entry.wfsSearchable === 'boolean') {
-            wfsSearchableFlags.set(String(key), entry.wfsSearchable);
-          }
-        });
-      }
-    } catch {}
-
-    // If no per-project config exists, try a safe fallback using project-config layers
-    if (!hasSearchableConfig && (!Array.isArray(searchableLayers) || searchableLayers.length === 0)) {
+    const allowedProjectIds = [];
+    for (const pid of projectIds) {
+      if (!authEnabled) { allowedProjectIds.push(pid); continue; }
       try {
-        const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
-        if (fs.existsSync(cfgPath)) {
-          const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-          const fallbackLayers = Object.keys(cfg?.layers || {});
-          if (fallbackLayers.length > 0) {
-            const defaultField = String(req.query.searchAttribute || 'NAMN').trim() || 'NAMN';
-            searchableLayers = fallbackLayers.map((name) => ({
-              name,
-              fields: [defaultField],
-              titleField: defaultField
-            }));
-          }
-        }
-      } catch {}
+        const info = deriveProjectAccess(accessSnapshot, req.user || null, pid);
+        if (info && info.allowed === true) allowedProjectIds.push(pid);
+      } catch {
+        // On error, fail-closed: skip this project
+      }
     }
-    const layerFilterRaw = String(req.query.l || '').trim();
+    if (!allowedProjectIds.length) {
+      return res.status(403).json({ error: 'forbidden', message: 'No accessible projects in request.' });
+    }
+
+    // Shared helpers (used by every project loop iteration below)
     const normalizeLayerToken = (value) => String(value || '')
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -7449,139 +7526,241 @@ app.get('/api/search', ensureProjectAccessFromQuery('project'), async (req, res)
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '');
 
-    const layerFilter = layerFilterRaw
-      ? layerFilterRaw.split(',').map((v) => v.trim()).filter(Boolean)
-      : null;
-    const layerFilterByNormalized = layerFilter
-      ? new Map(layerFilter.map((v) => [normalizeLayerToken(v), v]))
-      : null;
-    const layerFilterNormalized = layerFilter
-      ? new Set(layerFilter.map((v) => normalizeLayerToken(v)).filter(Boolean))
-      : null;
+    const sanitizeForKey = (value) => String(value || '')
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, '_');
+
+    // Per-project layer filter parser.
+    // Order of precedence:
+    //   1. ?l_<sanitized_pid>=lay1,lay2   (per-project filter)
+    //   2. ?l=lay1,lay2                   (only when exactly one project is requested)
+    const parseLayerFilterFor = (pid) => {
+      const safePid = sanitizeForKey(pid);
+      const perProjectKey = `l_${safePid}`;
+      let raw = '';
+      // Express normalizes query keys; search case-insensitively too.
+      if (req.query && Object.prototype.hasOwnProperty.call(req.query, perProjectKey)) {
+        const v = req.query[perProjectKey];
+        raw = Array.isArray(v) ? String(v[0] || '') : String(v || '');
+      } else if (req.query) {
+        const targetLc = perProjectKey.toLowerCase();
+        for (const [k, v] of Object.entries(req.query)) {
+          if (String(k).toLowerCase() === targetLc) {
+            raw = Array.isArray(v) ? String(v[0] || '') : String(v || '');
+            break;
+          }
+        }
+      }
+      if (!raw && allowedProjectIds.length === 1) {
+        raw = String(req.query.l || '').trim();
+      }
+      const list = String(raw || '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (!list.length) return { filter: null, byNormalized: null, normalizedSet: null };
+      return {
+        filter: list,
+        byNormalized: new Map(list.map((v) => [normalizeLayerToken(v), v])),
+        normalizedSet: new Set(list.map((v) => normalizeLayerToken(v)).filter(Boolean))
+      };
+    };
 
     const limitRaw = Number.parseInt(String(req.query.limit || req.query.max || '10'), 10);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 10;
 
-    // Prepare results
-    const results = [];
+    // Aggregate results from every allowed project. Per-project limit is the
+    // overall limit so a single rich project doesn't crowd out the others on
+    // the way to the final slice.
+    const searchableLayersDir = path.resolve(dataDir, 'searchable-layers');
+    const aggregatedResults = [];
+    const usedProjectIds = [];
 
-    for (const layer of Array.isArray(searchableLayers) ? searchableLayers : []) {
-      if (!layer || !layer.name || !Array.isArray(layer.fields) || layer.fields.length === 0) {
+    for (const projectId of allowedProjectIds) {
+      const project = findProjectById(projectId);
+      if (!project) {
+        // Skip unknown projects silently — matches the ACL behaviour above.
         continue;
       }
-      if (layer.searchable === false) continue;
-      if (wfsSearchableFlags && wfsSearchableFlags.get(String(layer.name)) === false) continue;
-      if (layerFilter) {
-        const rawName = String(layer.name || '').trim();
-        const normalizedName = normalizeLayerToken(rawName);
-        const directMatch = layerFilter.includes(rawName);
-        const normalizedMatch = normalizedName && layerFilterNormalized && layerFilterNormalized.has(normalizedName);
-        if (!directMatch && !normalizedMatch) continue;
+      usedProjectIds.push(projectId);
+
+      // Load searchable layers configuration (per project)
+      const searchableLayersPath = path.join(searchableLayersDir, `${projectId}.json`);
+      let searchableLayers = [];
+      const hasSearchableConfig = fs.existsSync(searchableLayersPath);
+      if (hasSearchableConfig) {
+        try { searchableLayers = JSON.parse(fs.readFileSync(searchableLayersPath, 'utf-8')); }
+        catch { searchableLayers = []; }
       }
 
-      const rawLayerName = String(layer.name || '').trim();
-      const normalizedLayerName = normalizeLayerToken(rawLayerName);
-      const layerTypeForResult = (layerFilterByNormalized && normalizedLayerName && layerFilterByNormalized.get(normalizedLayerName))
-        || rawLayerName;
-      const layerSearchAttribute = String(
-        layer.searchAttribute
-        || layer.titleField
-        || (Array.isArray(layer.fields) && layer.fields[0])
-        || ''
-      ).trim();
-
-      const layerResults = await (async () => {
-        try {
-          const result = await tileRendererPool.renderTile({
-            action: 'search_features',
-            project_path: project.file,
-            type_name: String(layer.name),
-            fields: Array.isArray(layer.fields) ? layer.fields : [],
-            query,
-            limit
+      // Respect per-layer wfsSearchable=false in project-config
+      let wfsSearchableFlags = null;
+      try {
+        const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
+        if (fs.existsSync(cfgPath)) {
+          const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+          const layerCfg = cfg?.layers && typeof cfg.layers === 'object' ? cfg.layers : {};
+          wfsSearchableFlags = new Map();
+          Object.keys(layerCfg).forEach((key) => {
+            const entry = layerCfg[key] || {};
+            if (typeof entry.wfsSearchable === 'boolean') {
+              wfsSearchableFlags.set(String(key), entry.wfsSearchable);
+            }
           });
-          if (result && result.status === 'success' && Array.isArray(result.results)) {
-            return result.results;
-          }
-          return [];
-        } catch (err) {
-          console.error('Search worker error:', err?.message || err);
-          return [];
         }
-      })();
+      } catch {}
 
-      for (const row of layerResults) {
-        const centroidWkt = row.geometry_centroid || row.centroid || null;
-        const rawGeomWkt = row.GEOM || row.geometry || null;
-        const rawGeomText = typeof rawGeomWkt === 'string' ? rawGeomWkt : '';
-        const geomWkt = centroidWkt
-          || (rawGeomText && rawGeomText.length <= 12000 ? rawGeomWkt : null);
-        let easting = null;
-        let northing = null;
-        const parseFirstCoordFromWkt = (wkt) => {
-          try {
-            const text = typeof wkt === 'string' ? wkt : '';
-            if (!text) return null;
-            const m = text.match(/\(\s*\(?\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
-            if (!m) return null;
-            const x = Number.parseFloat(m[1]);
-            const y = Number.parseFloat(m[2]);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-            return [x, y];
-          } catch {
-            return null;
-          }
-        };
+      // If no per-project config exists, try a safe fallback using project-config layers
+      if (!hasSearchableConfig && (!Array.isArray(searchableLayers) || searchableLayers.length === 0)) {
         try {
-          const pointWkt = typeof centroidWkt === 'string' ? centroidWkt : '';
-          const m = pointWkt.match(/POINT\s*(?:Z|M|ZM)?\s*\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
-          if (m) {
-            easting = Number.parseFloat(m[1]);
-            northing = Number.parseFloat(m[2]);
-            if (!Number.isFinite(easting)) easting = null;
-            if (!Number.isFinite(northing)) northing = null;
+          const cfgPath = path.join(cacheDir, projectId, 'project-config.json');
+          if (fs.existsSync(cfgPath)) {
+            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+            const fallbackLayers = Object.keys(cfg?.layers || {});
+            if (fallbackLayers.length > 0) {
+              const defaultField = String(req.query.searchAttribute || 'NAMN').trim() || 'NAMN';
+              searchableLayers = fallbackLayers.map((name) => ({
+                name,
+                fields: [defaultField],
+                titleField: defaultField
+              }));
+            }
           }
         } catch {}
-        if (!Number.isFinite(easting) || !Number.isFinite(northing)) {
-          const fallbackCoord = parseFirstCoordFromWkt(rawGeomWkt) || parseFirstCoordFromWkt(geomWkt);
-          if (fallbackCoord) {
-            easting = fallbackCoord[0];
-            northing = fallbackCoord[1];
-          }
+      }
+
+      const { filter: layerFilter, byNormalized: layerFilterByNormalized, normalizedSet: layerFilterNormalized } = parseLayerFilterFor(projectId);
+
+      for (const layer of Array.isArray(searchableLayers) ? searchableLayers : []) {
+        if (!layer || !layer.name || !Array.isArray(layer.fields) || layer.fields.length === 0) {
+          continue;
         }
-        const nameValue = row.NAMN || row.namn || row.Name || row.name || null;
-        const rawSearchValue = layerSearchAttribute ? row[layerSearchAttribute] : null;
-        const searchValue = rawSearchValue != null && String(rawSearchValue).trim() !== ''
-          ? rawSearchValue
-          : nameValue;
-        const gidValue = row.GID || row.gid || row.ID || row.id || null;
-        const resultRow = {
-          ...(row && typeof row === 'object' ? row : {}),
-          NAMN: nameValue,
-          namn: nameValue,
-          name: nameValue,
-          GID: gidValue,
-          gid: gidValue,
-          ID: gidValue,
-          id: gidValue,
-          TYPE: layerTypeForResult,
-          type: layerTypeForResult,
-          GEOM: geomWkt,
-          geom: geomWkt,
-          geometry: geomWkt,
-          the_geom: geomWkt,
-          wkb_geometry: geomWkt,
-          EASTING: easting,
-          NORTHING: northing,
-          easting,
-          northing,
-          SEARCH_VALUE: searchValue
-        };
-        results.push(resultRow);
+        if (layer.searchable === false) continue;
+        if (wfsSearchableFlags && wfsSearchableFlags.get(String(layer.name)) === false) continue;
+        if (layerFilter) {
+          const rawName = String(layer.name || '').trim();
+          const normalizedName = normalizeLayerToken(rawName);
+          const directMatch = layerFilter.includes(rawName);
+          const normalizedMatch = normalizedName && layerFilterNormalized && layerFilterNormalized.has(normalizedName);
+          if (!directMatch && !normalizedMatch) continue;
+        }
+
+        const rawLayerName = String(layer.name || '').trim();
+        const normalizedLayerName = normalizeLayerToken(rawLayerName);
+        const layerTypeForResult = (layerFilterByNormalized && normalizedLayerName && layerFilterByNormalized.get(normalizedLayerName))
+          || rawLayerName;
+        const layerSearchAttribute = String(
+          layer.searchAttribute
+          || layer.titleField
+          || (Array.isArray(layer.fields) && layer.fields[0])
+          || ''
+        ).trim();
+
+        const layerResults = await (async () => {
+          try {
+            const result = await tileRendererPool.renderTile({
+              action: 'search_features',
+              project_path: project.file,
+              type_name: String(layer.name),
+              fields: Array.isArray(layer.fields) ? layer.fields : [],
+              query,
+              limit
+            });
+            if (result && result.status === 'success' && Array.isArray(result.results)) {
+              return result.results;
+            }
+            return [];
+          } catch (err) {
+            console.error('Search worker error:', err?.message || err);
+            return [];
+          }
+        })();
+
+        for (const row of layerResults) {
+          const centroidWkt = row.geometry_centroid || row.centroid || null;
+          const rawGeomWkt = row.GEOM || row.geometry || null;
+          const rawGeomText = typeof rawGeomWkt === 'string' ? rawGeomWkt : '';
+          const geomWkt = centroidWkt
+            || (rawGeomText && rawGeomText.length <= 12000 ? rawGeomWkt : null);
+          let easting = null;
+          let northing = null;
+          const parseFirstCoordFromWkt = (wkt) => {
+            try {
+              const text = typeof wkt === 'string' ? wkt : '';
+              if (!text) return null;
+              const m = text.match(/\(\s*\(?\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/);
+              if (!m) return null;
+              const x = Number.parseFloat(m[1]);
+              const y = Number.parseFloat(m[2]);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+              return [x, y];
+            } catch {
+              return null;
+            }
+          };
+          try {
+            const pointWkt = typeof centroidWkt === 'string' ? centroidWkt : '';
+            const m = pointWkt.match(/POINT\s*(?:Z|M|ZM)?\s*\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)/i);
+            if (m) {
+              easting = Number.parseFloat(m[1]);
+              northing = Number.parseFloat(m[2]);
+              if (!Number.isFinite(easting)) easting = null;
+              if (!Number.isFinite(northing)) northing = null;
+            }
+          } catch {}
+          if (!Number.isFinite(easting) || !Number.isFinite(northing)) {
+            const fallbackCoord = parseFirstCoordFromWkt(rawGeomWkt) || parseFirstCoordFromWkt(geomWkt);
+            if (fallbackCoord) {
+              easting = fallbackCoord[0];
+              northing = fallbackCoord[1];
+            }
+          }
+          const nameValue = row.NAMN || row.namn || row.Name || row.name || null;
+          const rawSearchValue = layerSearchAttribute ? row[layerSearchAttribute] : null;
+          const searchValue = rawSearchValue != null && String(rawSearchValue).trim() !== ''
+            ? rawSearchValue
+            : nameValue;
+          // Origo's search/autocomplete calls `.indexOf` on the value of
+          // `searchAttribute`. A null/undefined throws
+          // "Cannot read properties of undefined (reading 'indexOf')" in
+          // the input handler. Coerce to a safe string fallback.
+          const safeSearchValue = (searchValue != null && String(searchValue).trim() !== '')
+            ? String(searchValue)
+            : (layerTypeForResult || 'result');
+          const gidValue = row.GID || row.gid || row.ID || row.id || null;
+          const resultRow = {
+            ...(row && typeof row === 'object' ? row : {}),
+            NAMN: nameValue,
+            namn: nameValue,
+            name: nameValue,
+            GID: gidValue,
+            gid: gidValue,
+            ID: gidValue,
+            id: gidValue,
+            TYPE: layerTypeForResult,
+            type: layerTypeForResult,
+            GEOM: geomWkt,
+            geom: geomWkt,
+            geometry: geomWkt,
+            the_geom: geomWkt,
+            wkb_geometry: geomWkt,
+            EASTING: easting,
+            NORTHING: northing,
+            easting,
+            northing,
+            SEARCH_VALUE: safeSearchValue,
+            // Cross-project provenance (used by Origo client to detect a hit
+            // from a different project and offer "open source map" handoff).
+            project: projectId,
+            PROJECT: projectId,
+            _qtiler_project: projectId
+          };
+          aggregatedResults.push(resultRow);
+        }
       }
     }
 
-    res.json(results.slice(0, limit));
+    res.json(aggregatedResults.slice(0, limit));
   } catch (error) {
     console.error('Error handling search request:', error);
     res.status(500).json({ error: 'internal_server_error' });
@@ -8456,7 +8635,19 @@ function queueTileRender(params, filePath, cb) {
       activeRenders.delete(key);
       const waiters = inflightTileWaiters.get(key);
       inflightTileWaiters.delete(key);
-      console.error(`[Pool Error] ${params.project} ${params.z}/${params.x}/${params.y}:`, err.message);
+
+      // Queue full: return 503 so the client can retry without flooding logs.
+      if (err?.code === 'QUEUE_FULL') {
+        const qErr = Object.assign(new Error('Server busy — try again shortly'), { statusCode: 503 });
+        if (waiters && Array.isArray(waiters.callbacks)) {
+          for (const fn of waiters.callbacks) { try { fn(qErr, null); } catch {} }
+        } else {
+          cb(qErr, null);
+        }
+        return;
+      }
+
+      console.error(`[Pool Error] ${params.project}/${params.layer || params.theme || '?'} ${params.z}/${params.x}/${params.y}:`, err.message);
       
       // Intentar limpiar archivo corrupto/vacío si se creó
       if (fs.existsSync(filePath)) {
@@ -8912,16 +9103,14 @@ app.get("/wmts", (req, res, next) => {
 
         const baseUrl = getRequestBaseUrl(req);
 
-        const reqApiKey = req.query?.api_key || "";
+        // NOTE: api_key intentionally omitted from kvpUrl. The capability
+        // document is cacheable; clients must send the key via X-API-Key.
         let kvpUrl = baseUrl + "/wmts?";
         if (filterProjectId) {
             kvpUrl += "project=" + encodeURIComponent(filterProjectId) + "&";
         }
         if (filterLayer) {
           kvpUrl += "layer=" + encodeURIComponent(filterLayer) + "&";
-        }
-        if (reqApiKey) {
-          kvpUrl += "api_key=" + encodeURIComponent(reqApiKey) + "&";
         }
 
         const metadataSnapshot = serviceMetadata || serviceMetadataDefaults;
@@ -9097,8 +9286,15 @@ app.get("/wmts", (req, res, next) => {
       if (checkAccess && typeof checkAccess.then === 'function') checkAccess.catch(next);
       return;
     }
-    
-    // No specific project - return all accessible layers
+
+    // No specific project. Optionally require login (and reject anonymous discovery).
+    // Set QTILER_WMTS_REQUIRE_AUTH=1 to refuse the global capability listing for anonymous users.
+    if (String(process.env.QTILER_WMTS_REQUIRE_AUTH || '').trim() === '1') {
+      const authEnabled = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      if (authEnabled && !req.user) {
+        return res.status(401).json({ error: 'auth_required' });
+      }
+    }
     return executeGetCapabilities();
   }
 

@@ -33,7 +33,7 @@
     }
   },
   "autoEnable": false,
-  "license": "Qrigo Commercial License",
-  "licenseFile": "LICENSE_Qrigo.txt",
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
   "supportContact": "support@mundogis.se"
 }

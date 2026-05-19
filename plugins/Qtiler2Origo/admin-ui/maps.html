@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qtiler2Origo &ndash; Maps Portal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
+  <script src="/lang-support.js"></script>
+  <style>
+    html, body { min-height: 100%; }
+    body { background-color: #f5f5f5; display: flex; flex-direction: column; min-height: 100vh; }
+    main.maps-main { flex: 1 0 auto; }
+    .hero.is-origo { background: linear-gradient(135deg, #00d1b2, #0092fa); color: #fff; }
+    .hero.is-origo h1 { color: #fff; }
+    .hero.is-origo .subtitle { color: rgba(255,255,255,0.85); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 0.9rem; }
+    .brand img { max-height: 56px; max-width: 200px; background: rgba(255,255,255,0.92); padding: 4px 8px; border-radius: 6px; }
+    .brand-text h1 { margin: 0; }
+    .brand-text p { margin: 0; }
+    .top-actions { display: flex; align-items: center; gap: 0.6rem; }
+    .top-actions select { font-size: 0.85rem; }
+    .auth-bar { display: flex; align-items: center; gap: 0.6rem; color: #fff; }
+    .auth-bar .user-name { font-weight: 600; }
+    .login-modal .box { max-width: 380px; margin: 0 auto; }
+    .map-card { height: 100%; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; background: #fff; }
+    .map-card:hover { transform: translateY(-4px); box-shadow: 0 8px 12px rgba(0,0,0,0.15); }
+    .map-card-image { height: 180px; background-size: cover; background-position: center; background-color: #eee; position: relative; }
+    .map-card-image::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 50%; background: linear-gradient(transparent, rgba(0,0,0,0.6)); }
+    .map-card-title { position: absolute; bottom: 10px; left: 15px; color: #fff; font-weight: bold; font-size: 1.25rem; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+    .map-card-body { padding: 15px; flex: 1; }
+    .map-card-desc { font-size: 0.9rem; color: #666; margin-bottom: 15px; }
+    .qtiler-footer { flex-shrink: 0; background: #1f2933; color: #cbd5e1; padding: 1.25rem 0; margin-top: 2rem; }
+    .qtiler-footer a { color: #93c5fd; }
+    .qtiler-footer .footer-inner { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <section class="hero is-origo is-small">
+    <div class="hero-body">
+      <div class="container topbar">
+        <div class="brand">
+          <img id="brand-logo" src="" alt="" hidden />
+          <div class="brand-text">
+            <h1 class="title" data-i18n="qtiler2origo.maps.heading">Map Portal</h1>
+            <p class="subtitle is-6" data-i18n="qtiler2origo.maps.subtitle">Interactive maps published via Origo Bridge</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <label class="visually-hidden" for="lang-selector" data-i18n="qtiler2origo.maps.language">Language</label>
+          <div class="select is-small">
+            <select id="lang-selector" aria-label="Language">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="sv">Svenska</option>
+              <option value="no">Norsk</option>
+            </select>
+          </div>
+          <div id="auth-box" class="auth-bar" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="login-modal" class="modal login-modal">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <div class="box">
+        <h2 class="title is-5 has-text-centered" data-i18n="qtiler2origo.maps.signin">Sign in</h2>
+        <form id="login-form">
+          <div class="field">
+            <label class="label is-small" data-i18n="qtiler2origo.maps.username">Username</label>
+            <div class="control"><input class="input" id="login-user" type="text" autocomplete="username" required></div>
+          </div>
+          <div class="field">
+            <label class="label is-small" data-i18n="qtiler2origo.maps.password">Password</label>
+            <div class="control"><input class="input" id="login-pass" type="password" autocomplete="current-password" required></div>
+          </div>
+          <p id="login-err" class="help is-danger" style="display:none;"></p>
+          <div class="field is-grouped is-grouped-right" style="margin-top:1rem;">
+            <p class="control"><button type="button" id="btn-cancel-login" class="button is-light" data-i18n="qtiler2origo.maps.cancel">Cancel</button></p>
+            <p class="control"><button type="submit" class="button is-link" data-i18n="qtiler2origo.maps.login">Login</button></p>
+          </div>
+        </form>
+      </div>
+    </div>
+    <button class="modal-close is-large" id="btn-close-login" aria-label="close"></button>
+  </div>
+
+  <main class="maps-main">
+    <section class="section">
+      <div class="container" id="maps-grid">
+        <p class="has-text-centered" data-i18n="qtiler2origo.maps.loading">Loading maps...</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="qtiler-footer">
+    <div class="container footer-inner">
+      <span id="footer-copyright">© <span id="footer-year"></span> Qtiler · MundoGIS</span>
+      <span><a href="https://qtiler.com" target="_blank" rel="noopener noreferrer">qtiler.com</a></span>
+    </div>
+  </footer>
+
+  <script>
+    /* ── Inline i18n catalog ── */
+    const I18N = {
+      en: {
+        'qtiler2origo.maps.heading': 'Map Portal',
+        'qtiler2origo.maps.subtitle': 'Interactive maps published via Origo Bridge',
+        'qtiler2origo.maps.language': 'Language',
+        'qtiler2origo.maps.loading': 'Loading maps...',
+        'qtiler2origo.maps.signin': 'Sign in',
+        'qtiler2origo.maps.username': 'Username',
+        'qtiler2origo.maps.password': 'Password',
+        'qtiler2origo.maps.login': 'Login',
+        'qtiler2origo.maps.logout': 'Logout',
+        'qtiler2origo.maps.cancel': 'Cancel',
+        'qtiler2origo.maps.open_map': 'Open map',
+        'qtiler2origo.maps.no_maps': 'No maps published yet.',
+        'qtiler2origo.maps.no_public_maps': 'No public maps available. Please log in to see private maps.',
+        'qtiler2origo.maps.failed': 'Failed to load maps.',
+        'qtiler2origo.maps.login_failed': 'Login failed: ',
+        'qtiler2origo.maps.default_desc': 'Interactive map'
+      },
+      es: {
+        'qtiler2origo.maps.heading': 'Portal de mapas',
+        'qtiler2origo.maps.subtitle': 'Mapas interactivos publicados con Origo Bridge',
+        'qtiler2origo.maps.language': 'Idioma',
+        'qtiler2origo.maps.loading': 'Cargando mapas...',
+        'qtiler2origo.maps.signin': 'Iniciar sesión',
+        'qtiler2origo.maps.username': 'Usuario',
+        'qtiler2origo.maps.password': 'Contraseña',
+        'qtiler2origo.maps.login': 'Entrar',
+        'qtiler2origo.maps.logout': 'Cerrar sesión',
+        'qtiler2origo.maps.cancel': 'Cancelar',
+        'qtiler2origo.maps.open_map': 'Abrir mapa',
+        'qtiler2origo.maps.no_maps': 'Aún no hay mapas publicados.',
+        'qtiler2origo.maps.no_public_maps': 'No hay mapas públicos disponibles. Inicia sesión para ver mapas privados.',
+        'qtiler2origo.maps.failed': 'No se pudieron cargar los mapas.',
+        'qtiler2origo.maps.login_failed': 'Error al iniciar sesión: ',
+        'qtiler2origo.maps.default_desc': 'Mapa interactivo'
+      },
+      sv: {
+        'qtiler2origo.maps.heading': 'Kartportal',
+        'qtiler2origo.maps.subtitle': 'Interaktiva kartor publicerade via Origo Bridge',
+        'qtiler2origo.maps.language': 'Språk',
+        'qtiler2origo.maps.loading': 'Laddar kartor...',
+        'qtiler2origo.maps.signin': 'Logga in',
+        'qtiler2origo.maps.username': 'Användarnamn',
+        'qtiler2origo.maps.password': 'Lösenord',
+        'qtiler2origo.maps.login': 'Logga in',
+        'qtiler2origo.maps.logout': 'Logga ut',
+        'qtiler2origo.maps.cancel': 'Avbryt',
+        'qtiler2origo.maps.open_map': 'Öppna karta',
+        'qtiler2origo.maps.no_maps': 'Inga publicerade kartor ännu.',
+        'qtiler2origo.maps.no_public_maps': 'Inga publika kartor tillgängliga. Logga in för att se privata kartor.',
+        'qtiler2origo.maps.failed': 'Kunde inte ladda kartor.',
+        'qtiler2origo.maps.login_failed': 'Inloggning misslyckades: ',
+        'qtiler2origo.maps.default_desc': 'Interaktiv karta'
+      },
+      no: {
+        'qtiler2origo.maps.heading': 'Kartportal',
+        'qtiler2origo.maps.subtitle': 'Interaktive kart publisert via Origo Bridge',
+        'qtiler2origo.maps.language': 'Språk',
+        'qtiler2origo.maps.loading': 'Laster kart...',
+        'qtiler2origo.maps.signin': 'Logg inn',
+        'qtiler2origo.maps.username': 'Brukernavn',
+        'qtiler2origo.maps.password': 'Passord',
+        'qtiler2origo.maps.login': 'Logg inn',
+        'qtiler2origo.maps.logout': 'Logg ut',
+        'qtiler2origo.maps.cancel': 'Avbryt',
+        'qtiler2origo.maps.open_map': 'Åpne kart',
+        'qtiler2origo.maps.no_maps': 'Ingen publiserte kart enda.',
+        'qtiler2origo.maps.no_public_maps': 'Ingen offentlige kart tilgjengelig. Logg inn for å se private kart.',
+        'qtiler2origo.maps.failed': 'Kunne ikke laste kart.',
+        'qtiler2origo.maps.login_failed': 'Innlogging mislyktes: ',
+        'qtiler2origo.maps.default_desc': 'Interaktivt kart'
+      }
+    };
+
+    const escapeHtml = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    const getLang = () => (window.qtilerLang && window.qtilerLang.get && window.qtilerLang.get()) || 'en';
+    const t = (key) => {
+      const lang = getLang();
+      return (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
+    };
+
+    function applyI18n() {
+      document.documentElement.setAttribute('lang', getLang());
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (key) el.textContent = t(key);
+      });
+    }
+
+    /* Lang selector wiring */
+    const langSelector = document.getElementById('lang-selector');
+    const syncLangSelector = () => { if (langSelector.value !== getLang()) langSelector.value = getLang(); };
+    langSelector.addEventListener('change', () => {
+      if (window.qtilerLang && window.qtilerLang.set) window.qtilerLang.set(langSelector.value);
+    });
+    if (window.qtilerLang && window.qtilerLang.subscribe) {
+      window.qtilerLang.subscribe(() => { syncLangSelector(); applyI18n(); rerenderDynamic(); });
+    }
+    syncLangSelector();
+
+    /* Footer year */
+    document.getElementById('footer-year').textContent = String(new Date().getFullYear());
+
+    /* DOM refs */
+    const authBox = document.getElementById('auth-box');
+    const grid = document.getElementById('maps-grid');
+    const brandLogo = document.getElementById('brand-logo');
+    let lastPayload = null;
+
+    function rerenderDynamic() {
+      if (lastPayload) {
+        renderAuth(lastPayload);
+        renderGrid(lastPayload);
+      }
+    }
+
+    async function loadMaps() {
+      grid.innerHTML = '<p class="has-text-centered">' + escapeHtml(t('qtiler2origo.maps.loading')) + '</p>';
+      let payload;
+      try {
+        const res = await fetch('/plugins/Qtiler2Origo/api/public-maps', { credentials: 'same-origin' });
+        payload = await res.json();
+      } catch (err) {
+        grid.innerHTML = '<div class="notification is-danger">' + escapeHtml(t('qtiler2origo.maps.failed')) + '</div>';
+        renderAuth({ authActive: false, user: null });
+        return;
+      }
+      lastPayload = payload;
+      // Logo from backend
+      if (payload && payload.logoUrl) {
+        brandLogo.src = payload.logoUrl;
+        brandLogo.hidden = false;
+        brandLogo.alt = t('qtiler2origo.maps.heading');
+      } else {
+        brandLogo.hidden = true;
+        brandLogo.removeAttribute('src');
+      }
+      renderAuth(payload);
+      renderGrid(payload);
+    }
+
+    function renderGrid(payload) {
+      const profiles = Array.isArray(payload?.items) ? payload.items : [];
+      if (!profiles.length) {
+        const msgKey = payload?.authActive && !payload?.user
+          ? 'qtiler2origo.maps.no_public_maps'
+          : 'qtiler2origo.maps.no_maps';
+        grid.innerHTML = '<div class="notification is-warning has-text-centered">' + escapeHtml(t(msgKey)) + '</div>';
+        return;
+      }
+      const columns = document.createElement('div');
+      columns.className = 'columns is-multiline';
+      profiles.forEach((p) => {
+        const col = document.createElement('div');
+        col.className = 'column is-one-third-tablet is-one-quarter-desktop';
+        const profileId = encodeURIComponent(p.profileKey || p.id || '');
+        const thumbUrl = p.projectId ? '/plugins/Qtiler2Origo/api/thumbnail/' + encodeURIComponent(p.projectId) : '';
+        const bgImg = thumbUrl ? 'background-image: url(' + thumbUrl + ');' : '';
+        const mapLink = p.launchUrl || ('/Qtiler2Origo/maps/?qtiler_profile=' + profileId);
+        col.innerHTML = '\n          <a href="' + escapeHtml(mapLink) + '" target="_blank" class="map-card">\n            <div class="map-card-image" style="' + bgImg + '">\n              <div class="map-card-title">' + escapeHtml(p.name || p.profileKey || 'Map') + '</div>\n            </div>\n            <div class="map-card-body">\n              <div class="map-card-desc">' + escapeHtml(p.description || t('qtiler2origo.maps.default_desc')) + '</div>\n              <span class="button is-small is-light is-fullwidth">' + escapeHtml(t('qtiler2origo.maps.open_map')) + '</span>\n            </div>\n          </a>';
+        columns.appendChild(col);
+      });
+      grid.innerHTML = '';
+      grid.appendChild(columns);
+    }
+
+    /* Login modal */
+    const loginModal = document.getElementById('login-modal');
+    const loginForm = document.getElementById('login-form');
+    const loginUser = document.getElementById('login-user');
+    const loginPass = document.getElementById('login-pass');
+    const loginErr = document.getElementById('login-err');
+
+    function openLoginModal() {
+      loginErr.style.display = 'none';
+      loginErr.textContent = '';
+      loginUser.value = '';
+      loginPass.value = '';
+      loginModal.classList.add('is-active');
+      setTimeout(() => loginUser.focus(), 50);
+    }
+    function closeLoginModal() { loginModal.classList.remove('is-active'); }
+
+    document.getElementById('btn-close-login').addEventListener('click', closeLoginModal);
+    document.getElementById('btn-cancel-login').addEventListener('click', closeLoginModal);
+    loginModal.querySelector('.modal-background').addEventListener('click', closeLoginModal);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLoginModal(); });
+
+    loginForm.addEventListener('submit', doLogin);
+
+    function renderAuth(payload) {
+      if (!payload || !payload.authActive) { authBox.hidden = true; authBox.innerHTML = ''; return; }
+      authBox.hidden = false;
+      if (payload.user) {
+        const name = payload.user.username || payload.user.id || 'user';
+        authBox.innerHTML =
+          '<span class="user-name">' + escapeHtml(name) + '</span>' +
+          '<button id="btn-logout" class="button is-small is-light">' + escapeHtml(t('qtiler2origo.maps.logout')) + '</button>';
+        document.getElementById('btn-logout').addEventListener('click', doLogout);
+      } else {
+        authBox.innerHTML = '<button id="btn-login" class="button is-small is-light">' + escapeHtml(t('qtiler2origo.maps.login')) + '</button>';
+        document.getElementById('btn-login').addEventListener('click', openLoginModal);
+      }
+    }
+
+    async function doLogin(ev) {
+      ev.preventDefault();
+      const username = loginUser.value.trim();
+      const password = loginPass.value;
+      loginErr.style.display = 'none';
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        closeLoginModal();
+        await loadMaps();
+      } catch (err) {
+        loginErr.textContent = t('qtiler2origo.maps.login_failed') + err.message;
+        loginErr.style.display = '';
+      }
+    }
+
+    async function doLogout() {
+      try {
+        await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (_) { /* ignore */ }
+      await loadMaps();
+    }
+
+    applyI18n();
+    loadMaps();
+  </script>
+</body>
+</html>

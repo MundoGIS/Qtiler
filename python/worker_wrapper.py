@@ -49,13 +49,19 @@ if not QGIS_PREFIX:
 if os.name == "nt":
     OSGEO4W_BIN = os.environ.get("OSGEO4W_BIN")
     qgis_bin = os.path.join(QGIS_PREFIX, "bin")
+    qt6_bin = os.path.join(QGIS_PREFIX, "..", "Qt6", "bin")
+    qt5_bin = os.path.join(QGIS_PREFIX, "..", "Qt5", "bin")
+    
     paths = [p for p in os.environ.get("PATH", "").split(";") if p]
-    for pth in (OSGEO4W_BIN, qgis_bin):
-        if pth and pth not in paths: paths.insert(0, pth)
+    for pth in (OSGEO4W_BIN, qgis_bin, qt6_bin, qt5_bin):
+        if pth and os.path.isdir(pth) and pth not in paths: 
+            paths.insert(0, pth)
     os.environ["PATH"] = ";".join(paths)
     try:
         if OSGEO4W_BIN and os.path.isdir(OSGEO4W_BIN): os.add_dll_directory(OSGEO4W_BIN)
         if os.path.isdir(qgis_bin): os.add_dll_directory(qgis_bin)
+        if os.path.isdir(qt6_bin): os.add_dll_directory(qt6_bin)
+        if os.path.isdir(qt5_bin): os.add_dll_directory(qt5_bin)
     except: pass
 
 qgis_python = os.path.join(QGIS_PREFIX, "python")
@@ -64,8 +70,13 @@ if os.path.isdir(qgis_python) and qgis_python not in sys.path:
 
 # --- Importar QGIS ---
 try:
+    from qgis.core import QgsApplication
+    QgsApplication.setPrefixPath(QGIS_PREFIX, True)
+    qgs = QgsApplication([], False)
+    qgs.initQgis()
+
     from qgis.core import (
-        QgsApplication, QgsProject, QgsMapSettings, 
+        QgsProject, QgsMapSettings, 
         QgsMapRendererParallelJob, QgsRectangle, QgsCoordinateReferenceSystem
     )
     from qgis.PyQt.QtCore import QSize, QEventLoop
@@ -80,6 +91,11 @@ try:
 except Exception:
     QgsPointXY = None
     QgsFeatureRequest = None
+
+try:
+    from qgis.core import QgsExpression
+except Exception:
+    QgsExpression = None
 
 try:
     from qgis.core import QgsVectorLayer, QgsFeature, QgsGeometry, QgsWkbTypes
@@ -127,10 +143,7 @@ try:
 except Exception:
     QgsMapRendererCustomPainterJob = None
 
-# Inicializar QGIS (una sola vez)
-QgsApplication.setPrefixPath(QGIS_PREFIX, True)
-qgs = QgsApplication([], False)
-qgs.initQgis()
+# QGS fue inicializado arriba antes del resto de los imports!
 
 # --- Helpers ---
 _current_project_path = None
@@ -166,6 +179,51 @@ def safe_xml_name(value):
     if out.lower().startswith('xml'):
         out = '_' + out
     return out
+
+
+def _find_layer_loose(project, requested_name):
+    """Resolve a layer name tolerating sanitization differences.
+
+    QGIS WMS/WFS often expose layer names in a sanitized form (spaces and
+    special characters replaced by underscores). Clients that follow that
+    naming will fail an exact ``mapLayersByName`` lookup against the original
+    project layer name. Try a few normalizations (sanitized typename,
+    case-insensitive match, underscore↔space swap) before giving up.
+    """
+    if project is None or not requested_name:
+        return None
+    try:
+        wanted = str(requested_name).strip()
+    except Exception:
+        return None
+    if not wanted:
+        return None
+    candidates = {wanted, wanted.replace('_', ' '), wanted.replace(' ', '_')}
+    try:
+        candidates.add(safe_xml_name(wanted))
+    except Exception:
+        pass
+    candidates_lc = {c.lower() for c in candidates if c}
+    try:
+        for lyr in project.mapLayers().values():
+            try:
+                lname = lyr.name() if hasattr(lyr, 'name') else None
+                if not lname:
+                    continue
+                if lname in candidates:
+                    return lyr
+                if lname.lower() in candidates_lc:
+                    return lyr
+                try:
+                    if safe_xml_name(lname) in candidates:
+                        return lyr
+                except Exception:
+                    pass
+            except Exception:
+                continue
+    except Exception:
+        return None
+    return None
 
 
 def _normalize_srs_name(value):
@@ -890,11 +948,52 @@ def process_task(params):
 
             results = []
 
+            def _to_py(val):
+                # Coerce QVariant / Qt types to JSON-serializable Python.
+                try:
+                    if val is None:
+                        return None
+                    # PyQt QVariant: NULL check
+                    if hasattr(val, 'isNull') and callable(getattr(val, 'isNull')):
+                        try:
+                            if val.isNull():
+                                return None
+                        except Exception:
+                            pass
+                    # QVariant.value()
+                    if hasattr(val, 'value') and callable(getattr(val, 'value')) and val.__class__.__name__ == 'QVariant':
+                        try:
+                            return _to_py(val.value())
+                        except Exception:
+                            pass
+                    if isinstance(val, (str, int, float, bool)):
+                        return val
+                    # QDate / QDateTime / QTime
+                    cls = val.__class__.__name__
+                    if cls in ('QDate', 'QDateTime', 'QTime'):
+                        try:
+                            return val.toString('yyyy-MM-ddTHH:mm:ss')
+                        except Exception:
+                            return str(val)
+                    if isinstance(val, (list, tuple)):
+                        return [_to_py(v) for v in val]
+                    if isinstance(val, dict):
+                        return { str(k): _to_py(v) for k, v in val.items() }
+                    return str(val)
+                except Exception:
+                    try:
+                        return str(val)
+                    except Exception:
+                        return None
+
             def append_feature(feature):
                 row = { 'id': feature.id(), '_layer': requested_type }
                 try:
                     for fname in available:
-                        row[fname] = feature[fname]
+                        try:
+                            row[fname] = _to_py(feature[fname])
+                        except Exception:
+                            row[fname] = None
                 except Exception:
                     pass
                 try:
@@ -912,32 +1011,65 @@ def process_task(params):
                 results.append(row)
 
             try:
-                for feature in lyr.getFeatures():
-                    matched = False
-                    for fname in normalized_fields:
-                        try:
-                            val = feature[fname]
-                            if val is None:
-                                continue
-                            text = _norm_text(val)
-                            if not text:
-                                continue
-                            # match at string start or any token start
-                            if text.startswith(q):
-                                matched = True
-                                break
-                            for token in text.split(' '):
-                                if token.startswith(q):
+                # Fast path: push the filter down to the data provider via a
+                # QgsExpression. Iterating ALL features in Python is O(N*M) on
+                # huge polygon layers and made the request "spin forever" —
+                # this lets the provider (OGR/PostGIS/GPKG) use its own indexes
+                # and string ops, returning only matching features.
+                fast_path_done = False
+                if QgsExpression is not None and QgsFeatureRequest is not None and normalized_fields:
+                    try:
+                        # Escape single quotes for SQL. Drop LIKE wildcards
+                        # from user input so they don't act as wildcards (rare
+                        # in name searches; if present, just treat as literal).
+                        # Lowercase the query to match lower("field") on the
+                        # left-hand side of the LIKE — otherwise an uppercase
+                        # query like 'Hjärta' never matches a lowered column.
+                        q_sql = q.lower().replace("'", "''").replace('%', '').replace('_', ' ')
+                        if q_sql.strip():
+                            like_pat = f"%{q_sql}%"
+                            clauses = []
+                            for fname in normalized_fields:
+                                safe_name = fname.replace('"', '""')
+                                clauses.append(f'lower("{safe_name}") LIKE \'{like_pat}\'')
+                            expr_str = ' OR '.join(clauses)
+                            expr = QgsExpression(expr_str)
+                            if not expr.hasParserError():
+                                req = QgsFeatureRequest().setFilterExpression(expr_str).setLimit(limit)
+                                for feature in lyr.getFeatures(req):
+                                    append_feature(feature)
+                                    if len(results) >= limit:
+                                        break
+                                fast_path_done = True
+                    except Exception:
+                        fast_path_done = False
+                if not fast_path_done:
+                    # Fallback: pure-Python iteration with prefix/substring match.
+                    # Kept for providers / fields where the SQL pushdown failed.
+                    for feature in lyr.getFeatures():
+                        matched = False
+                        for fname in normalized_fields:
+                            try:
+                                val = feature[fname]
+                                if val is None:
+                                    continue
+                                text = _norm_text(val)
+                                if not text:
+                                    continue
+                                # Substring match (mirrors Origo's FILTER_CONTAINS)
+                                # plus prefix/token-prefix for backward-compat
+                                # ranking of "starts with" matches.
+                                if q in text:
                                     matched = True
                                     break
-                        except Exception:
-                            continue
+                            except Exception:
+                                continue
+                            if matched:
+                                break
                         if matched:
-                            break
-                    if matched:
-                        append_feature(feature)
-                        if len(results) >= limit:
-                            break
+                            append_feature(feature)
+                            if len(results) >= limit:
+                                break
             except Exception:
                 pass
 
@@ -2102,6 +2234,212 @@ def process_task(params):
             else:
                 raise ValueError('Fallo al exportar el PDF, error code: ' + str(res))
 
+        # --- Layer fields/attributes ---------------------------------------
+        if action == 'layer_fields':
+            layer_name = params.get('layer')
+            if not layer_name:
+                raise ValueError('Falta layer')
+            matches = proj.mapLayersByName(str(layer_name))
+            if not matches:
+                return {'status': 'success', 'fields': []}
+            lyr = matches[0]
+            if not _is_vector_layer(lyr):
+                return {'status': 'success', 'fields': []}
+            fields_out = []
+            try:
+                for f in lyr.fields():
+                    try:
+                        fields_out.append({
+                            'name': f.name(),
+                            'type': f.typeName() if hasattr(f, 'typeName') else str(f.type())
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            geom_str = ''
+            try:
+                # geometryType returns 0=Point, 1=Line, 2=Polygon
+                gt = lyr.geometryType()
+                geom_str = {0: 'Point', 1: 'Line', 2: 'Polygon'}.get(int(gt), 'Unknown')
+            except Exception:
+                pass
+            return {'status': 'success', 'fields': fields_out, 'geometryType': geom_str}
+
+        # --- Layer unique values for a given field -------------------------
+        if action == 'layer_values':
+            layer_name = params.get('layer')
+            field_name = params.get('field')
+            if not layer_name or not field_name:
+                raise ValueError('Falta layer/field')
+            limit = int(params.get('limit') or 500)
+            matches = proj.mapLayersByName(str(layer_name))
+            if not matches:
+                return {'status': 'success', 'values': []}
+            lyr = matches[0]
+            if not _is_vector_layer(lyr):
+                return {'status': 'success', 'values': []}
+            values = []
+            try:
+                idx = lyr.fields().indexFromName(str(field_name))
+                if idx < 0:
+                    return {'status': 'success', 'values': []}
+                # uniqueValues returns a set; cap to limit
+                seen = lyr.uniqueValues(idx, limit)
+                for v in seen:
+                    if v is None:
+                        continue
+                    try:
+                        values.append(str(v))
+                    except Exception:
+                        continue
+                # Sort case-insensitive, numeric-aware best-effort
+                try:
+                    values.sort(key=lambda s: (0, float(s)) if s.replace('.', '', 1).replace('-', '', 1).isdigit() else (1, s.lower()))
+                except Exception:
+                    values.sort()
+            except Exception:
+                pass
+            return {'status': 'success', 'values': values[:limit]}
+
+        # --- Extract layer style (QGIS renderer -> JSON) -------------------
+        # Used by Qtiler2qwc to publish vector layers as WFS in QWC2 with a
+        # JSON style approximating the original QGIS rendering. Only simple
+        # renderer types are supported. Unsupported renderers return
+        # { "status": "success", "supported": false, "reason": "..." } so
+        # callers can fall back to WMS automatically.
+        if action in ('extract_layer_style', 'extract_style'):
+            layer_name = params.get('layer') or params.get('type_name')
+            if not layer_name:
+                raise ValueError('Falta layer')
+            matches = proj.mapLayersByName(str(layer_name))
+            if not matches:
+                raise ValueError('Capa no encontrada')
+            lyr = matches[0]
+            if not _is_vector_layer(lyr):
+                return {"status": "success", "supported": False, "reason": "not_vector"}
+
+            def _qcolor_to_rgba(c):
+                try:
+                    return [int(c.red()), int(c.green()), int(c.blue()), int(c.alpha())]
+                except Exception:
+                    return [128, 128, 128, 255]
+
+            def _symbol_to_dict(sym):
+                if sym is None:
+                    return None
+                out = {"opacity": 1.0}
+                try:
+                    out["opacity"] = float(sym.opacity())
+                except Exception:
+                    pass
+                try:
+                    color = sym.color()
+                    out["color"] = _qcolor_to_rgba(color)
+                except Exception:
+                    out["color"] = [128, 128, 128, 255]
+                # Geometry-type-specific extras
+                try:
+                    sl = sym.symbolLayers()[0] if sym.symbolLayerCount() > 0 else None
+                except Exception:
+                    sl = None
+                # Size for points
+                try:
+                    out["size"] = float(sym.size())
+                except Exception:
+                    pass
+                # Stroke (outline) for polygons / markers
+                try:
+                    if sl is not None:
+                        if hasattr(sl, 'strokeColor'):
+                            out["strokeColor"] = _qcolor_to_rgba(sl.strokeColor())
+                        if hasattr(sl, 'strokeWidth'):
+                            out["strokeWidth"] = float(sl.strokeWidth())
+                        if hasattr(sl, 'penStyle'):
+                            try:
+                                out["strokeStyle"] = str(sl.penStyle())
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                # Width for line symbols
+                try:
+                    if hasattr(sym, 'width'):
+                        out["width"] = float(sym.width())
+                except Exception:
+                    pass
+                return out
+
+            renderer = None
+            try:
+                renderer = lyr.renderer() if hasattr(lyr, 'renderer') else None
+            except Exception:
+                renderer = None
+            if renderer is None:
+                return {"status": "success", "supported": False, "reason": "no_renderer"}
+
+            renderer_type = ''
+            try:
+                renderer_type = str(renderer.type())
+            except Exception:
+                pass
+
+            geom = _geometry_type_name(lyr) or ''
+            result_style = {"geometryType": geom, "type": renderer_type}
+
+            if renderer_type == 'singleSymbol':
+                try:
+                    sym = renderer.symbol()
+                    result_style["symbol"] = _symbol_to_dict(sym)
+                except Exception:
+                    return {"status": "success", "supported": False, "reason": "single_symbol_read_failed"}
+                return {"status": "success", "supported": True, "style": result_style}
+
+            if renderer_type == 'categorizedSymbol':
+                try:
+                    attr = renderer.classAttribute() if hasattr(renderer, 'classAttribute') else ''
+                    cats = renderer.categories() if hasattr(renderer, 'categories') else []
+                except Exception:
+                    return {"status": "success", "supported": False, "reason": "categorized_read_failed"}
+                # Reject if classAttribute is an expression (contains operators / parens)
+                attr_str = str(attr or '')
+                if any(ch in attr_str for ch in ('(', '"', "'", ' ')):
+                    return {"status": "success", "supported": False, "reason": "categorized_expression"}
+                category_list = []
+                default_symbol = None
+                for cat in cats or []:
+                    try:
+                        value = cat.value()
+                        label = cat.label()
+                        sym_dict = _symbol_to_dict(cat.symbol())
+                    except Exception:
+                        continue
+                    # Convert QVariant to plain Python where possible
+                    try:
+                        # PyQt: QVariant has .value()
+                        if hasattr(value, 'value') and callable(value.value):
+                            value = value.value()
+                    except Exception:
+                        pass
+                    is_null_or_empty = value is None or (isinstance(value, str) and value == '')
+                    if is_null_or_empty:
+                        default_symbol = sym_dict
+                        continue
+                    category_list.append({
+                        "value": value,
+                        "label": str(label or ''),
+                        "symbol": sym_dict
+                    })
+                if not category_list and default_symbol is None:
+                    return {"status": "success", "supported": False, "reason": "categorized_empty"}
+                result_style["attribute"] = attr_str
+                result_style["categories"] = category_list
+                if default_symbol is not None:
+                    result_style["default"] = default_symbol
+                return {"status": "success", "supported": True, "style": result_style}
+
+            return {"status": "success", "supported": False, "reason": "unsupported_renderer:" + renderer_type}
+
         # --- Legend action -------------------------------------------------
         if action in ('legend', 'getlegendgraphic'):
             if not output_file:
@@ -2148,7 +2486,10 @@ def process_task(params):
             width_px = max(240, int(params.get('width') or 260))
             height_px = margin * 2 + row_h * len(legend_items)
 
-            img = QImage(int(width_px), int(height_px), QImage.Format_ARGB32)
+            qimg_format = getattr(QImage.Format, "Format_ARGB32", None)
+            if qimg_format is None:
+                qimg_format = getattr(QImage, "Format_ARGB32")
+            img = QImage(int(width_px), int(height_px), qimg_format)
             if transparent:
                 img.fill(0)
             else:
@@ -2381,15 +2722,20 @@ def process_task(params):
                     if not name:
                         continue
                     try:
-                        matches = proj.mapLayersByName(str(name))
+                        matches = proj.mapLayersByName(str(name)) or _find_layer_loose(proj, str(name))
                         if matches:
-                            layers_to_render.append(matches[0])
+                            layers_to_render.append(matches[0] if isinstance(matches, list) else matches)
                     except Exception:
                         continue
             elif params.get('layer'):
-                l = proj.mapLayersByName(params['layer'])
+                lname = str(params['layer'])
+                l = proj.mapLayersByName(lname)
                 if l:
                     layers_to_render = [l[0]]
+                else:
+                    found = _find_layer_loose(proj, lname)
+                    if found:
+                        layers_to_render = [found]
 
         if not layers_to_render and not params.get('theme'):
             raise ValueError("Capa/Tema no encontrado")
@@ -2438,7 +2784,10 @@ def process_task(params):
         # CustomPainterJob tends to be more reliable than ParallelJob in headless environments.
         img = None
         if QgsMapRendererCustomPainterJob is not None and QImage is not None and QPainter is not None:
-            img = QImage(int(width), int(height), QImage.Format_ARGB32)
+            qimg_format = getattr(QImage.Format, "Format_ARGB32", None)
+            if qimg_format is None:
+                qimg_format = getattr(QImage, "Format_ARGB32")
+            img = QImage(int(width), int(height), qimg_format)
             if transparent and save_fmt == "PNG":
                 img.fill(0)
             else:

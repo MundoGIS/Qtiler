@@ -487,7 +487,13 @@ export const registerWfsRoutes = ({
       return;
     }
 
-    const config = typeof readProjectConfig === 'function' ? (readProjectConfig(projectId) || {}) : {};
+    // Always bypass the in-memory cache here: the server runs as a cluster
+    // and each worker has its own projectConfigCache. If the user toggles
+    // a layer's `wfsEditable` flag in worker A, worker B's cache stays stale
+    // and would incorrectly reject the transaction with "Layer not editable".
+    const config = typeof readProjectConfig === 'function'
+      ? (readProjectConfig(projectId, { useCache: false }) || {})
+      : {};
     let tmpDir;
     try {
       tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-tx-'));
@@ -682,8 +688,9 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'VERSION') || getQueryCI(req, 'version'),
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
-        const reqApiKey = String(getQueryCI(req, 'api_key') || '').trim();
-        const serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}${reqApiKey ? `&api_key=${encodeURIComponent(reqApiKey)}` : ''}`;
+        const serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}`;
+        // NOTE: api_key intentionally omitted from the OnlineResource URL.
+        // Clients must send the key via the X-API-Key header.
         // Advertise the same default cap used by GetFeature to avoid client-side truncation surprises.
         const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10) || 5000000;
         const countDefault = Number.parseInt(

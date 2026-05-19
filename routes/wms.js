@@ -24,6 +24,21 @@ const getQueryCI = (req, key) => {
   return null;
 };
 
+// Return an HTTP status code appropriate for a renderTile error.
+const renderErrStatus = (err) => err?.code === 'QUEUE_FULL' ? 503 : 500;
+
+// 1x1 transparent PNG used as instant placeholder while a real legend is
+// rendered in the background. Avoids freezing QWC2 LayerTree when many
+// thumbnails are requested simultaneously.
+const PLACEHOLDER_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64'
+);
+
+// Tracks legend keys currently being rendered so duplicate concurrent
+// requests don't all enqueue the same job.
+const legendInFlight = new Set();
+
 const toBool = (value, fallback = false) => {
   if (value == null) return fallback;
   const raw = String(value).trim().toLowerCase();
@@ -542,8 +557,10 @@ export const registerWmsRoutes = ({
 
         // Include the required `project` parameter in the advertised endpoint so clients that
         // follow the OnlineResource won't lose project context after GetCapabilities.
-        const reqApiKey = req.query?.api_key || "";
-        const serviceUrl = `${getRequestBaseUrl(req)}/wms?project=${encodeURIComponent(projectId)}${reqApiKey ? '&api_key=' + encodeURIComponent(reqApiKey) : ''}`;
+        const serviceUrl = `${getRequestBaseUrl(req)}/wms?project=${encodeURIComponent(projectId)}`;
+        // NOTE: do not append ?api_key=… here. The capability document is cached
+        // by clients and proxies; clients must send the key via the X-API-Key
+        // header instead so it never lands in shared logs/caches.
         const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type("text/xml").send(xml);
@@ -564,34 +581,53 @@ export const registerWmsRoutes = ({
           return;
         }
 
-        let tmpDir;
+        // Cache legends on disk: they rarely change and clients (e.g. QWC2)
+        // request one per layer at once, which would otherwise flood the pool.
+        const safeProject = String(project.id || project.name || 'project').replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const safeLayer = layerName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const legendCacheDir = path.join(process.cwd(), 'cache', safeProject, '_legends');
+        const cachedFile = path.join(legendCacheDir, `${safeLayer}.png`);
+
+        // Serve from cache if exists and project file hasn't changed since.
         try {
-          tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-wms-legend-"));
-          const outFile = path.join(tmpDir, `legend.png`);
-          const result = await tileRendererPool.renderTile({
+          const [cachedStat, projStat] = await Promise.all([
+            fs.promises.stat(cachedFile).catch(() => null),
+            fs.promises.stat(project.file).catch(() => null)
+          ]);
+          if (cachedStat && projStat && cachedStat.mtimeMs >= projStat.mtimeMs) {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.type('image/png');
+            return res.sendFile(cachedFile);
+          }
+        } catch { /* fall through to render */ }
+
+        try {
+          await fs.promises.mkdir(legendCacheDir, { recursive: true });
+        } catch { /* ignore */ }
+
+        // Cache miss: respond IMMEDIATELY with a placeholder PNG so the
+        // browser doesn't keep 20 connections pending (which would block
+        // every other request — map tiles, background, etc.). Kick off a
+        // background render that fills the cache for the next reload.
+        const inflightKey = `${safeProject}::${safeLayer}`;
+        if (!legendInFlight.has(inflightKey)) {
+          legendInFlight.add(inflightKey);
+          // Fire-and-forget. Errors are swallowed (next reload will retry).
+          tileRendererPool.renderTile({
             action: "legend",
             project_path: project.file,
-            output_file: outFile,
+            output_file: cachedFile,
             layer: layerName,
             format: "image/png",
             transparent: true
+          }).catch(() => {}).finally(() => {
+            legendInFlight.delete(inflightKey);
           });
-
-          if (!result || result.status !== "success") {
-            const msg = result?.message || result?.error || "legend_failed";
-            res.status(500).type("application/xml").send(wmsExceptionXml(String(msg), { code: "NoApplicableCode" }));
-            return;
-          }
-
-          res.setHeader("Cache-Control", "no-store");
-          res.type("image/png");
-          res.sendFile(outFile, async () => {
-            try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
-          });
-        } catch (err) {
-          try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
-          res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
         }
+
+        res.setHeader('Cache-Control', 'no-store');
+        res.type('image/png');
+        res.status(200).send(PLACEHOLDER_PNG);
         return;
       }
 
@@ -682,7 +718,7 @@ export const registerWmsRoutes = ({
             res.type('application/json').json(result.data || {});
           }
         } catch (err) {
-          res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
+          res.status(renderErrStatus(err)).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
         }
         return;
       }
@@ -762,7 +798,7 @@ export const registerWmsRoutes = ({
           });
         } catch (err) {
           try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
-          res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
+          res.status(renderErrStatus(err)).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
         }
         return;
       }
@@ -918,7 +954,7 @@ export const registerWmsRoutes = ({
           res.type(cacheTarget.contentType);
           res.sendFile(cacheTarget.filePath);
         } catch (err) {
-          res.status(500).type('application/xml').send(wmsExceptionXml(String(err?.message || err), { code: 'NoApplicableCode' }));
+          res.status(renderErrStatus(err)).type('application/xml').send(wmsExceptionXml(String(err?.message || err), { code: 'NoApplicableCode' }));
         }
         return;
       }
@@ -955,7 +991,7 @@ export const registerWmsRoutes = ({
         });
       } catch (err) {
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
-        res.status(500).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
+        res.status(renderErrStatus(err)).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
       }
     };
 
