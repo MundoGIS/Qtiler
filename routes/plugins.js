@@ -417,18 +417,17 @@ export const registerPluginRoutes = ({
       if (!pricing[pluginName]) continue;
       const status = getLicenseStatus(store, pluginName);
       if (status.status === 'expired') {
+        // Disable the plugin so its routes/middleware stop serving requests,
+        // but DO NOT delete the plugin directory. A transient "expired" verdict
+        // (e.g. brief signature/verification glitch, partial licenses.json
+        // read, or a single bad machineFingerprint computation) would otherwise
+        // permanently destroy the install and force the operator to re-upload
+        // the plugin .zip. Disabling is enough to gate feature access; the
+        // operator can re-activate a valid license without reinstalling.
         try {
           await pluginManager.disablePlugin(pluginName);
         } catch (err) {
           console.warn(`[licenses] Failed to disable expired plugin ${pluginName}`, err?.message || err);
-        }
-        try {
-          const pluginPath = path.join(pluginsDir, pluginName);
-          if (fs.existsSync(pluginPath)) {
-            await removeRecursive(pluginPath);
-          }
-        } catch (err) {
-          console.warn(`[licenses] Failed to remove expired plugin ${pluginName}`, err?.message || err);
         }
       }
     }
@@ -582,7 +581,7 @@ export const registerPluginRoutes = ({
     res.json(out);
   });
 
-  app.post('/licenses/activate', requireAdminIfEnabled, (req, res) => {
+  app.post('/licenses/activate', requireAdminIfEnabled, async (req, res) => {
     const pluginName = sanitizePluginName(req.body?.plugin || req.body?.name || '');
     const licenseKey = String(req.body?.licenseKey || '').trim();
     if (!pluginName || !pricing[pluginName]) {
@@ -634,7 +633,30 @@ export const registerPluginRoutes = ({
     store.plugins[pluginName].licenseKey = licenseKey;
     saveLicenseStore(store);
 
-    res.json({ status: 'ok' });
+    // Auto-enable the plugin once a valid license is activated, mirroring the
+    // auto-enable-on-install behaviour from /plugins/upload. Without this the
+    // operator has to take a separate manual step after activation.
+    let autoEnabled = false;
+    try {
+      const alreadyEnabled = pluginManager.listEnabled().includes(pluginName);
+      if (!alreadyEnabled) {
+        await pluginManager.enablePlugin(pluginName);
+        autoEnabled = true;
+      }
+    } catch (err) {
+      console.warn('[licenses] auto-enable after activate failed', err?.message || err);
+    }
+
+    // CRITICAL: the server runs in cluster mode (see server.js — cluster.fork()
+    // per CPU). pluginManager state lives in each worker's process memory, so
+    // the enable above only takes effect in THIS worker. Subsequent requests
+    // round-robin to other workers that still believe the plugin is disabled,
+    // which surfaces as the admin UI flickering between enabled / not-enabled
+    // when the user refreshes. Mirror /plugins/upload and ask the primary to
+    // restart every worker so they all re-read data/plugins.json on boot.
+    restartAfterResponse(res);
+
+    res.json({ status: 'ok', enabled: autoEnabled || pluginManager.listEnabled().includes(pluginName) });
   });
 
   /* 

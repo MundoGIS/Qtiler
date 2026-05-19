@@ -688,9 +688,22 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'VERSION') || getQueryCI(req, 'version'),
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
-        const serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}`;
-        // NOTE: api_key intentionally omitted from the OnlineResource URL.
-        // Clients must send the key via the X-API-Key header.
+        const reqApiKey = String(
+          getQueryCI(req, 'api_key') ||
+          getQueryCI(req, 'apikey') ||
+          getQueryCI(req, 'apiKey') ||
+          getQueryCI(req, 'API_KEY') ||
+          ''
+        ).trim();
+        let serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}`;
+        // If capabilities were requested with api_key, propagate it in the
+        // advertised OnlineResource URLs (GetFeature/Describe/Transaction).
+        // QGIS WFS editing uses the Transaction POST endpoint from capabilities;
+        // without this it sends follow-up requests unauthenticated and only
+        // user/password auth appears to work.
+        if (reqApiKey) {
+          serviceUrl += `&api_key=${encodeURIComponent(reqApiKey)}`;
+        }
         // Advertise the same default cap used by GetFeature to avoid client-side truncation surprises.
         const hardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10) || 5000000;
         const countDefault = Number.parseInt(

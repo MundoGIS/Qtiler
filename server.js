@@ -451,6 +451,16 @@ app.use((req, res, next) => {
     const q = req.query || {};
     const hasKeyQuery = !!(q.api_key || q.apikey || q.apiKey || q.API_KEY);
     if (hasKeyHeader || hasKeyQuery) {
+      // EXCEPTION: all WMTS endpoints. QGIS can use WMTS KVP/REST with api_key
+      // and must be allowed to cache both capabilities and tile responses. If
+      // this middleware forces no-store, QNetworkDiskCache stops caching and
+      // causes constant re-fetches/re-renders. Access control is still applied
+      // by WMTS handlers before serving any resource.
+      const urlPath = String(req.path || '');
+      const isWmtsEndpoint = /^\/wmts(\/|$)/i.test(urlPath);
+      if (isWmtsEndpoint) {
+        return next();
+      }
       res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Vary', 'Authorization, X-API-Key, Cookie');
@@ -485,9 +495,11 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   try {
     const urlPath = String(req.path || '').toLowerCase();
-    const wantsHtml = req.accepts && req.accepts('html');
+    const acceptHeader = String((req.get && req.get('accept')) || '').toLowerCase();
+    const wantsHtml = acceptHeader.includes('text/html') || acceptHeader.includes('application/xhtml+xml');
     const isHtmlPath = urlPath === '/' || urlPath.endsWith('.html') || urlPath === '/index.html' || urlPath === '/login';
-    if (wantsHtml || isHtmlPath) {
+    const isServiceEndpoint = urlPath.startsWith('/wmts') || urlPath.startsWith('/wms') || urlPath.startsWith('/wfs') || urlPath.startsWith('/api/');
+    if ((wantsHtml || isHtmlPath) && !isServiceEndpoint) {
       // Conservative header to prevent caching of sensitive UI
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
@@ -8255,6 +8267,12 @@ const setWmtsTileCacheHeaders = (res) => {
     if (!res || typeof res.setHeader !== 'function') return;
     // Cacheable for GIS clients; tiles are file-backed and stable per z/x/y until cache is explicitly cleared.
     res.setHeader('Cache-Control', `public, max-age=${WMTS_TILE_CACHE_MAX_AGE_S}`);
+    // Explicitly remove conflicting legacy headers that earlier middleware may have set.
+    // Qt Network (QGIS) and many HTTP/1.0 proxies treat `Pragma: no-cache` and
+    // `Expires: 0` as hard "do not cache" signals even when Cache-Control says public.
+    // removeHeader is a no-op if the header was never set, so this is always safe.
+    res.removeHeader('Pragma');
+    res.removeHeader('Expires');
   } catch {}
 };
 // Track viewer sessions that requested on-demand tile generation.
@@ -9067,6 +9085,9 @@ app.get("/wmts", (req, res, next) => {
     const filterProjectId = filterProjectRaw ? filterProjectRaw.replace(/[^a-zA-Z0-9-_]/g, "").toLowerCase() : "";
 
     const filterLayer = String(findQ('layer') || findQ('LAYER') || '').trim();
+    const reqApiKey = String(
+      findQ('api_key') || findQ('apikey') || findQ('apiKey') || findQ('API_KEY') || ''
+    ).trim();
 
     // For GetCapabilities, check project access if a specific project is requested
     const executeGetCapabilities = () => {
@@ -9103,14 +9124,18 @@ app.get("/wmts", (req, res, next) => {
 
         const baseUrl = getRequestBaseUrl(req);
 
-        // NOTE: api_key intentionally omitted from kvpUrl. The capability
-        // document is cacheable; clients must send the key via X-API-Key.
+        // If capabilities were requested with api_key, keep that key in the
+        // advertised WMTS operation URLs so clients like QGIS continue sending
+        // authenticated requests for GetTile/GetFeatureInfo.
         let kvpUrl = baseUrl + "/wmts?";
         if (filterProjectId) {
             kvpUrl += "project=" + encodeURIComponent(filterProjectId) + "&";
         }
         if (filterLayer) {
           kvpUrl += "layer=" + encodeURIComponent(filterLayer) + "&";
+        }
+        if (reqApiKey) {
+          kvpUrl += "api_key=" + encodeURIComponent(reqApiKey) + "&";
         }
 
         const metadataSnapshot = serviceMetadata || serviceMetadataDefaults;
@@ -9243,7 +9268,8 @@ app.get("/wmts", (req, res, next) => {
           xmlParts.push("</TileMatrixSetLink>");
           
           if (baseUrl) {
-             const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png${reqApiKey ? '?api_key=' + encodeURIComponent(reqApiKey) : ''}`;
+             const keySuffix = reqApiKey ? `?api_key=${encodeURIComponent(reqApiKey)}` : '';
+             const template = `${baseUrl}/wmts/rest/${encodeURIComponent(layer.projectKey)}/${encodeURIComponent(layer.layerKey)}/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png${keySuffix}`;
              xmlParts.push(`<ResourceURL format=\"image/png\" resourceType=\"tile\" template=\"${xmlEscape(template)}\"/>`);
           }
           
