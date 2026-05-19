@@ -1,7 +1,8 @@
-{
-  "enabled": [
-    "Qtiler2qwc",
-    "Qrigo",
-    "Qtiler2Origo"
-  ]
+﻿{
+    "enabled":  [
+                    "Qtiler2qwc",
+                    "Qrigo",
+                    "Qtiler2Origo",
+                    "QtilerAuth"
+                ]
 }
