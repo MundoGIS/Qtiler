@@ -155,7 +155,7 @@ REM  Step 4b: Ensure QtilerAuth plugin is enabled (90-day trial auto-issued)
 REM ----------------------------------------------------------------------
 echo [Qtiler] Enabling QtilerAuth plugin ^(90-day trial license^)...
 if not exist data mkdir data >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='data\plugins.json'; if (Test-Path $f) { try { $j = Get-Content $f -Raw | ConvertFrom-Json } catch { $j = [pscustomobject]@{ enabled=@() } } } else { $j = [pscustomobject]@{ enabled=@() } }; if (-not $j.enabled) { $j | Add-Member -NotePropertyName enabled -NotePropertyValue @() -Force }; $list = @($j.enabled); if ($list -notcontains 'QtilerAuth') { $list += 'QtilerAuth'; $j.enabled = $list; ($j | ConvertTo-Json -Depth 10) | Set-Content -Path $f -Encoding UTF8; Write-Host '  QtilerAuth added to enabled plugins.' } else { Write-Host '  QtilerAuth already enabled.' }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='data\plugins.json'; if (Test-Path $f) { try { $j = Get-Content $f -Raw | ConvertFrom-Json } catch { $j = [pscustomobject]@{ enabled=@() } } } else { $j = [pscustomobject]@{ enabled=@() } }; if (-not $j.enabled) { $j | Add-Member -NotePropertyName enabled -NotePropertyValue @() -Force }; $list = @($j.enabled); if ($list -notcontains 'QtilerAuth') { $list += 'QtilerAuth'; $j.enabled = $list; $json = ($j | ConvertTo-Json -Depth 10); [System.IO.File]::WriteAllText((Resolve-Path $f), $json, (New-Object System.Text.UTF8Encoding $false)); Write-Host '  QtilerAuth added to enabled plugins.' } else { Write-Host '  QtilerAuth already enabled.' }"
 echo.
 
 REM ----------------------------------------------------------------------
