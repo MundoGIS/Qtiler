@@ -69,6 +69,58 @@ const safeLayerNameForWfs = (value) => {
   return String(value).normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 };
 
+const xmlAttr = (text, attrName) => {
+  const re = new RegExp(`${attrName}="([^"]*)"`, 'i');
+  const match = String(text || '').match(re);
+  return match ? match[1] : '';
+};
+
+const qgisColorToHex = (value) => {
+  const parts = String(value || '').split(',').slice(0, 3).map((part) => Number(part));
+  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  return `#${parts.map((part) => Math.max(0, Math.min(255, Math.round(part))).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const readQgis3dLayerConfig = (projectFile, cachedLayers = []) => {
+  const result = new Map();
+  try {
+    if (!projectFile || !fs.existsSync(projectFile)) return result;
+    let xml = '';
+    if (/\.qgz$/i.test(projectFile)) {
+      const zip = new AdmZip(projectFile);
+      const entry = zip.getEntries().find((item) => /\.qgs$/i.test(item.entryName));
+      if (entry) xml = entry.getData().toString('utf8');
+    } else if (/\.qgs$/i.test(projectFile)) {
+      xml = fs.readFileSync(projectFile, 'utf8');
+    }
+    if (!xml) return result;
+
+    const byId = new Map();
+    for (const layer of cachedLayers || []) {
+      if (layer?.layer_id) byId.set(String(layer.layer_id), String(layer.name || layer.layer || ''));
+    }
+
+    const rendererRe = /<renderer-3d\b[^>]*>[\s\S]*?<\/renderer-3d>/gi;
+    for (const match of xml.matchAll(rendererRe)) {
+      const block = match[0];
+      const layerId = xmlAttr(block, 'layer');
+      const layerName = byId.get(layerId);
+      if (!layerName) continue;
+      const extrusionRaw = xmlAttr(block, 'extrusion-height');
+      const extrusionHeight = Number(extrusionRaw);
+      if (!Number.isFinite(extrusionHeight) || extrusionHeight <= 0) continue;
+      const materialMatch = block.match(/<material\b[^>]*>/i);
+      result.set(layerName, {
+        extrusionHeight,
+        ...(materialMatch ? { color: qgisColorToHex(xmlAttr(materialMatch[0], 'diffuse')) } : {})
+      });
+    }
+  } catch {
+    return result;
+  }
+  return result;
+};
+
 const normalizeBackgroundSelection = ({
   backgroundsInput,
   defaultBackgroundKeyInput,
@@ -1049,6 +1101,36 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
     }
 
+    if (features?.view3d === true && !disabledPlugins.has('View3D')) {
+      baseConfig.plugins = baseConfig.plugins && typeof baseConfig.plugins === 'object' ? baseConfig.plugins : {};
+      baseConfig.plugins.common = Array.isArray(baseConfig.plugins.common) ? baseConfig.plugins.common : [];
+      if (!baseConfig.plugins.common.some((p) => p?.name === 'View3D')) {
+        baseConfig.plugins.common.push({ name: 'View3D' });
+      }
+
+      const ensure3dTool = (section, name, cfg = null) => {
+        baseConfig.plugins[section] = Array.isArray(baseConfig.plugins[section]) ? baseConfig.plugins[section] : [];
+        const existing = baseConfig.plugins[section].find((p) => p?.name === name);
+        if (existing) {
+          existing.availableIn3D = true;
+          if (cfg && (!existing.cfg || typeof existing.cfg !== 'object')) existing.cfg = cfg;
+          return;
+        }
+        baseConfig.plugins[section].push({ name, availableIn3D: true, ...(cfg ? { cfg } : {}) });
+      };
+
+      for (const section of ['desktop', 'mobile']) {
+        ensure3dTool(section, 'BackgroundSwitcher3D');
+        ensure3dTool(section, 'LayerTree3D');
+        ensure3dTool(section, 'Measure3D');
+        ensure3dTool(section, 'MapLight3D');
+        ensure3dTool(section, 'Settings3D');
+        ensure3dTool(section, 'MapCopyright3D');
+        ensure3dTool(section, 'HideObjects3D');
+        ensure3dTool(section, 'ExportObjects3D');
+      }
+    }
+
     if (hasMultipleThemes) {
       // Keep Portal plugin but clean up demo links
       const portal = (baseConfig.plugins?.common || []).find((p) => p?.name === 'Portal');
@@ -1180,8 +1262,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       for (const p of plugins) {
         if (!p || !p.cfg) continue;
         if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
-        if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
-        if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
+        if (p.name === 'Editing') p.cfg.serviceUrl = '/wfs';
+        if (p.name === 'Identify') p.cfg.serviceUrl = '/wms';
         if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
         if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
         if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
@@ -1264,9 +1346,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
       } else if (bg.type === 'layer' && bg.sourceProjectId && bg.name) {
         let preset = null;
+        let bgExtent = null;
         try {
-          const ext = await getProjectExtent(bg.sourceProjectId);
-          const crs = ext?.crs || null;
+          bgExtent = await getProjectExtent(bg.sourceProjectId);
+          const crs = bgExtent?.crs || null;
           if (crs) {
             preset = await findTileGridPresetForCrs(crs);
           }
@@ -1298,6 +1381,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             projection: preset?.coordinateReferenceSystem || 'EPSG:3857',
             resolutions,
             tileSize: [256, 256],
+            bbox: { crs: 'EPSG:4326', bounds: bgExtent?.wgs84 || [-180, -90, 180, 90] },
             // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /plugins/...
             thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bg.name)}?project=${encodeURIComponent(bg.sourceProjectId)}`
@@ -1345,6 +1429,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const cacheIndex = await readCacheIndex(projectId);
     const cachedLayers = cacheIndex?.layers || [];
     const projectLayerFlags = await readProjectLayerFlags(projectId);
+    const qgis3dLayers = readQgis3dLayerConfig(cacheIndex?.project, cachedLayers);
 
     // Collect additional CRS from layers that differ from the project CRS
     const additionalCrsSet = new Set();
@@ -1405,6 +1490,25 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             updatable: true,
             deletable: true
           }
+        };
+      }
+      const layer3d = qgis3dLayers.get(name) || qgis3dLayers.get(title);
+      if (layer3d && /polygon/i.test(String(cached?.geometry_type || ''))) {
+        sl.extrusionHeight = layer3d.extrusionHeight;
+        if (layer3d.color) sl.color = layer3d.color;
+        const wfsLayerName = name;
+        const wfs3dId = `${projectId}:3d:${safeLayerNameForWfs(wfsLayerName) || sanitizeFileToken(wfsLayerName) || 'layer'}`;
+        sl.wfs3dLayer = {
+          id: wfs3dId,
+          type: 'wfs',
+          name: wfsLayerName,
+          title: `${title || name} 3D`,
+          url: wfsUrl,
+          version: '1.1.0',
+          formats: ['application/json', 'geojson', 'json'],
+          projection: cached?.layer_crs || cached?.crs || projectCrs,
+          bbox: { crs: 'EPSG:4326', bounds: cached?.extent_wgs84 || bboxWgs84 },
+          color: layer3d.color || '#b2b2b2'
         };
       }
       return sl;
@@ -1472,10 +1576,21 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             path.join(projectsDir, projectId),
             path.join(projectsDir, projectId, projectId)
           ];
+          const scoreTerrainFile = (filename) => {
+            const name = String(filename || '').toLowerCase();
+            let score = 0;
+            if (/\.(tif|tiff)$/i.test(name)) score += 10;
+            if (/(terrain|dtm|dem|elevation|height|relief)/i.test(name)) score += 100;
+            if (/(stock|surface|ground|z)/i.test(name)) score += 15;
+            if (/(orto|ortho|orthophoto|aerial|satellite|imagery|rgb|topo|webb|basemap)/i.test(name)) score -= 200;
+            return score;
+          };
           for (const dir of candidates) {
             let entries = [];
             try { entries = await fs.promises.readdir(dir); } catch { continue; }
-            const tif = entries.find((e) => /\.tif$/i.test(e));
+            const tif = entries
+              .filter((e) => /\.(tif|tiff)$/i.test(e))
+              .sort((a, b) => scoreTerrainFile(b) - scoreTerrainFile(a) || a.localeCompare(b))[0];
             if (tif) {
               const terrainUrl = `${qtilerBaseUrl}/Qtiler2Origo/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
               return { url: terrainUrl, crs: projectCrs };
@@ -1485,11 +1600,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         return null;
       })();
       item.map3d = {
-        ...(dtm ? { dtm } : {})
-        // basemaps: intentionally omitted - QWC2 3D tries to build OL WMTS
-        // tile sources from external wmts: background layers and crashes when
-        // the tileGrid extent is null. The 3D scene renders the main WMS
-        // layers correctly without background basemaps.
+        ...(dtm ? { dtm } : {}),
+        basemaps: bgResult.theme
       };
     }
 
@@ -4161,7 +4273,7 @@ ${mapIcon}
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       const filename = String(req.params?.filename || '').replace(/[/\\]/g, '');
-      if (!projectId || !filename || !/\.tif$/i.test(filename)) {
+      if (!projectId || !filename || !/\.(tif|tiff)$/i.test(filename)) {
         return res.status(400).json({ error: 'invalid_request' });
       }
       // Resolve the file from the known project directories.

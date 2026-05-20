@@ -194,9 +194,23 @@
           if (buttonText === tr('Logout') || buttonText === 'Logout' || buttonText === 'Sign out') {
             authButton.disabled = true;
             try {
-              await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+              await fetch('/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-store' }
+              });
             } catch {}
-            window.location.href = '/';
+            authUser = null;
+            if (authUserBadge) {
+              authUserBadge.hidden = true;
+              authUserBadge.style.display = 'none';
+            }
+            if (adminConsoleLink) {
+              adminConsoleLink.hidden = true;
+              adminConsoleLink.style.display = 'none';
+            }
+            window.location.replace(`/login?loggedOut=1&_cb=${Date.now()}`);
             return;
           }
           

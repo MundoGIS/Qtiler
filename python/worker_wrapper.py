@@ -536,9 +536,111 @@ def _fid_to_int(fid_text):
     except Exception:
         return None
 
+def _float_text(value):
+    try:
+        return format(float(value), '.15g')
+    except Exception:
+        return str(value)
+
+def _points_from_gml_position_text(text, dim=2):
+    raw = str(text or '').strip()
+    if not raw:
+        return []
+    try:
+        dim = int(dim or 2)
+    except Exception:
+        dim = 2
+    if dim < 2:
+        dim = 2
+    nums = re.findall(r'[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?', raw)
+    if not nums:
+        return []
+    if len(nums) % dim != 0:
+        dim = 3 if len(nums) % 3 == 0 else 2
+    pts = []
+    for i in range(0, len(nums) - 1, dim):
+        pts.append((_float_text(nums[i]), _float_text(nums[i + 1])))
+    return pts
+
+def _gml_pos_dimension(el):
+    if el is None:
+        return 2
+    for key in ('srsDimension', 'dimension'):
+        try:
+            val = el.attrib.get(key)
+            if val:
+                return int(val)
+        except Exception:
+            pass
+    return 2
+
+def _manual_gml_line_geometry(el):
+    if el is None or QgsGeometry is None:
+        return None
+    try:
+        local = str(_strip_ns(el.tag) or '').lower()
+    except Exception:
+        local = ''
+    if local not in ('linestring', 'multilinestring', 'curve', 'multicurve'):
+        return None
+
+    line_elements = []
+    if local in ('linestring', 'curve'):
+        line_elements = [el]
+    else:
+        for child in el.iter():
+            child_local = str(_strip_ns(child.tag) or '').lower()
+            if child_local in ('linestring', 'linestringsegment', 'curve'):
+                line_elements.append(child)
+
+    lines = []
+    for line_el in line_elements:
+        pos_lists = []
+        try:
+            for child in line_el.iter():
+                child_local = str(_strip_ns(child.tag) or '').lower()
+                if child_local in ('poslist', 'coordinates'):
+                    pos_lists.append(child)
+        except Exception:
+            pos_lists = []
+
+        pts = []
+        for pos_el in pos_lists:
+            pts.extend(_points_from_gml_position_text(pos_el.text, _gml_pos_dimension(pos_el)))
+        if len(pts) >= 2:
+            lines.append(pts)
+
+    if not lines:
+        return None
+    try:
+        if local in ('multilinestring', 'multicurve') or len(lines) > 1:
+            parts = []
+            for pts in lines:
+                parts.append('(' + ', '.join(f'{x} {y}' for x, y in pts) + ')')
+            wkt = 'MULTILINESTRING (' + ', '.join(parts) + ')'
+        else:
+            wkt = 'LINESTRING (' + ', '.join(f'{x} {y}' for x, y in lines[0]) + ')'
+        geom = QgsGeometry.fromWkt(wkt)
+        if geom and not geom.isEmpty():
+            return geom
+    except Exception:
+        return None
+    return None
+
 def _geometry_from_value_element(value_el):
     if value_el is None:
         return None
+    # Parse common line GML variants manually first. Some QGIS builds can crash
+    # inside QgsOgcUtils.geometryFromGML on MultiLineString/posList payloads.
+    try:
+        for el in value_el.iter():
+            if el is value_el:
+                continue
+            geom = _manual_gml_line_geometry(el)
+            if geom is not None:
+                return geom
+    except Exception:
+        pass
     # Try nested GML first.
     try:
         if QgsOgcUtils is not None:
@@ -635,6 +737,41 @@ def get_project(path):
 
     if not ok:
         raise ValueError(f"No se pudo cargar el proyecto: {path}")
+
+    # Normalize relative OGR datasource paths (e.g. ./demodata.gpkg) to
+    # absolute paths rooted at the project directory. In clustered workers,
+    # relying on process CWD for relative SQLite/GPKG paths can cause
+    # intermittent "unable to open database file" under concurrent rendering
+    # and WFS-T edits.
+    try:
+        project_dir = os.path.dirname(os.path.abspath(path))
+        for lyr in _project_instance.mapLayers().values():
+            try:
+                if not hasattr(lyr, 'providerType') or lyr.providerType() != 'ogr':
+                    continue
+                src = lyr.source() if hasattr(lyr, 'source') else ''
+                if not src or '|' not in src:
+                    continue
+                file_part, rest = src.split('|', 1)
+                raw = str(file_part or '').strip().strip('"').strip("'")
+                if not raw:
+                    continue
+                lower = raw.lower()
+                if not (lower.endswith('.gpkg') or lower.endswith('.sqlite') or lower.endswith('.db') or lower.endswith('.mbtiles')):
+                    continue
+                # Keep absolute datasources untouched.
+                if os.path.isabs(raw):
+                    continue
+                abs_path = os.path.normpath(os.path.join(project_dir, raw))
+                if not os.path.exists(abs_path):
+                    continue
+                new_src = abs_path + '|' + rest
+                if new_src != src and hasattr(lyr, 'setDataSource'):
+                    lyr.setDataSource(new_src, lyr.name(), 'ogr')
+            except Exception:
+                continue
+    except Exception:
+        pass
 
     _current_project_path = path
     return _project_instance

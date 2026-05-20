@@ -125,7 +125,14 @@ export const registerUiRoutes = ({
     if (!security.isEnabled()) {
       return res.redirect(authPluginInstallUrl);
     }
-    if (req.user && req.user.role === "admin") {
+    const forceLogin = req.query && String(req.query.loggedOut || '') === '1';
+    if (forceLogin) {
+      const base = { httpOnly: true, sameSite: 'lax', path: '/' };
+      res.clearCookie('qtiler_token', base);
+      res.clearCookie('qtiler_token', { ...base, secure: true });
+      res.clearCookie('qtiler_token', { ...base, secure: false });
+    }
+    if (!forceLogin && req.user && req.user.role === "admin") {
       return res.redirect("/index.html");
     }
     return sendLoginPage(req, res);

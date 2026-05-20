@@ -102,7 +102,7 @@ initCollapsible();
   }
 });
 
-const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'adminnuevo321';
+const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'MundoGIS-2026';
 const urlParams = new URLSearchParams(window.location.search);
 const justInstalledFlag = urlParams.has('justInstalled');
 if (justInstalledFlag && typeof window !== 'undefined' && window.history?.replaceState) {
@@ -498,8 +498,12 @@ function renderUsers() {
       ? apiKeyValue
       : (user.apiKeyPrefix ? `${user.apiKeyPrefix}… (hidden)` : '(no key)');
     apiKeyInput.className = 'api-key-input';
+    const hasStoredPlainKey = Boolean(user.apiKey);
+    const isOneTimeOnlyView = Boolean(oneTimeKey) && !hasStoredPlainKey;
     apiKeyInput.title = apiKeyVisible
-      ? 'API key (copy now — will not be retrievable later)'
+      ? (isOneTimeOnlyView
+          ? 'API key (copy now — this one-time view will not be shown again)'
+          : 'API key')
       : 'API key is stored hashed. Use "Regenerate" to issue a new one.';
 
     const copyBtn = document.createElement('button');
@@ -524,7 +528,11 @@ function renderUsers() {
         const result = await api(`/auth-admin/users/${user.id}/api-key`, { method: 'POST' });
         if (result?.apiKey) {
           state.recentlyIssuedKeys.set(user.id, result.apiKey);
-          showMessage('success', `API key regenerated for ${user.username}. Copy it now — it will not be retrievable later.`);
+          if (result?.apiKeyOneTime) {
+            showMessage('success', `API key regenerated for ${user.username}. Copy it now — this one-time view will not be shown again.`);
+          } else {
+            showMessage('success', `API key regenerated for ${user.username}. You can copy it now or later from this table.`);
+          }
         } else {
           showMessage('success', `API key regenerated for ${user.username}.`);
         }
@@ -950,7 +958,11 @@ userForm.addEventListener('submit', async (event) => {
       }
       if (created?.apiKey && created?.user?.id) {
         state.recentlyIssuedKeys.set(created.user.id, created.apiKey);
-        showMessage('success', `User ${createPayload.username} created. API key shown once — copy it now from the table.`);
+        if (created?.apiKeyOneTime) {
+          showMessage('success', `User ${createPayload.username} created. API key shown once — copy it now from the table.`);
+        } else {
+          showMessage('success', `User ${createPayload.username} created. API key is available in the table and can be copied later.`);
+        }
       } else {
         showMessage('success', `User ${createPayload.username} created.`);
       }

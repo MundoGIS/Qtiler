@@ -69,6 +69,83 @@ const safeLayerNameForWfs = (value) => {
   return String(value).normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 };
 
+const appendApiKey = (url, apiKey) => {
+  const key = String(apiKey || '').trim();
+  if (!key || typeof url !== 'string' || !url.trim()) return url;
+  return url + (url.includes('?') ? '&' : '?') + `api_key=${encodeURIComponent(key)}`;
+};
+
+const xmlAttr = (text, attrName) => {
+  const re = new RegExp(`${attrName}="([^"]*)"`, 'i');
+  const match = String(text || '').match(re);
+  return match ? match[1] : '';
+};
+
+const qgisColorToHex = (value) => {
+  const parts = String(value || '').split(',').slice(0, 3).map((part) => Number(part));
+  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  return `#${parts.map((part) => Math.max(0, Math.min(255, Math.round(part))).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const readQgis3dLayerConfig = (projectFile, cachedLayers = []) => {
+  const result = new Map();
+  try {
+    if (!projectFile || !fs.existsSync(projectFile)) return result;
+    let xml = '';
+    if (/\.qgz$/i.test(projectFile)) {
+      const zip = new AdmZip(projectFile);
+      const entry = zip.getEntries().find((item) => /\.qgs$/i.test(item.entryName));
+      if (entry) xml = entry.getData().toString('utf8');
+    } else if (/\.qgs$/i.test(projectFile)) {
+      xml = fs.readFileSync(projectFile, 'utf8');
+    }
+    if (!xml) return result;
+
+    const byId = new Map();
+    for (const layer of cachedLayers || []) {
+      if (layer?.layer_id) byId.set(String(layer.layer_id), String(layer.name || layer.layer || ''));
+    }
+
+    const rendererRe = /<renderer-3d\b[^>]*>[\s\S]*?<\/renderer-3d>/gi;
+    for (const match of xml.matchAll(rendererRe)) {
+      const block = match[0];
+      const layerId = xmlAttr(block, 'layer');
+      const layerName = byId.get(layerId);
+      if (!layerName) continue;
+      const extrusionRaw = xmlAttr(block, 'extrusion-height');
+      const extrusionHeight = Number(extrusionRaw);
+      if (!Number.isFinite(extrusionHeight) || extrusionHeight <= 0) continue;
+      const materialMatch = block.match(/<material\b[^>]*>/i);
+      result.set(layerName, {
+        extrusionHeight,
+        ...(materialMatch ? { color: qgisColorToHex(xmlAttr(materialMatch[0], 'diffuse')) } : {})
+      });
+    }
+  } catch {
+    return result;
+  }
+  return result;
+};
+
+const resolveApiKeyFromRequest = (req) => {
+  const q = req?.query || {};
+  const direct = String(q.api_key || q.apikey || q.apiKey || '').trim();
+  if (direct) return direct;
+  try {
+    const ref = String(req?.get?.('referer') || '').trim();
+    if (!ref) return '';
+    const parsed = new URL(ref);
+    return String(
+      parsed.searchParams.get('api_key') ||
+      parsed.searchParams.get('apikey') ||
+      parsed.searchParams.get('apiKey') ||
+      ''
+    ).trim();
+  } catch {
+    return '';
+  }
+};
+
 const normalizeBackgroundSelection = ({
   backgroundsInput,
   defaultBackgroundKeyInput,
@@ -503,6 +580,97 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         await fs.promises.writeFile(cfgPath, JSON.stringify(parsed, null, 2), 'utf8');
       } catch {
         // Skip missing/unreadable configs.
+      }
+    }
+  };
+
+  const patchQwc2View3dRuntime = async () => {
+    const colorLayerAnchor = 'void 0===t[o.id].fields&&u.getFields&&u.getFields(o).then(function(e){n.updateColorLayer(o.id,{fields:e})}),t},{})}),an(n,"applyColorLayerUpdates"';
+    const colorLayerReplacement = 'void 0===t[o.id].fields&&u.getFields&&u.getFields(o).then(function(e){n.updateColorLayer(o.id,{fields:e})}),function e(r){var i,a;null===(i=r.sublayers)||void 0===i||null===(a=i.forEach)||void 0===a||a.call(i,function(r){var i,a,s,c;r.wfs3dLayer&&r.extrusionHeight&&(t[r.wfs3dLayer.id]=qt(qt({},r.wfs3dLayer),{},{visibility:null===(i=r.visibility)||void 0===i||i,opacity:null!==(a=r.opacity)&&void 0!==a?a:255,extrusionHeight:r.extrusionHeight,color:null!==(s=r.color)&&void 0!==s?s:null===(c=r.wfs3dLayer)||void 0===c?void 0:c.color})),e(r)})}(o),t},{})}),an(n,"applyColorLayerUpdates"';
+    const available3dAnchor = 'availableIn3D:c,cfg:K(K({},a.cfg),n.props.appConfig.pluginsDef.cfg[a.name+"Plugin"])';
+    const available3dReplacement = 'availableIn3D:!!a.availableIn3D||c,cfg:K(K({},a.cfg),n.props.appConfig.pluginsDef.cfg[a.name+"Plugin"])';
+    const candidates = [];
+
+    const walk = async (dir) => {
+      let entries;
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (/QWC2App\.js$/i.test(entry.name) || /\.QWC2App\.js$/i.test(entry.name)) {
+          candidates.push(full);
+        }
+      }
+    };
+
+    await walk(installRoot);
+    let colorLayerPatched = 0;
+    let colorLayerAlreadyPatched = 0;
+    let available3dPatched = 0;
+    let available3dAlreadyPatched = 0;
+    for (const filePath of candidates) {
+      let raw;
+      try {
+        raw = await fs.promises.readFile(filePath, 'utf8');
+      } catch {
+        continue;
+      }
+      let next = raw;
+      if (next.includes('wfs3dLayer')) {
+        colorLayerAlreadyPatched++;
+      } else {
+        const colorLayerCount = next.split(colorLayerAnchor).length - 1;
+        if (colorLayerCount === 1) {
+          next = next.replace(colorLayerAnchor, colorLayerReplacement);
+          colorLayerPatched++;
+        }
+      }
+      if (next.includes('!!a.availableIn3D||c')) {
+        available3dAlreadyPatched++;
+      } else {
+        const available3dCount = next.split(available3dAnchor).length - 1;
+        if (available3dCount === 1) {
+          next = next.replace(available3dAnchor, available3dReplacement);
+          available3dPatched++;
+        }
+      }
+      if (next !== raw) {
+        await fs.promises.writeFile(filePath, next, 'utf8');
+      }
+    }
+    if (colorLayerPatched || colorLayerAlreadyPatched || available3dPatched || available3dAlreadyPatched) {
+      console.log(`[${pluginSlug}] QWC2 View3D runtime patch: colorLayers patched=${colorLayerPatched}, already=${colorLayerAlreadyPatched}; availableIn3D patched=${available3dPatched}, already=${available3dAlreadyPatched}`);
+    }
+
+    const translationDirs = [
+      path.join(installRoot, 'translations'),
+      path.join(installRoot, 'static', 'translations')
+    ];
+    for (const translationsDir of translationDirs) {
+      let entries;
+      try {
+        entries = await fs.promises.readdir(translationsDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.json') || entry.name.endsWith('_overrides.json')) continue;
+        const filePath = path.join(translationsDir, entry.name);
+        try {
+          const parsed = JSON.parse(await fs.promises.readFile(filePath, 'utf8') || '{}');
+          const items = parsed?.messages?.appmenu?.items;
+          if (!items || typeof items !== 'object') continue;
+          if (items.BackgroundSwitcher3D && items.BackgroundSwitcher3D !== items.ThemeSwitcher) continue;
+          items.BackgroundSwitcher3D = items.BackgroundSwitcher || 'Backgrounds';
+          await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2), 'utf8');
+        } catch {
+          // Keep bundled translations unchanged when a file cannot be parsed or written.
+        }
       }
     }
   };
@@ -1016,6 +1184,68 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
     }
 
+    if (features?.view3d === true && !disabledPlugins.has('View3D')) {
+      baseConfig.plugins = baseConfig.plugins && typeof baseConfig.plugins === 'object' ? baseConfig.plugins : {};
+      baseConfig.plugins.common = Array.isArray(baseConfig.plugins.common) ? baseConfig.plugins.common : [];
+      const view3dPlugin = baseConfig.plugins.common.find((p) => p?.name === 'View3D');
+      if (!view3dPlugin) {
+        baseConfig.plugins.common.push({ name: 'View3D' });
+      }
+
+      const ensure3dTool = (section, name, cfg = null) => {
+        baseConfig.plugins[section] = Array.isArray(baseConfig.plugins[section]) ? baseConfig.plugins[section] : [];
+        const existing = baseConfig.plugins[section].find((p) => p?.name === name);
+        if (existing) {
+          existing.availableIn3D = true;
+          if (cfg) existing.cfg = { ...(existing.cfg && typeof existing.cfg === 'object' ? existing.cfg : {}), ...cfg };
+          return;
+        }
+        baseConfig.plugins[section].push({ name, availableIn3D: true, ...(cfg ? { cfg } : {}) });
+      };
+
+      const topBar3dCfg = {
+        toolbarItems: [
+          { key: 'LayerTree3D', icon: 'layers' },
+          { key: 'Measure3D', icon: 'measure' },
+          { key: 'BackgroundSwitcher3D', icon: 'background' },
+          { key: 'MapLight3D', icon: 'sun' },
+          { key: 'Settings3D', icon: 'cog' }
+        ],
+        menuItems: [
+          { key: 'LayerTree3D', icon: 'layers' },
+          { key: 'Measure3D', icon: 'measure' },
+          { key: 'BackgroundSwitcher3D', icon: 'background' },
+          { key: 'MapLight3D', icon: 'sun' },
+          { key: 'Settings3D', icon: 'cog' },
+          { key: 'HideObjects3D', icon: 'eye-slash' },
+          { key: 'ExportObjects3D', icon: 'download' }
+        ]
+      };
+
+      const view3dConfig = baseConfig.plugins.common.find((p) => p?.name === 'View3D');
+      if (view3dConfig) {
+        view3dConfig.cfg = view3dConfig.cfg && typeof view3dConfig.cfg === 'object' ? view3dConfig.cfg : {};
+        view3dConfig.cfg.pluginOptions = view3dConfig.cfg.pluginOptions && typeof view3dConfig.cfg.pluginOptions === 'object' ? view3dConfig.cfg.pluginOptions : {};
+        view3dConfig.cfg.pluginOptions.TopBar3D = {
+          ...(view3dConfig.cfg.pluginOptions.TopBar3D && typeof view3dConfig.cfg.pluginOptions.TopBar3D === 'object' ? view3dConfig.cfg.pluginOptions.TopBar3D : {}),
+          ...topBar3dCfg
+        };
+      }
+
+      for (const section of ['desktop', 'mobile']) {
+        ensure3dTool(section, 'TopBar3D', topBar3dCfg);
+        ensure3dTool(section, 'BottomBar3D');
+        ensure3dTool(section, 'BackgroundSwitcher3D');
+        ensure3dTool(section, 'LayerTree3D');
+        ensure3dTool(section, 'Measure3D');
+        ensure3dTool(section, 'MapLight3D');
+        ensure3dTool(section, 'Settings3D');
+        ensure3dTool(section, 'MapCopyright3D');
+        ensure3dTool(section, 'HideObjects3D');
+        ensure3dTool(section, 'ExportObjects3D');
+      }
+    }
+
     if (hasMultipleThemes) {
       // Keep Portal plugin but clean up demo links
       const portal = (baseConfig.plugins?.common || []).find((p) => p?.name === 'Portal');
@@ -1147,8 +1377,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       for (const p of plugins) {
         if (!p || !p.cfg) continue;
         if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
-        if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
-        if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
+        if (p.name === 'Editing') p.cfg.serviceUrl = '/wfs';
+        if (p.name === 'Identify') p.cfg.serviceUrl = '/wms';
         if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
         if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
         if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
@@ -1186,7 +1416,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return null;
   };
 
-  const buildBackgroundLayers = async (profile, qtilerBaseUrl) => {
+  const buildBackgroundLayers = async (profile, qtilerBaseUrl, apiKey = '') => {
     const bgLayersTheme = [];
     const bgLayersGlobal = [];
     const backgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
@@ -1231,9 +1461,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
       } else if (bg.type === 'layer' && bg.sourceProjectId && bg.name) {
         let preset = null;
+        let bgExtent = null;
         try {
-          const ext = await getProjectExtent(bg.sourceProjectId);
-          const crs = ext?.crs || null;
+          bgExtent = await getProjectExtent(bg.sourceProjectId);
+          const crs = bgExtent?.crs || null;
           if (crs) {
             preset = await findTileGridPresetForCrs(crs);
           }
@@ -1248,7 +1479,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           const safeName = `wmts:${bg.sourceProjectId}/${bg.name}`;
           // Use the on-demand tile route that accepts raw project/layer names
           // and caches generated tiles on first request.
-          const wmtsUrl = `${qtilerBaseUrl}/wmts/${encodeURIComponent(bg.sourceProjectId)}/${encodeURIComponent(bg.name)}/{TileMatrix}/{TileCol}/{TileRow}.png`;
+          const wmtsUrl = appendApiKey(
+            `${qtilerBaseUrl}/wmts/${encodeURIComponent(bg.sourceProjectId)}/${encodeURIComponent(bg.name)}/{TileMatrix}/{TileCol}/{TileRow}.png`,
+            apiKey
+          );
           const resolutions = preset.matrices
             .map((m) => Number(m?.resolution))
             .filter((r) => Number.isFinite(r));
@@ -1265,6 +1499,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             projection: preset?.coordinateReferenceSystem || 'EPSG:3857',
             resolutions,
             tileSize: [256, 256],
+            bbox: { crs: 'EPSG:4326', bounds: bgExtent?.wgs84 || [-180, -90, 180, 90] },
             // QWC2 prepends /Qtiler2qwc/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /plugins/...
             thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bg.name)}?project=${encodeURIComponent(bg.sourceProjectId)}`
@@ -1277,7 +1512,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             name: safeName,
             title: bg.title || bg.name,
             type: 'wms',
-            url: `${qtilerBaseUrl}/wms?project=${encodeURIComponent(bg.sourceProjectId)}`,
+            url: appendApiKey(`${qtilerBaseUrl}/wms?project=${encodeURIComponent(bg.sourceProjectId)}`, apiKey),
             params: {
               LAYERS: bg.name,
               TRANSPARENT: false,
@@ -1297,10 +1532,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   /**
    * Build a single QWC2 theme item from a published profile.
    */
-  const buildThemeItem = async (profile, qtilerBaseUrl) => {
+  const buildThemeItem = async (profile, qtilerBaseUrl, apiKey = '') => {
     const projectId = profile.projectId || 'unknown';
-    const wmsUrl = `${qtilerBaseUrl}/wms?project=${encodeURIComponent(projectId)}`;
-    const wfsUrl = `${qtilerBaseUrl}/wfs?project=${encodeURIComponent(projectId)}`;
+    const wmsUrl = appendApiKey(`${qtilerBaseUrl}/wms?project=${encodeURIComponent(projectId)}`, apiKey);
+    const wfsUrl = appendApiKey(`${qtilerBaseUrl}/wfs?project=${encodeURIComponent(projectId)}`, apiKey);
 
     // Get real extent and CRS from cache index
     const extent = await getProjectExtent(projectId);
@@ -1312,6 +1547,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const cacheIndex = await readCacheIndex(projectId);
     const cachedLayers = cacheIndex?.layers || [];
     const projectLayerFlags = await readProjectLayerFlags(projectId);
+    const qgis3dLayers = readQgis3dLayerConfig(cacheIndex?.project, cachedLayers);
 
     // Collect additional CRS from layers that differ from the project CRS
     const additionalCrsSet = new Set();
@@ -1374,10 +1610,29 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           }
         };
       }
+      const layer3d = qgis3dLayers.get(name) || qgis3dLayers.get(title);
+      if (layer3d && /polygon/i.test(String(cached?.geometry_type || ''))) {
+        sl.extrusionHeight = layer3d.extrusionHeight;
+        if (layer3d.color) sl.color = layer3d.color;
+        const wfsLayerName = name;
+        const wfs3dId = `${projectId}:3d:${safeLayerNameForWfs(wfsLayerName) || sanitizeFileToken(wfsLayerName) || 'layer'}`;
+        sl.wfs3dLayer = {
+          id: wfs3dId,
+          type: 'wfs',
+          name: wfsLayerName,
+          title: `${title || name} 3D`,
+          url: wfsUrl,
+          version: '1.1.0',
+          formats: ['application/json', 'geojson', 'json'],
+          projection: cached?.layer_crs || cached?.crs || projectCrs,
+          bbox: { crs: 'EPSG:4326', bounds: cached?.extent_wgs84 || bboxWgs84 },
+          color: layer3d.color || '#b2b2b2'
+        };
+      }
       return sl;
     });
 
-    const bgResult = await buildBackgroundLayers(profile, qtilerBaseUrl);
+    const bgResult = await buildBackgroundLayers(profile, qtilerBaseUrl, apiKey);
     const searchEnabled = profile.features?.search !== false;
     // QWC2 only ships 4 built-in providers: coordinates, nominatim, qgis, fulltext.
     // We expose our /Qtiler2qwc/search endpoint via the `fulltext` provider; the
@@ -1439,10 +1694,21 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             path.join(projectsDir, projectId),
             path.join(projectsDir, projectId, projectId)
           ];
+          const scoreTerrainFile = (filename) => {
+            const name = String(filename || '').toLowerCase();
+            let score = 0;
+            if (/\.(tif|tiff)$/i.test(name)) score += 10;
+            if (/(terrain|dtm|dem|elevation|height|relief)/i.test(name)) score += 100;
+            if (/(stock|surface|ground|z)/i.test(name)) score += 15;
+            if (/(orto|ortho|orthophoto|aerial|satellite|imagery|rgb|topo|webb|basemap)/i.test(name)) score -= 200;
+            return score;
+          };
           for (const dir of candidates) {
             let entries = [];
             try { entries = await fs.promises.readdir(dir); } catch { continue; }
-            const tif = entries.find((e) => /\.tif$/i.test(e));
+            const tif = entries
+              .filter((e) => /\.(tif|tiff)$/i.test(e))
+              .sort((a, b) => scoreTerrainFile(b) - scoreTerrainFile(a) || a.localeCompare(b))[0];
             if (tif) {
               const terrainUrl = `${qtilerBaseUrl}/Qtiler2qwc/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
               return { url: terrainUrl, crs: projectCrs };
@@ -1452,32 +1718,43 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         return null;
       })();
       item.map3d = {
-        ...(dtm ? { dtm } : {})
-        // basemaps: intentionally omitted - QWC2 3D tries to build OL WMTS
-        // tile sources from external wmts: background layers and crashes when
-        // the tileGrid extent is null. The 3D scene renders the main WMS
-        // layers correctly without background basemaps.
+        ...(dtm ? { dtm } : {}),
+        basemaps: bgResult.theme
       };
 
       // Auto-discover 3D Tiles datasets for this project.
       // Convention: data/Qtiler2qwc/3dtiles/<projectId>/<setName>/tileset.json
       // Each subdirectory containing a tileset.json becomes one tiles3d entry.
       try {
-        const projectTiles3dDir = path.join(tiles3dRoot, projectId);
-        const subdirs = await fs.promises.readdir(projectTiles3dDir, { withFileTypes: true });
+        const candidateIds = [...new Set([
+          projectId,
+          String(projectId || '').replace(/-demo$/i, ''),
+          profile.backgroundProjectId,
+          ...(profile.layers || []).map((layer) => layer?.sourceProjectId)
+        ].map((id) => String(id || '').trim()).filter(Boolean))];
         const tiles3dEntries = [];
-        for (const ent of subdirs) {
-          if (!ent.isDirectory()) continue;
-          const setName = ent.name;
-          const tilesetPath = path.join(projectTiles3dDir, setName, 'tileset.json');
-          try {
-            await fs.promises.access(tilesetPath);
-            tiles3dEntries.push({
-              name: setName,
-              title: setName,
-              url: `${qtilerBaseUrl}/Qtiler2qwc/3dtiles/${encodeURIComponent(projectId)}/${encodeURIComponent(setName)}/tileset.json`
-            });
-          } catch { /* no tileset.json in this subdir, skip */ }
+        const seenTiles3d = new Set();
+        for (const candidateId of candidateIds) {
+          const projectTiles3dDir = path.join(tiles3dRoot, candidateId);
+          let subdirs = [];
+          try { subdirs = await fs.promises.readdir(projectTiles3dDir, { withFileTypes: true }); } catch { continue; }
+          for (const ent of subdirs) {
+            if (!ent.isDirectory()) continue;
+            const setName = ent.name;
+            const tilesetPath = path.join(projectTiles3dDir, setName, 'tileset.json');
+            const key = `${candidateId}/${setName}`;
+            if (seenTiles3d.has(setName) || seenTiles3d.has(key)) continue;
+            try {
+              await fs.promises.access(tilesetPath);
+              seenTiles3d.add(setName);
+              seenTiles3d.add(key);
+              tiles3dEntries.push({
+                name: setName,
+                title: setName,
+                url: `${qtilerBaseUrl}/Qtiler2qwc/3dtiles/${encodeURIComponent(candidateId)}/${encodeURIComponent(setName)}/tileset.json`
+              });
+            } catch { /* no tileset.json in this subdir, skip */ }
+          }
         }
         if (tiles3dEntries.length > 0) {
           item.map3d.tiles3d = tiles3dEntries;
@@ -1593,15 +1870,17 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
     }
 
-    const firstId = items[0]?.id || 'unknown';
-
     return {
       themes: {
         title: 'root',
         searchServiceUrl: `${qtilerBaseUrl}/Qtiler2qwc/search`,
         subdirs: [],
         items,
-        defaultTheme: defaultTheme || firstId,
+        // Do not force-open the first map in the generic webmap entrypoint.
+        // When a specific launch URL is used, QWC2 still gets #/?t=<project>
+        // and opens that map directly. Without a launch target, users should
+        // land on the map catalog/list page.
+        ...(defaultTheme ? { defaultTheme } : {}),
         // Use the map CRS of the first theme if available so QWC2 initializes
         // the map in the project's native CRS instead of forcing WebMercator.
         defaultMapCrs: (items[0] && items[0].mapCrs) ? items[0].mapCrs : 'EPSG:3857',
@@ -2279,6 +2558,7 @@ ${mapIcon}
       }));
 
       await applyBrandingToQwc2Configs();
+      await patchQwc2View3dRuntime();
       const branding = await getBrandingStatus();
       res.json({ status: 'logo_removed', branding });
     } catch(err) { console.error('XERR', err);
@@ -2763,7 +3043,7 @@ ${mapIcon}
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       const filename = String(req.params?.filename || '').replace(/[/\\]/g, '');
-      if (!projectId || !filename || !/\.tif$/i.test(filename)) {
+      if (!projectId || !filename || !/\.(tif|tiff)$/i.test(filename)) {
         return res.status(400).json({ error: 'invalid_request' });
       }
       // Resolve the file from the known project directories.
@@ -3032,6 +3312,7 @@ ${mapIcon}
   });
 
   await applyBrandingToQwc2Configs();
+  await patchQwc2View3dRuntime();
   // Standalone server disabled; no auto-start
 
   return {

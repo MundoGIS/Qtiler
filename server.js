@@ -85,7 +85,16 @@ verifyQGISEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.set("trust proxy", true);
+const parseTrustProxySetting = (value) => {
+  const raw = String(value ?? 'loopback').trim();
+  if (!raw) return false;
+  const normalized = raw.toLowerCase();
+  if (['0', 'false', 'off', 'no'].includes(normalized)) return false;
+  if (['1', 'true', 'on', 'yes'].includes(normalized)) return true;
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return raw;
+};
+app.set("trust proxy", parseTrustProxySetting(process.env.QTILER_TRUST_PROXY));
 
 // Cache-buster for static assets. Helps avoid stale JS in browsers/proxies (e.g. IIS reverse proxy).
 // Changes on each server start unless QTILER_ASSET_VERSION is provided.

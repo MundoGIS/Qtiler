@@ -730,37 +730,6 @@ const renderProjects = (projects) => {
       return btn;
     };
 
-    // --- Viewers section ---
-    const viewersBox = document.createElement('fieldset');
-    viewersBox.className = 'portal-viewers-box';
-    const viewersLegend = document.createElement('legend');
-    viewersLegend.textContent = tr('portal.section.viewers');
-    viewersBox.appendChild(viewersLegend);
-    const viewersRow = document.createElement('div');
-    viewersRow.className = 'portal-viewers-row';
-
-    const mkViewerLink = (href, label) => {
-      const a = document.createElement('a');
-      a.href = href;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.className = 'portal-action-icon';
-      a.textContent = label;
-      return a;
-    };
-
-    viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}`, isPublicProject), 'WMTS'));
-    viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}&service=wms`, isPublicProject), 'WMS'));
-    if (projectHasVector || !!project.wfsUrl) {
-      viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?project=${projectIdEnc}&service=wfs`, isPublicProject), 'WFS'));
-    }
-    if (projectHasVector) {
-      viewersRow.appendChild(mkViewerLink(withApiKey(`/viewer.html?vectortiles=${projectIdEnc}`, isPublicProject), tr('portal.layer.vectortiles.viewer')));
-    }
-
-    viewersBox.appendChild(viewersRow);
-    links.appendChild(viewersBox);
-
     // --- Copy URLs ---
     links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
     links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
@@ -957,14 +926,19 @@ const handleLogout = async () => {
   if (!logoutButton) return;
   logoutButton.disabled = true;
   try {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch('/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-store' }
+    });
   } catch (err) {
     console.error('Logout request failed', err);
   }
   sessionUser = null;
   sessionUserLabel = null;
   renderAuthUi();
-  window.location.href = '/';
+  window.location.replace(`/login?loggedOut=1&_cb=${Date.now()}`);
 };
 
 const setLanguage = (lang) => {

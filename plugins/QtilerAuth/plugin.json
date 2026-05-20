@@ -10,7 +10,10 @@
         "Create and manage users, roles, account status, passwords, and API keys.",
         "Set projects as public/private and assign user-specific private access.",
         "Supports session cookie, bearer token, basic auth, and api_key workflows.",
-        "Use it as the security base layer for dashboard and service endpoints."
+        "Use it as the security base layer for dashboard and service endpoints.",
+        "Production behind IIS/URL Rewrite/ARR with DNS and HTTPS: set PUBLIC_BASE_URL to the external HTTPS URL, keep QTILER_TRUST_PROXY=loopback when IIS and Qtiler run on the same host, enable QTILER_ENABLE_HSTS=1 only after HTTPS is verified, and set QTILER_CORS_ALLOWED_ORIGINS to the trusted public origins.",
+        "IIS must terminate TLS with a valid certificate, redirect HTTP to HTTPS, proxy to http://127.0.0.1:3000, preserve the original Host, and forward X-Forwarded-Proto=https, X-Forwarded-Host, and X-Forwarded-For. Disable WebDAV or explicitly allow PATCH/DELETE if IIS filters those methods.",
+        "Recommended production hardening: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE set to a finite value such as 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 for hash-only API key storage, and QTILER_WMTS_REQUIRE_AUTH=1 if anonymous global WMTS discovery should be blocked. Use QTILER_CORS_ALLOW_CREDENTIALS=1 only when a different trusted origin needs cookie sessions."
       ]
     },
     "es": {

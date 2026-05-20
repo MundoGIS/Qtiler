@@ -16,8 +16,8 @@ const ROLE_AUTH = 'authenticated';
 const VALID_ROLES = new Set([ROLE_ADMIN, ROLE_AUTH]);
 const COOKIE_NAME = 'qtiler_token';
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 3600;
-const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'adminnuevo321';
-const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo123'];
+const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'MundoGIS-2026';
+const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo321', 'adminnuevo123', 'adminnuevo', 'admin2026'];
 
 /* ------------------------------------------------------------------ */
 /*  Brute-force protection / captcha configuration                     */
@@ -32,6 +32,9 @@ const LOGIN_LOCKOUT_SECONDS = num(process.env.AUTH_LOGIN_LOCKOUT_SECONDS, 900);
 const LOGIN_CAPTCHA_AFTER = num(process.env.AUTH_LOGIN_CAPTCHA_AFTER, 3);
 const API_RATE_LIMIT_PER_MINUTE = num(process.env.AUTH_API_RATE_LIMIT_PER_MINUTE, 0);
 const API_KEY_LAST_USED_THROTTLE_MS = 60_000;
+const STORE_PLAINTEXT_API_KEYS = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.AUTH_STORE_PLAINTEXT_API_KEYS ?? '1').trim().toLowerCase()
+);
 const CAPTCHA_PROVIDER = String(process.env.AUTH_CAPTCHA_PROVIDER || '').trim().toLowerCase();
 const CAPTCHA_SITE_KEY = String(process.env.AUTH_CAPTCHA_SITE_KEY || '').trim();
 const CAPTCHA_SECRET_KEY = String(process.env.AUTH_CAPTCHA_SECRET_KEY || '').trim();
@@ -56,9 +59,18 @@ const getClientIp = (req) => {
 };
 
 const pickCookieSecure = (req) => {
-  if (req.secure) return true;
-  const xfp = String(req.get('x-forwarded-proto') || '').toLowerCase();
-  return xfp === 'https';
+  return !!req.secure;
+};
+
+const clearAuthCookie = (res) => {
+  const base = {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/'
+  };
+  res.clearCookie(COOKIE_NAME, base);
+  res.clearCookie(COOKIE_NAME, { ...base, secure: true });
+  res.clearCookie(COOKIE_NAME, { ...base, secure: false });
 };
 
 /* In-memory sliding-minute rate limit for API-key authenticated requests. */
@@ -849,12 +861,14 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
           req.user = user ? pickUserPayload(user) : null;
 
           // Sliding idle timeout for browser cookie sessions.
-          if (req.user && !bearer) {
+          const isLogoutRequest = req.path === '/auth/logout' || req.originalUrl === '/auth/logout';
+          if (req.user && !bearer && !isLogoutRequest) {
             try {
               const renewedToken = issueToken(user);
               res.cookie(COOKIE_NAME, renewedToken, {
                 httpOnly: true,
                 sameSite: 'lax',
+                path: '/',
                 secure: pickCookieSecure(req),
                 maxAge: tokenTtlSeconds * 1000
               });
@@ -1059,6 +1073,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'lax',
+      path: '/',
       secure: pickCookieSecure(req),
       maxAge: tokenTtlSeconds * 1000
     });
@@ -1084,12 +1099,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         } catch {}
       }
     } catch {}
-    res.clearCookie(COOKIE_NAME, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: pickCookieSecure(req)
-    });
-    return res.json({ ok: true });
+    clearAuthCookie(res);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    return res.json({ ok: true, loggedOut: true });
   });
 
   router.get('/me', (req, res) => {
@@ -1165,8 +1179,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       username: cleanUsername,
       passwordHash,
       role: targetRole,
-      // Store hash + prefix only; plaintext is returned once below.
-      apiKey: null,
+      // Compatibility mode (default): keep plaintext key so admins can copy it
+      // later without rotating. Set AUTH_STORE_PLAINTEXT_API_KEYS=0 to keep
+      // hash-only storage (more secure, but copy is one-time only).
+      apiKey: STORE_PLAINTEXT_API_KEYS ? newApiKey : null,
       apiKeyHash: hashApiKey(newApiKey),
       apiKeyPrefix: apiKeyPrefixOf(newApiKey),
       projects: ensureArrayOfStrings(projects),
@@ -1185,7 +1201,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.status(201).json({
       user: pickAdminUserPayload(userRecord),
       apiKey: newApiKey,
-      apiKeyOneTime: true
+      apiKeyOneTime: !STORE_PLAINTEXT_API_KEYS
     });
   });
 
@@ -1193,7 +1209,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     const { id } = req.params;
     const newKey = generateApiKey();
     const updated = updateUserFields(id, {
-      apiKey: null,
+      apiKey: STORE_PLAINTEXT_API_KEYS ? newKey : null,
       apiKeyHash: hashApiKey(newKey),
       apiKeyPrefix: apiKeyPrefixOf(newKey),
       apiKeyLastUsedAt: null
@@ -1204,7 +1220,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({
       user: pickAdminUserPayload(updated),
       apiKey: newKey,
-      apiKeyOneTime: true
+      apiKeyOneTime: !STORE_PLAINTEXT_API_KEYS
     });
   });
 

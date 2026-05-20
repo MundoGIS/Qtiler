@@ -450,7 +450,7 @@
     const justInstalled = params.get('justInstalled');
     if (justInstalled && justInstalled !== '0') {
       const defaultUser = 'admin';
-      const defaultPass = 'admin2026';
+      const defaultPass = 'MundoGIS-2026';
       const text = `Use this username and password and change the default password: ${defaultUser} / ${defaultPass}`;
       flashStatusText(text, { state: 'info', ttlMs: 20000 });
 
@@ -465,7 +465,16 @@
     // ignore
   }
 
-  checkSession();
+  const skipSessionCheckAfterLogout = (() => {
+    try {
+      return new URLSearchParams(window.location.search || '').get('loggedOut') === '1';
+    } catch {
+      return false;
+    }
+  })();
+  if (!skipSessionCheckAfterLogout) {
+    checkSession();
+  }
 })();
 
 // If page is restored from back/forward cache, reload to refresh auth/session state.

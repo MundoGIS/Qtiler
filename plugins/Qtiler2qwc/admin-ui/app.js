@@ -739,7 +739,7 @@ function syncUI() {
   if (openWebmapBtn) {
     if (installed) {
       openWebmapBtn.classList.remove('is-disabled');
-      openWebmapBtn.href = '/plugins/Qtiler2qwc/qwc2/';
+      openWebmapBtn.href = '/Qtiler2qwc/webmap/';
     } else {
       openWebmapBtn.classList.add('is-disabled');
       openWebmapBtn.href = '#';
@@ -771,7 +771,7 @@ function syncUI() {
   if (openPublishModalBtn) openPublishModalBtn.disabled = !installed;
   if (catalogLink) {
     if (installed) {
-      catalogLink.href = '/plugins/Qtiler2qwc/qwc2/';
+      catalogLink.href = '/Qtiler2qwc/webmap/';
       catalogLink.classList.remove('is-disabled');
     } else {
       catalogLink.href = '#';
@@ -1056,12 +1056,21 @@ async function loadProjectLayers(projectId, target = 'main') {
 }
 
 async function loadProjectsForPublish() {
-  const payload = await api('/projects');
+  let payload = null;
+  try {
+    payload = await api('/plugins/Qtiler2qwc/api/projects');
+  } catch (_) {
+    payload = await api('/projects');
+  }
   const list = Array.isArray(payload?.projects) ? payload.projects : [];
   publishState.projects = list.map((p) => ({ id: String(p.id || '').trim(), name: String(p.name || p.id || '').trim() })).filter((p) => p.id);
   const options = publishState.projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || p.id)}</option>`).join('');
-  publishProjectSelect.innerHTML = options;
-  backgroundProjectSelect.innerHTML = `<option value="">${escapeHtml(t('Qtiler2qwc.no_bg_option'))}</option>${options}`;
+  if (publishProjectSelect) {
+    publishProjectSelect.innerHTML = options || `<option value="">${escapeHtml(t('Qtiler2qwc.no_project_selected'))}</option>`;
+  }
+  if (backgroundProjectSelect) {
+    backgroundProjectSelect.innerHTML = `<option value="">${escapeHtml(t('Qtiler2qwc.no_bg_option'))}</option>${options}`;
+  }
 }
 
 /* ── Publish modal ── */
@@ -1096,24 +1105,33 @@ async function preparePublishModal(editProfileId = null) {
       const mainProjectId = String(publishProjectSelect.value || '').trim();
       if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
 
-      // CRITICAL FIX: Removed .filter((l) => l.role === 'main') because layers don't have role saved
-      const savedMain = profile.layers || [];
-      const savedMainNames = savedMain.map((l) => String(l.name || '').trim());
+      const savedLayers = Array.isArray(profile.layers) ? profile.layers : [];
+      const savedMain = savedLayers.filter((l) => !l?.role || l.role === 'main');
       // Respect saved visibility flag (default true)
       const visibleSet = new Set(savedMain.filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible)).map((l) => String(l.name || '').trim()));
       setCheckedLayerNames(projectLayersList, Array.from(visibleSet));
 
       // Background project
-      const bgProjectId = profile.backgroundProjectId || '';
+      const savedBackgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
+      const savedLayerBackgrounds = savedBackgrounds.filter((bg) => bg?.type === 'layer' && bg.name);
+      const savedBgNames = Array.from(new Set([
+        ...(Array.isArray(profile.backgroundLayerNames) ? profile.backgroundLayerNames : []),
+        ...savedLayerBackgrounds.map((bg) => bg.name),
+        ...savedLayers.filter((l) => l?.role === 'background').map((l) => l.name)
+      ].map((name) => String(name || '').trim()).filter(Boolean)));
+      const bgProjectId = profile.backgroundProjectId || savedLayerBackgrounds[0]?.sourceProjectId || savedLayers.find((l) => l?.role === 'background')?.sourceProjectId || '';
       if (backgroundProjectSelect) backgroundProjectSelect.value = bgProjectId;
       if (bgProjectId) {
         await loadProjectLayers(bgProjectId, 'background');
-        const savedBgNames = (profile.backgroundLayerNames || []);
         setCheckedLayerNames(backgroundLayersList, savedBgNames);
+      } else {
+        publishState.backgroundLayers = [];
+        backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2qwc.optional_select'))}</p>`;
       }
 
       // Default background
-      publishState.defaultBackgroundKey = profile.defaultBackgroundKey || 'none';
+      const savedDefaultBg = savedBackgrounds.find((bg) => bg?.isDefault === true);
+      publishState.defaultBackgroundKey = profile.defaultBackgroundKey || savedDefaultBg?.key || 'none';
       refreshBackgroundOptions();
 
       // Features
