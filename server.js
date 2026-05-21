@@ -603,7 +603,10 @@ const loadTileGridPresets = () => {
           id,
           fileName: path.basename(entry, ".json"),
           supportedCrs,
-          path: presetPath
+          path: presetPath,
+          projectId: typeof raw?.project_id === "string" && raw.project_id.trim() ? raw.project_id.trim() : null,
+          derivedFrom: typeof raw?.derived_from === "string" ? raw.derived_from.trim().toLowerCase() : null,
+          isScalePreset: typeof id === "string" && id.toUpperCase().startsWith("SCALES_")
         });
       } catch (err) {
         console.warn("Failed to load tile grid preset", { presetPath, error: String(err?.message || err) });
@@ -616,6 +619,24 @@ const loadTileGridPresets = () => {
 };
 
 const findTileMatrixPresetForCrs = (crs) => {
+  return findTileMatrixPresetForCrsWithOptions(crs, {});
+};
+
+const normalizePresetProjectIdToken = (value) => {
+  if (!value) return null;
+  const raw = String(value).trim();
+  return raw ? raw.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase() : null;
+};
+
+const buildScalePresetIdForProject = (crs, projectId) => {
+  if (!crs || !projectId) return null;
+  const safeCrs = String(crs).replace(/[^a-zA-Z0-9]/g, "_");
+  const safeProject = String(projectId).replace(/[^a-zA-Z0-9]/g, "_");
+  if (!safeCrs || !safeProject) return null;
+  return `SCALES_${safeCrs}_${safeProject}`;
+};
+
+const findTileMatrixPresetForCrsWithOptions = (crs, options = {}) => {
   if (!crs) {
     return null;
   }
@@ -624,7 +645,38 @@ const findTileMatrixPresetForCrs = (crs) => {
     return null;
   }
   const presets = loadTileGridPresets();
-  return presets.find((preset) => Array.isArray(preset.supportedCrs) && preset.supportedCrs.includes(normalized)) || null;
+  const matches = presets.filter((preset) => Array.isArray(preset.supportedCrs) && preset.supportedCrs.includes(normalized));
+  if (!matches.length) return null;
+
+  const preferredProjectId = options && options.preferredProjectId ? String(options.preferredProjectId).trim() : "";
+  const preferredProjectToken = normalizePresetProjectIdToken(preferredProjectId);
+  const preferredScaleId = preferredProjectId ? buildScalePresetIdForProject(normalized, preferredProjectId) : null;
+
+  const scorePreset = (preset) => {
+    let score = 0;
+    const id = String(preset?.id || "");
+    const fileName = String(preset?.fileName || "");
+    const projectToken = normalizePresetProjectIdToken(preset?.projectId);
+
+    if (preferredScaleId && id.toUpperCase() === preferredScaleId.toUpperCase()) score += 100;
+    if (preferredScaleId && fileName.toUpperCase() === preferredScaleId.toUpperCase()) score += 95;
+    if (preferredProjectToken && projectToken && preferredProjectToken === projectToken) score += 80;
+    if (preset?.derivedFrom === "project_scales") score += 40;
+    if (preset?.isScalePreset) score += 20;
+
+    // Fallback tie-breaker: keep stable ordering across restarts.
+    if (!score && id.toUpperCase() === normalized.replace(":", "_")) score += 5;
+    return score;
+  };
+
+  const ranked = matches
+    .map((preset) => ({ preset, score: scorePreset(preset) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(a.preset.fileName || a.preset.id || "").localeCompare(String(b.preset.fileName || b.preset.id || ""));
+    });
+
+  return ranked[0]?.preset || null;
 };
 
 const sendAccessDenied = (req, res) => {
@@ -2156,11 +2208,14 @@ const detectProjectCrs = (projectId) => {
   return spatial?.crs || null;
 };
 
-const deriveTileMatrixInfoForCrs = (tileCrs) => {
+const deriveTileMatrixInfoForCrs = (tileCrs, options = {}) => {
   if (!tileCrs) {
     return { presetId: null, tileMatrixSet: null };
   }
-  const presetMeta = findTileMatrixPresetForCrs(tileCrs);
+  const preferredProjectId = options && options.preferredProjectId ? options.preferredProjectId : null;
+  const presetMeta = preferredProjectId
+    ? findTileMatrixPresetForCrsWithOptions(tileCrs, { preferredProjectId })
+    : findTileMatrixPresetForCrs(tileCrs);
   if (!presetMeta) {
     return { presetId: null, tileMatrixSet: null };
   }
@@ -2269,7 +2324,7 @@ const recordOnDemandRequest = (projectId, targetMode, targetName) => {
   );
   let tileMatrixSetDef = cloneIfObject(layerConfig?.tile_matrix_set || layerConfig?.tileMatrixSet);
   if ((!tileMatrixPresetId || !tileMatrixSetDef) && tileCrsHint) {
-    const derived = deriveTileMatrixInfoForCrs(tileCrsHint);
+    const derived = deriveTileMatrixInfoForCrs(tileCrsHint, { preferredProjectId: projectId });
     if (!tileMatrixPresetId && derived.presetId) {
       tileMatrixPresetId = derived.presetId;
     }
@@ -4725,12 +4780,16 @@ const pickBootstrapTileProfile = (candidateList = [], autoGenExtent = null, proj
       const profile = buildGlobalMercatorProfile(source || "epsg3857");
       return profile;
     }
-    let preset = findTileMatrixPresetForCrs(normalized);
+    let preset = projectId
+      ? findTileMatrixPresetForCrsWithOptions(normalized, { preferredProjectId: projectId })
+      : findTileMatrixPresetForCrs(normalized);
     
     // Auto-generate if missing and we have an extent
     if (!preset && normalized !== "EPSG:3857" && autoGenExtent) {
       createAutoGridPreset(normalized, autoGenExtent, projectId);
-      preset = findTileMatrixPresetForCrs(normalized);
+      preset = projectId
+        ? findTileMatrixPresetForCrsWithOptions(normalized, { preferredProjectId: projectId })
+        : findTileMatrixPresetForCrs(normalized);
     }
 
     if (preset) {
@@ -6050,11 +6109,32 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
     ].map((candidate) => (typeof candidate === "string" ? candidate.trim() : ""))
       .filter(Boolean);
     const matchCrs = tileCrsCandidates.length ? tileCrsCandidates[0] : null;
-    const presetMatch = matchCrs ? findTileMatrixPresetForCrs(matchCrs) : null;
+    const presetMatch = matchCrs
+      ? (projectKey
+        ? findTileMatrixPresetForCrsWithOptions(matchCrs, { preferredProjectId: projectKey })
+        : findTileMatrixPresetForCrs(matchCrs))
+      : null;
     if (presetMatch) {
       const presetNameForCli = presetMatch.fileName || presetMatch.id || "";
       effectiveTileMatrixPreset = presetNameForCli;
       console.log(`[cache] Auto-selected tile matrix preset ${presetNameForCli} for CRS ${matchCrs}`);
+    }
+  } else if (!requestedTileMatrixPreset && projectKey) {
+    const tileCrsCandidates = [
+      normalizedTileCrs,
+      req.body?.project_crs,
+      req.body?.cache_crs,
+      existingEntry?.tile_crs,
+      existingEntry?.crs
+    ].map((candidate) => (typeof candidate === "string" ? candidate.trim() : ""))
+      .filter(Boolean);
+    const matchCrs = tileCrsCandidates.length ? tileCrsCandidates[0] : null;
+    const preferredMatch = matchCrs ? findTileMatrixPresetForCrsWithOptions(matchCrs, { preferredProjectId: projectKey }) : null;
+    const preferredName = preferredMatch ? (preferredMatch.fileName || preferredMatch.id || "") : "";
+    const preferredLooksProjectScale = typeof preferredName === "string" && preferredName.toUpperCase().startsWith("SCALES_");
+    if (preferredName && preferredLooksProjectScale && preferredName !== effectiveTileMatrixPreset) {
+      console.log(`[cache] Replacing stale tile matrix preset ${effectiveTileMatrixPreset} -> ${preferredName} for project ${projectKey}`);
+      effectiveTileMatrixPreset = preferredName;
     }
   }
 
@@ -7401,8 +7481,15 @@ const deriveOnDemandTileGrid = (projectId, targetMode, targetName) => {
     const tileCrs = typeof entry.tile_crs === 'string' && entry.tile_crs.trim() ? entry.tile_crs.trim().toUpperCase() : null;
     let tileMatrixSet = entry.tile_matrix_set || entry.tileMatrixSet || null;
     const presetIdRaw = typeof entry.tile_matrix_preset === 'string' ? entry.tile_matrix_preset.trim() : '';
-    const presetId = presetIdRaw && presetIdRaw.endsWith('.json') ? presetIdRaw.replace(/\.json$/i, '') : presetIdRaw;
+    let presetId = presetIdRaw && presetIdRaw.endsWith('.json') ? presetIdRaw.replace(/\.json$/i, '') : presetIdRaw;
     const profileSource = String(entry.tile_profile_source || entry.tileProfileSource || '').toLowerCase();
+    if (tileCrs && profileSource === 'project_scales') {
+      const preferred = findTileMatrixPresetForCrsWithOptions(tileCrs, { preferredProjectId: projectId });
+      const preferredId = preferred ? (preferred.fileName || preferred.id || '') : '';
+      if (preferredId && preferredId.toUpperCase().startsWith('SCALES_') && preferredId !== presetId) {
+        presetId = preferredId;
+      }
+    }
     const preferPreset = !!(presetId && (presetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
     if ((preferPreset || !tileMatrixSet) && presetId) {
       const preset = getTileMatrixPresetRaw(presetId);
@@ -7823,9 +7910,19 @@ app.get("/cache/:project/index.json", ensureProjectAccess((req) => req.params.pr
               }
               const presetId = presetIdRaw && presetIdRaw.endsWith('.json') ? presetIdRaw.replace(/\.json$/i, '') : presetIdRaw;
               const profileSource = String(out.tile_profile_source || out.tileProfileSource || '').toLowerCase();
-              const isScalePreset = !!(presetId && (presetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
+              let effectivePresetId = presetId;
+              const tileCrsOut = typeof out.tile_crs === 'string' ? out.tile_crs.trim().toUpperCase() : '';
+              if (profileSource === 'project_scales' && tileCrsOut) {
+                const preferred = findTileMatrixPresetForCrsWithOptions(tileCrsOut, { preferredProjectId: p });
+                const preferredId = preferred ? (preferred.fileName || preferred.id || '') : '';
+                if (preferredId && preferredId.toUpperCase().startsWith('SCALES_')) {
+                  effectivePresetId = preferredId;
+                  out.tile_matrix_preset = preferredId;
+                }
+              }
+              const isScalePreset = !!(effectivePresetId && (effectivePresetId.toUpperCase().startsWith('SCALES_') || profileSource === 'project_scales'));
               if (isScalePreset) {
-                const preset = getTileMatrixPresetRaw(presetId);
+                const preset = getTileMatrixPresetRaw(effectivePresetId);
                 if (preset && typeof preset === 'object') {
                   out.tile_matrix_set = normalizeTileMatrixSetForExtent(preset, out.extent);
                 }

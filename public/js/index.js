@@ -2852,6 +2852,7 @@
         theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 5.5h6a2 2 0 0 1 2 2v2.5h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 1-1.5 1.5h-6a2 2 0 0 1-2-2v-2.5H6.5a2 2 0 0 1-2-2v-6A1.5 1.5 0 0 1 5.5 5.5Zm.5 1.5v5.5a.5.5 0 0 0 .5.5H12V7.5a.5.5 0 0 0-.5-.5H6A.5.5 0 0 0 6 7Zm7 7v2.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5V12h-5.5a.5.5 0 0 0-.5.5Z"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2.75a.75.75 0 0 1 1.5 0V4h7V2.75a.75.75 0 0 1 1.5 0V4h1.25A2.75 2.75 0 0 1 21 6.75v11.5A2.75 2.75 0 0 1 18.25 21H5.75A2.75 2.75 0 0 1 3 18.25V6.75A2.75 2.75 0 0 1 5.75 4H7V2.75ZM5.75 5.5A1.25 1.25 0 0 0 4.5 6.75v1.25h15V6.75A1.25 1.25 0 0 0 18.25 5.5H5.75Zm12.5 4.5h-15v8.25c0 .69.56 1.25 1.25 1.25h12.5c.69 0 1.25-.56 1.25-1.25V10Z"/></svg>',
         play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.27a1 1 0 0 1 1.52-.85l9 5.73a1 1 0 0 1 0 1.7l-9 5.73a1 1 0 0 1-1.52-.85V5.27Z"/></svg>',
+        download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.25 4a.75.75 0 0 1 1.5 0v8.19l2.47-2.47a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 1 1 1.06-1.06l2.47 2.47V4ZM4.75 15a.75.75 0 0 1 .75.75v2.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-2.5a.75.75 0 0 1 1.5 0v2.5A2.75 2.75 0 0 1 17.25 21H6.75A2.75 2.75 0 0 1 4 18.25v-2.5A.75.75 0 0 1 4.75 15Z"/></svg>',
         trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3a1 1 0 0 0-1 1v1H4.75a.75.75 0 0 0 0 1.5h.68l.76 11.24A2.75 2.75 0 0 0 8.93 20.5h6.14a2.75 2.75 0 0 0 2.74-2.76l.76-11.24h.68a.75.75 0 0 0 0-1.5H16V4a1 1 0 0 0-1-1H9Zm1 1.5h4V5H10V4.5Zm-1.82 3h7.64l-.74 11a1.25 1.25 0 0 1-1.24 1.2H8.7a1.25 1.25 0 0 1-1.24-1.2l-.74-11Z"/></svg>',
         copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.75 4A3.75 3.75 0 0 0 6 7.75v8.5A3.75 3.75 0 0 0 9.75 20h8.5A3.75 3.75 0 0 0 22 16.25v-8.5A3.75 3.75 0 0 0 18.25 4h-8.5Zm0 1.5h8.5A2.25 2.25 0 0 1 20.5 7.75v8.5a2.25 2.25 0 0 1-2.25 2.25h-8.5A2.25 2.25 0 0 1 7.5 16.25v-8.5A2.25 2.25 0 0 1 9.75 5.5ZM4.75 7A.75.75 0 0 1 5.5 7.75v9a.75.75 0 0 1-1.5 0v-9A.75.75 0 0 1 4.75 7Z"/></svg>',
         eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c4.97 0 9.15 3.16 10.63 7.5C21.15 16.84 16.96 20 12 20s-9.15-3.16-10.63-7.5C2.85 8.16 7.04 5 12 5Zm0 1.5c-4.09 0-7.68 2.5-9.04 6 1.36 3.5 4.95 6 9.04 6 4.09 0 7.68-2.5 9.04-6-1.36-3.5-4.95-6-9.04-6Zm0 2.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 1.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/></svg>',
@@ -4567,6 +4568,9 @@
               headingActions.style.marginLeft = 'auto';
               headingActions.style.display = 'flex';
               headingActions.style.gap = '8px';
+              const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
+              downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, p));
+              headingActions.appendChild(downloadProjectBtn);
               const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
               deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
               headingActions.appendChild(deleteProjectBtn);
@@ -4685,14 +4689,19 @@
           });
           heading.appendChild(toggleBtn);
 
-          const headingActions = document.createElement('div');
-          headingActions.style.marginLeft = 'auto';
-          headingActions.style.display = 'flex';
-          headingActions.style.gap = '8px';
-          const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
-          deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, project));
-          headingActions.appendChild(deleteProjectBtn);
-          heading.appendChild(headingActions);
+          if (isAdmin) {
+            const headingActions = document.createElement('div');
+            headingActions.style.marginLeft = 'auto';
+            headingActions.style.display = 'flex';
+            headingActions.style.gap = '8px';
+            const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
+            downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, project));
+            headingActions.appendChild(downloadProjectBtn);
+            const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+            deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, project));
+            headingActions.appendChild(deleteProjectBtn);
+            heading.appendChild(headingActions);
+          }
 
           wrap.appendChild(heading);
           listEl = document.createElement('div');
@@ -7404,6 +7413,56 @@
           }
         } catch (err) {
           showStatus('Network error: ' + err, true);
+        } finally {
+          restoreButton();
+        }
+      }
+
+      async function downloadProjectBundle(btn, project) {
+        if (!project || !project.id) return;
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        btn.title = tr('Preparing project download...');
+        btn.setAttribute('aria-busy', 'true');
+        showStatus(tr('Preparing project download: {project}', { project: project.name || project.id }));
+        try {
+          const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/download', {
+            method: 'GET',
+            credentials: 'include'
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            const detail = data?.error || data?.details || res.statusText;
+            showStatus(tr('Project download failed: {error}', { error: detail }), true);
+            return;
+          }
+          const blob = await res.blob();
+          const disposition = String(res.headers.get('content-disposition') || '');
+          const nameMatch = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+          const fallbackName = (project.id || 'project') + '.zip';
+          const fileName = nameMatch && nameMatch[1]
+            ? decodeURIComponent(nameMatch[1].replace(/^\"|\"$/g, '').trim())
+            : fallbackName;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          showStatus(tr('Project download ready: {project}', { project: project.name || project.id }));
+        } catch (err) {
+          showStatus(tr('Project download failed: {error}', { error: String(err) }), true);
         } finally {
           restoreButton();
         }

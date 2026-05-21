@@ -8,6 +8,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import yauzl from "yauzl";
+import AdmZip from "adm-zip";
 import { pipeline } from "stream/promises";
 import { spawnSync } from "child_process";
 
@@ -98,6 +99,50 @@ export const registerProjectRoutes = ({
     if (['1', 'true', 'yes', 'on', 'si', 'sí'].includes(raw)) return true;
     if (['0', 'false', 'no', 'off'].includes(raw)) return false;
     return fallback;
+  };
+
+  const isPathInside = (candidatePath, basePath) => {
+    const resolvedBase = path.resolve(basePath);
+    const resolvedCandidate = path.resolve(candidatePath);
+    const baseLower = resolvedBase.toLowerCase();
+    const candidateLower = resolvedCandidate.toLowerCase();
+    return candidateLower === baseLower || candidateLower.startsWith(baseLower + path.sep);
+  };
+
+  const resolveProjectBundleSource = (project) => {
+    if (!project || !project.file) return null;
+    const projectFilePath = path.resolve(project.file);
+    const projectRoot = path.resolve(projectsDir);
+    const preferredDir = path.resolve(path.join(projectsDir, String(project.id || "").trim()));
+    const projectParentDir = path.dirname(projectFilePath);
+
+    if (!isPathInside(projectFilePath, projectRoot)) {
+      return null;
+    }
+
+    if (String(project.id || "").trim() && fs.existsSync(preferredDir) && fs.statSync(preferredDir).isDirectory()) {
+      if (isPathInside(projectFilePath, preferredDir)) {
+        return {
+          kind: "directory",
+          sourcePath: preferredDir,
+          zipRoot: path.basename(preferredDir)
+        };
+      }
+    }
+
+    if (projectParentDir && isPathInside(projectParentDir, projectRoot) && projectParentDir.toLowerCase() !== projectRoot.toLowerCase()) {
+      return {
+        kind: "directory",
+        sourcePath: projectParentDir,
+        zipRoot: path.basename(projectParentDir)
+      };
+    }
+
+    return {
+      kind: "file",
+      sourcePath: projectFilePath,
+      zipRoot: null
+    };
   };
 
   const detectRequestLanguage = (req) => {
@@ -1520,6 +1565,76 @@ export const registerProjectRoutes = ({
     } catch (err) {
       console.error('[projects.delete] Unexpected error while deleting project', String(err?.message || err));
       return res.status(500).json({ error: 'project_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get("/projects/:id/download", requireAdmin, async (req, res) => {
+    const projectId = String(req.params?.id || "").trim();
+    if (!projectId) {
+      return res.status(400).json({ error: "project_id_required" });
+    }
+
+    const project = findProjectById(projectId);
+    if (!project || !project.file) {
+      return res.status(404).json({ error: "project_not_found" });
+    }
+
+    const bundleSource = resolveProjectBundleSource(project);
+    if (!bundleSource || !bundleSource.sourcePath) {
+      return res.status(400).json({ error: "invalid_project_source" });
+    }
+
+    if (!isPathInside(bundleSource.sourcePath, projectsDir)) {
+      return res.status(400).json({ error: "project_source_outside_root" });
+    }
+
+    const sourcePath = path.resolve(bundleSource.sourcePath);
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: "project_source_missing" });
+    }
+
+    const idForName = sanitizeProjectId(project.id) || "project";
+    const zipName = `${idForName}.zip`;
+    const tempZipPath = path.join(os.tmpdir(), `qtiler-project-${idForName}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.zip`);
+
+    const cleanupTemp = async () => {
+      try { await fs.promises.unlink(tempZipPath); } catch {}
+    };
+
+    try {
+      const zip = new AdmZip();
+      if (bundleSource.kind === "directory") {
+        zip.addLocalFolder(sourcePath, bundleSource.zipRoot || path.basename(sourcePath));
+      } else {
+        zip.addLocalFile(sourcePath, "", path.basename(sourcePath));
+      }
+
+      await new Promise((resolve, reject) => {
+        zip.writeZip(tempZipPath, (err) => {
+          if (err) return reject(err);
+          return resolve();
+        });
+      });
+
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+      res.setHeader("Cache-Control", "no-store");
+
+      const readStream = fs.createReadStream(tempZipPath);
+      readStream.on("error", async (err) => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "zip_stream_failed", details: redactSecrets(String(err?.message || err)) });
+        } else {
+          try { res.end(); } catch {}
+        }
+        await cleanupTemp();
+      });
+      res.on("close", () => { cleanupTemp(); });
+      readStream.pipe(res);
+    } catch (err) {
+      await cleanupTemp();
+      console.error("Project zip download failed", { projectId, error: err?.message || err });
+      return res.status(500).json({ error: "project_zip_failed", details: redactSecrets(String(err?.message || err)) });
     }
   });
 
