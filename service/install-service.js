@@ -27,7 +27,7 @@ if (!fs.existsSync(wrapperBatch)) {
 
 // Build environment entries for the service from current process.env (if present)
 const envEntries = [];
-['PYTHON_EXE', 'OSGEO4W_BIN', 'QGIS_PREFIX', 'QTWC_QWC2_PORT', 'QTWC_QWC2_AUTOSTART', 'QTWC_QWC2_REPO', 'QTWC_QWC2_VERSION'].forEach((k) => {
+['PORT', 'PYTHON_EXE', 'OSGEO4W_BIN', 'QGIS_PREFIX', 'QTWC_QWC2_PORT', 'QTWC_QWC2_AUTOSTART', 'QTWC_QWC2_REPO', 'QTWC_QWC2_VERSION'].forEach((k) => {
   if (process.env[k]) envEntries.push({ name: k, value: process.env[k] });
 });
 

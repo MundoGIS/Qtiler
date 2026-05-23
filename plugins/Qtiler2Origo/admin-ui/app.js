@@ -4,12 +4,14 @@
 (function setupModalScrollLock() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const sync = () => {
-    const open = !!document.querySelector('.modal.is-active');
-    document.body.classList.toggle('modal-open', open);
+    const modalOpen = !!document.querySelector('.modal.is-active');
+    const publishOpen = !!document.querySelector('.publish-editor:not([hidden])');
+    document.body.classList.toggle('modal-open', modalOpen || publishOpen);
+    document.body.classList.toggle('publish-editor-open', publishOpen);
   };
   const obs = new MutationObserver(sync);
   document.addEventListener('DOMContentLoaded', () => {
-    obs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
+    obs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'hidden'] });
     sync();
   });
 })();
@@ -81,6 +83,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Edit profile: {id}',
     'Qtiler2Origo.main_project': 'Main project',
     'Qtiler2Origo.project_layers': 'Project layers',
+    'Qtiler2Origo.layer_include': 'Include',
+    'Qtiler2Origo.layer_initial_visibility': 'Visible on map start',
+    'Qtiler2Origo.layer_include_help': 'If enabled, this layer is included in the published map.',
+    'Qtiler2Origo.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
     'Qtiler2Origo.bg_project': 'Background project (optional)',
     'Qtiler2Origo.bg_layers': 'Background layers',
     'Qtiler2Origo.default_bg': 'Default background',
@@ -203,6 +209,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_tab_designer': 'Basic design',
     'Qtiler2Origo.wfs_tab_json': 'Advanced JSON',
     'Qtiler2Origo.wfs_tab_attributes': 'Attributes (Infoclick)',
+    'Qtiler2Origo.wfs_designer_header': 'Quick visual tuning',
+    'Qtiler2Origo.wfs_designer_help': 'The preview stays on the right. Adjust fill, pattern and stroke from the control box on the left.',
+    'Qtiler2Origo.wfs_group_geometry': 'Geometry',
+    'Qtiler2Origo.wfs_group_fill': 'Fill',
+    'Qtiler2Origo.wfs_group_pattern': 'Pattern',
+    'Qtiler2Origo.wfs_group_stroke': 'Stroke',
     'Qtiler2Origo.wfs_reset': '↺ Reset to basic style',
     'Qtiler2Origo.wfs_cancel': 'Cancel',
     'Qtiler2Origo.wfs_save': 'Save style',
@@ -227,6 +239,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_move_up': 'Move up',
     'Qtiler2Origo.wfs_move_down': 'Move down',
     'Qtiler2Origo.wfs_delete': 'Delete',
+    'Qtiler2Origo.wfs_edit_rule': 'Edit rule',
+    'Qtiler2Origo.wfs_rule_editor_title': 'Edit rule style',
+    'Qtiler2Origo.wfs_rule_editor_done': 'Done',
+    'Qtiler2Origo.wfs_rule_default': 'Default rule',
+    'Qtiler2Origo.wfs_edit_visual_style': 'Edit visual style',
+    'Qtiler2Origo.wfs_rule_mode_note': 'Editing visual style for rule {rule}. Save to apply it to that rule only.',
     'Qtiler2Origo.wfs_filter': 'Filter',
     'Qtiler2Origo.wfs_attr': 'Attribute',
     'Qtiler2Origo.wfs_op': 'Operator',
@@ -241,6 +259,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_radius': 'Radius',
     'Qtiler2Origo.wfs_fill_color': 'Fill color',
     'Qtiler2Origo.wfs_fill_opacity': 'Fill opacity',
+    'Qtiler2Origo.wfs_fill_pattern': 'Fill pattern',
+    'Qtiler2Origo.wfs_fill_pattern_angle': 'Pattern angle',
+    'Qtiler2Origo.wfs_fill_pattern_spacing': 'Pattern spacing',
+    'Qtiler2Origo.wfs_fill_pattern_size': 'Dot size',
+    'Qtiler2Origo.wfs_fill_pattern_transparent': 'Transparent background',
+    'Qtiler2Origo.wfs_fill_pattern_transparent_help': 'Show only the lines or dots so layers below remain visible.',
+    'Qtiler2Origo.wfs_fill_pattern_solid': 'Solid',
+    'Qtiler2Origo.wfs_fill_pattern_slash': 'Slash',
+    'Qtiler2Origo.wfs_fill_pattern_backslash': 'Backslash',
+    'Qtiler2Origo.wfs_fill_pattern_horizontal': 'Horizontal lines',
+    'Qtiler2Origo.wfs_fill_pattern_vertical': 'Vertical lines',
+    'Qtiler2Origo.wfs_fill_pattern_dots': 'Dots',
+    'Qtiler2Origo.wfs_fill_pattern_outline': 'Outline only',
     'Qtiler2Origo.wfs_stroke_color': 'Stroke color',
     'Qtiler2Origo.wfs_stroke_width': 'Stroke width',
     'Qtiler2Origo.wfs_stroke_opacity': 'Stroke opacity',
@@ -440,6 +471,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Editar perfil: {id}',
     'Qtiler2Origo.main_project': 'Proyecto principal',
     'Qtiler2Origo.project_layers': 'Capas del proyecto',
+    'Qtiler2Origo.layer_include': 'Incluir',
+    'Qtiler2Origo.layer_initial_visibility': 'Visible al abrir',
+    'Qtiler2Origo.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
+    'Qtiler2Origo.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
     'Qtiler2Origo.bg_project': 'Proyecto de fondo (opcional)',
     'Qtiler2Origo.bg_layers': 'Capas de fondo',
     'Qtiler2Origo.default_bg': 'Fondo por defecto',
@@ -562,6 +597,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_tab_designer': 'Diseño básico',
     'Qtiler2Origo.wfs_tab_json': 'Editar JSON avanzado',
     'Qtiler2Origo.wfs_tab_attributes': 'Atributos (Infoclick)',
+    'Qtiler2Origo.wfs_designer_header': 'Ajuste visual rápido',
+    'Qtiler2Origo.wfs_designer_help': 'La vista previa queda a la derecha. A la izquierda ajustas relleno, patrón y borde desde una caja más cómoda.',
+    'Qtiler2Origo.wfs_group_geometry': 'Geometría',
+    'Qtiler2Origo.wfs_group_fill': 'Relleno',
+    'Qtiler2Origo.wfs_group_pattern': 'Patrón',
+    'Qtiler2Origo.wfs_group_stroke': 'Borde y línea',
     'Qtiler2Origo.wfs_reset': '↺ Restablecer estilo básico',
     'Qtiler2Origo.wfs_cancel': 'Cancelar',
     'Qtiler2Origo.wfs_save': 'Guardar estilo',
@@ -586,6 +627,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_move_up': 'Subir',
     'Qtiler2Origo.wfs_move_down': 'Bajar',
     'Qtiler2Origo.wfs_delete': 'Eliminar',
+    'Qtiler2Origo.wfs_edit_rule': 'Editar regla',
+    'Qtiler2Origo.wfs_rule_editor_title': 'Editar estilo de regla',
+    'Qtiler2Origo.wfs_rule_editor_done': 'Listo',
+    'Qtiler2Origo.wfs_rule_default': 'Regla por defecto',
+    'Qtiler2Origo.wfs_edit_visual_style': 'Editar estilo visual',
+    'Qtiler2Origo.wfs_rule_mode_note': 'Estás editando la apariencia visual de la regla {rule}. Al guardar se aplica solo a esa regla.',
     'Qtiler2Origo.wfs_filter': 'Filtro',
     'Qtiler2Origo.wfs_attr': 'Atributo',
     'Qtiler2Origo.wfs_op': 'Operador',
@@ -600,6 +647,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_radius': 'Radio',
     'Qtiler2Origo.wfs_fill_color': 'Color de relleno',
     'Qtiler2Origo.wfs_fill_opacity': 'Opacidad relleno',
+    'Qtiler2Origo.wfs_fill_pattern': 'Patrón de relleno',
+    'Qtiler2Origo.wfs_fill_pattern_angle': 'Ángulo del patrón',
+    'Qtiler2Origo.wfs_fill_pattern_spacing': 'Separación del patrón',
+    'Qtiler2Origo.wfs_fill_pattern_size': 'Tamaño de punto',
+    'Qtiler2Origo.wfs_fill_pattern_transparent': 'Fondo transparente',
+    'Qtiler2Origo.wfs_fill_pattern_transparent_help': 'Muestra solo las rayas o puntos para poder ver capas debajo.',
+    'Qtiler2Origo.wfs_fill_pattern_solid': 'Sólido',
+    'Qtiler2Origo.wfs_fill_pattern_slash': 'Slash',
+    'Qtiler2Origo.wfs_fill_pattern_backslash': 'Backslash',
+    'Qtiler2Origo.wfs_fill_pattern_horizontal': 'Líneas horizontales',
+    'Qtiler2Origo.wfs_fill_pattern_vertical': 'Líneas verticales',
+    'Qtiler2Origo.wfs_fill_pattern_dots': 'Puntos',
+    'Qtiler2Origo.wfs_fill_pattern_outline': 'Solo borde',
     'Qtiler2Origo.wfs_stroke_color': 'Color del borde',
     'Qtiler2Origo.wfs_stroke_width': 'Grosor borde',
     'Qtiler2Origo.wfs_stroke_opacity': 'Opacidad borde',
@@ -799,6 +859,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Redigera profil: {id}',
     'Qtiler2Origo.main_project': 'Huvudprojekt',
     'Qtiler2Origo.project_layers': 'Projektlager',
+    'Qtiler2Origo.layer_include': 'Inkludera',
+    'Qtiler2Origo.layer_initial_visibility': 'Synlig vid start',
+    'Qtiler2Origo.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
+    'Qtiler2Origo.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
     'Qtiler2Origo.bg_project': 'Bakgrundsprojekt (valfritt)',
     'Qtiler2Origo.bg_layers': 'Bakgrundslager',
     'Qtiler2Origo.default_bg': 'Standardbakgrund',
@@ -921,6 +985,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_tab_designer': 'Grundläggande design',
     'Qtiler2Origo.wfs_tab_json': 'Redigera avancerad JSON',
     'Qtiler2Origo.wfs_tab_attributes': 'Attribut (Infoclick)',
+    'Qtiler2Origo.wfs_designer_header': 'Snabb visuell justering',
+    'Qtiler2Origo.wfs_designer_help': 'Förhandsgranskningen ligger till höger. Justera fyllning, mönster och linje i rutan till vänster.',
+    'Qtiler2Origo.wfs_group_geometry': 'Geometri',
+    'Qtiler2Origo.wfs_group_fill': 'Fyllning',
+    'Qtiler2Origo.wfs_group_pattern': 'Mönster',
+    'Qtiler2Origo.wfs_group_stroke': 'Linje',
     'Qtiler2Origo.wfs_reset': '↺ Återställ grundstil',
     'Qtiler2Origo.wfs_cancel': 'Avbryt',
     'Qtiler2Origo.wfs_save': 'Spara stil',
@@ -945,6 +1015,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_move_up': 'Flytta upp',
     'Qtiler2Origo.wfs_move_down': 'Flytta ner',
     'Qtiler2Origo.wfs_delete': 'Ta bort',
+    'Qtiler2Origo.wfs_edit_rule': 'Redigera regel',
+    'Qtiler2Origo.wfs_rule_editor_title': 'Redigera regelstil',
+    'Qtiler2Origo.wfs_rule_editor_done': 'Klar',
+    'Qtiler2Origo.wfs_rule_default': 'Standardregel',
+    'Qtiler2Origo.wfs_edit_visual_style': 'Redigera visuell stil',
+    'Qtiler2Origo.wfs_rule_mode_note': 'Du redigerar den visuella stilen för regel {rule}. När du sparar tillämpas den bara på den regeln.',
     'Qtiler2Origo.wfs_filter': 'Filter',
     'Qtiler2Origo.wfs_attr': 'Attribut',
     'Qtiler2Origo.wfs_op': 'Operator',
@@ -959,6 +1035,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_radius': 'Radie',
     'Qtiler2Origo.wfs_fill_color': 'Fyllningsfärg',
     'Qtiler2Origo.wfs_fill_opacity': 'Fyllning opacitet',
+    'Qtiler2Origo.wfs_fill_pattern': 'Fyllningsmönster',
+    'Qtiler2Origo.wfs_fill_pattern_angle': 'Mönstervinkel',
+    'Qtiler2Origo.wfs_fill_pattern_spacing': 'Mönsteravstånd',
+    'Qtiler2Origo.wfs_fill_pattern_size': 'Punktstorlek',
+    'Qtiler2Origo.wfs_fill_pattern_transparent': 'Transparent bakgrund',
+    'Qtiler2Origo.wfs_fill_pattern_transparent_help': 'Visa bara linjer eller punkter så att lager under fortfarande syns.',
+    'Qtiler2Origo.wfs_fill_pattern_solid': 'Heldragen',
+    'Qtiler2Origo.wfs_fill_pattern_slash': 'Snedstreck',
+    'Qtiler2Origo.wfs_fill_pattern_backslash': 'Omvänt snedstreck',
+    'Qtiler2Origo.wfs_fill_pattern_horizontal': 'Horisontella linjer',
+    'Qtiler2Origo.wfs_fill_pattern_vertical': 'Vertikala linjer',
+    'Qtiler2Origo.wfs_fill_pattern_dots': 'Punkter',
+    'Qtiler2Origo.wfs_fill_pattern_outline': 'Endast kontur',
     'Qtiler2Origo.wfs_stroke_color': 'Linjefärg',
     'Qtiler2Origo.wfs_stroke_width': 'Linjebredd',
     'Qtiler2Origo.wfs_stroke_opacity': 'Linje opacitet',
@@ -1125,16 +1214,22 @@ const publishModal = document.getElementById('publishModal');
 const modalTitle = document.getElementById('modalTitle');
 const closePublishModalTop = document.getElementById('closePublishModalTop');
 const closePublishModalBottom = document.getElementById('closePublishModalBottom');
+const publishModalToggleFullscreen = document.getElementById('publishModalToggleFullscreen');
+const publishModalTabButtons = Array.from(document.querySelectorAll('[data-publish-tab]'));
+const publishModalPanels = Array.from(document.querySelectorAll('[data-publish-panel]'));
 const publishNowBtn = document.getElementById('publishNowBtn');
 const removeDemoBtn = document.getElementById('removeDemoBtn');
 const publishName = document.getElementById('publishName');
 const publishDescription = document.getElementById('publishDescription');
 const publishNameError = document.getElementById('publishNameError');
+const publishStatusError = document.getElementById('publishStatusError');
 const publishProjectSelect = document.getElementById('publishProjectSelect');
 const backgroundProjectSelect = document.getElementById('backgroundProjectSelect');
 const projectLayersList = document.getElementById('projectLayersList');
 const backgroundLayersList = document.getElementById('backgroundLayersList');
 const defaultBackgroundList = document.getElementById('defaultBackgroundList');
+const publishLayersDynamicSlot = document.getElementById('publishLayersDynamicSlot');
+const publishToolsDynamicSlot = document.getElementById('publishToolsDynamicSlot');
 const featureSearch = document.getElementById('featureSearch');
 const featureSearchGlobal = document.getElementById('featureSearchGlobal');
 const featureView3D = document.getElementById('featureView3D');
@@ -1161,18 +1256,42 @@ const cfgDxfUrl = document.getElementById('cfgDxfUrl');
 const wfsStyleModal = document.getElementById('wfs-style-modal');
 const wfsStyleLayerTitle = document.getElementById('wfs-style-layer-title');
 const wfsStyleGeometryBadge = document.getElementById('wfs-style-geometry-badge');
+const wfsStyleFullscreenBtn = document.getElementById('wfs-style-fullscreen');
 const wfsStylePreview = document.getElementById('wfs-style-preview');
+const wfsStylePresets = document.getElementById('wfs-style-presets');
+const wfsStylePresetsSection = document.getElementById('wfs-style-presets-section');
+const wfsStylePresetsSelect = document.getElementById('wfs-style-presets-select');
+const wfsStylePresetsApply = document.getElementById('wfs-style-presets-apply');
+const wfsRuleEditorModal = document.getElementById('wfs-rule-editor-modal');
+const wfsRuleEditorHost = document.getElementById('wfs-rule-editor-host');
+const wfsRuleEditorTitle = document.getElementById('wfs-rule-editor-title');
+const wfsRuleEditorFullscreenBtn = document.getElementById('wfs-rule-editor-fullscreen');
+const wfsStyleRuleModeNote = document.getElementById('wfs-style-rule-mode-note');
 const wfsStyleTabButtons = Array.from(document.querySelectorAll('[data-style-tab]'));
 const wfsStylePanels = Array.from(document.querySelectorAll('[data-style-panel]'));
 const wfsStyleJsonEditor = document.getElementById('wfs-style-json-editor');
 const wfsStyleError = document.getElementById('wfs-style-error');
 const wfsStyleShape = document.getElementById('wfsStyleShape');
+const wfsStyleShapeWrap = document.getElementById('wfsStyleShapeWrap');
 const wfsStyleFillColor = document.getElementById('wfsStyleFillColor');
+const wfsStyleFillColorWrap = document.getElementById('wfsStyleFillColorWrap');
 const wfsStyleFillOpacity = document.getElementById('wfsStyleFillOpacity');
+const wfsStyleFillOpacityWrap = document.getElementById('wfsStyleFillOpacityWrap');
+const wfsStyleFillPattern = document.getElementById('wfsStyleFillPattern');
+const wfsStyleFillPatternWrap = document.getElementById('wfsStyleFillPatternWrap');
+const wfsStylePatternAngle = document.getElementById('wfsStylePatternAngle');
+const wfsStylePatternAngleWrap = document.getElementById('wfsStylePatternAngleWrap');
+const wfsStylePatternSpacing = document.getElementById('wfsStylePatternSpacing');
+const wfsStylePatternSpacingWrap = document.getElementById('wfsStylePatternSpacingWrap');
+const wfsStylePatternSize = document.getElementById('wfsStylePatternSize');
+const wfsStylePatternSizeWrap = document.getElementById('wfsStylePatternSizeWrap');
+const wfsStylePatternTransparent = document.getElementById('wfsStylePatternTransparent');
+const wfsStylePatternTransparentWrap = document.getElementById('wfsStylePatternTransparentWrap');
 const wfsStyleStrokeColor = document.getElementById('wfsStyleStrokeColor');
 const wfsStyleStrokeOpacity = document.getElementById('wfsStyleStrokeOpacity');
 const wfsStyleStrokeWidth = document.getElementById('wfsStyleStrokeWidth');
 const wfsStyleRadius = document.getElementById('wfsStyleRadius');
+const wfsStyleRadiusWrap = document.getElementById('wfsStyleRadiusWrap');
 const wfsStyleDash = document.getElementById('wfsStyleDash');
 const wfsStyleResetBtn = document.getElementById('wfs-style-reset');
 const wfsStyleApplyJsonBtn = document.getElementById('wfs-style-apply-json');
@@ -1188,6 +1307,8 @@ const minZoomInput       = document.getElementById('origo-cfg-min-zoom');
 const maxZoomInput       = document.getElementById('origo-cfg-max-zoom');
 const previewIframe      = document.getElementById('origo-preview-iframe');
 const previewOverlay     = document.getElementById('origo-preview-overlay');
+const openPreviewTabBtn  = document.getElementById('btn-open-map-preview-tab');
+const origoConfigSummary = document.getElementById('origo-config-summary');
 
 /* Map of configurable tools: checkbox id → config panel + input */
 const TOOL_CONFIG_MAP = {
@@ -1250,6 +1371,8 @@ function syncControlsFromCheckboxes() {
       return merged ? { name: def.name, options: merged } : { name: def.name };
     });
   controlsJsonInput.value = JSON.stringify(selected, null, 2);
+  try { renderPublishConfigSummary(); } catch {}
+  try { schedulePreviewRefresh(); } catch {}
 }
 
 /** Set checkboxes from a saved Origo controls array. */
@@ -1273,6 +1396,141 @@ function syncCheckboxesFromControls(controlsArray) {
   });
   // Re-render the inline configurator panels so saved options become visible.
   if (typeof renderControlConfigPanels === 'function') renderControlConfigPanels();
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+let activePublishTab = 'layers';
+
+function getNormalizedControlsArray() {
+  const deduped = new Map();
+  let parsed = [];
+  try {
+    parsed = JSON.parse(String(controlsJsonInput?.value || '[]'));
+  } catch {
+    parsed = [];
+  }
+  if (Array.isArray(parsed)) {
+    parsed.forEach((entry) => {
+      if (typeof entry === 'string' && entry.trim()) {
+        deduped.set(entry.trim(), { name: entry.trim() });
+      } else if (entry && typeof entry === 'object' && String(entry.name || '').trim()) {
+        const name = String(entry.name || '').trim();
+        const normalized = { name };
+        if (entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)) {
+          normalized.options = entry.options;
+        }
+        deduped.set(name, normalized);
+      }
+    });
+  }
+  if (!deduped.size) {
+    ORIGO_CTRL_DEFS
+      .filter((def) => document.getElementById(def.id)?.checked)
+      .forEach((def) => {
+        const userOpts = publishState.controlsOptions?.[def.name];
+        const baseOpts = def.options || null;
+        const merged = (userOpts && typeof userOpts === 'object')
+          ? { ...(baseOpts || {}), ...userOpts }
+          : baseOpts;
+        deduped.set(def.name, merged ? { name: def.name, options: merged } : { name: def.name });
+      });
+  }
+  return Array.from(deduped.values());
+}
+
+function getControlDisplayName(name) {
+  const def = ORIGO_CTRL_DEFS.find((item) => item.name === name);
+  if (!def) return name;
+  if (def.labelKey) return t(def.labelKey) || def.label || name;
+  return def.label || name;
+}
+
+function updatePublishModalFullscreenButton() {
+  if (!publishModalToggleFullscreen || !publishModal) return;
+  const isFullscreen = publishModal.classList.contains('publish-editor--fullscreen');
+  publishModalToggleFullscreen.textContent = isFullscreen ? 'Windowed' : 'Full screen';
+  publishModalToggleFullscreen.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+}
+
+function renderPublishConfigSummary() {
+  if (!origoConfigSummary) return;
+  const mainProjectId = String(publishProjectSelect?.value || '').trim();
+  const mainProjectLabel = publishProjectSelect?.selectedOptions?.[0]?.textContent?.trim() || mainProjectId || 'Not selected';
+  const activeLayerKeys = getCheckedLayerNames(projectLayersList);
+  const allLayers = getAllPublishLayers();
+  const activeLayers = activeLayerKeys
+    .map((key) => allLayers.find((layer) => getLayerKey(layer) === key))
+    .filter(Boolean);
+  const activeBackgroundLayers = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || []);
+  const defaultBackground = (publishState.backgroundOptions || []).find((item) => item.key === publishState.defaultBackgroundKey) || null;
+  const controls = getNormalizedControlsArray();
+  const mapCenter = String(centerInput?.value || '').trim();
+  const mapExtent = String(extentInput?.value || '').trim();
+  const mapZoom = String(zoomInput?.value || '').trim();
+  const mapMinZoom = String(minZoomInput?.value || '').trim();
+  const mapMaxZoom = String(maxZoomInput?.value || '').trim();
+  const layerItems = activeLayers.length
+    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => `<li>${escapeHtml(layer.name)}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">No active layers selected yet.</p>`;
+  const backgroundItems = activeBackgroundLayers.length
+    ? `<ul class="publish-editor__summary-list">${activeBackgroundLayers.map((layer) => `<li>${escapeHtml(layer.name)}</li>`).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">No background layers selected.</p>`;
+  const controlItems = controls.length
+    ? `<ul class="publish-editor__summary-list">${controls.map((ctrl) => `<li>${escapeHtml(getControlDisplayName(ctrl.name))}</li>`).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">No active controls configured.</p>`;
+  origoConfigSummary.innerHTML = `
+    <section class="publish-editor__summary-card">
+      <h4>Current map</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>Name:</strong> ${escapeHtml(String(publishName?.value || '').trim() || 'Untitled map')}</div>
+        <div><strong>Main project:</strong> ${escapeHtml(mainProjectLabel)}</div>
+        <div><strong>Description:</strong> ${escapeHtml(String(publishDescription?.value || '').trim() || 'No description')}</div>
+      </div>
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>Active layers (${activeLayers.length})</h4>
+      ${layerItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>Backgrounds</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>Default:</strong> ${escapeHtml(defaultBackground?.title || 'OpenStreetMap / none')}</div>
+      </div>
+      ${backgroundItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>Controls in preview (${controls.length})</h4>
+      ${controlItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>View state</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>Zoom:</strong> ${escapeHtml(mapZoom || 'Auto')}</div>
+        <div><strong>Min / Max:</strong> ${escapeHtml(mapMinZoom || 'default')} / ${escapeHtml(mapMaxZoom || 'default')}</div>
+        <div><strong>Center:</strong> ${escapeHtml(mapCenter || 'Auto')}</div>
+        <div><strong>Extent:</strong> ${escapeHtml(mapExtent || 'Auto')}</div>
+      </div>
+    </section>`;
+}
+
+function setPublishModalTab(tabId) {
+  activePublishTab = String(tabId || 'layers');
+  publishModalTabButtons.forEach((button) => {
+    const isActive = button.getAttribute('data-publish-tab') === activePublishTab;
+    button.classList.toggle('publish-editor__tab-btn--active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+  publishModalPanels.forEach((panel) => {
+    panel.classList.toggle('publish-editor__tab-panel--active', panel.getAttribute('data-publish-panel') === activePublishTab);
+  });
+  if (activePublishTab === 'config') {
+    renderPublishConfigSummary();
+    try {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => loadMapPreview({ silent: true }));
+      });
+    } catch {}
+  }
 }
 
 /* ── Per-control inline configurator ──
@@ -1828,13 +2086,42 @@ function isVectorGeometry(geometry) {
   return /(point|line|string|polygon|multi|curve|surface|geometry)/.test(value);
 }
 
+function getLayerKey(layer) {
+  return String(layer?.key || layer?.name || '').trim();
+}
+
+function makeLayerKey(projectId, layerName) {
+  const pid = String(projectId || '').trim();
+  const name = String(layerName || '').trim();
+  if (!pid || !name) return name;
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  return pid === currentProjectId ? name : `${pid}::${name}`;
+}
+
+function getAllPublishLayers() {
+  return []
+    .concat(Array.isArray(publishState.mainLayers) ? publishState.mainLayers : [])
+    .concat(Array.isArray(publishState.extraLayers) ? publishState.extraLayers : []);
+}
+
+function getSelectedPublishLayers() {
+  const selectedKeys = new Set(getCheckedLayerNames(projectLayersList));
+  return getAllPublishLayers().filter((layer) => selectedKeys.has(getLayerKey(layer)));
+}
+
+function getLayerProjectId(layerName) {
+  return String(getMainLayerByName(layerName)?.sourceProjectId || publishProjectSelect?.value || '').trim();
+}
+
 function getMainLayerByName(layerName) {
-  return (publishState.mainLayers || []).find((layer) => String(layer?.name || '') === String(layerName || '')) || null;
+  const key = String(layerName || '').trim();
+  return getAllPublishLayers().find((layer) => getLayerKey(layer) === key) || null;
 }
 
 function getLayerGeometryType(layerName) {
   const layer = getMainLayerByName(layerName);
-  return String(layer?.geometry || publishState.mainRules?.[layerName]?.geometryType || '').trim();
+  const key = String(layerName || '').trim();
+  return String(layer?.geometry || publishState.mainRules?.[key]?.geometryType || '').trim();
 }
 
 function geometryFamily(geometryType) {
@@ -1917,6 +2204,105 @@ function defaultStyleDefinition(geometryType) {
   return [[rule]];
 }
 
+function qgisColorArrayToRgba(colorValue, opacityMultiplier = 1, fallback = 'rgba(128, 128, 128, 1)') {
+  if (!Array.isArray(colorValue) || colorValue.length < 3) return fallback;
+  const red = clampNumber(colorValue[0], 0, 255, 128);
+  const green = clampNumber(colorValue[1], 0, 255, 128);
+  const blue = clampNumber(colorValue[2], 0, 255, 128);
+  const alphaBase = colorValue[3] == null ? 1 : clampNumber(Number(colorValue[3]) / 255, 0, 1, 1);
+  const alpha = clampNumber(alphaBase * clampNumber(opacityMultiplier, 0, 1, 1), 0, 1, 1);
+  return `rgba(${Math.round(red)}, ${Math.round(green)}, ${Math.round(blue)}, ${alpha})`;
+}
+
+function qgisStrokeStyleToLineDash(strokeStyle) {
+  const value = String(strokeStyle || '').toLowerCase();
+  if (!value || value.includes('solid')) return undefined;
+  if (value.includes('dashdot')) return [10, 4, 2, 4];
+  if (value.includes('dot')) return [2, 5];
+  if (value.includes('dash')) return [8, 6];
+  return undefined;
+}
+
+function qgisCategoryFilter(attribute, value) {
+  const field = String(attribute || '').trim();
+  if (!field || value == null || value === '') return '';
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return `[${field}] == ${value}`;
+  }
+  const text = String(value).replace(/'/g, "\\'");
+  return `[${field}] == '${text}'`;
+}
+
+function qgisSymbolToOrigoRule(symbol, geometryType, filterExpression) {
+  if (!symbol || typeof symbol !== 'object') return null;
+  const family = geometryFamily(geometryType);
+  const opacity = clampNumber(symbol.opacity, 0, 1, 1);
+  const strokeWidth = clampNumber(symbol.width != null ? symbol.width : symbol.strokeWidth, 0, 20, family === 'line' ? 2 : 1);
+  const strokeColor = qgisColorArrayToRgba(symbol.strokeColor, opacity, qgisColorArrayToRgba(symbol.color, opacity));
+  const fillColor = qgisColorArrayToRgba(symbol.color, opacity);
+  const geomEntry = {};
+  if (filterExpression) geomEntry.filter = filterExpression;
+
+  if (family === 'point') {
+    const size = clampNumber(symbol.size, 2, 40, 6);
+    geomEntry.circle = {
+      radius: clampNumber(size / 2, 2, 24, 6),
+      fill: { color: fillColor },
+      stroke: { color: strokeColor, width: clampNumber(symbol.strokeWidth, 0, 12, 1) }
+    };
+  } else if (family === 'line') {
+    geomEntry.stroke = {
+      color: fillColor,
+      width: strokeWidth
+    };
+    const lineDash = qgisStrokeStyleToLineDash(symbol.strokeStyle);
+    if (lineDash) geomEntry.stroke.lineDash = lineDash;
+  } else {
+    const fillPattern = String(symbol.fillPattern || 'solid').trim() || 'solid';
+    if (fillPattern !== 'outline') {
+      geomEntry.fill = { color: fillColor };
+    }
+    geomEntry.stroke = {
+      color: strokeColor,
+      width: strokeWidth
+    };
+    const lineDash = qgisStrokeStyleToLineDash(symbol.strokeStyle);
+    if (lineDash) geomEntry.stroke.lineDash = lineDash;
+  }
+
+  return [geomEntry];
+}
+
+function normalizeDetectedLayerStyle(styleDef, geometryType) {
+  if (Array.isArray(styleDef)) return styleDef;
+  if (!styleDef || typeof styleDef !== 'object') return defaultStyleDefinition(geometryType);
+
+  const looksLikeOrigo = !!(styleDef.fill || styleDef.stroke || styleDef.circle || styleDef.icon || styleDef.regularShape);
+  if (looksLikeOrigo) return [[styleDef]];
+
+  const detectedGeometryType = String(styleDef.geometryType || geometryType || '').trim();
+  if (styleDef.type === 'singleSymbol' && styleDef.symbol) {
+    return qgisSymbolToOrigoRule(styleDef.symbol, detectedGeometryType, '') || defaultStyleDefinition(detectedGeometryType);
+  }
+
+  if (styleDef.type === 'categorizedSymbol' && Array.isArray(styleDef.categories)) {
+    const rules = [];
+    for (const category of styleDef.categories) {
+      if (!category || typeof category !== 'object') continue;
+      const filterExpression = qgisCategoryFilter(styleDef.attribute, category.value);
+      const entry = qgisSymbolToOrigoRule(category.symbol, detectedGeometryType, filterExpression);
+      if (entry) rules.push(entry);
+    }
+    if (styleDef.default && typeof styleDef.default === 'object') {
+      const fallbackRule = qgisSymbolToOrigoRule(styleDef.default, detectedGeometryType, '');
+      if (fallbackRule) rules.push(fallbackRule);
+    }
+    return rules.length ? rules : defaultStyleDefinition(detectedGeometryType);
+  }
+
+  return defaultStyleDefinition(detectedGeometryType);
+}
+
 function unwrapPrimaryStyleRule(styleDef) {
   if (Array.isArray(styleDef) && Array.isArray(styleDef[0]) && styleDef[0][0] && typeof styleDef[0][0] === 'object') {
     return styleDef[0][0];
@@ -1925,6 +2311,162 @@ function unwrapPrimaryStyleRule(styleDef) {
     return styleDef[0];
   }
   return styleDef && typeof styleDef === 'object' ? styleDef : {};
+}
+
+function getDesignerFillPattern() {
+  const raw = String(wfsStyleFillPattern?.value || 'solid').trim().toLowerCase() || 'solid';
+  if (raw === 'diagonal') return 'slash';
+  return raw;
+}
+
+function setDesignerFillPattern(pattern) {
+  if (!wfsStyleFillPattern) return;
+  const raw = String(pattern || 'solid').trim().toLowerCase() || 'solid';
+  wfsStyleFillPattern.value = raw === 'diagonal' ? 'slash' : raw;
+}
+
+function getDefaultDesignerPatternOptions(pattern) {
+  switch (String(pattern || '').trim().toLowerCase()) {
+    case 'backslash':
+      return { angle: 135, spacing: 10, size: 2.5, transparent: false };
+    case 'horizontal':
+      return { angle: 0, spacing: 10, size: 2.5, transparent: false };
+    case 'vertical':
+      return { angle: 90, spacing: 10, size: 2.5, transparent: false };
+    case 'cross':
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+    case 'dots':
+      return { angle: 0, spacing: 10, size: 2.5, transparent: false };
+    case 'slash':
+    case 'diagonal':
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+    default:
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+  }
+}
+
+function getDesignerPatternOptions() {
+  const pattern = getDesignerFillPattern();
+  const defaults = getDefaultDesignerPatternOptions(pattern);
+  return {
+    fillPattern: pattern,
+    fillPatternAngle: clampNumber(wfsStylePatternAngle?.value, 0, 180, defaults.angle),
+    fillPatternSpacing: clampNumber(wfsStylePatternSpacing?.value, 4, 32, defaults.spacing),
+    fillPatternSize: clampNumber(wfsStylePatternSize?.value, 1, 12, defaults.size),
+    fillPatternTransparent: !!wfsStylePatternTransparent?.checked
+  };
+}
+
+function applyDesignerPatternOptions(options) {
+  const normalizedPattern = String(options?.fillPattern || 'solid').trim().toLowerCase() || 'solid';
+  const defaults = getDefaultDesignerPatternOptions(normalizedPattern);
+  setDesignerFillPattern(normalizedPattern);
+  if (wfsStylePatternAngle) {
+    wfsStylePatternAngle.value = String(clampNumber(options?.fillPatternAngle, 0, 180, defaults.angle));
+  }
+  if (wfsStylePatternSpacing) {
+    wfsStylePatternSpacing.value = String(clampNumber(options?.fillPatternSpacing, 4, 32, defaults.spacing));
+  }
+  if (wfsStylePatternSize) {
+    wfsStylePatternSize.value = String(clampNumber(options?.fillPatternSize, 1, 12, defaults.size));
+  }
+  if (wfsStylePatternTransparent) {
+    wfsStylePatternTransparent.checked = options?.fillPatternTransparent === true;
+  }
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+}
+
+function buildSvgPatternFill(fill, stroke, strokeWidth, designerOptions = null) {
+  const pattern = String(designerOptions?.fillPattern || getDesignerFillPattern()).trim().toLowerCase() || 'solid';
+  if (pattern === 'outline') return { defs: '', fill: 'rgba(0,0,0,0)' };
+  if (pattern === 'solid') return { defs: '', fill };
+
+  const defaults = getDefaultDesignerPatternOptions(pattern);
+  const options = designerOptions && typeof designerOptions === 'object'
+    ? {
+        fillPattern: pattern,
+        fillPatternAngle: clampNumber(designerOptions.fillPatternAngle, 0, 180, defaults.angle),
+        fillPatternSpacing: clampNumber(designerOptions.fillPatternSpacing, 4, 32, defaults.spacing),
+        fillPatternSize: clampNumber(designerOptions.fillPatternSize, 1, 12, defaults.size)
+      }
+    : getDesignerPatternOptions();
+  const spacing = clampNumber(options.fillPatternSpacing, 4, 32, 10);
+  const angle = clampNumber(options.fillPatternAngle, 0, 180, defaults.angle);
+  const dotSize = clampNumber(options.fillPatternSize, 1, 12, 2.5);
+  const patternId = `preview-pattern-${pattern}-${spacing}-${angle}-${dotSize}`.replace(/[^a-z0-9_-]/gi, '-');
+  let content = '';
+
+  if (pattern === 'dots') {
+    const radius = Math.max(0.8, dotSize);
+    content = `<circle cx="${spacing / 2}" cy="${spacing / 2}" r="${radius}" fill="${stroke}" />`;
+  } else {
+    const lineStrokeWidth = Math.max(0.6, strokeWidth);
+    const buildLine = (lineAngle) => `<path d="M ${spacing / 2} -${spacing} L ${spacing / 2} ${spacing * 2}" stroke="${stroke}" stroke-width="${lineStrokeWidth}" stroke-linecap="round" transform="rotate(${lineAngle} ${spacing / 2} ${spacing / 2})" />`;
+    if (pattern === 'cross') {
+      content = `${buildLine(angle)}${buildLine((angle + 90) % 180)}`;
+    } else {
+      const effectiveAngle = pattern === 'slash'
+        ? angle
+        : pattern === 'backslash'
+          ? 180 - angle
+          : pattern === 'horizontal'
+            ? 90
+            : pattern === 'vertical'
+              ? 0
+              : angle;
+      content = buildLine(effectiveAngle);
+    }
+  }
+
+  return {
+    defs: `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing}" height="${spacing}"><rect width="${spacing}" height="${spacing}" fill="${fill}" />${content}</pattern></defs>`,
+    fill: `url(#${patternId})`
+  };
+}
+
+function syncDesignerGeometryFields(geometryType) {
+  const family = geometryFamily(geometryType);
+  const pointOnly = family === 'point';
+  const hasFill = family !== 'line';
+  const polygonOnly = family === 'polygon' || family === 'generic';
+  const pattern = getDesignerFillPattern();
+  const showPatternControls = polygonOnly && pattern !== 'solid' && pattern !== 'outline';
+  const showDotSize = showPatternControls && pattern === 'dots';
+  const showAngle = showPatternControls && pattern !== 'dots';
+  if (wfsStyleShapeWrap) wfsStyleShapeWrap.hidden = !pointOnly;
+  if (wfsStyleRadiusWrap) wfsStyleRadiusWrap.hidden = !pointOnly;
+  if (wfsStyleFillColorWrap) wfsStyleFillColorWrap.hidden = !hasFill;
+  if (wfsStyleFillOpacityWrap) wfsStyleFillOpacityWrap.hidden = !hasFill;
+  if (wfsStyleFillPatternWrap) wfsStyleFillPatternWrap.hidden = !polygonOnly;
+  if (wfsStylePatternAngleWrap) wfsStylePatternAngleWrap.hidden = !showAngle;
+  if (wfsStylePatternSpacingWrap) wfsStylePatternSpacingWrap.hidden = !showPatternControls;
+  if (wfsStylePatternSizeWrap) wfsStylePatternSizeWrap.hidden = !showDotSize;
+  if (wfsStylePatternTransparentWrap) wfsStylePatternTransparentWrap.hidden = !showPatternControls;
+}
+
+function getSimplifiedQgisStyle(rawStyle, geometryType) {
+  if (!rawStyle || typeof rawStyle !== 'object') return null;
+  if (rawStyle.type === 'singleSymbol' && rawStyle.symbol) {
+    return qgisSymbolToOrigoRule(rawStyle.symbol, geometryType, '') || null;
+  }
+  if (rawStyle.type === 'categorizedSymbol') {
+    const symbol = rawStyle.default || rawStyle.categories?.[0]?.symbol || null;
+    if (!symbol) return null;
+    return qgisSymbolToOrigoRule(symbol, geometryType, '') || null;
+  }
+  return null;
+}
+
+function getDesignerOptionsFromQgisStyle(rawStyle) {
+  if (!rawStyle || typeof rawStyle !== 'object') return { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') };
+  let symbol = null;
+  if (rawStyle.type === 'singleSymbol' && rawStyle.symbol) {
+    symbol = rawStyle.symbol;
+  } else if (rawStyle.type === 'categorizedSymbol') {
+    symbol = rawStyle.default || rawStyle.categories?.[0]?.symbol || null;
+  }
+  const pattern = String(symbol?.fillPattern || 'solid').trim().toLowerCase() || 'solid';
+  return { fillPattern: pattern === 'diagonal' ? 'slash' : pattern, ...getDefaultDesignerPatternOptions(pattern) };
 }
 
 function applyStyleDefinitionToDesigner(styleDef, geometryType) {
@@ -1947,6 +2489,7 @@ function applyStyleDefinitionToDesigner(styleDef, geometryType) {
   if (wfsStyleStrokeWidth) wfsStyleStrokeWidth.value = String(clampNumber(strokeRule.width, 0, 12, 2));
   if (wfsStyleRadius) wfsStyleRadius.value = String(clampNumber(pointRule.radius || rule.radius, 2, 24, 6));
   if (wfsStyleDash) wfsStyleDash.value = dashKeyFromPattern(strokeRule.lineDash);
+  syncDesignerGeometryFields(geometryType);
 }
 
 function buildStyleDefinitionFromDesigner(geometryType) {
@@ -1963,7 +2506,10 @@ function buildStyleDefinitionFromDesigner(geometryType) {
 
   const rule = { stroke };
   if (family === 'polygon' || family === 'generic') {
-    rule.fill = fill;
+    const pattern = getDesignerFillPattern();
+    if (pattern !== 'outline') {
+      rule.fill = fill;
+    }
   }
   if (family === 'point' || family === 'generic') {
     const radius = clampNumber(wfsStyleRadius?.value, 2, 24, 6);
@@ -2008,12 +2554,18 @@ function stylePreviewSvg(geometryType) {
     }
     return `<svg viewBox="0 0 240 120" aria-hidden="true"><circle cx="120" cy="60" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
   }
-  return `<svg viewBox="0 0 240 120" aria-hidden="true"><path d="M24 88 L72 30 L150 24 L216 74 L176 94 L70 92 Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+  const fillValue = getDesignerFillPattern() === 'outline' ? 'rgba(0,0,0,0)' : fill;
+  const patternFill = buildSvgPatternFill(fillValue, stroke, strokeWidth);
+  return `<svg viewBox="0 0 240 120" aria-hidden="true">${patternFill.defs}<path d="M24 88 L72 30 L150 24 L216 74 L176 94 L70 92 Z" fill="${patternFill.fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
 }
 
 function setStyleEditorTab(tabName) {
   const valid = ['rules', 'designer', 'json', 'attributes'];
   const active = valid.includes(tabName) ? tabName : 'rules';
+  if (active !== 'designer' && Number.isInteger(currentDesignerRuleIndex)) {
+    currentDesignerRuleIndex = null;
+    updateDesignerRuleModeNotice();
+  }
   // Remember which panel was active BEFORE switching, so we can sync edits
   // out of it (and only out of it) without clobbering work done elsewhere.
   const previousActive = (wfsStylePanels.find((p) => !p.hidden) || {}).getAttribute
@@ -2139,6 +2691,23 @@ function addLog(msg, type = 'info') {
   while (logContainer.children.length > 50) logContainer.lastChild.remove();
 }
 
+function clearPublishStatusError() {
+  if (!publishStatusError) return;
+  publishStatusError.textContent = '';
+  publishStatusError.style.display = 'none';
+}
+
+function showPublishStatusError(message, tabId = 'layers') {
+  const text = String(message || '').trim();
+  if (!text) return;
+  if (publishStatusError) {
+    publishStatusError.textContent = text;
+    publishStatusError.style.display = '';
+  }
+  if (tabId) setPublishModalTab(tabId);
+  addLog(text, 'error');
+}
+
 clearLogBtn?.addEventListener('click', () => {
   if (logContainer) logContainer.innerHTML = `<p class="log-empty">${escapeHtml(t('Qtiler2Origo.no_activity'))}</p>`;
 });
@@ -2151,8 +2720,10 @@ let publishedItems = [];
 const publishState = {
   projects: [],
   mainLayers: [],
+  extraLayers: [],
   backgroundLayers: [],
   mainRules: {},
+  initialVisibility: {},
   backgroundOptions: [],
   defaultBackgroundKey: 'none',
   groups: [],            // [{ name, title, parent, expanded }]
@@ -2160,12 +2731,12 @@ const publishState = {
   controls: {},          // { search: { hintText, minLength, limit, ... } }
   searchSources: [],     // [{ projectId, layers: [layerName,...] }]
   searchSourceCatalog: {}, // { projectId: [{ name, ... }] } — cached searchable layers per project
+  projectLayerCatalog: {}, // { projectId: normalizedLayer[] } — cached for external layer picker
   editingProfileId: null  // non-null = edit mode
 };
 
 function getFixedBackgroundOptions() {
   return [
-    { key: 'osm', type: 'osm', title: 'OpenStreetMap', required: true },
     { key: 'none', type: 'none', title: t('Qtiler2Origo.no_bg_option'), required: true }
   ];
 }
@@ -2370,13 +2941,20 @@ async function loadPublishedProfiles() {
 }
 
 /* ── Layer helpers ── */
-function normalizeLayersPayload(payload) {
+function normalizeLayersPayload(payload, options = {}) {
+  const sourceProjectId = String(options.sourceProjectId || publishProjectSelect?.value || '').trim();
   return (Array.isArray(payload?.layers) ? payload.layers : [])
     .map((row) => {
       if (!row || typeof row !== 'object') return null;
       const name = String(row.name || row.id || '').trim();
       if (!name) return null;
-      return { name, geometry: String(row.geometry_type || row.geometry || row.kind || '').trim() };
+      const key = makeLayerKey(sourceProjectId, name);
+      return {
+        key,
+        name,
+        sourceProjectId,
+        geometry: String(row.geometry_type || row.geometry || row.kind || '').trim()
+      };
     })
     .filter(Boolean);
 }
@@ -2387,19 +2965,25 @@ function renderLayerChecklist(container, layers, rules = {}) {
   const isBackgroundList = container === backgroundLayersList;
   if (!Array.isArray(layers) || !layers.length) {
     container.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_layers'))}</p>`;
+    try { renderPublishConfigSummary(); } catch {}
     return;
   }
   // Resolve background project id once for thumbnail URL
   const bgProjectId = isBackgroundList ? String(backgroundProjectSelect?.value || '').trim() : '';
   container.innerHTML = layers.map((layer) => {
-    const rule = rules[layer.name] || {};
+    const layerKey = getLayerKey(layer);
+    const rule = rules[layerKey] || {};
     const tags = [];
     if (rule.searchable) tags.push(t('Qtiler2Origo.searchable'));
     if (rule.editable) tags.push(t('Qtiler2Origo.editable'));
     const isVectorLayer = isMainLayerList && isVectorGeometry(layer.geometry);
     if (rule.serveAsWfs && isMainLayerList) tags.push('WFS vectorial');
+    if (isMainLayerList && layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim()) {
+      tags.push(`Project: ${layer.sourceProjectId}`);
+    }
     const tagText = tags.length ? `<span class="Qtiler2Origo-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
-    const activeHint = isMainLayerList ? `<small class="help">Activa al abrir mapa</small>` : '';
+    const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
+    const activeHint = !isMainLayerList ? '' : `<small class="help">${escapeHtml(t('Qtiler2Origo.layer_include_help'))} ${escapeHtml(t('Qtiler2Origo.layer_initial_visibility_help'))}</small>`;
     
     let styleButton = '';
     if (isVectorLayer) {
@@ -2407,10 +2991,10 @@ function renderLayerChecklist(container, layers, rules = {}) {
       styleButton = `
         <div style="display:flex; gap:4px">
           <label class="button is-small ${wfsColor}" style="margin-bottom:0">
-            <input type="checkbox" style="margin-right:6px" data-wfs-toggle="${escapeHtml(layer.name)}" ${rule.serveAsWfs ? 'checked' : ''} />
+            <input type="checkbox" style="margin-right:6px" data-wfs-toggle="${escapeHtml(layerKey)}" ${rule.serveAsWfs ? 'checked' : ''} />
             WFS
           </label>
-          <button type="button" class="button is-small is-info is-light" data-style-layer="${escapeHtml(layer.name)}">${rule.wfsStyle ? t('Qtiler2Origo.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Origo.wfs_style_no') || 'Config. estilo'}</button>
+          <button type="button" class="button is-small is-info is-light" data-style-layer="${escapeHtml(layerKey)}">${rule.wfsStyle ? t('Qtiler2Origo.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Origo.wfs_style_no') || 'Config. estilo'}</button>
         </div>
       `;
     }
@@ -2420,47 +3004,78 @@ function renderLayerChecklist(container, layers, rules = {}) {
       const tUrl = `/plugins/Qtiler2Origo/api/thumbnail/${encodeURIComponent(bgProjectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
       bgThumb = `<img class="Qtiler2Origo-bg-item__thumb" src="${escapeHtml(tUrl)}" alt="" loading="lazy" style="width:48px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #d8dde3;margin-right:6px"/>`;
     }
-    const checkboxId = `Qtilerlay_${(container.id || 'l')}_${escapeHtml(layer.name).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const checkboxId = `Qtilerlay_${(container.id || 'l')}_${escapeHtml(layerKey).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const includeControl = isMainLayerList
+      ? `
+        <label class="button is-small is-light" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;" title="${escapeHtml(t('Qtiler2Origo.layer_include_help'))}">
+          <input id="${checkboxId}" type="checkbox" data-layer-include="${escapeHtml(layerKey)}" data-layer-name="${escapeHtml(layerKey)}" class="Qtiler2Origo-layer-row__check" />
+          <span>${escapeHtml(t('Qtiler2Origo.layer_include'))}</span>
+        </label>
+      `
+      : `<input id="${checkboxId}" type="checkbox" data-layer-include="${escapeHtml(layerKey)}" data-layer-name="${escapeHtml(layerKey)}" class="Qtiler2Origo-layer-row__check" />`;
+    const visibleControl = isMainLayerList
+      ? `
+        <label class="button is-small is-light" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;" title="${escapeHtml(t('Qtiler2Origo.layer_initial_visibility_help'))}">
+          <input type="checkbox" data-layer-visible="${escapeHtml(layerKey)}" class="Qtiler2Origo-layer-row__check" ${isInitiallyVisible ? 'checked' : ''} />
+          <span>${escapeHtml(t('Qtiler2Origo.layer_initial_visibility'))}</span>
+        </label>
+      `
+      : '';
+    const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
       <div class="Qtiler2Origo-layer-row">
-        <input id="${checkboxId}" type="checkbox" data-layer-name="${escapeHtml(layer.name)}" class="Qtiler2Origo-layer-row__check" />
+        ${!isMainLayerList ? includeControl : ''}
         ${bgThumb}
-        <label for="${checkboxId}" class="Qtiler2Origo-layer-row__main">
+        <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Origo-layer-row__main">
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
           ${activeHint}
-        </label>
-        ${styleButton}
+        </${mainContentTag}>
+        ${isMainLayerList ? `<div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
       </div>
     `;
   }).join('');
+  try { renderPublishConfigSummary(); } catch {}
 }
 
 function getCheckedLayerNames(container) {
   if (!container) return [];
-  return Array.from(container.querySelectorAll('input[type="checkbox"][data-layer-name]:checked'))
-    .map((el) => String(el.getAttribute('data-layer-name') || '').trim())
+  return Array.from(container.querySelectorAll('input[type="checkbox"][data-layer-include]:checked'))
+    .map((el) => String(el.getAttribute('data-layer-include') || '').trim())
     .filter(Boolean);
+}
+
+function getCheckedLayers(container, layers) {
+  if (!container || !Array.isArray(layers) || !layers.length) return [];
+  const checkedKeys = new Set(getCheckedLayerNames(container));
+  return layers.filter((layer) => checkedKeys.has(getLayerKey(layer)));
 }
 
 function setCheckedLayerNames(container, names) {
   if (!container || !Array.isArray(names)) return;
   const set = new Set(names);
-  container.querySelectorAll('input[type="checkbox"][data-layer-name]').forEach((el) => {
-    el.checked = set.has(el.getAttribute('data-layer-name'));
+  container.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => {
+    el.checked = set.has(el.getAttribute('data-layer-include'));
   });
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+function getInitialVisibleLayerNames() {
+  return getAllPublishLayers()
+    .map((layer) => getLayerKey(layer))
+    .filter((key) => key && publishState.initialVisibility[key] !== false);
 }
 
 /* ── Background options ── */
 function buildBackgroundOptions() {
   const backgroundProjectId = String(backgroundProjectSelect?.value || '').trim();
-  const selectedLayerNames = getCheckedLayerNames(backgroundLayersList);
-  const dynamicOptions = selectedLayerNames.map((name) => ({
-    key: `layer:${backgroundProjectId}:${name}`,
+  const selectedBackgroundLayers = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || []);
+  const dynamicOptions = selectedBackgroundLayers.map((layer) => ({
+    key: `layer:${backgroundProjectId}:${layer.name}`,
     type: 'layer',
     sourceProjectId: backgroundProjectId,
-    name,
-    title: backgroundProjectId ? `${backgroundProjectId} / ${name}` : name,
+    name: layer.name,
+    title: backgroundProjectId ? `${backgroundProjectId} / ${layer.name}` : layer.name,
     required: false
   }));
   const options = [...getFixedBackgroundOptions(), ...dynamicOptions];
@@ -2506,6 +3121,7 @@ function renderDefaultBackgroundOptions() {
 function refreshBackgroundOptions() {
   buildBackgroundOptions();
   renderDefaultBackgroundOptions();
+  try { renderPublishConfigSummary(); } catch {}
 }
 
 /* ── Groups, per-layer placement & module config ── */
@@ -2517,6 +3133,8 @@ function refreshBackgroundOptions() {
 function ensureExtraSections() {
   const modalBody = publishModal?.querySelector('.modal-card-body');
   if (!modalBody) return null;
+  const layersSlot = publishLayersDynamicSlot || modalBody;
+  const toolsSlot = publishToolsDynamicSlot || modalBody;
 
   let groupsSection = document.getElementById('Qtiler2OrigoGroupsSection');
   if (!groupsSection) {
@@ -2538,13 +3156,7 @@ function ensureExtraSections() {
           <p class="help" style="margin-top:6px">${escapeHtml(t('Qtiler2Origo.pub_layer_assign_help'))}</p>
         </div>
       </div>`;
-    // Insert between layers (step 1) and backgrounds (step 2)
-    const steps = modalBody.querySelectorAll('.modal-step');
-    if (steps.length >= 2) {
-      steps[0].parentNode.insertBefore(groupsSection, steps[1]);
-    } else {
-      modalBody.appendChild(groupsSection);
-    }
+    toolsSlot.appendChild(groupsSection);
     groupsSection.querySelector('#Qtiler2OrigoAddGroupBtn')
       .addEventListener('click', () => {
         const idx = publishState.groups.length + 1;
@@ -2587,6 +3199,21 @@ function ensureExtraSections() {
       });
   }
 
+  let extraLayersSection = document.getElementById('Qtiler2OrigoExtraLayersSection');
+  if (!extraLayersSection) {
+    extraLayersSection = document.createElement('fieldset');
+    extraLayersSection.id = 'Qtiler2OrigoExtraLayersSection';
+    extraLayersSection.className = 'modal-step';
+    extraLayersSection.innerHTML = `
+      <legend class="modal-step__legend">Additional project layers</legend>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+        <p class="help" style="margin:0">Add WMS or WFS layers from other published QGIS projects.</p>
+        <button type="button" id="Qtiler2OrigoOpenExternalLayers" class="button is-small">+ Add layers</button>
+      </div>
+      <div id="Qtiler2OrigoExtraLayersList"></div>`;
+    layersSlot.appendChild(extraLayersSection);
+  }
+
   let searchSection = document.getElementById('Qtiler2OrigoSearchOptions');
   if (!searchSection) {
     searchSection = document.createElement('fieldset');
@@ -2610,8 +3237,7 @@ function ensureExtraSections() {
         <p class="help" style="margin:0 0 8px">${escapeHtml(t('Qtiler2Origo.pub_search_sources_help'))}</p>
         <div id="Qtiler2OrigoSearchSourcesList"></div>
       </div>`;
-    // Append at end of modal body
-    modalBody.appendChild(searchSection);
+    toolsSlot.appendChild(searchSection);
   }
   // The search-options section (which now hosts the cross-project picker)
   // is always visible so the user can configure it before enabling the
@@ -2620,7 +3246,230 @@ function ensureExtraSections() {
   // was display:none.
   searchSection.style.display = '';
 
-  return { groupsSection, searchSection };
+  return { groupsSection, extraLayersSection, searchSection };
+}
+
+async function getProjectLayersCatalog(projectId) {
+  const pid = String(projectId || '').trim();
+  if (!pid) return [];
+  if (Array.isArray(publishState.projectLayerCatalog[pid])) {
+    return publishState.projectLayerCatalog[pid];
+  }
+  const payload = await api(`/projects/${encodeURIComponent(pid)}/layers`);
+  const normalized = normalizeLayersPayload(payload, { sourceProjectId: pid });
+  publishState.projectLayerCatalog[pid] = normalized;
+  return normalized;
+}
+
+async function addExternalLayers(projectId, selectedItems) {
+  const pid = String(projectId || '').trim();
+  if (!pid || !Array.isArray(selectedItems) || !selectedItems.length) return;
+  const catalog = await getProjectLayersCatalog(pid);
+  const rules = await loadLayerRules(pid).catch(() => ({}));
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  if (pid === currentProjectId) return;
+
+  for (const item of selectedItems) {
+    const layerName = String(item?.name || '').trim();
+    if (!layerName) continue;
+    const layerObj = catalog.find((layer) => String(layer?.name || '') === layerName);
+    if (!layerObj) continue;
+    const layerKey = getLayerKey(layerObj);
+    if (!publishState.extraLayers.some((layer) => getLayerKey(layer) === layerKey)) {
+      publishState.extraLayers.push({ ...layerObj });
+    }
+    if (typeof publishState.initialVisibility[layerKey] === 'undefined') {
+      publishState.initialVisibility[layerKey] = true;
+    }
+    const baseRule = rules[layerName] || {};
+    publishState.mainRules[layerKey] = {
+      ...(publishState.mainRules[layerKey] || {}),
+      searchable: baseRule.searchable === true,
+      editable: item.mode === 'WFS' ? baseRule.editable === true : false,
+      serveAsWfs: item.mode === 'WFS',
+      searchAttribute: baseRule.searchAttribute || null,
+      idAttribute: baseRule.idAttribute || null,
+      geometryAttribute: baseRule.geometryAttribute || null,
+      hintText: baseRule.hintText || null,
+      geometryType: String(baseRule.geometryType || layerObj.geometry || '').trim() || null
+    };
+  }
+}
+
+function renderExternalLayersSummary() {
+  const host = document.getElementById('Qtiler2OrigoExtraLayersList');
+  if (!host) return;
+  const rows = Array.isArray(publishState.extraLayers) ? publishState.extraLayers : [];
+  if (!rows.length) {
+    host.innerHTML = `<p class="help">No external layers added.</p>`;
+    return;
+  }
+  host.innerHTML = rows.map((layer) => {
+    const key = getLayerKey(layer);
+    const rule = publishState.mainRules[key] || {};
+    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      <div>
+        <strong>${escapeHtml(layer.name)}</strong>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
+      </div>
+      <span class="tag is-light">${rule.serveAsWfs ? 'WFS' : 'WMS'}</span>
+      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">Remove</button>
+    </div>`;
+  }).join('');
+}
+
+function ensureExternalLayerModal() {
+  let modal = document.getElementById('Qtiler2OrigoExternalLayerModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'Qtiler2OrigoExternalLayerModal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-background" data-close-external-layer-modal></div>
+    <div class="modal-card" style="width:min(920px, calc(100vw - 32px))">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Add layers from another project</p>
+        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal></button>
+      </header>
+      <section class="modal-card-body">
+        <label class="field">
+          <span class="label">Project</span>
+          <select id="Qtiler2OrigoExternalProjectSelect" class="input"></select>
+        </label>
+        <div id="Qtiler2OrigoExternalProjectLayers" style="display:grid;gap:8px;max-height:55vh;overflow:auto"></div>
+      </section>
+      <footer class="modal-card-foot" style="justify-content:space-between">
+        <button type="button" class="button" data-close-external-layer-modal>Cancel</button>
+        <button type="button" class="button is-primary" id="Qtiler2OrigoExternalLayerApply">Add selected layers</button>
+      </footer>
+    </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+async function renderExternalLayerModalList(projectId) {
+  const host = document.getElementById('Qtiler2OrigoExternalProjectLayers');
+  if (!host) return;
+  const pid = String(projectId || '').trim();
+  if (!pid) {
+    host.innerHTML = `<p class="help">Select a project.</p>`;
+    return;
+  }
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  if (pid === currentProjectId) {
+    host.innerHTML = `<p class="help">The main project is already listed above. Pick a different project here.</p>`;
+    return;
+  }
+  const layers = await getProjectLayersCatalog(pid);
+  if (!layers.length) {
+    host.innerHTML = `<p class="help">No layers available for this project.</p>`;
+    return;
+  }
+  host.innerHTML = layers.map((layer) => {
+    const key = getLayerKey(layer);
+    const isVector = isVectorGeometry(layer.geometry);
+    const checked = publishState.extraLayers.some((row) => getLayerKey(row) === key) ? 'checked' : '';
+    const currentRule = publishState.mainRules[key] || {};
+    const mode = currentRule.serveAsWfs ? 'WFS' : 'WMS';
+    return `<label style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      <input type="checkbox" data-external-layer-check="${escapeHtml(key)}" ${checked} />
+      <div>
+        <div><strong>${escapeHtml(layer.name)}</strong></div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || 'Layer')}</div>
+      </div>
+      <select class="input is-small" style="width:92px" data-external-layer-mode="${escapeHtml(key)}" ${isVector ? '' : 'disabled'}>
+        <option value="WMS" ${mode === 'WMS' ? 'selected' : ''}>WMS</option>
+        <option value="WFS" ${mode === 'WFS' ? 'selected' : ''}>WFS</option>
+      </select>
+    </label>`;
+  }).join('');
+}
+
+function bindExternalLayerPickerEvents() {
+  const openBtn = document.getElementById('Qtiler2OrigoOpenExternalLayers');
+  if (openBtn && !openBtn.dataset.bound) {
+    openBtn.dataset.bound = '1';
+    openBtn.addEventListener('click', async () => {
+      const modal = ensureExternalLayerModal();
+      const select = document.getElementById('Qtiler2OrigoExternalProjectSelect');
+      const currentProjectId = String(publishProjectSelect?.value || '').trim();
+      const options = (publishState.projects || [])
+        .filter((project) => project.id && project.id !== currentProjectId)
+        .map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>`)
+        .join('');
+      select.innerHTML = `<option value="">Select a project</option>${options}`;
+      modal.classList.add('is-active');
+      await renderExternalLayerModalList(String(select.value || '').trim());
+    });
+  }
+
+  const modal = ensureExternalLayerModal();
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.hasAttribute('data-close-external-layer-modal')) {
+        modal.classList.remove('is-active');
+      }
+    });
+    document.getElementById('Qtiler2OrigoExternalProjectSelect')?.addEventListener('change', async (event) => {
+      const target = event.target;
+      await renderExternalLayerModalList(String(target.value || '').trim());
+    });
+    document.getElementById('Qtiler2OrigoExternalLayerApply')?.addEventListener('click', async () => {
+      const select = document.getElementById('Qtiler2OrigoExternalProjectSelect');
+      const projectId = String(select?.value || '').trim();
+      const host = document.getElementById('Qtiler2OrigoExternalProjectLayers');
+      const selectedItems = Array.from(host?.querySelectorAll('input[data-external-layer-check]:checked') || []).map((input) => {
+        const layerKey = String(input.getAttribute('data-external-layer-check') || '').trim();
+        const modeSelect = host.querySelector(`[data-external-layer-mode="${CSS.escape(layerKey)}"]`);
+        const layer = (publishState.projectLayerCatalog[projectId] || []).find((entry) => getLayerKey(entry) === layerKey);
+        return layer ? { name: layer.name, mode: String(modeSelect?.value || 'WMS').trim().toUpperCase() === 'WFS' ? 'WFS' : 'WMS' } : null;
+      }).filter(Boolean);
+      await addExternalLayers(projectId, selectedItems);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      renderExternalLayersSummary();
+      refreshExtraSections();
+      modal.classList.remove('is-active');
+    });
+  }
+
+  const summary = document.getElementById('Qtiler2OrigoExtraLayersList');
+  if (summary && !summary.dataset.bound) {
+    summary.dataset.bound = '1';
+    summary.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const key = String(target.getAttribute('data-remove-extra-layer') || '').trim();
+      if (!key) return;
+      publishState.extraLayers = publishState.extraLayers.filter((layer) => getLayerKey(layer) !== key);
+      delete publishState.mainRules[key];
+      delete publishState.layerGroups[key];
+      delete publishState.initialVisibility[key];
+      const checkedNames = getCheckedLayerNames(projectLayersList).filter((name) => name !== key);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      renderExternalLayersSummary();
+      renderLayerAssignments();
+    });
+  }
+
+  const assignments = document.getElementById('Qtiler2OrigoLayerAssignList');
+  if (assignments && !assignments.dataset.bound) {
+    assignments.dataset.bound = '1';
+    assignments.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const key = String(target.getAttribute('data-remove-publish-layer') || '').trim();
+      if (!key) return;
+      const checkbox = projectLayersList?.querySelector(`input[type="checkbox"][data-layer-include="${CSS.escape(key)}"]`);
+      if (!(checkbox instanceof HTMLInputElement)) return;
+      checkbox.checked = false;
+      renderLayerAssignments();
+      schedulePreviewRefresh();
+    });
+  }
 }
 
 function getGroupOptionsHtml(selected) {
@@ -2664,7 +3513,7 @@ function renderLayerAssignments() {
   // Show ALL project layers (active + inactive) so the user can assign every
   // layer to a group up-front, even if it isn't currently checked. Active
   // layers are visually emphasized so the user can tell at a glance.
-  const allLayers = Array.isArray(publishState.mainLayers) ? publishState.mainLayers : [];
+  const allLayers = getAllPublishLayers();
   if (!allLayers.length) {
     list.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.pub_assign_help'))}</p>`;
     return;
@@ -2672,22 +3521,27 @@ function renderLayerAssignments() {
   const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
   // Sort: active first, then inactive — preserving original order within each bucket.
   const ordered = [
-    ...allLayers.filter((l) => checkedSet.has(l.name)),
-    ...allLayers.filter((l) => !checkedSet.has(l.name))
+    ...allLayers.filter((l) => checkedSet.has(getLayerKey(l))),
+    ...allLayers.filter((l) => !checkedSet.has(getLayerKey(l)))
   ];
   list.innerHTML = ordered.map((layer) => {
     const name = String(layer?.name || '');
-    if (!name) return '';
-    const isActive = checkedSet.has(name);
-    const groupSel = publishState.layerGroups[name] || 'root';
+    const layerKey = getLayerKey(layer);
+    if (!name || !layerKey) return '';
+    const isActive = checkedSet.has(layerKey);
+    const groupSel = publishState.layerGroups[layerKey] || 'root';
     const opacity = isActive ? '1' : '0.6';
     const dot = isActive
       ? '<span title="active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex:0 0 8px"></span>'
       : '<span title="inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#cbd5e1;flex:0 0 8px"></span>';
-    return `<div style="display:grid;grid-template-columns:14px 1fr 160px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
+    const removeBtn = isActive
+      ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">Quitar</button>`
+      : '<span></span>';
+    return `<div style="display:grid;grid-template-columns:14px 1fr 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
       ${dot}
-      <span title="${escapeHtml(name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}</span>
-      <select class="input is-small" data-layer-group-for="${escapeHtml(name)}">${getGroupOptionsHtml(groupSel)}</select>
+      <span title="${escapeHtml(name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}${layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim() ? ` [${escapeHtml(layer.sourceProjectId)}]` : ''}</span>
+      <select class="input is-small" data-layer-group-for="${escapeHtml(layerKey)}">${getGroupOptionsHtml(groupSel)}</select>
+      ${removeBtn}
     </div>`;
   }).join('');
 }
@@ -2696,8 +3550,11 @@ function refreshExtraSections() {
   ensureExtraSections();
   renderGroupsManager();
   renderLayerAssignments();
+  bindExternalLayerPickerEvents();
+  renderExternalLayersSummary();
   bindSearchSourceEvents();
   renderSearchSources();
+  renderPublishConfigSummary();
 }
 
 /* ── Layer loading ── */
@@ -2749,16 +3606,19 @@ async function loadLayerRules(projectId) {
 
 async function loadProjectLayers(projectId, target = 'main') {
   const payload = await api(`/projects/${encodeURIComponent(projectId)}/layers`);
-  const normalized = normalizeLayersPayload(payload);
+  const normalized = normalizeLayersPayload(payload, { sourceProjectId: projectId });
+  publishState.projectLayerCatalog[projectId] = normalized;
   if (target === 'main') {
     publishState.mainLayers = normalized;
+    publishState.extraLayers = [];
     publishState.mainRules = await loadLayerRules(projectId);
-    renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+    publishState.initialVisibility = Object.fromEntries(normalized.map((layer) => [getLayerKey(layer), true]));
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     // Default visibility = on, but DO NOT force-check the per-row WFS toggle —
     // that would override the saved profile's per-layer `serveAsWfs` flag and
     // make every layer appear as WFS until the user toggles one (which then
     // re-renders all the others as unchecked, looking like a mass-deselect).
-    projectLayersList.querySelectorAll('input[type="checkbox"][data-layer-name]').forEach((el) => { el.checked = true; });
+    projectLayersList.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => { el.checked = true; });
     refreshExtraSections();
     return;
   }
@@ -2948,21 +3808,31 @@ function bindSearchSourceEvents() {
 function openPublishModal() {
   if (publishModal) {
     publishModal.hidden = false;
-    publishModal.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+  clearPublishStatusError();
+  document.body.classList.add('publish-editor-open');
   refreshExtraSections();
   // Ensure controls textarea reflects checkboxes when no saved controls yet
   if (controlsJsonInput && !controlsJsonInput.value.trim()) syncControlsFromCheckboxes();
+  setPublishModalTab('layers');
+  renderPublishConfigSummary();
+  updatePublishModalFullscreenButton();
 }
 function closePublishModal() {
   if (publishModal) publishModal.hidden = true;
+  if (publishModal) publishModal.classList.remove('publish-editor--fullscreen');
+  document.body.classList.remove('publish-editor-open');
   // Clear preview iframe to remove residual
   if (previewIframe) previewIframe.src = '';
   if (previewOverlay) previewOverlay.style.display = '';
   publishState.editingProfileId = null;
+  clearPublishStatusError();
   publishState.groups = [];
   publishState.layerGroups = {};
+  publishState.initialVisibility = {};
   publishState.controls = {};
+  publishState.extraLayers = [];
+  updatePublishModalFullscreenButton();
 }
 
 async function preparePublishModal(editProfileId = null) {
@@ -2988,29 +3858,42 @@ async function preparePublishModal(editProfileId = null) {
       const mainProjectId = String(publishProjectSelect.value || '').trim();
       if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
 
-      // CRITICAL FIX: Removed .filter((l) => l.role === 'main') because layers don't have role saved
-      const savedMain = profile.layers || [];
-      const savedMainNames = savedMain.map((l) => String(l.name || '').trim());
+      const savedLayerRows = Array.isArray(profile.layers) ? profile.layers : [];
+      const savedMain = savedLayerRows.filter((layer) => String(layer?.role || 'main') !== 'background');
+      const savedExternal = savedMain.filter((layer) => {
+        const srcPid = String(layer?.sourceProjectId || '').trim();
+        return srcPid && srcPid !== mainProjectId;
+      });
+      for (const layer of savedExternal) {
+        const srcPid = String(layer?.sourceProjectId || '').trim();
+        const layerName = String(layer?.name || '').trim();
+        if (!srcPid || !layerName) continue;
+        const externalLayer = {
+          key: makeLayerKey(srcPid, layerName),
+          name: layerName,
+          sourceProjectId: srcPid,
+          geometry: String(layer?.geometryType || '').trim()
+        };
+        if (!publishState.extraLayers.some((row) => getLayerKey(row) === externalLayer.key)) {
+          publishState.extraLayers.push(externalLayer);
+        }
+      }
       savedMain.forEach((layer) => {
-        const key = String(layer?.name || '').trim();
+        const key = makeLayerKey(String(layer?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(layer?.name || '').trim());
         if (!key) return;
         publishState.mainRules[key] = {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
           wfsStyle: layer?.wfsStyle || null,
+          designerOptions: layer?.designerOptions && typeof layer.designerOptions === 'object'
+            ? JSON.parse(JSON.stringify(layer.designerOptions))
+            : (publishState.mainRules[key]?.designerOptions || {}),
           attributes: Array.isArray(layer?.attributes) ? JSON.parse(JSON.stringify(layer.attributes)) : (publishState.mainRules[key]?.attributes || []),
           searchable: layer?.searchable === true,
           editable: layer?.editable !== false,
           geometryType: String(layer?.geometryType || publishState.mainRules[key]?.geometryType || '').trim() || null
         };
       });
-      // Respect saved visibility flag (default true)
-      const visibleSet = new Set(savedMain.filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible)).map((l) => String(l.name || '').trim()));
-      // Re-render so the per-row WFS toggle reflects the saved `serveAsWfs`
-      // (loadProjectLayers rendered the list before we merged the saved rules).
-      renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
-      setCheckedLayerNames(projectLayersList, Array.from(visibleSet));
-
       // Background project
       const bgProjectId = profile.backgroundProjectId || '';
       if (backgroundProjectSelect) backgroundProjectSelect.value = bgProjectId;
@@ -3026,11 +3909,34 @@ async function preparePublishModal(editProfileId = null) {
             .filter((b) => b && b.type === 'layer' && b.name)
             .map((b) => String(b.name));
         }
-        setCheckedLayerNames(backgroundLayersList, savedBgNames);
+        if (!savedBgNames.length) {
+          savedBgNames = savedLayerRows
+            .filter((layer) => String(layer?.role || '').trim() === 'background')
+            .map((layer) => String(layer?.name || '').trim())
+            .filter(Boolean);
+        }
+        const savedBgKeys = (publishState.backgroundLayers || [])
+          .filter((layer) => savedBgNames.includes(String(layer?.name || '').trim()))
+          .map((layer) => getLayerKey(layer));
+        setCheckedLayerNames(backgroundLayersList, savedBgKeys);
       }
 
+      const includedSet = new Set(savedMain
+        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim()))
+        .filter(Boolean));
+      const visibleSet = new Set(savedMain
+        .filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible))
+        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim())));
+
+      publishState.initialVisibility = {};
+      includedSet.forEach((key) => {
+        publishState.initialVisibility[key] = visibleSet.has(key);
+      });
+
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, Array.from(includedSet));
+
       // Default background
-      publishState.defaultBackgroundKey = profile.defaultBackgroundKey || 'none';
       refreshBackgroundOptions();
 
       // Features
@@ -3149,14 +4055,23 @@ async function preparePublishModal(editProfileId = null) {
     if (extraJsonInput) extraJsonInput.value = '';
     // Reset features to defaults
     if (featureSearch) featureSearch.checked = true;
-    if (featureSearchGlobal) if (featureView3D) featureView3D.checked = true;
+    if (featureSearchGlobal) featureSearchGlobal.checked = false;
+    if (featureView3D) featureView3D.checked = true;
     if (featureEditing) featureEditing.checked = true;
     if (featureIdentify) featureIdentify.checked = true;
     if (featureLayerTree) featureLayerTree.checked = true;
     if (featureLegend) featureLegend.checked = true;
-    if (featureMeasurement) if (featurePrint) featurePrint.checked = true;
+    if (featureMeasurement) featureMeasurement.checked = false;
+    if (featurePrint) featurePrint.checked = true;
     if (featureMapTip) featureMapTip.checked = true;
-    if (featureShare) if (featureRedlining) if (featureBookmark) if (featureHeightProfile) if (featureDxfExport) if (featureAttributeTable) if (featureRouting) // Reset tool config
+    if (featureShare) featureShare.checked = false;
+    if (featureRedlining) featureRedlining.checked = false;
+    if (featureBookmark) featureBookmark.checked = false;
+    if (featureHeightProfile) featureHeightProfile.checked = false;
+    if (featureDxfExport) featureDxfExport.checked = false;
+    if (featureAttributeTable) featureAttributeTable.checked = false;
+    if (featureRouting) featureRouting.checked = false;
+    // Reset tool config
     if (cfgShareUrl) cfgShareUrl.value = '';
     if (cfgRoutingUrl) cfgRoutingUrl.value = '';
     if (cfgElevationUrl) cfgElevationUrl.value = '';
@@ -3275,9 +4190,10 @@ publishProjectSelect?.addEventListener('change', async () => {
   const projectId = String(publishProjectSelect.value || '').trim();
   if (!projectId) {
     projectLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_project_selected'))}</p>`;
+    schedulePreviewRefresh();
     return;
   }
-  try { await loadProjectLayers(projectId, 'main'); } catch (err) { addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'); }
+  try { await loadProjectLayers(projectId, 'main'); schedulePreviewRefresh(); } catch (err) { addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'); }
 });
 
 backgroundProjectSelect?.addEventListener('change', async () => {
@@ -3285,12 +4201,16 @@ backgroundProjectSelect?.addEventListener('change', async () => {
   if (!projectId) {
     backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_bg_selected'))}</p>`;
     refreshBackgroundOptions();
+    schedulePreviewRefresh();
     return;
   }
-  try { await loadProjectLayers(projectId, 'background'); } catch (err) { addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'); }
+  try { await loadProjectLayers(projectId, 'background'); schedulePreviewRefresh(); } catch (err) { addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'); }
 });
 
-backgroundLayersList?.addEventListener('change', () => { refreshBackgroundOptions(); });
+backgroundLayersList?.addEventListener('change', () => {
+  refreshBackgroundOptions();
+  schedulePreviewRefresh();
+});
 
 projectLayersList?.addEventListener('change', (event) => {
   const target = event.target;
@@ -3306,14 +4226,24 @@ projectLayersList?.addEventListener('change', (event) => {
     
     // Re-render to update tags and button colors
     const checkedNames = getCheckedLayerNames(projectLayersList);
-    renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     setCheckedLayerNames(projectLayersList, checkedNames);
     renderLayerAssignments();
+    schedulePreviewRefresh();
     return;
   }
 
-  if (!target.hasAttribute('data-layer-name')) return;
+  if (target.hasAttribute('data-layer-visible')) {
+    const layerKey = String(target.getAttribute('data-layer-visible') || '').trim();
+    if (!layerKey) return;
+    publishState.initialVisibility[layerKey] = target.checked;
+    schedulePreviewRefresh();
+    return;
+  }
+
+  if (!target.hasAttribute('data-layer-include')) return;
   renderLayerAssignments();
+  schedulePreviewRefresh();
 });
 
 projectLayersList?.addEventListener('click', (event) => {
@@ -3345,12 +4275,14 @@ defaultBackgroundList?.addEventListener('change', (event) => {
         existing.remove();
       }
     });
+    schedulePreviewRefresh();
   }
 });
 
 publishNowBtn?.addEventListener('click', async () => {
   const mapName = String(publishName?.value || '').trim();
   const mapDescription = String(publishDescription?.value || '').trim();
+  clearPublishStatusError();
   if (!mapName) {
     if (publishNameError) { publishNameError.textContent = t('Qtiler2Origo.name_required'); publishNameError.style.display = ''; }
     publishName?.focus();
@@ -3369,21 +4301,28 @@ publishNowBtn?.addEventListener('click', async () => {
   }
 
   const projectId = String(publishProjectSelect.value || '').trim();
-  if (!projectId) { addLog(t('Qtiler2Origo.log_error', { msg: 'project required' }), 'error'); return; }
-  const layerNames = getCheckedLayerNames(projectLayersList);
-  const allLayerNames = Array.isArray(publishState.mainLayers) ? publishState.mainLayers.map((l) => l.name) : [];
-  if (!allLayerNames.length) { addLog(t('Qtiler2Origo.log_error', { msg: 'no project layers available' }), 'error'); return; }
+  if (!projectId) { showPublishStatusError('Select a main project before publishing.', 'layers'); return; }
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) { showPublishStatusError('No project layers are available. Check project access or reload the modal.', 'layers'); return; }
 
-  // Checkboxes represent "active on map start"; all layers are still published.
-  const checkedSet = new Set(layerNames);
-  const layersPayload = allLayerNames.map((name) => ({
-    name,
-    visible: checkedSet.has(name),
-    group: String(publishState.layerGroups[name] || 'root').trim() || 'root'
-  }));
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  if (!selectedLayers.length) { showPublishStatusError('Select at least one main layer to publish.', 'layers'); return; }
+
+  const layersPayload = selectedLayers.map((layer) => {
+    const key = getLayerKey(layer);
+    return {
+      name: layer.name,
+      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      visible: publishState.initialVisibility[key] !== false,
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+    };
+  });
 
   const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
-  const backgroundLayerNames = getCheckedLayerNames(backgroundLayersList);
+  const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+    .map((layer) => String(layer?.name || '').trim())
+    .filter(Boolean);
   refreshBackgroundOptions();
   const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
     key: item.key, type: item.type, title: item.title,
@@ -3392,7 +4331,10 @@ publishNowBtn?.addEventListener('click', async () => {
     isDefault: item.key === publishState.defaultBackgroundKey
   }));
   const layerRules = {};
-  allLayerNames.forEach((name) => { layerRules[name] = publishState.mainRules[name] || { searchable: false, editable: false }; });
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
 
   publishNowBtn.disabled = true;
   try {
@@ -3455,7 +4397,7 @@ publishNowBtn?.addEventListener('click', async () => {
       if (publishNameError) { publishNameError.textContent = t('Qtiler2Origo.name_duplicate'); publishNameError.style.display = ''; }
       publishName?.focus();
     } else {
-      addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+      showPublishStatusError(String(err.message || 'Publish failed.'), 'layers');
     }
   } finally {
     publishNowBtn.disabled = false;
@@ -3641,15 +4583,32 @@ publishedProfilesList?.addEventListener('click', async (event) => {
 
 closePublishModalTop?.addEventListener('click', closePublishModal);
 closePublishModalBottom?.addEventListener('click', closePublishModal);
+publishModalToggleFullscreen?.addEventListener('click', () => {
+  publishModal?.classList.toggle('publish-editor--fullscreen');
+  updatePublishModalFullscreenButton();
+});
+publishModalTabButtons.forEach((button) => {
+  button.addEventListener('click', () => setPublishModalTab(button.getAttribute('data-publish-tab')));
+});
 
 /* ── Origo preview panel ── */
-document.getElementById('btn-load-map-preview')?.addEventListener('click', () => {
+function buildMapPreviewUrl() {
   const projectId = String(publishProjectSelect?.value || '').trim();
-  if (!projectId) { addLog('Selecciona un proyecto principal primero.', 'error'); return; }
-  // Pass the currently-visible layers so the preview WMS shows the right data
-  const visibleLayers = getCheckedLayerNames(projectLayersList);
-  const allLayers = Array.isArray(publishState.mainLayers) ? publishState.mainLayers.map((l) => l.name) : [];
-  const layersParam = (visibleLayers.length ? visibleLayers : allLayers).join(',');
+  if (!projectId) return '';
+  const selectedLayers = getSelectedPublishLayers();
+  const previewLayerSpecs = selectedLayers.map((layer) => ({
+    name: layer.name,
+    sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+    visible: publishState.initialVisibility[getLayerKey(layer)] !== false,
+    group: String(publishState.layerGroups?.[getLayerKey(layer)] || 'root').trim() || 'root'
+  }));
+  const layersParam = previewLayerSpecs.length ? JSON.stringify(previewLayerSpecs) : '';
+  const previewLayerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    previewLayerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+  const layerRulesParam = Object.keys(previewLayerRules).length ? JSON.stringify(previewLayerRules) : '';
   // Resolve the active background so the preview map uses the SAME tile grid
   // and CRS as the published profile, instead of OSM-only defaults.
   const bgKey = publishState.defaultBackgroundKey || '';
@@ -3676,9 +4635,11 @@ document.getElementById('btn-load-map-preview')?.addEventListener('click', () =>
   // levels for 3006) would clamp the preview no matter what the user typed.
   const minZoomStr = String(document.getElementById('origo-cfg-min-zoom')?.value || '').trim();
   const maxZoomStr = String(document.getElementById('origo-cfg-max-zoom')?.value || '').trim();
+  const controlsJson = JSON.stringify(getNormalizedControlsArray());
   const qs = [
     `project=${encodeURIComponent(projectId)}`,
     layersParam ? `layers=${encodeURIComponent(layersParam)}` : '',
+    layerRulesParam ? `layerRules=${encodeURIComponent(layerRulesParam)}` : '',
     bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
     bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
     bgKey ? `bgKey=${encodeURIComponent(bgKey)}` : '',
@@ -3687,12 +4648,43 @@ document.getElementById('btn-load-map-preview')?.addEventListener('click', () =>
     extentStr ? `extent=${encodeURIComponent(extentStr)}` : '',
     centerCrs ? `centerCrs=${encodeURIComponent(centerCrs)}` : '',
     minZoomStr ? `minZoom=${encodeURIComponent(minZoomStr)}` : '',
-    maxZoomStr ? `maxZoom=${encodeURIComponent(maxZoomStr)}` : ''
+    maxZoomStr ? `maxZoom=${encodeURIComponent(maxZoomStr)}` : '',
+    controlsJson && controlsJson !== '[]' ? `controls=${encodeURIComponent(controlsJson)}` : ''
   ].filter(Boolean).join('&');
-  const src = `/plugins/Qtiler2Origo/api/preview-page?${qs}`;
+  return `/plugins/Qtiler2Origo/api/preview-page?${qs}`;
+}
+
+function loadMapPreview(options = {}) {
+  const { silent = false } = options;
+  const src = buildMapPreviewUrl();
+  if (!src) {
+    if (!silent) addLog('Selecciona un proyecto principal primero.', 'error');
+    return '';
+  }
   if (previewIframe) previewIframe.src = src;
   if (previewOverlay) previewOverlay.style.display = 'none';
-  addLog('Cargando mapa preview…', 'info');
+  if (!silent) addLog('Cargando mapa preview…', 'info');
+  renderPublishConfigSummary();
+  return src;
+}
+
+let publishPreviewRefreshTimer = null;
+function schedulePreviewRefresh() {
+  if (publishPreviewRefreshTimer) window.clearTimeout(publishPreviewRefreshTimer);
+  publishPreviewRefreshTimer = window.setTimeout(() => {
+    publishPreviewRefreshTimer = null;
+    if (activePublishTab === 'config') {
+      loadMapPreview({ silent: true });
+    }
+  }, 150);
+}
+
+document.getElementById('btn-load-map-preview')?.addEventListener('click', () => {
+  loadMapPreview();
+});
+openPreviewTabBtn?.addEventListener('click', () => {
+  const src = loadMapPreview({ silent: true });
+  if (src) window.open(src, '_blank', 'noopener,noreferrer');
 });
 
 // Listen for origo-loaded message from the preview iframe
@@ -3798,6 +4790,19 @@ ORIGO_CTRL_DEFS.forEach((def) => {
   document.getElementById(def.id)?.addEventListener('change', syncControlsFromCheckboxes);
 });
 
+[publishName, publishDescription, zoomInput, centerInput, extentInput, minZoomInput, maxZoomInput, controlsJsonInput, extraJsonInput]
+  .filter(Boolean)
+  .forEach((el) => {
+    el.addEventListener('input', () => {
+      renderPublishConfigSummary();
+      schedulePreviewRefresh();
+    });
+    el.addEventListener('change', () => {
+      renderPublishConfigSummary();
+      schedulePreviewRefresh();
+    });
+  });
+
 /* ── Tool card visual toggle (JS fallback for :has() support) ── */
 document.querySelectorAll('.Qtiler2Origo-tool-card input[type="checkbox"]').forEach((cb) => {
   const card = cb.closest('.Qtiler2Origo-tool-card');
@@ -3824,22 +4829,229 @@ Promise.all([
 
 /* --- WFS Style Editor Logic --- */
 let currentEditingWfsLayer = null;
+let currentStylePresets = [];
+let currentDetectedQgisStyle = null;
+
+function deepCloneStyle(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function getBuiltinStylePresets(geometryType) {
+  const family = geomFamilyOf(geometryType);
+  if (family === 'line') {
+    return [
+      {
+        key: 'builtin-line-solid',
+        title: 'Solid line',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]]
+      },
+      {
+        key: 'builtin-line-dashed',
+        title: 'Dashed line',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(217, 119, 6, 1)', width: 3, lineDash: [8, 6] } }]]
+      },
+      {
+        key: 'builtin-line-subtle',
+        title: 'Subtle gray',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(71, 85, 105, 0.9)', width: 1.5 } }]]
+      }
+    ];
+  }
+  if (family === 'polygon') {
+    return [
+      {
+        key: 'builtin-polygon-fill',
+        title: 'Filled polygon',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(59, 130, 246, 0.25)' }, stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]],
+        designer: { fillPattern: 'solid', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-slash-tight',
+        title: 'Slash hatch 45°',
+        description: 'Tight diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(37, 99, 235, 0.18)' }, stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]],
+        designer: { fillPattern: 'slash', fillPatternAngle: 45, fillPatternSpacing: 8, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-slash-wide',
+        title: 'Slash hatch 25°',
+        description: 'Wide separated lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(14, 165, 233, 0.15)' }, stroke: { color: 'rgba(3, 105, 161, 1)', width: 2 } }]],
+        designer: { fillPattern: 'slash', fillPatternAngle: 25, fillPatternSpacing: 16, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-backslash',
+        title: 'Backslash hatch',
+        description: 'Opposite diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(249, 115, 22, 0.14)' }, stroke: { color: 'rgba(194, 65, 12, 1)', width: 2 } }]],
+        designer: { fillPattern: 'backslash', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-horizontal',
+        title: 'Horizontal hatch',
+        description: 'Parallel horizontal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(99, 102, 241, 0.12)' }, stroke: { color: 'rgba(79, 70, 229, 1)', width: 2 } }]],
+        designer: { fillPattern: 'horizontal', fillPatternAngle: 0, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-vertical',
+        title: 'Vertical hatch',
+        description: 'Parallel vertical lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(236, 72, 153, 0.12)' }, stroke: { color: 'rgba(190, 24, 93, 1)', width: 2 } }]],
+        designer: { fillPattern: 'vertical', fillPatternAngle: 90, fillPatternSpacing: 12, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-cross',
+        title: 'Cross hatch',
+        description: 'Crossed diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(16, 185, 129, 0.16)' }, stroke: { color: 'rgba(5, 150, 105, 1)', width: 2 } }]],
+        designer: { fillPattern: 'cross', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-dots-tight',
+        title: 'Dense dots',
+        description: 'Small close dots',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(168, 85, 247, 0.18)' }, stroke: { color: 'rgba(126, 34, 206, 1)', width: 2 } }]],
+        designer: { fillPattern: 'dots', fillPatternAngle: 0, fillPatternSpacing: 8, fillPatternSize: 1.8 }
+      },
+      {
+        key: 'builtin-polygon-dots-wide',
+        title: 'Wide dots',
+        description: 'Separated larger dots',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(244, 114, 182, 0.18)' }, stroke: { color: 'rgba(190, 24, 93, 1)', width: 2 } }]],
+        designer: { fillPattern: 'dots', fillPatternAngle: 0, fillPatternSpacing: 16, fillPatternSize: 3.5 }
+      },
+      {
+        key: 'builtin-polygon-outline',
+        title: 'Outline only',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(15, 23, 42, 0.95)', width: 2.5 } }]],
+        designer: { fillPattern: 'outline', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      }
+    ];
+  }
+  return [];
+}
+
+function getQgisStylePresets(rawStyle, geometryType) {
+  if (!rawStyle || typeof rawStyle !== 'object') return [];
+  const style = getSimplifiedQgisStyle(rawStyle, geometryType);
+  if (!style) return [];
+  const designer = getDesignerOptionsFromQgisStyle(rawStyle);
+  return [{
+    key: 'qgis-detected-style',
+    title: 'QGIS style',
+    description: rawStyle.type === 'categorizedSymbol' ? 'Simplified from QGIS categorized renderer' : 'Imported from QGIS',
+    badge: 'QGIS',
+    style,
+    designer
+  }];
+}
+
+function buildStylePresets(geometryType, rawQgisStyle) {
+  return [...getQgisStylePresets(rawQgisStyle, geometryType), ...getBuiltinStylePresets(geometryType)];
+}
+
+function stylePresetPreviewSvg(preset, geometryType) {
+  const style = preset?.style;
+  try {
+    const family = geomFamilyOf(geometryType);
+    if ((family === 'polygon' || family === 'generic') && preset?.designer?.fillPattern) {
+      const rule = unwrapPrimaryStyleRule(style);
+      const fillColor = String(rule?.fill?.color || 'rgba(59, 130, 246, 0.25)');
+      const strokeColor = String(rule?.stroke?.color || 'rgba(37, 99, 235, 1)');
+      const strokeWidth = Number(rule?.stroke?.width || 2);
+      const dash = Array.isArray(rule?.stroke?.lineDash) ? ` stroke-dasharray="${rule.stroke.lineDash.join(' ')}"` : '';
+      const fillValue = preset.designer.fillPattern === 'outline' ? 'rgba(0,0,0,0)' : fillColor;
+      const patternFill = buildSvgPatternFill(fillValue, strokeColor, strokeWidth, preset.designer);
+      return `<svg viewBox="0 0 240 120" aria-hidden="true">${patternFill.defs}<path d="M24 88 L72 30 L150 24 L216 74 L176 94 L70 92 Z" fill="${patternFill.fill}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${dash} /></svg>`;
+    }
+    const rules = typeof origoStyleToRules === 'function'
+      ? origoStyleToRules(Array.isArray(style) ? style : [style])
+      : [];
+    if (Array.isArray(rules) && rules.length) {
+      return rulePreviewSampleSvg(rules[0], family);
+    }
+  } catch {}
+  return stylePreviewSvg(geometryType);
+}
+
+function renderStylePresetGallery(geometryType) {
+  if (!wfsStylePresets || !wfsStylePresetsSection || !wfsStylePresetsSelect) return;
+  if (!Array.isArray(currentStylePresets) || !currentStylePresets.length) {
+    wfsStylePresets.innerHTML = '';
+    wfsStylePresetsSelect.innerHTML = '<option value="">Selecciona un preset…</option>';
+    wfsStylePresetsSection.hidden = true;
+    return;
+  }
+  wfsStylePresetsSection.hidden = false;
+  wfsStylePresetsSelect.innerHTML = ['<option value="">Selecciona un preset…</option>']
+    .concat(currentStylePresets.map((preset, index) => `<option value="${index}">${escapeHtml(preset.title || `Preset ${index + 1}`)}${preset.badge ? ` (${escapeHtml(preset.badge)})` : ''}</option>`))
+    .join('');
+  const preset = currentStylePresets[0];
+  wfsStylePresets.innerHTML = preset ? `
+    <article class="Qtiler2Origo-style-preset">
+      <div class="Qtiler2Origo-style-preset__sample">${stylePresetPreviewSvg(preset, geometryType)}</div>
+      <div class="Qtiler2Origo-style-preset__meta">
+        <strong>${escapeHtml(preset.title || 'Preset')}</strong>
+        <small>${escapeHtml(preset.description || '')}</small>
+        <span class="Qtiler2Origo-style-preset__badge">${escapeHtml(preset.badge || 'Preset')}</span>
+      </div>
+    </article>
+  ` : '';
+}
+
+function applyStylePreset(preset) {
+  if (!preset || !preset.style) return;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const style = deepCloneStyle(preset.style);
+  applyStyleDefinitionToDesigner(style, geometryType);
+  applyDesignerPatternOptions(preset?.designer || { fillPattern: 'solid' });
+  try {
+    if (typeof origoStyleToRules === 'function') {
+      currentRules = origoStyleToRules(Array.isArray(style) ? style : [style]);
+      renderRulesPanel();
+    }
+  } catch {}
+  if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
+  try { if (typeof setJsonEditorValue === 'function') setJsonEditorValue(JSON.stringify(style, null, 2)); } catch {}
+  syncStylePreview();
+}
 
 function populateStyleCopySelect(currentLayer) {
   if (!wfsStyleCopySelect) return;
   wfsStyleCopySelect.innerHTML = `<option value="">${t('Qtiler2Origo.wfs_copy_layer')}</option>`;
   
   // Find all layers in projectLayersList that have a style (either in mainRules or a default vector)
-  const optionLayers = (publishState.mainLayers || []).filter(l => {
-    const lName = l.name || l.title;
-    return lName && lName !== currentLayer && isVectorGeometry(getLayerGeometryType(lName));
+  const optionLayers = getAllPublishLayers().filter((layer) => {
+    const layerKey = getLayerKey(layer);
+    return layerKey && layerKey !== currentLayer && isVectorGeometry(getLayerGeometryType(layerKey));
   });
 
   for (const l of optionLayers) {
-    const lName = l.name || l.title;
+    const lName = getLayerKey(l);
     const opt = document.createElement('option');
     opt.value = lName;
-    opt.textContent = lName;
+    opt.textContent = l.sourceProjectId && l.sourceProjectId !== String(publishProjectSelect?.value || '').trim()
+      ? `${l.name} [${l.sourceProjectId}]`
+      : l.name;
     wfsStyleCopySelect.appendChild(opt);
   }
 }
@@ -3849,6 +5061,9 @@ function openStyleEditor(layerName) {
   currentRuleIndex = 0;
   const geometryType = getLayerGeometryType(layerName);
   if (!isVectorGeometry(geometryType)) return;
+  currentDetectedQgisStyle = null;
+  currentStylePresets = buildStylePresets(geometryType, null);
+  renderStylePresetGallery(geometryType);
 
   if (wfsStyleLayerTitle) wfsStyleLayerTitle.innerText = layerName;
   if (wfsStyleGeometryBadge) {
@@ -3867,45 +5082,58 @@ function openStyleEditor(layerName) {
   renderAttributesPanel();
   const existingStyle = existingRules.wfsStyle || defaultStyleDefinition(geometryType);
   applyStyleDefinitionToDesigner(existingStyle, geometryType);
+  applyDesignerPatternOptions(existingRules?.designerOptions || { fillPattern: 'solid' });
   currentLayerGeomFamily = geomFamilyOf(geometryType);
   try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules(Array.isArray(existingStyle) ? existingStyle : [existingStyle]); renderRulesPanel(); } } catch(e){}
   if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(existingStyle, null, 2);
   
-  // Default to JSON tab if using complex Array syntax
-  if (Array.isArray(existingStyle)) {
-    setStyleEditorTab('json');
-  } else {
-    setStyleEditorTab('designer');
-  }
+  setStyleEditorTab('designer');
   syncStylePreview();
 
-  if (!existingRules.wfsStyle) {
-    const projectId = String(publishProjectSelect?.value || '').trim();
-    if (projectId && wfsStyleJsonEditor) {
+  const projectId = getLayerProjectId(layerName);
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  if (projectId && wfsStyleJsonEditor) {
+    if (!existingRules.wfsStyle) {
       wfsStyleJsonEditor.value = t('Qtiler2Origo.loading_style') || 'Loading detected style from QGIS…';
-      fetch(`/Qtiler2Origo/layer-style?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`)
-        .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
-        .then((data) => {
-          const style = data && data.style ? data.style : defaultStyleDefinition(geometryType);
-          applyStyleDefinitionToDesigner(style, geometryType);
-          try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules(Array.isArray(style) ? style : [style]); renderRulesPanel(); } } catch(e){}
-          if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
-          if (Array.isArray(style)) setStyleEditorTab('json');
-          syncStylePreview();
-        })
-        .catch(() => {
-          if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(defaultStyleDefinition(geometryType), null, 2);
-          try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules([defaultStyleDefinition(geometryType)]); renderRulesPanel(); } } catch(e){}
-          syncStylePreview();
-        });
     }
+    fetch(`/Qtiler2Origo/layer-style?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(sourceLayerName)}`)
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+      .then((data) => {
+        currentDetectedQgisStyle = data && data.supported === false ? null : (data?.style || null);
+        currentStylePresets = buildStylePresets(geometryType, currentDetectedQgisStyle);
+        renderStylePresetGallery(geometryType);
+        if (existingRules.wfsStyle) return;
+        const qgisDesignerOptions = currentDetectedQgisStyle ? getDesignerOptionsFromQgisStyle(currentDetectedQgisStyle) : { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') };
+        const style = currentDetectedQgisStyle
+          ? (getSimplifiedQgisStyle(currentDetectedQgisStyle, geometryType) || defaultStyleDefinition(geometryType))
+          : defaultStyleDefinition(geometryType);
+        applyStyleDefinitionToDesigner(style, geometryType);
+        applyDesignerPatternOptions(qgisDesignerOptions);
+        try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules(Array.isArray(style) ? style : [style]); renderRulesPanel(); } } catch(e){}
+        if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
+        setStyleEditorTab('designer');
+        syncStylePreview();
+      })
+      .catch(() => {
+        currentDetectedQgisStyle = null;
+        currentStylePresets = buildStylePresets(geometryType, null);
+        renderStylePresetGallery(geometryType);
+        if (existingRules.wfsStyle) return;
+        if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(defaultStyleDefinition(geometryType), null, 2);
+        applyDesignerPatternOptions({ fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+        try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules([defaultStyleDefinition(geometryType)]); renderRulesPanel(); } } catch(e){}
+        syncStylePreview();
+      });
   }
 
-  wfsStyleModal?.classList.add('is-active');
+  openManagedModal(wfsStyleModal, wfsStyleFullscreenBtn);
 }
 
 function closeStyleEditor() {
-  wfsStyleModal?.classList.remove('is-active');
+  closeRuleStyleEditor();
+  closeManagedModal(wfsStyleModal, wfsStyleFullscreenBtn);
+  currentDesignerRuleIndex = null;
+  updateDesignerRuleModeNotice();
   currentEditingWfsLayer = null;
 }
 
@@ -3927,10 +5155,14 @@ function saveStyleEditor() {
     publishState.mainRules[layerName].wfsStyle = styleObj;
     publishState.mainRules[layerName].attributes = JSON.parse(JSON.stringify(currentAttributes));
     publishState.mainRules[layerName].geometryType = geometryType || null;
+    publishState.mainRules[layerName].designerOptions = {
+      ...(publishState.mainRules[layerName].designerOptions || {}),
+      ...getDesignerPatternOptions()
+    };
 
     const checkedNames = getCheckedLayerNames(projectLayersList);
     closeStyleEditor();
-    renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     setCheckedLayerNames(projectLayersList, checkedNames);
   } catch (err) {
     if (wfsStyleError) {
@@ -3944,12 +5176,52 @@ wfsStyleTabButtons.forEach((button) => {
   button.addEventListener('click', () => setStyleEditorTab(button.getAttribute('data-style-tab')));
 });
 
-[wfsStyleShape, wfsStyleFillColor, wfsStyleFillOpacity, wfsStyleStrokeColor, wfsStyleStrokeOpacity, wfsStyleStrokeWidth, wfsStyleRadius, wfsStyleDash]
+wfsStyleFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(wfsStyleModal, wfsStyleFullscreenBtn);
+});
+
+wfsRuleEditorFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+});
+
+wfsStylePresetsSelect?.addEventListener('change', () => {
+  const index = Number(wfsStylePresetsSelect.value);
+  if (!Number.isInteger(index) || !currentStylePresets[index] || !wfsStylePresets) return;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const preset = currentStylePresets[index];
+  wfsStylePresets.innerHTML = `
+    <article class="Qtiler2Origo-style-preset">
+      <div class="Qtiler2Origo-style-preset__sample">${stylePresetPreviewSvg(preset, geometryType)}</div>
+      <div class="Qtiler2Origo-style-preset__meta">
+        <strong>${escapeHtml(preset.title || 'Preset')}</strong>
+        <small>${escapeHtml(preset.description || '')}</small>
+        <span class="Qtiler2Origo-style-preset__badge">${escapeHtml(preset.badge || 'Preset')}</span>
+      </div>
+    </article>
+  `;
+});
+
+wfsStylePresetsApply?.addEventListener('click', () => {
+  const index = Number(wfsStylePresetsSelect?.value);
+  if (!Number.isInteger(index) || !currentStylePresets[index]) return;
+  applyStylePreset(currentStylePresets[index]);
+});
+
+[wfsStyleShape, wfsStyleFillColor, wfsStyleFillOpacity, wfsStyleStrokeColor, wfsStyleStrokeOpacity, wfsStyleStrokeWidth, wfsStyleRadius, wfsStyleDash, wfsStylePatternAngle, wfsStylePatternSpacing, wfsStylePatternSize, wfsStylePatternTransparent]
   .filter(Boolean)
   .forEach((input) => {
     input.addEventListener('input', syncStylePreview);
     input.addEventListener('change', syncStylePreview);
   });
+
+wfsStyleFillPattern?.addEventListener('input', () => {
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+  syncStylePreview();
+});
+wfsStyleFillPattern?.addEventListener('change', () => {
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+  syncStylePreview();
+});
 
 wfsStyleResetBtn?.addEventListener('click', () => {
   const ok = window.confirm(t('Qtiler2Origo.wfs_reset_confirm'));
@@ -3957,6 +5229,7 @@ wfsStyleResetBtn?.addEventListener('click', () => {
   const geometryType = getLayerGeometryType(currentEditingWfsLayer);
   const style = defaultStyleDefinition(geometryType);
   applyStyleDefinitionToDesigner(style, geometryType);
+  applyDesignerPatternOptions({ fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
   if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
   // Also reset the rules tab to a single default rule built from the basic style
   try {
@@ -4008,6 +5281,8 @@ wfsStyleCopySelect?.addEventListener('change', () => {
    ====================================================================== */
 let currentRules = [];
 let currentRuleIndex = 0; // Index of the rule currently shown in the dropdown-driven editor
+let currentRuleEditorIndex = null;
+let currentDesignerRuleIndex = null;
 let currentAttributes = []; // [{name, title, url}, ...]
 let currentLayerFields = []; // [{name, type}, ...]
 let currentLayerGeomFamily = 'point'; // point|line|polygon
@@ -4096,6 +5371,119 @@ const rulesCopySelect = document.getElementById('wfs-rules-copy-select');
 const svgPickerModal = document.getElementById('svg-picker-modal');
 const svgPickerGrid = document.getElementById('svg-picker-grid');
 const svgPickerSearch = document.getElementById('svg-picker-search');
+const svgPickerFullscreenBtn = document.getElementById('svg-picker-fullscreen');
+
+svgPickerFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(svgPickerModal, svgPickerFullscreenBtn);
+});
+
+const managedModalState = new WeakMap();
+let managedModalOrder = 0;
+
+function getManagedModalEntry(modal) {
+  if (!modal) return null;
+  let entry = managedModalState.get(modal);
+  if (!entry) {
+    entry = { offsetX: 0, offsetY: 0, zIndex: 0 };
+    managedModalState.set(modal, entry);
+  }
+  return entry;
+}
+
+function applyManagedModalState(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!modal || !entry) return;
+  modal.style.zIndex = entry.zIndex ? String(entry.zIndex) : '';
+  modal.style.setProperty('--qt-modal-offset-x', `${entry.offsetX || 0}px`);
+  modal.style.setProperty('--qt-modal-offset-y', `${entry.offsetY || 0}px`);
+}
+
+function resetManagedModalState(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!entry) return;
+  entry.offsetX = 0;
+  entry.offsetY = 0;
+  applyManagedModalState(modal);
+}
+
+function bringManagedModalToFront(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!entry) return;
+  managedModalOrder += 1;
+  entry.zIndex = 2000 + managedModalOrder * 10;
+  applyManagedModalState(modal);
+}
+
+function updateManagedModalFullscreenButton(modal, button) {
+  if (!modal || !button) return;
+  const isFullscreen = modal.classList.contains('Qtiler2Origo-modal--fullscreen');
+  button.textContent = isFullscreen ? 'Windowed' : 'Full screen';
+  button.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+}
+
+function toggleManagedModalFullscreen(modal, button) {
+  if (!modal) return;
+  const enabled = modal.classList.toggle('Qtiler2Origo-modal--fullscreen');
+  if (modal === wfsStyleModal) {
+    modal.classList.toggle('Qtiler2Origo-style-modal--fullscreen', enabled);
+  }
+  if (enabled) resetManagedModalState(modal);
+  bringManagedModalToFront(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function openManagedModal(modal, button) {
+  if (!modal) return;
+  modal.classList.add('is-active');
+  bringManagedModalToFront(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function closeManagedModal(modal, button) {
+  if (!modal) return;
+  modal.classList.remove('is-active');
+  modal.classList.remove('Qtiler2Origo-modal--fullscreen');
+  if (modal === wfsStyleModal) {
+    modal.classList.remove('Qtiler2Origo-style-modal--fullscreen');
+  }
+  resetManagedModalState(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function enableManagedModal(modal) {
+  if (!modal || modal.dataset.qtManagedModal === 'true') return;
+  modal.dataset.qtManagedModal = 'true';
+  const header = modal.querySelector('.modal-card-head');
+  header?.classList.add('Qtiler2Origo-modal-drag-handle');
+  modal.addEventListener('pointerdown', () => bringManagedModalToFront(modal));
+  header?.addEventListener('pointerdown', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    if (modal.classList.contains('Qtiler2Origo-modal--fullscreen')) return;
+    if (event.button !== 0) return;
+    if (event.target.closest('button, .delete, input, select, textarea, a, label, summary')) return;
+    const entry = getManagedModalEntry(modal);
+    if (!entry) return;
+    const startX = event.clientX - entry.offsetX;
+    const startY = event.clientY - entry.offsetY;
+    bringManagedModalToFront(modal);
+    const onMove = (moveEvent) => {
+      entry.offsetX = moveEvent.clientX - startX;
+      entry.offsetY = moveEvent.clientY - startY;
+      applyManagedModalState(modal);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    event.preventDefault();
+  });
+}
+
+enableManagedModal(wfsStyleModal);
+enableManagedModal(wfsRuleEditorModal);
+enableManagedModal(svgPickerModal);
 
 function defaultRule(geomFamily) {
   const r = {
@@ -4345,12 +5733,12 @@ function loadSvgLibrary() {
 
 function openSvgPicker(targetCallback) {
   svgPickerTargetCb = targetCallback;
-  svgPickerModal?.classList.add('is-active');
+  openManagedModal(svgPickerModal, svgPickerFullscreenBtn);
   if (svgPickerSearch) svgPickerSearch.value = '';
   loadSvgLibrary().then(cats => renderSvgGrid(cats, ''));
 }
 function closeSvgPicker() {
-  svgPickerModal?.classList.remove('is-active');
+  closeManagedModal(svgPickerModal, svgPickerFullscreenBtn);
   svgPickerTargetCb = null;
 }
 window.closeSvgPicker = closeSvgPicker;
@@ -4376,13 +5764,8 @@ function renderSvgGrid(cats, filter) {
 }
 svgPickerSearch?.addEventListener('input', () => loadSvgLibrary().then(cats => renderSvgGrid(cats, svgPickerSearch.value)));
 
-function ruleCard(rule, idx) {
-  const card = document.createElement('div');
-  card.dataset.ruleIndex = String(idx);
-  card.style.cssText = 'border:1px solid #d0d7de;border-radius:6px;padding:0.6rem;background:#fafbfc';
-  // local i18n shortcut
+function buildRuleEditorMarkup(rule, idx) {
   const T = (k) => t('Qtiler2Origo.' + k);
-
   const fieldOptions = [`<option value="">${T('wfs_no_filter')}</option>`]
     .concat(currentLayerFields.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`)).join('');
   const ui = parseFilterToUi(rule.filter);
@@ -4394,10 +5777,10 @@ function ruleCard(rule, idx) {
     const isIcon = rule.point.mode === 'icon';
     geomHtml = `
       <div style="display:flex;gap:0.4rem;margin-bottom:0.4rem">
-        <label><input type="radio" name="ptmode-${idx}" value="circle" ${!isIcon ? 'checked' : ''}/> ${T('wfs_circle')}</label>
-        <label><input type="radio" name="ptmode-${idx}" value="icon" ${isIcon ? 'checked' : ''}/> ${T('wfs_svg_icon')}</label>
+        <label style="display:inline-flex;align-items:center;gap:6px"><input type="radio" name="ptmode-${idx}" value="circle" ${!isIcon ? 'checked' : ''}/> ${T('wfs_circle')}</label>
+        <label style="display:inline-flex;align-items:center;gap:6px"><input type="radio" name="ptmode-${idx}" value="icon" ${isIcon ? 'checked' : ''}/> ${T('wfs_svg_icon')}</label>
       </div>
-      <div data-ptpanel="circle" ${isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:end">
+      <div data-ptpanel="circle" ${isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
         <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="circle.fillNone" ${rule.point.circle.fillNone ? 'checked' : ''}/> ${T('wfs_no_fill')}</label>
         <label>${T('wfs_fill_color')}<input type="color" data-rk="circle.fill" value="${rule.point.circle.fill}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
         <label>${T('wfs_fill_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.fillOpacity" value="${rule.point.circle.fillOpacity}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
@@ -4406,8 +5789,8 @@ function ruleCard(rule, idx) {
         <label>${T('wfs_stroke_width')}<input type="number" step="0.5" min="0" max="10" data-rk="circle.strokeWidth" value="${rule.point.circle.strokeWidth}" /></label>
         <label style="grid-column:1/4">${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.strokeOpacity" value="${rule.point.circle.strokeOpacity}" /></label>
       </div>
-      <div data-ptpanel="icon" ${!isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:end">
-        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:48px;height:48px;border:1px solid #ccc;background:#fff;object-fit:contain"/></div>
+      <div data-ptpanel="icon" ${!isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
+        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:56px;height:56px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
         <button type="button" class="button small" data-rk="icon.pick">${T('wfs_pick_svg')}</button>
         <div></div>
         <label style="grid-column:1/4">${T('wfs_url')}<input type="text" style="width:100%" data-rk="icon.src" value="${rule.point.icon.src}" /></label>
@@ -4419,7 +5802,7 @@ function ruleCard(rule, idx) {
     `;
   } else if (currentLayerGeomFamily === 'line') {
     geomHtml = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <label>${T('wfs_color')}<input type="color" data-rk="stroke.color" value="${rule.stroke.color}" /></label>
         <label>${T('wfs_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="stroke.opacity" value="${rule.stroke.opacity}" /></label>
         <label>${T('wfs_width')}<input type="number" step="0.5" min="0" max="20" data-rk="stroke.width" value="${rule.stroke.width}" /></label>
@@ -4435,14 +5818,14 @@ function ruleCard(rule, idx) {
     const noFill = !!rule.fill.none;
     const noStroke = !!rule.stroke.none;
     geomHtml = `
-      <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:end">
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
         <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="fill.none" ${noFill ? 'checked' : ''}/> ${T('wfs_no_fill_only_stroke')}</label>
         <label>${T('wfs_fill_color')}<input type="color" data-rk="fill.color" value="${rule.fill.color}" ${noFill ? 'disabled' : ''}/></label>
         <label>${T('wfs_fill_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="fill.opacity" value="${rule.fill.opacity}" ${noFill ? 'disabled' : ''}/></label>
         <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="stroke.none" ${noStroke ? 'checked' : ''}/> ${T('wfs_no_stroke')}</label>
         <label>${T('wfs_stroke_color')}<input type="color" data-rk="stroke.color" value="${rule.stroke.color}" ${noStroke ? 'disabled' : ''}/></label>
         <label>${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="stroke.opacity" value="${rule.stroke.opacity}" ${noStroke ? 'disabled' : ''}/></label>
-        <label style="grid-column:1/4;display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:0">
+        <label style="grid-column:1/4;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0">
           <label>${T('wfs_stroke_width')}<input type="number" step="0.5" min="0" max="20" data-rk="stroke.width" value="${rule.stroke.width}" ${noStroke ? 'disabled' : ''}/></label>
           <label>${T('wfs_stroke_pattern')}<select data-rk="stroke.dash" ${noStroke ? 'disabled' : ''}>
             <option value="solid"${rule.stroke.dash === 'solid' ? ' selected' : ''}>${T('wfs_solid')}</option>
@@ -4467,55 +5850,55 @@ function ruleCard(rule, idx) {
   ` : '';
   const offsetYHtml = `<label>${T('wfs_label_offsety')}<input type="number" step="1" data-rk="lab.offsetY" value="${rule.label.offsetY ?? -14}" /></label>`;
 
-  card.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
-      <strong style="font-size:0.9rem">${T('wfs_rule')} ${idx + 1}</strong>
-      <div style="display:flex;gap:4px">
-        <button type="button" class="button small" data-rk="up" title="${T('wfs_move_up')}">↑</button>
-        <button type="button" class="button small" data-rk="down" title="${T('wfs_move_down')}">↓</button>
-        <button type="button" class="button small is-danger" data-rk="del" title="${T('wfs_delete')}">✕</button>
-      </div>
+  return `
+    <div class="Qtiler2Origo-rule-editor-shell" data-rule-editor-root="${idx}" data-rule-editor-index="${idx}">
+      <fieldset>
+        <legend>${T('wfs_filter')}</legend>
+        <div style="display:grid;grid-template-columns:2fr 1fr 2fr;gap:10px;align-items:end">
+          <label>${T('wfs_attr')}<select data-rk="f.field">${fieldOptions.replace(`value="${ui.field}"`, `value="${ui.field}" selected`)}</select></label>
+          <label>${T('wfs_op')}<select data-rk="f.op">${opOptions}</select></label>
+          <label>${T('wfs_value')}<input type="text" data-rk="f.value" value="${ui.value}" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>${T('wfs_symbol')}</legend>
+        <div style="display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;margin-bottom:10px">
+          <div class="Qtiler2Origo-rule-summary__sample">${rulePreviewSampleSvg(rule, currentLayerGeomFamily || 'polygon')}</div>
+          <div class="help" style="margin:0">${T('wfs_edit_visual_style')}</div>
+          <button type="button" class="button small is-link is-light" data-rk="stylebasic">${T('wfs_edit_visual_style')}</button>
+        </div>
+        ${geomHtml}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <label title="${T('wfs_visible_from_tip')}">${T('wfs_visible_from')}<input type="number" min="0" step="1" data-rk="r.maxScale" value="${rule.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+          <label title="${T('wfs_visible_to_tip')}">${T('wfs_visible_to')}<input type="number" min="0" step="1" data-rk="r.minScale" value="${rule.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend><label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" data-rk="lab.enabled" ${rule.label.enabled ? 'checked' : ''}/> ${T('wfs_label')}</label></legend>
+        <div style="display:grid;grid-template-columns:3fr 1fr;gap:10px;align-items:end">
+          <label>${T('wfs_text_help')}
+            <input type="text" data-rk="lab.text" value="${(rule.label.text || '').replace(/"/g,'&quot;')}" placeholder="${T('wfs_text_placeholder')}" />
+          </label>
+          <label>${T('wfs_insert_field')}
+            <select data-rk="lab.insertField"><option value="">--</option>${labelFieldOpts}</select>
+          </label>
+          <label>${T('wfs_color')}<input type="color" data-rk="lab.color" value="${rule.label.color}" /></label>
+          <label>${T('wfs_size')}<input type="number" min="6" max="48" data-rk="lab.size" value="${rule.label.size}" /></label>
+          ${placementHtml}
+          ${offsetYHtml}
+          <label title="${T('wfs_label_from_tip')}">${T('wfs_label_from')}<input type="number" min="0" step="1" data-rk="lab.maxScale" value="${rule.label.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+          <label title="${T('wfs_label_to_tip')}">${T('wfs_label_to')}<input type="number" min="0" step="1" data-rk="lab.minScale" value="${rule.label.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+        </div>
+      </fieldset>
     </div>
-
-    <fieldset style="border:1px dashed #c8d1da;padding:0.4rem;margin-bottom:0.4rem">
-      <legend style="font-size:0.8rem">${T('wfs_filter')}</legend>
-      <div style="display:grid;grid-template-columns:2fr 1fr 2fr;gap:4px;align-items:end">
-        <label>${T('wfs_attr')}<select data-rk="f.field">${fieldOptions.replace(`value="${ui.field}"`, `value="${ui.field}" selected`)}</select></label>
-        <label>${T('wfs_op')}<select data-rk="f.op">${opOptions}</select></label>
-        <label>${T('wfs_value')}<input type="text" data-rk="f.value" value="${ui.value}" /></label>
-      </div>
-    </fieldset>
-
-    <fieldset style="border:1px dashed #c8d1da;padding:0.4rem;margin-bottom:0.4rem">
-      <legend style="font-size:0.8rem">${T('wfs_symbol')}</legend>
-      ${geomHtml}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-        <label title="${T('wfs_visible_from_tip')}">${T('wfs_visible_from')}<input type="number" min="0" step="1" data-rk="r.maxScale" value="${rule.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-        <label title="${T('wfs_visible_to_tip')}">${T('wfs_visible_to')}<input type="number" min="0" step="1" data-rk="r.minScale" value="${rule.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-      </div>
-    </fieldset>
-
-    <fieldset style="border:1px dashed #c8d1da;padding:0.4rem">
-      <legend style="font-size:0.8rem"><label><input type="checkbox" data-rk="lab.enabled" ${rule.label.enabled ? 'checked' : ''}/> ${T('wfs_label')}</label></legend>
-      <div style="display:grid;grid-template-columns:3fr 1fr;gap:4px;align-items:end">
-        <label>${T('wfs_text_help')}
-          <input type="text" data-rk="lab.text" value="${(rule.label.text || '').replace(/"/g,'&quot;')}" placeholder="${T('wfs_text_placeholder')}" />
-        </label>
-        <label>${T('wfs_insert_field')}
-          <select data-rk="lab.insertField"><option value="">--</option>${labelFieldOpts}</select>
-        </label>
-        <label>${T('wfs_color')}<input type="color" data-rk="lab.color" value="${rule.label.color}" /></label>
-        <label>${T('wfs_size')}<input type="number" min="6" max="48" data-rk="lab.size" value="${rule.label.size}" /></label>
-        ${placementHtml}
-        ${offsetYHtml}
-        <label title="${T('wfs_label_from_tip')}">${T('wfs_label_from')}<input type="number" min="0" step="1" data-rk="lab.maxScale" value="${rule.label.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-        <label title="${T('wfs_label_to_tip')}">${T('wfs_label_to')}<input type="number" min="0" step="1" data-rk="lab.minScale" value="${rule.label.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-      </div>
-    </fieldset>
   `;
-  
-  // wire events
-  card.querySelectorAll('[data-rk]').forEach(el => {
+}
+
+function attachRuleEditorHandlers(root, idx) {
+  if (!root) return;
+  root.querySelectorAll('[data-rk]').forEach((el) => {
     const k = el.getAttribute('data-rk');
     const handle = (val) => updateRuleField(idx, k, val);
     if (el.tagName === 'INPUT' && el.type === 'checkbox') {
@@ -4527,6 +5910,106 @@ function ruleCard(rule, idx) {
       el.addEventListener('click', () => handle(true));
     }
   });
+  wireRuleRadios(root);
+}
+
+function updateDesignerRuleModeNotice() {
+  if (!wfsStyleRuleModeNote) return;
+  if (!Number.isInteger(currentDesignerRuleIndex)) {
+    wfsStyleRuleModeNote.hidden = true;
+    wfsStyleRuleModeNote.textContent = '';
+    return;
+  }
+  wfsStyleRuleModeNote.hidden = false;
+  wfsStyleRuleModeNote.textContent = t('Qtiler2Origo.wfs_rule_mode_note', { rule: String(currentDesignerRuleIndex + 1) });
+}
+
+function openBasicDesignerForRule(idx) {
+  if (!Number.isInteger(idx) || !currentRules[idx]) return;
+  currentDesignerRuleIndex = idx;
+  currentRuleIndex = idx;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const styleDef = rulesToOrigoStyle([currentRules[idx]]);
+  applyStyleDefinitionToDesigner(styleDef, geometryType);
+  applyDesignerPatternOptions(publishState.mainRules?.[currentEditingWfsLayer]?.designerOptions || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  closeRuleStyleEditor();
+  setStyleEditorTab('designer');
+  updateDesignerRuleModeNotice();
+  syncStylePreview();
+}
+
+function renderRuleEditorModal() {
+  if (!wfsRuleEditorModal || !wfsRuleEditorHost) return;
+  if (currentRuleEditorIndex == null || !currentRules[currentRuleEditorIndex]) {
+    closeRuleStyleEditor();
+    return;
+  }
+  const idx = currentRuleEditorIndex;
+  const rule = currentRules[idx];
+  if (wfsRuleEditorTitle) wfsRuleEditorTitle.textContent = `${idx + 1}`;
+  wfsRuleEditorHost.innerHTML = buildRuleEditorMarkup(rule, idx);
+  const root = wfsRuleEditorHost.querySelector(`[data-rule-editor-root="${idx}"]`);
+  attachRuleEditorHandlers(root, idx);
+  if (currentLayerFields.length) attachValueDatalistForRule(idx, root || wfsRuleEditorHost);
+}
+
+function openRuleStyleEditor(idx) {
+  if (!Number.isInteger(idx) || !currentRules[idx] || !wfsRuleEditorModal) return;
+  currentRuleEditorIndex = idx;
+  currentRuleIndex = idx;
+  renderRuleEditorModal();
+  openManagedModal(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+}
+
+function closeRuleStyleEditor() {
+  currentRuleEditorIndex = null;
+  closeManagedModal(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+}
+window.closeRuleStyleEditor = closeRuleStyleEditor;
+
+function ruleCard(rule, idx) {
+  const T = (k) => t('Qtiler2Origo.' + k);
+  const card = document.createElement('div');
+  card.dataset.ruleIndex = String(idx);
+  card.className = 'Qtiler2Origo-rule-summary';
+  const filterText = rule.filter || T('wfs_rule_default');
+  const labelText = rule.label && rule.label.enabled && rule.label.text ? rule.label.text : '';
+  const chips = [];
+  if (rule.maxScale || rule.minScale) chips.push(`${T('wfs_visible_from')} ${rule.maxScale || T('wfs_no_limit')} / ${T('wfs_visible_to')} ${rule.minScale || T('wfs_no_limit')}`);
+  if (labelText) chips.push(`${T('wfs_label')}: ${labelText}`);
+  card.innerHTML = `
+    <div class="Qtiler2Origo-rule-summary__head">
+      <strong>${T('wfs_rule')} ${idx + 1}</strong>
+      <div class="Qtiler2Origo-rule-summary__actions">
+        <button type="button" class="button small is-link is-light" data-rk="edit">${T('wfs_edit_rule')}</button>
+        <button type="button" class="button small" data-rk="up" title="${T('wfs_move_up')}">↑</button>
+        <button type="button" class="button small" data-rk="down" title="${T('wfs_move_down')}">↓</button>
+        <button type="button" class="button small is-danger" data-rk="del" title="${T('wfs_delete')}">✕</button>
+      </div>
+    </div>
+    <div class="Qtiler2Origo-rule-summary__details">
+      <div class="Qtiler2Origo-rule-summary__sample">${rulePreviewSampleSvg(rule, currentLayerGeomFamily || 'polygon')}</div>
+      <div class="Qtiler2Origo-rule-summary__meta">
+        <code>${escapeHtml(filterText)}</code>
+        <div class="Qtiler2Origo-rule-summary__chips">
+          ${chips.length ? chips.map((chip) => `<span class="Qtiler2Origo-rule-summary__chip">${escapeHtml(chip)}</span>`).join('') : `<span class="Qtiler2Origo-rule-summary__chip">${escapeHtml(T('wfs_symbol'))}</span>`}
+        </div>
+      </div>
+    </div>
+  `;
+  const details = card.querySelector('.Qtiler2Origo-rule-summary__details');
+  if (details) {
+    details.style.cursor = 'pointer';
+    details.addEventListener('click', () => openRuleStyleEditor(idx));
+  }
+  card.querySelectorAll('[data-rk]').forEach((el) => {
+    const k = el.getAttribute('data-rk');
+    if (k === 'edit') {
+      el.addEventListener('click', () => openRuleStyleEditor(idx));
+      return;
+    }
+    el.addEventListener('click', () => updateRuleField(idx, k, true));
+  });
   return card;
 }
 
@@ -4536,23 +6019,46 @@ function updateRuleField(idx, key, value) {
   
   if (key === 'del') {
     currentRules.splice(idx, 1);
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = null;
+    else if (Number.isInteger(currentRuleEditorIndex) && currentRuleEditorIndex > idx) currentRuleEditorIndex -= 1;
     if (currentRuleIndex >= currentRules.length) currentRuleIndex = Math.max(0, currentRules.length - 1);
     return renderRulesPanel();
   }
-  if (key === 'up' && idx > 0) { [currentRules[idx-1], currentRules[idx]] = [currentRules[idx], currentRules[idx-1]]; currentRuleIndex = idx - 1; return renderRulesPanel(); }
-  if (key === 'down' && idx < currentRules.length - 1) { [currentRules[idx+1], currentRules[idx]] = [currentRules[idx], currentRules[idx+1]]; currentRuleIndex = idx + 1; return renderRulesPanel(); }
+  if (key === 'up' && idx > 0) {
+    [currentRules[idx-1], currentRules[idx]] = [currentRules[idx], currentRules[idx-1]];
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = idx - 1;
+    else if (currentRuleEditorIndex === idx - 1) currentRuleEditorIndex = idx;
+    currentRuleIndex = idx - 1;
+    return renderRulesPanel();
+  }
+  if (key === 'down' && idx < currentRules.length - 1) {
+    [currentRules[idx+1], currentRules[idx]] = [currentRules[idx], currentRules[idx+1]];
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = idx + 1;
+    else if (currentRuleEditorIndex === idx + 1) currentRuleEditorIndex = idx;
+    currentRuleIndex = idx + 1;
+    return renderRulesPanel();
+  }
+  if (key === 'edit') {
+    openRuleStyleEditor(idx);
+    return;
+  }
+  if (key === 'stylebasic') {
+    openBasicDesignerForRule(idx);
+    return;
+  }
   
   if (key.startsWith('f.')) {
-    // Filter UI -> rebuild expression
-    const card = rulesContainer.children[idx];
-    const field = card.querySelector('[data-rk="f.field"]').value;
-    const op = card.querySelector('[data-rk="f.op"]').value;
-    const val = card.querySelector('[data-rk="f.value"]').value;
+    const editorRoot = document.querySelector(`[data-rule-editor-root="${idx}"]`);
+    if (!editorRoot) return;
+    const field = editorRoot.querySelector('[data-rk="f.field"]')?.value || '';
+    const op = editorRoot.querySelector('[data-rk="f.op"]')?.value || '==';
+    const val = editorRoot.querySelector('[data-rk="f.value"]')?.value || '';
     const sel = currentLayerFields.find(f => f.name === field);
     r.filter = field ? buildFilterFromUi(field, op, val, sel?.type) : '';
+    afterRuleChange();
     if (key === 'f.field') {
-      // Re-render to refresh operator list
       renderRulesPanel();
+      if (currentRuleEditorIndex === idx) renderRuleEditorModal();
     }
     return;
   }
@@ -4638,8 +6144,8 @@ function afterRuleChange() {
 }
 
 // Wire radio button group manually
-function wireRuleRadios() {
-  rulesContainer?.querySelectorAll('input[type=radio][name^="ptmode-"]').forEach(rb => {
+function wireRuleRadios(root = document) {
+  root?.querySelectorAll('input[type=radio][name^="ptmode-"]').forEach(rb => {
     rb.addEventListener('change', () => {
       const m = rb.name.match(/^ptmode-(\d+)$/);
       if (!m) return;
@@ -4680,15 +6186,11 @@ function renderRulesPanel() {
   }
   // Render only the active rule's card.
   rulesContainer.appendChild(ruleCard(currentRules[currentRuleIndex], currentRuleIndex));
-  wireRuleRadios();
-  // Attach value autocompletion datalist for the visible rule.
-  if (currentLayerFields.length) {
-    attachValueDatalistForRule(currentRuleIndex);
-  }
   // Sync JSON tab in background
   if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(rulesToOrigoStyle(currentRules), null, 2);
   // Live preview gallery (shows ALL rules, regardless of selected card).
   try { renderRulesPreviewGallery(); } catch {/* ignore */}
+  if (currentRuleEditorIndex != null) renderRuleEditorModal();
 }
 
 /* ──────────────────────────────────────────────────────────────────
@@ -4789,10 +6291,12 @@ rulesCopySelect?.addEventListener('change', () => {
 // Hook into openStyleEditor to initialize rule editor
 const _origOpenStyleEditor = openStyleEditor;
 openStyleEditor = function(layerName) {
+  currentRuleEditorIndex = null;
+  currentDesignerRuleIndex = null;
   _origOpenStyleEditor(layerName);
   const geomType = getLayerGeometryType(layerName);
   currentLayerGeomFamily = geomFamilyOf(geomType);
-  const projectId = String(publishProjectSelect?.value || '').trim();
+  const projectId = getLayerProjectId(layerName);
   
   // Initialize rules from existing wfsStyle or from JSON editor content
   const existingRules = publishState.mainRules[layerName] || {};
@@ -4806,7 +6310,8 @@ openStyleEditor = function(layerName) {
   populateRulesCopySelect(layerName);
   
   // Async: load fields for this layer (then re-render to populate dropdowns)
-  loadLayerFields(projectId, layerName).then(({ fields, geometryType }) => {
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  loadLayerFields(projectId, sourceLayerName).then(({ fields, geometryType }) => {
     currentLayerFields = fields;
     if (geometryType) {
       currentLayerGeomFamily = geomFamilyOf(geometryType);
@@ -4821,6 +6326,7 @@ openStyleEditor = function(layerName) {
   
   // Default to rules tab
   setStyleEditorTab('rules');
+  updateDesignerRuleModeNotice();
   renderRulesPanel();
 };
 
@@ -4831,6 +6337,33 @@ saveStyleEditor = function() {
   if (!layerName) return;
   const activeRules = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'rules' && !p.hidden);
   const activeJson = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'json' && !p.hidden);
+  const activeDesigner = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'designer' && !p.hidden);
+  if (activeDesigner && Number.isInteger(currentDesignerRuleIndex) && currentRules[currentDesignerRuleIndex]) {
+    try {
+      const geometryType = getLayerGeometryType(layerName);
+      const styleObj = buildStyleDefinitionFromDesigner(geometryType);
+      const convertedRule = (origoStyleToRules(styleObj) || [defaultRule(currentLayerGeomFamily)])[0] || defaultRule(currentLayerGeomFamily);
+      const previousRule = currentRules[currentDesignerRuleIndex] || defaultRule(currentLayerGeomFamily);
+      convertedRule.filter = previousRule.filter;
+      convertedRule.maxScale = previousRule.maxScale;
+      convertedRule.minScale = previousRule.minScale;
+      convertedRule.label = JSON.parse(JSON.stringify(previousRule.label || defaultRule(currentLayerGeomFamily).label));
+      currentRules[currentDesignerRuleIndex] = convertedRule;
+      currentRuleIndex = currentDesignerRuleIndex;
+      const reopenIndex = currentDesignerRuleIndex;
+      currentDesignerRuleIndex = null;
+      updateDesignerRuleModeNotice();
+      setStyleEditorTab('rules');
+      renderRulesPanel();
+      openRuleStyleEditor(reopenIndex);
+    } catch (err) {
+      if (wfsStyleError) {
+        wfsStyleError.innerText = (t('Qtiler2Origo.wfs_invalid_json') || 'Invalid JSON: ') + err.message;
+        wfsStyleError.classList.remove('is-hidden');
+      }
+    }
+    return;
+  }
   if (activeJson) {
     // Save FULL layer config from the JSON editor
     try {
@@ -4847,7 +6380,7 @@ saveStyleEditor = function() {
       if (parsed.geometryType) r.geometryType = parsed.geometryType;
       const checkedNames = getCheckedLayerNames(projectLayersList);
       closeStyleEditor();
-      renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
       setCheckedLayerNames(projectLayersList, checkedNames);
       setJsonEditorStatus(t('Qtiler2Origo.wfs_saved') || 'Guardado.', false);
     } catch (err) {
@@ -4865,7 +6398,7 @@ saveStyleEditor = function() {
     publishState.mainRules[layerName].geometryType = getLayerGeometryType(layerName) || null;
     const checkedNames = getCheckedLayerNames(projectLayersList);
     closeStyleEditor();
-    renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     setCheckedLayerNames(projectLayersList, checkedNames);
     return;
   }
@@ -4947,10 +6480,11 @@ document.getElementById('wfs-style-format-json')?.addEventListener('click', () =
    ====================================================================== */
 const _layerValuesCache = new Map(); // key: layer|field -> string[]
 function loadLayerValues(projectId, layerName, fieldName) {
-  const key = `${layerName}||${fieldName}`;
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  const key = `${projectId}||${sourceLayerName}||${fieldName}`;
   if (_layerValuesCache.has(key)) return Promise.resolve(_layerValuesCache.get(key));
-  if (!projectId || !layerName || !fieldName) return Promise.resolve([]);
-  return fetch(`/Qtiler2Origo/layer-values?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}&field=${encodeURIComponent(fieldName)}&limit=500`)
+  if (!projectId || !sourceLayerName || !fieldName) return Promise.resolve([]);
+  return fetch(`/Qtiler2Origo/layer-values?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(sourceLayerName)}&field=${encodeURIComponent(fieldName)}&limit=500`)
     .then(r => r.ok ? r.json() : { values: [] })
     .then(d => {
       const arr = Array.isArray(d.values) ? d.values : [];
@@ -4961,13 +6495,11 @@ function loadLayerValues(projectId, layerName, fieldName) {
 }
 
 function attachValueDatalistForRule(idx) {
-  // Find the rendered card by data-rule-index (only one card is visible at a time).
-  const card = rulesContainer?.querySelector(`[data-rule-index="${idx}"]`);
+  const card = document.querySelector(`[data-rule-editor-root="${idx}"]`);
   if (!card) return;
   const fieldSel = card.querySelector('[data-rk="f.field"]');
   const valueInput = card.querySelector('[data-rk="f.value"]');
   if (!fieldSel || !valueInput) return;
-  // Re-attach when the user picks a different field.
   if (!fieldSel.dataset.dlBound) {
     fieldSel.dataset.dlBound = '1';
     fieldSel.addEventListener('change', () => attachValueDatalistForRule(idx));
@@ -4977,7 +6509,7 @@ function attachValueDatalistForRule(idx) {
     valueInput.removeAttribute('list');
     return;
   }
-  const projectId = String(publishProjectSelect?.value || '').trim();
+  const projectId = getLayerProjectId(currentEditingWfsLayer);
   const dlId = `dl-rule-${idx}-${field.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   loadLayerValues(projectId, currentEditingWfsLayer, field).then(values => {
     let dl = document.getElementById(dlId);

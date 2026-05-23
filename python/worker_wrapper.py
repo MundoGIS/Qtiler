@@ -79,11 +79,16 @@ try:
         QgsProject, QgsMapSettings, 
         QgsMapRendererParallelJob, QgsRectangle, QgsCoordinateReferenceSystem
     )
-    from qgis.PyQt.QtCore import QSize, QEventLoop
+    from qgis.PyQt.QtCore import QSize, QEventLoop, Qt
     from qgis.PyQt.QtGui import QColor
 except ImportError as e:
     sys.stderr.write(f"ERROR IMPORTS QGIS: {e}\n")
     sys.exit(1)
+
+try:
+    Qt
+except Exception:
+    Qt = None
 
 # Optional extras for WMS legend / feature info (best-effort)
 try:
@@ -2462,6 +2467,53 @@ def process_task(params):
                 except Exception:
                     return [128, 128, 128, 255]
 
+            def _brush_style_to_fill_pattern(value):
+                raw = '' if value is None else str(value)
+                low = raw.lower()
+                numeric = None
+                try:
+                    numeric = int(value)
+                except Exception:
+                    m_num = re.search(r'(\d+)', raw)
+                    if m_num:
+                        try:
+                            numeric = int(m_num.group(1))
+                        except Exception:
+                            numeric = None
+
+                dense_values = set()
+                diag_values = set()
+                cross_values = set()
+                dots_values = set()
+                if Qt is not None:
+                    for attr_name, bucket in (
+                        ('Dense1Pattern', dense_values), ('Dense2Pattern', dense_values), ('Dense3Pattern', dense_values),
+                        ('Dense4Pattern', dense_values), ('Dense5Pattern', dense_values), ('Dense6Pattern', dense_values), ('Dense7Pattern', dense_values),
+                        ('FDiagPattern', diag_values), ('BDiagPattern', diag_values), ('DiagCrossPattern', cross_values),
+                        ('HorPattern', cross_values), ('VerPattern', cross_values)
+                    ):
+                        try:
+                            bucket.add(int(getattr(Qt, attr_name)))
+                        except Exception:
+                            pass
+
+                if 'nobrush' in low:
+                    return 'outline'
+                if any(token in low for token in ('dense', 'dot', 'pointpatternfill', 'point pattern')):
+                    return 'dots'
+                if any(token in low for token in ('diagcross', 'cross', 'horpattern', 'verpattern')):
+                    return 'cross'
+                if any(token in low for token in ('fdiag', 'bdiag', 'linepatternfill', 'line pattern', 'svgfill', 'rasterfill')):
+                    return 'diagonal'
+                if numeric is not None:
+                    if numeric in dots_values or numeric in dense_values:
+                        return 'dots'
+                    if numeric in cross_values:
+                        return 'cross'
+                    if numeric in diag_values:
+                        return 'diagonal'
+                return 'solid'
+
             def _symbol_to_dict(sym):
                 if sym is None:
                     return None
@@ -2477,9 +2529,10 @@ def process_task(params):
                     out["color"] = [128, 128, 128, 255]
                 # Geometry-type-specific extras
                 try:
-                    sl = sym.symbolLayers()[0] if sym.symbolLayerCount() > 0 else None
+                    symbol_layers = list(sym.symbolLayers()) if sym.symbolLayerCount() > 0 else []
                 except Exception:
-                    sl = None
+                    symbol_layers = []
+                sl = symbol_layers[0] if symbol_layers else None
                 # Size for points
                 try:
                     out["size"] = float(sym.size())
@@ -2497,6 +2550,40 @@ def process_task(params):
                                 out["strokeStyle"] = str(sl.penStyle())
                             except Exception:
                                 pass
+                except Exception:
+                    pass
+                # Fill / hatch hints for polygons and patterned fills.
+                try:
+                    detected_pattern = 'solid'
+                    for symbol_layer in symbol_layers:
+                        if symbol_layer is None:
+                            continue
+                        layer_class = ''
+                        try:
+                            layer_class = symbol_layer.__class__.__name__
+                        except Exception:
+                            layer_class = ''
+                        layer_low = layer_class.lower()
+
+                        if hasattr(symbol_layer, 'brushStyle'):
+                            try:
+                                detected_pattern = _brush_style_to_fill_pattern(symbol_layer.brushStyle())
+                            except Exception:
+                                pass
+
+                        if detected_pattern == 'solid':
+                            if 'linepatternfill' in layer_low:
+                                detected_pattern = 'diagonal'
+                            elif 'pointpatternfill' in layer_low:
+                                detected_pattern = 'dots'
+                            elif 'svgfill' in layer_low or 'rasterfill' in layer_low:
+                                detected_pattern = 'dots'
+
+                        if detected_pattern != 'solid':
+                            break
+
+                    if detected_pattern != 'solid':
+                        out["fillPattern"] = detected_pattern
                 except Exception:
                     pass
                 # Width for line symbols

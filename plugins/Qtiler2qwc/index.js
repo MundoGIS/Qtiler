@@ -489,6 +489,28 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
 
+  const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
+    const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
+    if (!normalizedBaseUrl) return input;
+    const pattern = /http:\/\/(?:localhost|127\.0\.0\.1):3000(?=\/|$)/giu;
+    if (typeof input === 'string') {
+      return input.replace(pattern, normalizedBaseUrl);
+    }
+    try {
+      const raw = JSON.stringify(input);
+      return JSON.parse(raw.replace(pattern, normalizedBaseUrl));
+    } catch {
+      return input;
+    }
+  };
+
+  const sendRebasedJsonFile = async (res, filePath, baseUrl) => {
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    const rebased = rewriteLoopbackBaseUrls(raw, baseUrl);
+    res.type('application/json');
+    return res.send(rebased);
+  };
+
   const adminOnly = ensureAdmin(security);
   const logoUpload = multer({
     storage: multer.memoryStorage(),
@@ -2207,7 +2229,7 @@ ${mapIcon}
     } catch(err) { console.error('XERR', err);
       try {
         const webRoot = await resolveQwc2WebRoot().catch(()=>'');
-        if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
+        if (webRoot) return sendRebasedJsonFile(res, path.join(webRoot, 'themes.json'), getRequestBaseUrl(req));
       } catch {}
       return res.status(500).json({ error: 'qwc2_themes_failed' });
     }
@@ -2460,7 +2482,7 @@ ${mapIcon}
       res.json(normalizeThemesForQwc2Assets(themes));
     } catch {
       const webRoot = await resolveQwc2WebRoot().catch(()=>'');
-      if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
+      if (webRoot) return sendRebasedJsonFile(res, path.join(webRoot, 'themes.json'), getRequestBaseUrl(req));
       res.status(500).json({ error: 'qwc2_themes_failed' });
     }
   });

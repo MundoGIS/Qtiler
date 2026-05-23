@@ -366,8 +366,48 @@ input {
   margin: 0 auto;
   max-height: 96vh;
   width: min(1200px, 96vw);
+  transform: translate(var(--qt-modal-offset-x, 0px), var(--qt-modal-offset-y, 0px));
 }
 body.modal-open { overflow: hidden; }
+body.publish-editor-open { overflow: hidden; }
+body.modal-open:not(.publish-editor-open) .page > :not(.modal):not(.publish-editor) {
+  pointer-events: none;
+  user-select: none;
+  filter: blur(2px);
+}
+body.publish-editor-open .tab-panel--active > :not(#publishModal) {
+  pointer-events: none;
+  user-select: none;
+  filter: blur(2px);
+}
+
+.modal .modal-card-head.Qtiler2Origo-modal-drag-handle {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.modal.Qtiler2Origo-modal--fullscreen {
+  padding: 12px;
+}
+
+.modal.Qtiler2Origo-modal--fullscreen .modal-card {
+  width: calc(100vw - 24px) !important;
+  max-width: none !important;
+  min-height: calc(100vh - 24px);
+  height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);
+  transform: none !important;
+}
+
+.modal.Qtiler2Origo-modal--fullscreen .modal-card-body {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.modal.Qtiler2Origo-modal--fullscreen .modal-card-head.Qtiler2Origo-modal-drag-handle {
+  cursor: default;
+}
 
 #wfs-style-modal {
   /* Stay above the publish-editor overlay (z-index 1000) so the WFS style
@@ -413,6 +453,7 @@ body.modal-open { overflow: hidden; }
 }
 
 .publish-editor__header,
+.publish-editor__tabs,
 .publish-editor__footer {
   display: flex;
   align-items: center;
@@ -426,6 +467,46 @@ body.modal-open { overflow: hidden; }
   border-bottom: 1px solid var(--line);
   border-top-left-radius: 10px;
   border-top-right-radius: 10px;
+}
+
+.publish-editor__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.publish-editor__tabs {
+  width: min(1180px, 96vw);
+  margin: 0 auto;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #eef4fb;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.publish-editor__tab-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #516072;
+  padding: 9px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.publish-editor__tab-btn:hover {
+  background: #dde9f7;
+  color: var(--ink);
+}
+
+.publish-editor__tab-btn--active {
+  background: #fff;
+  color: var(--primary);
+  border-color: #bfd2ee;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .publish-editor__footer {
@@ -448,8 +529,18 @@ body.modal-open { overflow: hidden; }
   background: #fff;
 }
 
+.publish-editor__tab-panel {
+  display: none;
+}
+
+.publish-editor__tab-panel--active {
+  display: grid;
+  gap: 16px;
+}
+
 /* Inner card */
 .publish-editor > .publish-editor__header,
+.publish-editor > .publish-editor__tabs,
 .publish-editor > .publish-editor__body,
 .publish-editor > .publish-editor__footer {
   width: min(1180px, 96vw);
@@ -461,8 +552,107 @@ body.modal-open { overflow: hidden; }
   flex-direction: column;
   padding: 24px 0;
 }
+.publish-editor.publish-editor--fullscreen {
+  padding: 0;
+  background: rgba(15, 23, 42, 0.62);
+}
+.publish-editor.publish-editor--fullscreen > .publish-editor__header,
+.publish-editor.publish-editor--fullscreen > .publish-editor__tabs,
+.publish-editor.publish-editor--fullscreen > .publish-editor__body,
+.publish-editor.publish-editor--fullscreen > .publish-editor__footer {
+  width: 100vw;
+  max-width: none;
+  border-radius: 0;
+}
 .publish-editor > .publish-editor__header { margin-top: 0; }
 .publish-editor > .publish-editor__footer { margin-bottom: 0; }
+
+.publish-editor__config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+  padding-top: 1rem;
+}
+
+.publish-editor__config-main,
+.publish-editor__config-side {
+  min-width: 0;
+}
+
+.publish-editor__preview-frame {
+  width: 100%;
+  height: 430px;
+  background: #eef2f7;
+  border: 1px solid #ccd7e5;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.publish-editor__preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.78);
+  pointer-events: none;
+  text-align: center;
+  padding: 1rem;
+}
+
+.publish-editor__preview-toolbar {
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.publish-editor__summary {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.publish-editor__summary-card {
+  border: 1px solid #d9e3ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+  padding: 12px 14px;
+}
+
+.publish-editor__summary-card h4 {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: #163760;
+}
+
+.publish-editor__summary-meta {
+  display: grid;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: #334155;
+}
+
+.publish-editor__summary-list {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+  color: #334155;
+  font-size: 0.85rem;
+}
+
+.publish-editor__summary-list li {
+  margin: 0 0 4px;
+}
+
+.publish-editor__summary-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+}
 
 .modal-step {
   border: 1px solid var(--line);
@@ -477,6 +667,10 @@ body.modal-open { overflow: hidden; }
   font-size: 0.92rem;
   color: var(--primary);
   padding: 0 8px;
+}
+
+.publish-editor__config-step {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
 }
 
 .Qtiler2origo-checklist {
@@ -616,6 +810,34 @@ body.modal-open { overflow: hidden; }
   min-width: 0;
   word-break: break-word;
 }
+
+@media (max-width: 900px) {
+  .publish-editor {
+    padding: 0;
+  }
+
+  .publish-editor > .publish-editor__header,
+  .publish-editor > .publish-editor__tabs,
+  .publish-editor > .publish-editor__body,
+  .publish-editor > .publish-editor__footer {
+    width: 100vw;
+    max-width: none;
+    border-radius: 0;
+  }
+
+  .publish-editor__tabs {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .publish-editor__config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .publish-editor__preview-frame {
+    height: 320px;
+  }
+}
 /* Wrapper inserted around each label by JS so the gear ⚙ button and the
    config panel can sit together. Make sure it fills its grid cell rather
    than collapsing to content width. */
@@ -739,45 +961,123 @@ body.modal-open { overflow: hidden; }
   line-height: 1.3;
 }
 
-.Qtiler2origo-style-modal-card {
+.Qtiler2Origo-style-modal-card {
   width: min(1120px, 96vw);
 }
 
-.Qtiler2origo-style-subtitle {
+.Qtiler2Origo-style-subtitle {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 0.9rem;
 }
 
-.Qtiler2origo-style-layout {
+.Qtiler2Origo-style-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.Qtiler2Origo-style-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 360px);
   gap: 18px;
   align-items: start;
 }
 
-.Qtiler2origo-style-sidebar,
-.Qtiler2origo-style-preview-card {
+.Qtiler2Origo-style-sidebar,
+.Qtiler2Origo-style-preview-card {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  padding: 16px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
-.Qtiler2origo-style-preview-card {
+.Qtiler2Origo-style-preview-card {
   position: sticky;
   top: 0;
   max-height: calc(100vh - 220px);
   overflow: auto;
 }
 
-.Qtiler2origo-style-modal-card {
+.Qtiler2Origo-style-designer-shell {
+  display: grid;
+}
+
+.Qtiler2Origo-style-control-box {
+  border: 1px solid #d7dee8;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f9fbfe 0%, #ffffff 100%);
+  padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.Qtiler2Origo-style-control-box__head {
+  margin-bottom: 14px;
+}
+
+.Qtiler2Origo-style-control-box__head h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.Qtiler2Origo-style-control-box__head .help {
+  margin: 0;
+}
+
+.Qtiler2Origo-style-control-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.Qtiler2Origo-style-control-group {
+  border: 1px solid #e0e6ee;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+}
+
+.Qtiler2Origo-style-control-group h4 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #1e3a5f;
+}
+
+.Qtiler2Origo-style-modal-card {
   width: 96vw;
   max-width: 1280px;
   min-height: 60vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.Qtiler2origo-style-toolbar {
+.Qtiler2Origo-style-modal--fullscreen {
+  padding: 12px;
+}
+
+.Qtiler2Origo-style-modal--fullscreen .Qtiler2Origo-style-modal-card {
+  width: calc(100vw - 24px);
+  max-width: none;
+  min-height: calc(100vh - 24px);
+  height: calc(100vh - 24px);
+}
+
+.Qtiler2Origo-style-modal--fullscreen .modal-card-body {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.Qtiler2Origo-style-modal--fullscreen .Qtiler2Origo-style-layout {
+  min-height: 100%;
+}
+
+.Qtiler2Origo-style-modal--fullscreen .Qtiler2Origo-style-preview-card {
+  position: sticky;
+  top: 0;
+  max-height: none;
+}
+
+.Qtiler2Origo-style-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -786,13 +1086,13 @@ body.modal-open { overflow: hidden; }
   margin-bottom: 14px;
 }
 
-.Qtiler2origo-style-tabs {
+.Qtiler2Origo-style-tabs {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.Qtiler2origo-style-toolbar .button.is-active {
+.Qtiler2Origo-style-toolbar .button.is-active {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
@@ -801,42 +1101,269 @@ body.modal-open { overflow: hidden; }
 /* Bulma's `hidden` attribute is sometimes overridden by display:flex/grid
    on the same element. Force it for the style editor panels. */
 [hidden] { display: none !important; }
-.Qtiler2origo-style-panel { display: block; }
-.Qtiler2origo-style-panel[hidden] { display: none !important; }
+.Qtiler2Origo-style-panel { display: block; }
+.Qtiler2Origo-style-panel[hidden] { display: none !important; }
 
-.Qtiler2origo-style-grid {
+.Qtiler2Origo-style-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
-.Qtiler2origo-style-grid label,
-.Qtiler2origo-style-json-label {
+.Qtiler2Origo-style-grid label,
+.Qtiler2Origo-style-json-label {
   display: grid;
   gap: 6px;
   font-weight: 600;
 }
 
-.Qtiler2origo-style-grid select,
-.Qtiler2origo-style-grid input,
-.Qtiler2origo-style-json-label + textarea {
+.Qtiler2Origo-style-grid select,
+.Qtiler2Origo-style-grid input,
+.Qtiler2Origo-style-json-label + textarea {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
 }
 
-.Qtiler2origo-style-json-actions {
+.Qtiler2Origo-style-grid input[type="color"] {
+  min-height: 44px;
+  padding: 6px;
+}
+
+.Qtiler2Origo-style-grid input[type="range"] {
+  accent-color: var(--primary);
+}
+
+.Qtiler2Origo-style-json-actions {
   display: flex;
   justify-content: flex-end;
   margin-top: 10px;
 }
 
-.Qtiler2origo-style-preview-card h3 {
+.Qtiler2Origo-style-presets-disclosure {
+  border: 1px solid #d7dee8;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.Qtiler2Origo-style-presets-disclosure summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+}
+
+.Qtiler2Origo-style-presets-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.Qtiler2Origo-style-presets-dropdown {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.Qtiler2Origo-style-presets-section {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.Qtiler2Origo-style-presets-head h3 {
+  margin: 0;
+}
+
+.Qtiler2Origo-style-presets-head .help {
+  margin: 4px 0 0;
+}
+
+.Qtiler2Origo-style-presets {
+  display: grid;
+  gap: 8px;
+}
+
+.Qtiler2Origo-style-preset {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+
+.Qtiler2Origo-style-preset__sample {
+  width: 80px;
+  height: 48px;
+  border: 1px solid #d8dde3;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.Qtiler2Origo-style-preset__sample svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.Qtiler2Origo-style-preset__meta {
+  min-width: 0;
+}
+
+.Qtiler2Origo-style-preset__meta strong,
+.Qtiler2Origo-style-preset__meta small {
+  display: block;
+}
+
+.Qtiler2Origo-style-preset__meta small {
+  color: var(--muted);
+}
+
+.Qtiler2Origo-style-preset__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8eefc;
+  color: #23407a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.Qtiler2Origo-style-preview-card h3 {
   margin: 0 0 10px;
 }
 
-.Qtiler2origo-style-preview {
+.Qtiler2Origo-rule-editor-modal-card {
+  width: min(900px, 94vw);
+  display: flex;
+  flex-direction: column;
+}
+
+.Qtiler2Origo-rule-editor-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.Qtiler2Origo-rule-editor-shell fieldset {
+  border: 1px solid #d7dee8;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.Qtiler2Origo-rule-editor-shell legend {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #34537d;
+}
+
+.Qtiler2Origo-rule-editor-shell label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.Qtiler2Origo-rule-summary {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+}
+
+.Qtiler2Origo-rule-summary__head,
+.Qtiler2Origo-rule-summary__actions,
+.Qtiler2Origo-rule-summary__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.Qtiler2Origo-rule-summary__head {
+  justify-content: space-between;
+}
+
+.Qtiler2Origo-rule-summary__meta {
+  justify-content: space-between;
+}
+
+.Qtiler2Origo-rule-summary__sample {
+  width: 92px;
+  height: 56px;
+  border-radius: 10px;
+  border: 1px solid #d7dee8;
+  background: #fff;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.Qtiler2Origo-rule-summary__sample svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.Qtiler2Origo-rule-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.Qtiler2Origo-rule-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #eef4fb;
+  color: #27476d;
+  font-size: 0.78rem;
+}
+
+.Qtiler2Origo-rule-summary code {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  background: #f4f7fb;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.Qtiler2Origo-rule-summary__details {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .Qtiler2Origo-style-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .Qtiler2Origo-style-preview-card {
+    position: static;
+    max-height: none;
+  }
+
+  .Qtiler2Origo-rule-summary__details {
+    grid-template-columns: 1fr;
+  }
+}
+
+.Qtiler2Origo-style-preview {
   min-height: 240px;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -853,7 +1380,7 @@ body.modal-open { overflow: hidden; }
   padding: 8px;
 }
 
-.Qtiler2origo-style-preview .sample-row {
+.Qtiler2Origo-style-preview .sample-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -863,21 +1390,21 @@ body.modal-open { overflow: hidden; }
   padding: 6px 8px;
   font-size: 0.78rem;
 }
-.Qtiler2origo-style-preview .sample-row .sample-svg {
+.Qtiler2Origo-style-preview .sample-row .sample-svg {
   flex: 0 0 80px;
   height: 48px;
   background:#fff;
   border-radius:4px;
 }
-.Qtiler2origo-style-preview .sample-row .sample-meta {
+.Qtiler2Origo-style-preview .sample-row .sample-meta {
   flex: 1 1 auto;
   min-width: 0;
 }
-.Qtiler2origo-style-preview .sample-row .sample-meta strong {
+.Qtiler2Origo-style-preview .sample-row .sample-meta strong {
   display:block;
   font-size:0.78rem;
 }
-.Qtiler2origo-style-preview .sample-row .sample-meta code {
+.Qtiler2Origo-style-preview .sample-row .sample-meta code {
   display:block;
   font-size:0.7rem;
   color:#475;
@@ -887,7 +1414,7 @@ body.modal-open { overflow: hidden; }
 }
 
 @media (max-width: 900px) {
-  .Qtiler2origo-style-layout {
+  .Qtiler2Origo-style-layout {
     grid-template-columns: 1fr;
   }
 }

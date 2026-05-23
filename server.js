@@ -39,6 +39,15 @@ import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removePr
 
 
 dotenv.config({ override: true });
+
+const DEFAULT_APP_PORT = 3000;
+const resolveAppPort = (rawValue) => {
+  const parsed = Number.parseInt(String(rawValue ?? '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : DEFAULT_APP_PORT;
+};
+const APP_PORT = resolveAppPort(process.env.PORT);
+const INTERNAL_APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
+
 const ensureLicenseSecret = () => {
   const current = process.env.LICENSE_SECRET || '';
   if (current && current !== 'CHANGE_ME') return;
@@ -3148,7 +3157,7 @@ const runCacheJobViaHttp = async (payload, { timeoutMs = 3600000 } = {}) => {
     "Content-Type": "application/json",
     [INTERNAL_JOB_HEADER]: INTERNAL_JOB_TOKEN
   };
-  const res = await fetch("http://127.0.0.1:3000/generate-cache", {
+  const res = await fetch(`${INTERNAL_APP_ORIGIN}/generate-cache`, {
     method: "POST",
     headers: internalHeaders,
     body: JSON.stringify(payload),
@@ -3162,7 +3171,7 @@ const runCacheJobViaHttp = async (payload, { timeoutMs = 3600000 } = {}) => {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     await sleep(2000);
-    const statusRes = await fetch(`http://127.0.0.1:3000/generate-cache/${encodeURIComponent(jobId)}?tail=20000`, {
+    const statusRes = await fetch(`${INTERNAL_APP_ORIGIN}/generate-cache/${encodeURIComponent(jobId)}?tail=20000`, {
       headers: { [INTERNAL_JOB_HEADER]: INTERNAL_JOB_TOKEN }
     });
     if (statusRes.status === 404) {
@@ -9642,8 +9651,7 @@ const startServer = async () => {
   }
   initializeProjectSchedules();
   startScheduleHeartbeat();
-  const port = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
-  const server = app.listen(port, () => console.log(`🚀 Servidor Node.js en http://localhost:${port}`));
+  const server = app.listen(APP_PORT, () => console.log(`🚀 Servidor Node.js en http://localhost:${APP_PORT}`));
   // Increase timeout for tile rendering requests (default is 2 minutes)
   server.timeout = 300000; // 5 minutes
   server.keepAliveTimeout = 310000; // Slightly longer than timeout

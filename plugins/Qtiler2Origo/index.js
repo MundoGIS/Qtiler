@@ -433,13 +433,28 @@ const listProjectsFromDisk = async (projectsDir) => {
 export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
   const pluginSlug = 'Qtiler2Origo';
   const adminUiDir = path.join(baseDir, 'admin-ui');
+  const clientDir = path.join(baseDir, 'client');
+  const repoRootCandidates = Array.from(new Set([
+    path.resolve(process.cwd()),
+    path.resolve(baseDir),
+    path.resolve(baseDir, '..'),
+    path.resolve(baseDir, '..', '..')
+  ]));
+  const resolveRepoPath = (...parts) => {
+    for (const root of repoRootCandidates) {
+      const candidate = path.join(root, ...parts);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return path.join(process.cwd(), ...parts);
+  };
+  const workspaceRoot = path.dirname(resolveRepoPath('qgisprojects'));
   const dataRoot = path.resolve(dataDir, '..');
   const runtimeRoot = path.join(dataDir, 'origo');
   const installRoot = path.join(runtimeRoot, 'current');
   const publishedRoot = path.join(runtimeRoot, 'published');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
-  const projectsDir = path.join(process.cwd(), 'qgisprojects');
+  const projectsDir = resolveRepoPath('qgisprojects');
   let standaloneServer = null;
   let standalonePort = null;
 
@@ -458,6 +473,28 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(runtimeRoot, { recursive: true });
   await fs.promises.mkdir(publishedRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
+
+  const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
+    const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
+    if (!normalizedBaseUrl) return input;
+    const pattern = /http:\/\/(?:localhost|127\.0\.0\.1):3000(?=\/|$)/giu;
+    if (typeof input === 'string') {
+      return input.replace(pattern, normalizedBaseUrl);
+    }
+    try {
+      const raw = JSON.stringify(input);
+      return JSON.parse(raw.replace(pattern, normalizedBaseUrl));
+    } catch {
+      return input;
+    }
+  };
+
+  const sendRebasedJsonFile = async (res, filePath, baseUrl) => {
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    const rebased = rewriteLoopbackBaseUrls(raw, baseUrl);
+    res.type('application/json');
+    return res.send(rebased);
+  };
 
   const adminOnly = ensureAdmin(security);
 
@@ -814,7 +851,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const readCacheIndex = async (projectId) => {
     const safeName = sanitizeFileToken(projectId);
     if (!safeName) return null;
-    const indexPath = path.join(process.cwd(), 'cache', safeName, 'index.json');
+    const indexPath = resolveRepoPath('cache', safeName, 'index.json');
     try {
       const raw = await fs.promises.readFile(indexPath, 'utf8');
       return JSON.parse(raw || '{}');
@@ -830,7 +867,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const readProjectLayerFlags = async (projectId) => {
     const safeName = sanitizeFileToken(projectId);
     if (!safeName) return {};
-    const cfgPath = path.join(process.cwd(), 'cache', safeName, 'project-config.json');
+    const cfgPath = resolveRepoPath('cache', safeName, 'project-config.json');
     try {
       const raw = await fs.promises.readFile(cfgPath, 'utf8');
       const parsed = JSON.parse(raw || '{}');
@@ -1000,6 +1037,20 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     'EPSG:25833': { code: 'EPSG:25833', proj: '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs', label: 'ETRS89 / UTM 33N' },
     'EPSG:32632': { code: 'EPSG:32632', proj: '+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs', label: 'WGS 84 / UTM zone 32N' },
     'EPSG:32633': { code: 'EPSG:32633', proj: '+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs', label: 'WGS 84 / UTM zone 33N' }
+  };
+
+  const buildProj4Defs = (...codes) => {
+    const defs = [];
+    const seen = new Set();
+    codes.forEach((code) => {
+      const normalized = String(code || '').trim().toUpperCase();
+      if (!normalized || seen.has(normalized)) return;
+      const known = KNOWN_PROJECTIONS[normalized];
+      if (!known?.proj) return;
+      seen.add(normalized);
+      defs.push({ code: normalized, projection: known.proj });
+    });
+    return defs;
   };
 
   const buildQwc2Config = async ({ hasMultipleThemes = false, features = null, toolConfig = null, requiredCrs = [], authRequired = false } = {}) => {
@@ -1907,6 +1958,7 @@ ${mapIcon}
   const maybeAutoStartStandalone = async () => { /* removed */ };
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
+  app.use(`/plugins/${pluginSlug}/client`, express.static(clientDir));
   app.use(`/plugins/${pluginSlug}/published`, express.static(publishedRoot, { index: false }));
   // Serve dynamic, sanitized config/themes for the plugin-local QWC2 path so
   // the admin UI and local links always receive runtime-built configs.
@@ -2043,7 +2095,7 @@ ${mapIcon}
     } catch(err) { console.error('XERR', err);
       try {
         const webRoot = await resolveQwc2WebRoot().catch(()=>'');
-        if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
+        if (webRoot) return sendRebasedJsonFile(res, path.join(webRoot, 'themes.json'), getRequestBaseUrl(req));
       } catch {}
       return res.status(500).json({ error: 'origo_themes_failed' });
     }
@@ -2065,9 +2117,14 @@ ${mapIcon}
       layers ? `layers=${encodeURIComponent(layers)}` : '',
       bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
       bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
+      req.query?.bgKey ? `bgKey=${encodeURIComponent(req.query.bgKey)}` : '',
       req.query?.center ? `center=${encodeURIComponent(req.query.center)}` : '',
+      req.query?.centerCrs ? `centerCrs=${encodeURIComponent(req.query.centerCrs)}` : '',
       req.query?.zoom   ? `zoom=${encodeURIComponent(req.query.zoom)}`     : '',
-      req.query?.extent ? `extent=${encodeURIComponent(req.query.extent)}` : ''
+      req.query?.extent ? `extent=${encodeURIComponent(req.query.extent)}` : '',
+      req.query?.minZoom ? `minZoom=${encodeURIComponent(req.query.minZoom)}` : '',
+      req.query?.maxZoom ? `maxZoom=${encodeURIComponent(req.query.maxZoom)}` : '',
+      req.query?.controls ? `controls=${encodeURIComponent(req.query.controls)}` : ''
     ].filter(Boolean).join('&');
     const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
     // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
@@ -2080,11 +2137,12 @@ ${mapIcon}
 <base href="${base}">
 <title>Preview \u2013 ${projectId.replace(/[<>"&']/g, '')}</title>
 <link href="css/style.css" rel="stylesheet">
-<style>html,body{margin:0;padding:0;height:100%}#app-wrapper{height:100%}</style>
+<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
 </head>
 <body>
 <div id="app-wrapper"></div>
 <script src="js/origo.js"></script>
+<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>
 <script>
   // IMPORTANT: do NOT pass the config URL to Origo() directly. Origo's
   // loadResources() appends "${'$'}{urlParams.map}.json" to any URL it receives;
@@ -2095,9 +2153,29 @@ ${mapIcon}
   fetch('${configUrl}', { credentials: 'same-origin' })
     .then(function(r) { return r.json(); })
     .then(function(cfg) {
-      var origoApp = Origo(cfg);
+      return window.Qtiler2OrigoOrigoBoot.bootOrigo(cfg);
+    })
+    .then(function(origoApp) {
       window.origoApp = origoApp;
+      var refreshMapSize = function() {
+        try {
+          var viewer = typeof origoApp.api === 'function' ? origoApp.api() : null;
+          var map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
+          if (map && typeof map.updateSize === 'function') map.updateSize();
+        } catch (e) {}
+      };
+      requestAnimationFrame(function() {
+        requestAnimationFrame(refreshMapSize);
+      });
+      window.addEventListener('resize', refreshMapSize);
+      try {
+        var ro = new ResizeObserver(function() { refreshMapSize(); });
+        ro.observe(document.documentElement);
+        ro.observe(document.body);
+        ro.observe(document.getElementById('app-wrapper'));
+      } catch (e) {}
       origoApp.on('load', function() {
+        refreshMapSize();
         try { window.parent.postMessage({ type: 'origo-loaded' }, '*'); } catch(e){}
       });
     })
@@ -2155,12 +2233,30 @@ ${mapIcon}
 
   // ── Load tile grid data for a given project (used to build WMTS source) ──
   const loadTileGridForProject = async (projectId) => {
-    const tileGridDir = path.resolve(process.cwd(), 'config', 'tile-grids');
     try {
+      const tileGridDirCandidates = [
+        resolveRepoPath('config', 'tile-grids'),
+        path.resolve(process.cwd(), 'config', 'tile-grids')
+      ];
+      const tileGridDir = tileGridDirCandidates.find((dir) => fs.existsSync(dir));
+      if (!tileGridDir) return null;
       const files = await fs.promises.readdir(tileGridDir);
+      const normalizedProjectId = normalizeProjectId(projectId || '') || String(projectId || '').trim();
+      const safeProjectId = sanitizeFileToken(normalizedProjectId);
+      const candidateNames = new Set([
+        String(projectId || '').trim().toLowerCase(),
+        normalizedProjectId.toLowerCase(),
+        safeProjectId.toLowerCase()
+      ].filter(Boolean));
       // File naming convention: SCALES_EPSG_XXXX_<projectId>.json
-      const match = files.find((f) => f.toLowerCase() === `scales_epsg_3006_${projectId.toLowerCase()}.json`
-        || f.toLowerCase().endsWith(`_${projectId.toLowerCase()}.json`));
+      const match = files.find((f) => {
+        const lower = f.toLowerCase();
+        for (const candidate of candidateNames) {
+          if (lower === `scales_epsg_3006_${candidate}.json`) return true;
+          if (lower.endsWith(`_${candidate}.json`)) return true;
+        }
+        return false;
+      });
       if (!match) return null;
       const raw = await fs.promises.readFile(path.join(tileGridDir, match), 'utf8');
       const preset = JSON.parse(raw);
@@ -2194,7 +2290,10 @@ ${mapIcon}
         }
       }
       return { matrixSetId, resolutions, matrixIds, topLeft, tileSize, crs, projectionExtent };
-    } catch { return null; }
+    } catch (err) {
+      console.warn(`[Qtiler2Origo] Failed to load tile grid for project "${projectId}":`, err?.message || err);
+      return null;
+    }
   };
 
   // ── buildOrigoIndexConfig: build Origo index.json from a published profile ──
@@ -2280,6 +2379,42 @@ ${mapIcon}
     }
   };
 
+  const unwrapPrimaryStyleRule = (styleDef) => {
+    if (!Array.isArray(styleDef) || !Array.isArray(styleDef[0]) || !styleDef[0][0] || typeof styleDef[0][0] !== 'object') {
+      return null;
+    }
+    return styleDef[0][0];
+  };
+
+  const extractRuntimePatternStyle = (styleDef, layer) => {
+    const rawPattern = String(layer?.designerOptions?.fillPattern || '').trim().toLowerCase();
+    const pattern = rawPattern === 'diagonal' ? 'slash' : rawPattern;
+    if (!['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) return null;
+    const geometryType = String(layer?.geometryType || '').trim().toLowerCase();
+    if (geometryType && !geometryType.includes('polygon')) return null;
+    if (!Array.isArray(styleDef) || styleDef.length !== 1 || !Array.isArray(styleDef[0]) || styleDef[0].length !== 1) return null;
+    const rule = unwrapPrimaryStyleRule(styleDef);
+    if (!rule || rule.filter || rule.circle || rule.icon || rule.regularShape || !rule.stroke) return null;
+    const defaultAngle = pattern === 'backslash'
+      ? 135
+      : pattern === 'horizontal'
+        ? 0
+        : pattern === 'vertical'
+          ? 90
+          : 45;
+    return {
+      pattern,
+      fillColor: String(rule?.fill?.color || 'rgba(59, 130, 246, 0.25)'),
+      strokeColor: String(rule?.stroke?.color || 'rgba(37, 99, 235, 1)'),
+      strokeWidth: Number(rule?.stroke?.width || 1),
+      lineDash: Array.isArray(rule?.stroke?.lineDash) ? rule.stroke.lineDash.map(Number).filter(Number.isFinite) : [],
+      angle: Number.isFinite(Number(layer?.designerOptions?.fillPatternAngle)) ? Number(layer.designerOptions.fillPatternAngle) : defaultAngle,
+      spacing: Number.isFinite(Number(layer?.designerOptions?.fillPatternSpacing)) ? Number(layer.designerOptions.fillPatternSpacing) : 10,
+      size: Number.isFinite(Number(layer?.designerOptions?.fillPatternSize)) ? Number(layer.designerOptions.fillPatternSize) : 2.5,
+      transparentBackground: layer?.designerOptions?.fillPatternTransparent === true
+    };
+  };
+
   const buildOrigoIndexConfig = async (profile, baseUrl, req = null) => {
     // Forward caller's auth (cookie + api_key) so server-to-server fetch to
     // /wfs DescribeFeatureType isn't rejected with 401.
@@ -2288,12 +2423,6 @@ ${mapIcon}
     const apiKey = req?.headers?.['x-api-key'] || req?.query?.api_key;
     if (apiKey) authHeaders['x-api-key'] = apiKey;
     const projectId = profile.projectId;
-    const proj4PresetsPath = path.resolve(process.cwd(), 'config', 'proj4-presets.json');
-    let proj4PresetsAll = {};
-    try {
-      const raw = await fs.promises.readFile(proj4PresetsPath, 'utf8');
-      proj4PresetsAll = JSON.parse(raw || '{}');
-    } catch { /* ignore */ }
 
     const bgProjectId = profile.backgroundProjectId || null;
     const bgTileGrid = bgProjectId ? await loadTileGridForProject(bgProjectId) : null;
@@ -2338,16 +2467,20 @@ ${mapIcon}
     }
 
     // Proj4 definitions for non-standard CRS
-    const proj4Defs = [];
-    if (projCode && projCode !== 'EPSG:3857' && projCode !== 'EPSG:4326') {
-      const def = proj4PresetsAll[projCode];
-      if (def) proj4Defs.push({ code: projCode, projection: def });
-    }
+    const proj4Defs = buildProj4Defs(projCode, 'EPSG:3857', 'EPSG:4326');
 
     // Source map
     const source = {};
-    const mainSourceKey = 'qtiler_main';
-    source[mainSourceKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(projectId)}` };
+    const getWmsSourceKey = (pid) => `qtiler_wms_${String(pid || '').replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
+    const ensureWmsSource = (pid) => {
+      const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
+      const sourceKey = getWmsSourceKey(normalizedProjectId);
+      if (!source[sourceKey]) {
+        source[sourceKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}` };
+      }
+      return sourceKey;
+    };
+    const mainSourceKey = ensureWmsSource(projectId);
     source['osm'] = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' };
     // NOTE: No shared WMS source for background — each BG layer gets its own WMTS source
 
@@ -2378,21 +2511,31 @@ ${mapIcon}
     // Layers and Styles
     const layers = [];
     const origoStyles = {};
-    const cacheIndex = await readCacheIndex(projectId);
-    const cachedLayers = cacheIndex?.layers || [];
-    // Main project layers — WMS by default, WFS when serveAsWfs===true or editable===true
-    const mainLayers = (profile.layers || []).filter((l) => !l.sourceProjectId || l.sourceProjectId === projectId);
-    const wfsSrcKey = 'qtiler_main_wfs';
-    let wfsSrcAdded = false;
+    const qtilerPatternStyles = {};
+    const cacheLayersByProject = new Map();
+    const getCachedLayersForProject = async (pid) => {
+      const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
+      if (!cacheLayersByProject.has(normalizedProjectId)) {
+        const cacheIndex = await readCacheIndex(normalizedProjectId);
+        cacheLayersByProject.set(normalizedProjectId, Array.isArray(cacheIndex?.layers) ? cacheIndex.layers : []);
+      }
+      return cacheLayersByProject.get(normalizedProjectId) || [];
+    };
+    // Main map layers — WMS by default, WFS when serveAsWfs===true or editable===true.
+    const mainLayers = (profile.layers || []).filter((l) => String(l?.role || 'main') !== 'background');
+    const wfsSourceKeys = new Set();
     for (const layer of mainLayers) {
+      const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
+      const cachedLayers = await getCachedLayersForProject(srcProjId);
       if (layer.serveAsWfs === true || layer.editable === true) {
         // Fetch real WFS meta (attributes + geometryName + featureNS) so the
         // Origo editor can finishDrawing without crashing on undefined.filter
         // and so WFS-T POSTs target the right namespace/geometry column.
-        const wfsMeta = await fetchWfsLayerMeta(baseUrl, projectId, layer.name, authHeaders);
-        if (!wfsSrcAdded) {
+        const wfsMeta = await fetchWfsLayerMeta(baseUrl, srcProjId, layer.name, authHeaders);
+        const wfsSrcKey = `qtiler_wfs_${String(srcProjId).replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
+        if (!wfsSourceKeys.has(wfsSrcKey)) {
           source[wfsSrcKey] = {
-            url: `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}${security?.isEnabled() ? '' : ''}`,
+            url: `${baseUrl}/wfs?project=${encodeURIComponent(srcProjId)}${security?.isEnabled() ? '' : ''}`,
             type: 'WFS',
             projection: projCode,
             srsName: projCode,
@@ -2400,17 +2543,19 @@ ${mapIcon}
             workspace: wfsMeta.featureNS || 'http://www.qgis.org/gml',
             prefix: 'feature'
           };
-          wfsSrcAdded = true;
+          wfsSourceKeys.add(wfsSrcKey);
         }
         
         const cLayer = cachedLayers.find(c => c.name === layer.name || c.id === layer.name);
         
         let styleName = 'default';
-        const safeStyleName = String(layer.name).replace(/[^A-Za-z0-9_]/g, '_');
+        const safeStyleName = `${String(srcProjId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layer.name).replace(/[^A-Za-z0-9_]/g, '_')}`;
         if (layer.wfsStyle) {
           if (typeof layer.wfsStyle === 'object') {
             styleName = safeStyleName;
             origoStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle);
+            const patternRuntime = extractRuntimePatternStyle(origoStyles[styleName], layer);
+            if (patternRuntime) qtilerPatternStyles[styleName] = patternRuntime;
           } else if (typeof layer.wfsStyle === 'string') {
             styleName = layer.wfsStyle;
           }
@@ -2454,16 +2599,16 @@ ${mapIcon}
         layers.push(wfsDef);
       } else {
         // Plain WMS layer — generate a thumbnail style so legend has a real icon
-        const safe = String(layer.name).replace(/\s+/g, '_');
+        const safe = `${String(srcProjId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layer.name).replace(/\s+/g, '_')}`;
         const thumbStyleName = `wms_thumb_${safe}`;
-        const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
+        const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(srcProjId)}?LAYERS=${encodeURIComponent(layer.name)}`;
         origoStyles[thumbStyleName] = [[{ image: { src: thumbUrl } }]];
         const wmsDef = {
           name: layer.name,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
           title: layer.name,
           group: String(layer.group || 'root'),
-          source: mainSourceKey,
+          source: ensureWmsSource(srcProjId),
           type: 'WMS',
           queryable: true,
           visible: layer.visible !== false,
@@ -2575,6 +2720,13 @@ ${mapIcon}
           return n && VALID_ORIGO_CONTROL_NAMES.has(n);
         })
       : [];
+
+    // Origo already renders zoom buttons by default; keeping an explicit
+    // `zoom` control duplicates the + / - UI in both preview and published maps.
+    for (let i = controls.length - 1; i >= 0; i -= 1) {
+      const n = typeof controls[i] === 'string' ? controls[i] : controls[i]?.name;
+      if (n === 'zoom') controls.splice(i, 1);
+    }
 
     // Defensive: Origo's editor crashes with "Cannot read properties of
     // undefined (reading 'reduce')" when the editor control is enabled but no
@@ -2771,7 +2923,8 @@ ${mapIcon}
       source,
       groups,
       layers,
-      styles: Object.keys(origoStyles).length > 0 ? origoStyles : undefined
+      styles: Object.keys(origoStyles).length > 0 ? origoStyles : undefined,
+      qtilerPatternStyles: Object.keys(qtilerPatternStyles).length > 0 ? qtilerPatternStyles : undefined
     };
     if (finalResolutions) config.resolutions = finalResolutions;
     // Force the viewer's default tileGrid to use the WMTS top-left origin
@@ -2824,11 +2977,58 @@ ${mapIcon}
     const projectId = sanitizeFileToken(String(req.query?.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
     const rawLayers = String(req.query?.layers || '').trim();
+    const rawLayerRules = String(req.query?.layerRules || '').trim();
     const baseUrl = getRequestBaseUrl(req);
-    const sourceKey = 'qtiler_wms';
     const bgProject = sanitizeFileToken(String(req.query?.bgProject || '').trim());
     const bgLayer = String(req.query?.bgLayer || '').trim();
     const bgKey = String(req.query?.bgKey || '').trim().toLowerCase();
+    const parsePreviewLayers = (raw) => {
+      const text = String(raw || '').trim();
+      if (!text) return [];
+      const normalizeSpec = (entry) => {
+        if (!entry) return null;
+        if (typeof entry === 'string') {
+          const value = entry.trim();
+          if (!value) return null;
+          if (value.includes('::')) {
+            const idx = value.indexOf('::');
+            const sourceProjectId = normalizeProjectId(value.slice(0, idx)) || projectId;
+            const name = String(value.slice(idx + 2) || '').trim();
+            if (!name) return null;
+            return { name, sourceProjectId, group: 'root' };
+          }
+          return { name: value, sourceProjectId: projectId, group: 'root' };
+        }
+        if (typeof entry === 'object') {
+          const name = String(entry.name || '').trim();
+          if (!name) return null;
+          return {
+            name,
+            sourceProjectId: normalizeProjectId(entry.sourceProjectId || projectId) || projectId,
+            visible: entry.visible !== false,
+            group: String(entry.group || 'root').trim() || 'root'
+          };
+        }
+        return null;
+      };
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed.map(normalizeSpec).filter(Boolean);
+      } catch { /* fall back to comma list */ }
+      return text.split(',').map(normalizeSpec).filter(Boolean);
+    };
+    const previewLayerSpecs = parsePreviewLayers(rawLayers);
+    const parsePreviewLayerRules = (raw) => {
+      const text = String(raw || '').trim();
+      if (!text) return {};
+      try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    };
+    const previewLayerRules = parsePreviewLayerRules(rawLayerRules);
     // When the admin picked OSM (or no background) as default, the view MUST
     // be Web Mercator (EPSG:3857) so the OSM tiles align and the user can
     // zoom out across the full standard pyramid (0..21) regardless of the
@@ -2905,13 +3105,7 @@ ${mapIcon}
         && (!forceWebMercator || (looksWebMercator([ovExtent[0], ovExtent[1]]) && looksWebMercator([ovExtent[2], ovExtent[3]])))) {
       extentOverride = ovExtent;
     }
-    if (projCode && projCode !== 'EPSG:3857' && projCode !== 'EPSG:4326') {
-      try {
-        const presetsRaw = await fs.promises.readFile(path.resolve(process.cwd(), 'config', 'proj4-presets.json'), 'utf8');
-        const presets = JSON.parse(presetsRaw || '{}');
-        if (presets[projCode]) proj4Defs = [{ code: projCode, projection: presets[projCode] }];
-      } catch { /* ignore */ }
-    }
+    proj4Defs = buildProj4Defs(projCode, 'EPSG:3857', 'EPSG:4326');
 
     // Background tile grid (from the bg project) — used to align the preview
     // map exactly the way the published profile will be aligned. Skip when the
@@ -2956,16 +3150,88 @@ ${mapIcon}
     const finalMaxZoom = Array.isArray(finalResolutions) && finalResolutions.length
       ? finalResolutions.length - 1 : 19;
 
+    const previewControls = (() => {
+      const defaults = [
+        { name: 'home', options: { zoomOnStart: zoomOverride == null && center[0] === 0 && center[1] === 0 } },
+        { name: 'mapmenu', options: { isActive: false } },
+        { name: 'legend', options: { useGroupIndication: true } },
+        { name: 'scaleline' }
+      ];
+      try {
+        const raw = JSON.parse(String(req.query?.controls || '[]'));
+        if (!Array.isArray(raw) || !raw.length) return defaults;
+        const deduped = new Map();
+        raw.forEach((entry) => {
+          if (typeof entry === 'string' && entry.trim()) {
+            if (entry.trim() === 'zoom') return;
+            deduped.set(entry.trim(), { name: entry.trim() });
+          } else if (entry && typeof entry === 'object' && String(entry.name || '').trim()) {
+            const name = String(entry.name || '').trim();
+            if (name === 'zoom') return;
+            const normalized = { name };
+            if (entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)) {
+              normalized.options = entry.options;
+            }
+            deduped.set(name, normalized);
+          }
+        });
+        if (!deduped.size) return defaults;
+        if (deduped.has('home')) {
+          const currentHome = deduped.get('home') || { name: 'home' };
+          deduped.set('home', {
+            name: 'home',
+            options: {
+              ...(currentHome.options || {}),
+              zoomOnStart: zoomOverride == null && center[0] === 0 && center[1] === 0
+            }
+          });
+        }
+        return Array.from(deduped.values());
+      } catch {
+        return defaults;
+      }
+    })();
+
     const wmtsBgLayerName = (bgProject && bgLayer) ? `wmts_bg_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}` : null;
+    const previewStyles = {};
+    const qtilerPatternStyles = {};
     const sourceMap = {
-      [sourceKey]: {
-        url: `${baseUrl}/wms?project=${encodeURIComponent(req.query?.project || projectId)}`,
-        // Declare the view CRS explicitly so Origo's WMS GetMap requests use
-        // projCode (e.g. EPSG:3006). Without this, mixed-CRS layers in the
-        // main project end up "out of place" against a non-3857 background.
-        projection: projCode
-      },
       osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' }
+    };
+    const ensurePreviewWmsSource = (pid) => {
+      const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
+      const sourceKey = `qtiler_wms_${String(normalizedProjectId).replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
+      if (!sourceMap[sourceKey]) {
+        sourceMap[sourceKey] = {
+          url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
+          projection: projCode
+        };
+      }
+      return sourceKey;
+    };
+    const ensurePreviewWfsSource = (pid, projectionCode) => {
+      const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
+      const sourceKey = `qtiler_wfs_${String(normalizedProjectId).replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
+      if (!sourceMap[sourceKey]) {
+        sourceMap[sourceKey] = {
+          url: `${baseUrl}/wfs?project=${encodeURIComponent(normalizedProjectId)}`,
+          type: 'WFS',
+          projection: projectionCode,
+          srsName: projectionCode,
+          workspace: 'http://www.qgis.org/gml',
+          prefix: 'feature'
+        };
+      }
+      return sourceKey;
+    };
+    const cacheLayersByProject = new Map();
+    const getCachedLayersForProject = async (pid) => {
+      const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
+      if (!cacheLayersByProject.has(normalizedProjectId)) {
+        const cacheIndex = await readCacheIndex(normalizedProjectId);
+        cacheLayersByProject.set(normalizedProjectId, Array.isArray(cacheIndex?.layers) ? cacheIndex.layers : []);
+      }
+      return cacheLayersByProject.get(normalizedProjectId) || [];
     };
     if (wmtsBgLayerName) {
       sourceMap[wmtsBgLayerName] = {
@@ -2975,21 +3241,83 @@ ${mapIcon}
       };
     }
 
-    const layersArr = [
-      {
-        name: projectId,
-        id: rawLayers || projectId,  // Origo uses id as LAYERS param
-        title: projectId,
-        group: 'root',
-        source: sourceKey,
+    const layersArr = [];
+    for (const layerSpec of previewLayerSpecs) {
+      const sourceProjectId = normalizeProjectId(layerSpec.sourceProjectId || projectId) || projectId;
+      const layerName = String(layerSpec.name || '').trim();
+      const layerRuleKey = `${sourceProjectId}::${layerName}`;
+      const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
+        ? previewLayerRules[layerRuleKey]
+        : ((previewLayerRules[layerName] && typeof previewLayerRules[layerName] === 'object') ? previewLayerRules[layerName] : {});
+      const useWfs = rule?.serveAsWfs === true || rule?.editable === true || rule?.wfsStyle != null;
+      if (useWfs) {
+        const wfsMeta = await fetchWfsLayerMeta(baseUrl, sourceProjectId, layerName);
+        const wfsSourceKey = ensurePreviewWfsSource(sourceProjectId, projCode);
+        if (wfsMeta?.featureNS) sourceMap[wfsSourceKey].workspace = wfsMeta.featureNS;
+        const cachedLayers = await getCachedLayersForProject(sourceProjectId);
+        const cLayer = cachedLayers.find((c) => c.name === layerName || c.id === layerName);
+        let styleName = 'default';
+        const safeStyleName = `${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
+        if (rule?.wfsStyle && typeof rule.wfsStyle === 'object') {
+          styleName = safeStyleName;
+          previewStyles[styleName] = rewriteSvgIconColors(rule.wfsStyle);
+          const patternRuntime = extractRuntimePatternStyle(previewStyles[styleName], {
+            designerOptions: rule?.designerOptions,
+            geometryType: rule?.geometryType
+          });
+          if (patternRuntime) qtilerPatternStyles[styleName] = patternRuntime;
+        } else if (rule?.wfsStyle && typeof rule.wfsStyle === 'string') {
+          styleName = rule.wfsStyle;
+        } else if (cLayer?.origoStyle) {
+          styleName = safeStyleName;
+          previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+        }
+        let resolvedAttrs = (Array.isArray(rule?.attributes) && rule.attributes.length)
+          ? rule.attributes
+          : (Array.isArray(wfsMeta?.attributes) ? wfsMeta.attributes : []);
+        if (!resolvedAttrs.length) resolvedAttrs = [{ name: 'fid', title: 'fid', type: 'text' }];
+        const wfsDef = {
+          name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
+          id: layerName,
+          title: layerName,
+          group: String(layerSpec.group || 'root').trim() || 'root',
+          source: wfsSourceKey,
+          type: 'WFS',
+          queryable: true,
+          visible: layerSpec.visible !== false,
+          style: styleName,
+          featureType: layerName,
+          attributes: resolvedAttrs,
+          geometryName: rule?.geometryAttribute || wfsMeta?.geometryName || 'geometry'
+        };
+        if (rule?.editable) wfsDef.editable = true;
+        if (rule?.geometryType) wfsDef.geometryType = rule.geometryType;
+        else if (cLayer?.geometry_type) {
+          const gt = String(cLayer.geometry_type).toLowerCase();
+          if (gt.includes('polygon')) wfsDef.geometryType = 'Polygon';
+          else if (gt.includes('line')) wfsDef.geometryType = 'LineString';
+          else if (gt.includes('point')) wfsDef.geometryType = 'Point';
+        }
+        layersArr.push(wfsDef);
+        continue;
+      }
+      layersArr.push({
+        name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
+        id: layerName,
+        title: layerName,
+        group: String(layerSpec.group || 'root').trim() || 'root',
+        source: ensurePreviewWmsSource(sourceProjectId),
         type: 'WMS',
         format: 'image/png',
         transparent: true,
         queryable: false,
-        visible: true
-      }
-    ];
+        visible: layerSpec.visible !== false
+      });
+    }
     if (wmtsBgLayerName && bgTileGrid) {
+      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bgLayer)}?project=${encodeURIComponent(bgProject)}`;
+      const bgStyleName = `bg_thumb_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
+      previewStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
       const bgMaxZoom = (Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length)
         ? bgTileGrid.resolutions.length - 1 : undefined;
       layersArr.push({
@@ -3002,6 +3330,8 @@ ${mapIcon}
         format: 'image/png',
         queryable: false,
         visible: true,
+        style: bgStyleName,
+        thumbnail: bgThumbUrl,
         ...(bgMaxZoom != null ? { maxZoom: bgMaxZoom } : {}),
         tileGrid: {
           origin: bgTileGrid.topLeft || [-20037508.34, 20037508.34],
@@ -3010,7 +3340,27 @@ ${mapIcon}
         },
         ...(Array.isArray(bgTileGrid.projectionExtent) ? { extent: bgTileGrid.projectionExtent } : {})
       });
+    } else if (bgProject && bgLayer) {
+      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bgLayer)}?project=${encodeURIComponent(bgProject)}`;
+      const bgStyleName = `bg_thumb_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
+      previewStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
+      layersArr.push({
+        name: `wms_bg_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`,
+        id: bgLayer,
+        title: `${bgProject} / ${bgLayer}`,
+        group: 'background',
+        source: ensurePreviewWmsSource(bgProject),
+        type: 'WMS',
+        format: 'image/png',
+        transparent: false,
+        queryable: false,
+        visible: true,
+        style: bgStyleName,
+        thumbnail: bgThumbUrl
+      });
     } else {
+      const osmThumb = 'https://tile.openstreetmap.org/4/8/5.png';
+      previewStyles.bg_thumb_osm = [[{ image: { src: osmThumb } }]];
       layersArr.push({
         name: 'osm',
         title: 'OpenStreetMap',
@@ -3018,7 +3368,9 @@ ${mapIcon}
         source: 'osm',
         queryable: false,
         type: 'OSM',
-        visible: true
+        visible: true,
+        style: 'bg_thumb_osm',
+        thumbnail: osmThumb
       });
     }
 
@@ -3064,23 +3416,15 @@ ${mapIcon}
       // out to inspect the full project before re-publishing.
       center,
       zoom: zoomOverride != null ? zoomOverride : zoom,
-      controls: [
-        // home.zoomOnStart re-fits the view to the home extent the moment the
-        // map loads, which would discard a captured center/zoom (admin sees
-        // "all of Sweden" instead of their captured AoI). Only auto-zoom on
-        // start when no override was provided.
-        { name: 'home', options: { zoomOnStart: zoomOverride == null && center[0] === 0 && center[1] === 0 } },
-        { name: 'mapmenu', options: { isActive: false } },
-        { name: 'legend', options: { useGroupIndication: true } },
-        { name: 'zoom' },
-        { name: 'scaleline' }
-      ],
+      controls: previewControls,
       source: sourceMap,
       groups: [
         { name: 'background', title: 'Background', expanded: false, exclusive: true }
       ],
       layers: layersArr
     };
+    if (Object.keys(previewStyles).length > 0) config.styles = previewStyles;
+    if (Object.keys(qtilerPatternStyles).length > 0) config.qtilerPatternStyles = qtilerPatternStyles;
     if (proj4Defs.length) config.proj4Defs = proj4Defs;
     if (finalResolutions) config.resolutions = finalResolutions;
     // Align viewer's default tileGrid with WMTS top-left origin so WMS
@@ -3129,12 +3473,17 @@ ${mapIcon}
 
       const title = profile?.name || profileId;
       html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
+      const pluginBootstrapScript = `<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+      if (!html.includes(`/plugins/${pluginSlug}/client/origo-pattern-fills.js`)) {
+        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${pluginBootstrapScript}\n</head>`);
+        else html = pluginBootstrapScript + html;
+      }
       
       // Force the Origo initialization to use the explicit config with our profile param
       // avoiding strict Referer-Policy issues where browsers strip the query.
       html = html.replace(
         /Origo\('index\.json'\)/g, 
-        `Origo('index.json?qtiler_profile=${encodeURIComponent(profileId)}')`
+        `window.Qtiler2OrigoOrigoBoot.bootOrigo('index.json?qtiler_profile=${encodeURIComponent(profileId)}')`
       );
 
       // Inject cross-project map so the search box can hand off hits from
@@ -3519,7 +3868,7 @@ ${mapIcon}
       res.json(normalizeThemesForQwc2Assets(themes));
     } catch {
       const webRoot = await resolveQwc2WebRoot().catch(()=>'');
-      if (webRoot) return res.sendFile(path.join(webRoot, 'themes.json'));
+      if (webRoot) return sendRebasedJsonFile(res, path.join(webRoot, 'themes.json'), getRequestBaseUrl(req));
       res.status(500).json({ error: 'origo_themes_failed' });
     }
   });
@@ -3824,21 +4173,32 @@ ${mapIcon}
       const incomingVisibility = {};
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
-          if (l && typeof l === 'object' && l.name) incomingVisibility[String(l.name)] = !!l.visible;
+          if (l && typeof l === 'object' && l.name) {
+            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
+            incomingVisibility[`${srcPid}::${String(l.name)}`] = !!l.visible;
+          }
         }
       }
 
       const incomingGroupByName = {};
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
-          if (l && typeof l === 'object' && l.name && l.group) incomingGroupByName[String(l.name)] = String(l.group);
+          if (l && typeof l === 'object' && l.name && l.group) {
+            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
+            incomingGroupByName[`${srcPid}::${String(l.name)}`] = String(l.group);
+          }
         }
       }
-      const layers = layerNames.map((name) => {
-        const rule = layerRulesInput[name] && typeof layerRulesInput[name] === 'object' ? layerRulesInput[name] : {};
-        const sourceLayer = Array.isArray(inputLayers)
-          ? inputLayers.find((l) => l && typeof l === 'object' && String(l.name || '') === String(name))
-          : null;
+      const layerEntries = Array.isArray(inputLayers) && inputLayers.length
+        ? inputLayers.filter((l) => l && typeof l === 'object' && String(l.name || '').trim())
+        : layerNames.map((name) => ({ name, sourceProjectId: projectId }));
+      const layers = layerEntries.map((sourceLayer) => {
+        const name = String(sourceLayer?.name || '').trim();
+        const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
+        const layerRuleKey = `${sourceProjectId}::${name}`;
+        const rule = layerRulesInput[layerRuleKey] && typeof layerRulesInput[layerRuleKey] === 'object'
+          ? layerRulesInput[layerRuleKey]
+          : ((layerRulesInput[name] && typeof layerRulesInput[name] === 'object') ? layerRulesInput[name] : {});
         const fallbackSearchable = sourceLayer?.searchable === true;
         const fallbackEditable = sourceLayer?.editable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
@@ -3850,10 +4210,10 @@ ${mapIcon}
         const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
         const out = {
           name,
-          sourceProjectId: projectId,
+          sourceProjectId,
           role: 'main',
-          visible: (typeof incomingVisibility[name] === 'undefined') ? true : !!incomingVisibility[name],
-          group: incomingGroupByName[name] || String(rule.group || sourceLayer?.group || 'root'),
+          visible: (typeof incomingVisibility[layerRuleKey] === 'undefined') ? true : !!incomingVisibility[layerRuleKey],
+          group: incomingGroupByName[layerRuleKey] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: (rule.searchable === true) || fallbackSearchable,
           editable: (rule.editable === true) || fallbackEditable,
           serveAsWfs: (rule.serveAsWfs === true),
@@ -3863,6 +4223,9 @@ ${mapIcon}
           hintText: String(rule.hintText || '').trim() || fallbackHintText
         };
         if (ruleHasStyle) out.wfsStyle = rule.wfsStyle;
+        if (rule?.designerOptions && typeof rule.designerOptions === 'object' && Object.keys(rule.designerOptions).length) {
+          out.designerOptions = rule.designerOptions;
+        }
         // Persist user-defined infoclick attributes so the editor can restore
         // them, and so buildOrigoIndexConfig can apply them as the popup
         // attribute filter for both WFS and WMS layers.
@@ -4324,7 +4687,7 @@ ${mapIcon}
         return res.status(404).json({ error: 'project_not_found' });
       }
 
-      const cacheDir = path.join(process.cwd(), 'cache', safeProject, '_styles');
+      const cacheDir = resolveRepoPath('cache', safeProject, '_styles');
       const cacheFile = path.join(cacheDir, `${safeLayer}.json`);
 
       try {
