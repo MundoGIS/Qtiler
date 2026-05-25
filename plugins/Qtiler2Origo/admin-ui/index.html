@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Qtiler2Origo Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/eclipse.css" />
@@ -52,6 +55,10 @@
         <button class="tab-btn tab-btn--active" data-tab="maps">
           <span data-i18n="Qtiler2Origo.tab_maps">Maps</span>
           <span id="tabMapsBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="portal">
+          <span data-i18n="Qtiler2Origo.tab_portal">Portal</span>
+          <span id="tabPortalBadge" class="tab-badge">0</span>
         </button>
         <button class="tab-btn" data-tab="log">
           <span data-i18n="Qtiler2Origo.tab_log">Log</span>
@@ -156,19 +163,19 @@
           <header class="publish-editor__header">
             <div>
               <p id="modalTitle" class="publish-editor__title" data-i18n="Qtiler2Origo.modal_title">Publish project in Origo</p>
-              <p class="help" style="margin:4px 0 0">Editor fijo para crear y editar mapas sin desplazar la pagina.</p>
+              <p class="help" style="margin:4px 0 0" data-i18n="Qtiler2Origo.publish_editor_fixed_help">Editor fijo para crear y editar mapas sin desplazar la pagina.</p>
             </div>
             <div class="publish-editor__header-actions">
-              <button id="publishModalToggleFullscreen" class="button ghost small" type="button">Full screen</button>
+              <button id="publishModalToggleFullscreen" class="button ghost small" type="button" data-i18n="Qtiler2Origo.fullscreen">Full screen</button>
               <button id="closePublishModalTop" class="button ghost small" type="button" data-i18n="Qtiler2Origo.cancel">Cancel</button>
             </div>
           </header>
 
           <nav class="publish-editor__tabs" aria-label="Map editor sections">
             <button type="button" class="publish-editor__tab-btn publish-editor__tab-btn--active" data-publish-tab="layers" aria-selected="true">1. Layers</button>
-            <button type="button" class="publish-editor__tab-btn" data-publish-tab="backgrounds" aria-selected="false">2. Backgrounds</button>
-            <button type="button" class="publish-editor__tab-btn" data-publish-tab="tools" aria-selected="false">3. Controls &amp; search</button>
-            <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false">4. Origo Configuration</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="backgrounds" aria-selected="false" data-i18n="Qtiler2Origo.step_backgrounds">2. Backgrounds</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="tools" aria-selected="false" data-i18n="Qtiler2Origo.step_controls_search">3. Controls &amp; search</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false" data-i18n="Qtiler2Origo.step_origo_config">4. Origo Configuration</button>
           </nav>
 
           <section class="modal-card-body publish-editor__body">
@@ -304,22 +311,22 @@
 
             <section class="publish-editor__tab-panel" data-publish-panel="config">
               <fieldset class="modal-step publish-editor__config-step">
-                <legend class="modal-step__legend">4. Origo Configuration</legend>
+                <legend class="modal-step__legend" data-i18n="Qtiler2Origo.step_origo_config">4. Origo Configuration</legend>
                 <div class="publish-editor__config-grid">
                   <div class="publish-editor__config-main">
-                    <h4 class="title is-6" style="margin-bottom: 0.5rem;">Interactive Map</h4>
+                    <h4 class="title is-6" style="margin-bottom: 0.5rem;" data-i18n="Qtiler2Origo.interactive_map">Interactive Map</h4>
                     <div id="origo-preview-container" class="publish-editor__preview-frame">
                       <iframe id="origo-preview-iframe" src="" style="width:100%; height:100%; border:none;"></iframe>
                       <div id="origo-preview-overlay" class="publish-editor__preview-overlay">
                         <div class="publish-editor__preview-overlay-content">
-                          <strong id="origo-preview-overlay-title">Interactive Map</strong>
-                          <p id="origo-preview-overlay-message" class="has-text-grey">Pulsa Load Preview para cargar el mapa</p>
+                          <strong id="origo-preview-overlay-title" data-i18n="Qtiler2Origo.interactive_map">Interactive Map</strong>
+                          <p id="origo-preview-overlay-message" class="has-text-grey" data-i18n="Qtiler2Origo.interactive_map_idle">Pulsa Load Preview para cargar el mapa</p>
                         </div>
                       </div>
                     </div>
                     <div class="buttons is-centered publish-editor__preview-toolbar">
                       <button type="button" class="button is-small is-info" id="btn-load-map-preview" data-i18n="Qtiler2Origo.load_preview">Load Preview</button>
-                      <button type="button" class="button is-small" id="btn-open-map-preview-tab">Open in new tab</button>
+                      <button type="button" class="button is-small" id="btn-open-map-preview-tab" data-i18n="Qtiler2Origo.open_in_new_tab">Open in new tab</button>
                       <button type="button" class="button is-small is-primary" id="btn-fetch-map-extent" data-i18n="Qtiler2Origo.capture_view">Capture view (Center &amp; Zoom)</button>
                     </div>
 
@@ -391,6 +398,182 @@
             <button id="publishNowBtn" class="button is-primary" data-i18n="Qtiler2Origo.publish_now">Publish</button>
             <button id="closePublishModalBottom" class="button" type="button" data-i18n="Qtiler2Origo.cancel">Cancel</button>
           </footer>
+        </section>
+      </div>
+
+      <div class="tab-panel" data-panel="portal">
+        <section id="portalSection" class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.portal_section">Portal pages</h2>
+            <span id="portalPagesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Origo.portal_desc">Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.</p>
+          <div class="actions">
+            <button id="portalAddPageBtn" class="button primary" type="button" data-i18n="Qtiler2Origo.portal_add_page">New page</button>
+            <button id="portalDuplicatePageBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_duplicate_page">Duplicate page</button>
+            <button id="portalToggleFullscreenBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_fullscreen">Fullscreen editor</button>
+            <button id="portalSaveBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_save">Save portal</button>
+            <a id="portalOpenPageBtn" class="button ghost is-disabled" href="/Qtiler2Origo/maps" target="_blank" rel="noreferrer" data-i18n="Qtiler2Origo.portal_open_page">Open page</a>
+          </div>
+
+          <div class="portal-meta-grid" style="margin-bottom:1rem;">
+            <div class="field portal-meta-grid__checks">
+              <label class="checkbox"><input id="portalGdprEnabled" type="checkbox" /> <span>Enable GDPR / cookie consent</span></label>
+            </div>
+            <div class="field">
+              <label class="label" for="portalGdprCompany">Company / brand</label>
+              <div class="control"><input id="portalGdprCompany" class="input" type="text" maxlength="120" placeholder="Qtiler" /></div>
+            </div>
+            <div class="field">
+              <label class="label" for="portalGdprPrivacyUrl">Privacy policy URL</label>
+              <div class="control"><input id="portalGdprPrivacyUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy" /></div>
+            </div>
+            <div class="field">
+              <label class="label" for="portalGdprCookieUrl">Cookie policy URL</label>
+              <div class="control"><input id="portalGdprCookieUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/cookies" /></div>
+            </div>
+            <div class="field">
+              <label class="label" for="portalGdprContactUrl">GDPR contact URL</label>
+              <div class="control"><input id="portalGdprContactUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy-contact" /></div>
+            </div>
+            <div class="field">
+              <label class="label" for="portalGdprTitle">Banner title</label>
+              <div class="control"><input id="portalGdprTitle" class="input" type="text" maxlength="160" placeholder="Privacy and cookies" /></div>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:1rem;">
+            <label class="label" for="portalGdprText">Banner text</label>
+            <div class="control"><textarea id="portalGdprText" class="textarea" rows="3" placeholder="Explain essential cookies, embedded maps and consent."></textarea></div>
+          </div>
+
+          <div class="portal-editor">
+            <aside class="portal-editor__sidebar">
+              <div class="portal-editor__sidebar-head">
+                <strong data-i18n="Qtiler2Origo.portal_pages_list">Pages</strong>
+              </div>
+              <div id="portalPagesList" class="portal-pages-list"></div>
+            </aside>
+
+            <section class="portal-editor__workspace">
+              <div id="portalPageEmpty" class="portal-editor__empty" data-i18n="Qtiler2Origo.portal_empty">Create the first page to turn the maps portal into an editorial landing page.</div>
+
+              <div id="portalPageEditor" hidden>
+                <div class="portal-template-bar">
+                  <div>
+                    <strong data-i18n="Qtiler2Origo.portal_templates">Templates</strong>
+                    <p class="help" data-i18n="Qtiler2Origo.portal_templates_help">Start from a polished layout and then adapt text, maps and news blocks.</p>
+                  </div>
+                  <div class="portal-template-bar__controls">
+                    <div class="select is-small">
+                      <select id="portalTemplateSelect">
+                        <option value="story">Story landing</option>
+                        <option value="newsroom">Newsroom</option>
+                        <option value="campaign">Campaign / product</option>
+                      </select>
+                    </div>
+                    <button id="portalApplyTemplateBtn" class="button small" type="button" data-i18n="Qtiler2Origo.portal_apply_template">Apply template</button>
+                  </div>
+                </div>
+
+                <div class="portal-meta-grid">
+                  <div class="field">
+                    <label class="label" for="portalPageTitle" data-i18n="Qtiler2Origo.portal_page_title">Page title</label>
+                    <div class="control"><input id="portalPageTitle" class="input" type="text" maxlength="120" /></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageSlug" data-i18n="Qtiler2Origo.portal_page_slug">Slug</label>
+                    <div class="control"><input id="portalPageSlug" class="input" type="text" maxlength="120" placeholder="about-us" /></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageNavLabel" data-i18n="Qtiler2Origo.portal_page_nav">Navigation label</label>
+                    <div class="control"><input id="portalPageNavLabel" class="input" type="text" maxlength="80" /></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageSummary" data-i18n="Qtiler2Origo.portal_page_summary">Short summary</label>
+                    <div class="control"><input id="portalPageSummary" class="input" type="text" maxlength="180" /></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageHeaderLogoUrl" data-i18n="Qtiler2Origo.portal_header_logo">Header logo URL</label>
+                    <div class="control"><input id="portalPageHeaderLogoUrl" class="input" type="text" maxlength="400" placeholder="/plugins/Qtiler2Origo/api/branding/logo-file" /></div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageHeaderHeight" data-i18n="Qtiler2Origo.portal_header_height">Header height</label>
+                    <div class="control"><input id="portalPageHeaderHeight" class="input" type="number" min="0" max="320" step="4" /></div>
+                  </div>
+                </div>
+
+                <div class="portal-meta-grid portal-meta-grid--audience">
+                  <div class="field">
+                    <label class="label" for="portalPageVisibility" data-i18n="Qtiler2Origo.portal_visibility">Page visibility</label>
+                    <div class="control">
+                      <div class="select is-fullwidth">
+                        <select id="portalPageVisibility">
+                          <option value="public" data-i18n="Qtiler2Origo.portal_vis_public">Public</option>
+                          <option value="authenticated" data-i18n="Qtiler2Origo.portal_vis_authenticated">Authenticated users</option>
+                          <option value="restricted" data-i18n="Qtiler2Origo.portal_vis_restricted">Specific users / roles</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageUsers" data-i18n="Qtiler2Origo.portal_users">Allowed users</label>
+                    <div class="control"><input id="portalPageUsers" class="input" type="text" placeholder="anna, diego" /></div>
+                    <div class="control">
+                      <select id="portalPageUsersCatalog" class="input portal-multiselect" multiple size="6"></select>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="portalPageRoles" data-i18n="Qtiler2Origo.portal_roles">Allowed roles</label>
+                    <div class="control"><input id="portalPageRoles" class="input" type="text" placeholder="editor, customer" /></div>
+                    <div class="control">
+                      <select id="portalPageRolesCatalog" class="input portal-multiselect" multiple size="4"></select>
+                    </div>
+                  </div>
+                  <div class="field portal-meta-grid__checks">
+                    <label class="checkbox"><input id="portalPageShowInNav" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_in_nav">Show in navigation</span></label>
+                    <label class="checkbox"><input id="portalPageIsHome" type="checkbox" /> <span data-i18n="Qtiler2Origo.portal_set_home">Use as portal home</span></label>
+                    <label class="checkbox"><input id="portalPageShowHeader" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_header">Show header</span></label>
+                  </div>
+                </div>
+
+                <div class="portal-blocks-head">
+                  <div>
+                    <h3 data-i18n="Qtiler2Origo.portal_blocks">Sections</h3>
+                    <p class="help" data-i18n="Qtiler2Origo.portal_blocks_help">Combine hero, text, card, social and map sections to build a polished landing page.</p>
+                  </div>
+                  <div class="portal-blocks-actions">
+                    <div class="select is-small">
+                      <select id="portalAddBlockType">
+                        <option value="hero">Hero</option>
+                        <option value="text">Text</option>
+                        <option value="cards">Cards / news</option>
+                        <option value="maps">Featured maps</option>
+                        <option value="social">Social links</option>
+                      </select>
+                    </div>
+                    <button id="portalAddBlockBtn" class="button small" type="button" data-i18n="Qtiler2Origo.portal_add_block">Add section</button>
+                  </div>
+                </div>
+
+                <div id="portalBlocksList" class="portal-blocks-list"></div>
+
+                <div class="portal-preview-card">
+                  <div class="card-header-row">
+                    <h3 data-i18n="Qtiler2Origo.portal_preview">Live preview</h3>
+                    <div class="portal-preview-toolbar">
+                      <span class="badge badge--muted" data-i18n="Qtiler2Origo.portal_preview_note">Desktop preview</span>
+                      <div class="portal-preview-devices">
+                        <button type="button" class="button small is-active" data-portal-preview-device="desktop" data-i18n="Qtiler2Origo.portal_device_desktop">Desktop</button>
+                        <button type="button" class="button small" data-portal-preview-device="tablet" data-i18n="Qtiler2Origo.portal_device_tablet">Tablet</button>
+                        <button type="button" class="button small" data-portal-preview-device="mobile" data-i18n="Qtiler2Origo.portal_device_mobile">Mobile</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="portalPreviewHost" class="portal-preview-host"></div>
+                </div>
+              </div>
+            </section>
+          </div>
         </section>
       </div>
 
@@ -478,7 +661,7 @@
           </div>
           <div class="Qtiler2Origo-style-head-actions">
             <span id="wfs-style-geometry-badge" class="badge badge--muted">Vector</span>
-            <button type="button" class="button small" id="wfs-style-fullscreen">Full screen</button>
+            <button type="button" class="button small" id="wfs-style-fullscreen" data-i18n="Qtiler2Origo.fullscreen">Full screen</button>
             <button class="delete" aria-label="close" onclick="closeStyleEditor()"></button>
           </div>
         </header>
@@ -647,9 +830,12 @@
                 <div id="wfs-style-json-host" style="border:1px solid #d0d7de;border-radius:4px;min-height:380px;max-height:520px;overflow:auto;background:#fff"></div>
                 <textarea id="wfs-style-json-editor" class="textarea is-family-code" rows="18" style="display:none"></textarea>
                 <div class="Qtiler2Origo-style-json-actions" style="margin-top:0.5rem">
+                  <button type="button" class="button small" id="wfs-style-export-json" data-i18n="Qtiler2Origo.wfs_export_json">Exportar JSON</button>
+                  <button type="button" class="button small" id="wfs-style-import-json" data-i18n="Qtiler2Origo.wfs_import_json">Importar JSON</button>
                   <button type="button" class="button small" id="wfs-style-apply-json" data-i18n="Qtiler2Origo.wfs_apply_json">Aplicar JSON</button>
                   <span id="wfs-style-json-status" class="help" style="margin-left:0.5rem"></span>
                 </div>
+                <input id="wfs-style-import-file" type="file" accept="application/json,.json" hidden />
               </section>
             </div>
 
@@ -696,7 +882,7 @@
             <p class="Qtiler2Origo-style-subtitle"><span data-i18n="Qtiler2Origo.wfs_rule">Regla</span>: <strong id="wfs-rule-editor-title"></strong></p>
           </div>
           <div class="Qtiler2Origo-style-head-actions">
-            <button type="button" class="button small" id="wfs-rule-editor-fullscreen">Full screen</button>
+            <button type="button" class="button small" id="wfs-rule-editor-fullscreen" data-i18n="Qtiler2Origo.fullscreen">Full screen</button>
             <button class="delete" aria-label="close" onclick="closeRuleStyleEditor()"></button>
           </div>
         </header>
@@ -714,9 +900,9 @@
       <div class="modal-background" onclick="closeSvgPicker()"></div>
       <div class="modal-card" style="max-width:900px;width:90%">
         <header class="modal-card-head">
-          <p class="modal-card-title">Seleccionar icono SVG (QGIS)</p>
+          <p class="modal-card-title" data-i18n="Qtiler2Origo.svg_picker_title">Seleccionar icono SVG (QGIS)</p>
           <div class="Qtiler2Origo-style-head-actions">
-            <button type="button" class="button small" id="svg-picker-fullscreen">Full screen</button>
+            <button type="button" class="button small" id="svg-picker-fullscreen" data-i18n="Qtiler2Origo.fullscreen">Full screen</button>
             <button class="delete" aria-label="close" onclick="closeSvgPicker()"></button>
           </div>
         </header>

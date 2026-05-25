@@ -16,8 +16,9 @@ import http from 'http';
 import https from 'https';
 import AdmZip from 'adm-zip';
 import multer from 'multer';
+import sharp from 'sharp';
 import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
-import { readProjectAccessFromDb } from '../../lib/authDb.js';
+import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
 const DEFAULT_REPO = process.env.QTILER_ORIGO_REPO || process.env.QTWC_QWC2_REPO || 'origo-map/origo';
@@ -53,6 +54,7 @@ const normalizePreviewStatePayload = (input) => {
   return {
     project: sanitizeFileToken(String(source.project || '').trim()),
     layers: normalizeJsonish(source.layers),
+    groups: normalizeJsonish(source.groups),
     layerRules: normalizeJsonish(source.layerRules),
     bgProject: sanitizeFileToken(String(source.bgProject || '').trim()),
     bgLayer: String(source.bgLayer || '').trim(),
@@ -189,7 +191,6 @@ const normalizeBackgroundSelection = ({
       type,
       title,
       sourceProjectId: null,
-      name: null,
       isDefault: item.isDefault === true
     };
 
@@ -495,12 +496,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return path.join(process.cwd(), ...parts);
   };
   const workspaceRoot = path.dirname(resolveRepoPath('qgisprojects'));
+  const cacheRoot = resolveRepoPath('cache');
   const dataRoot = path.resolve(dataDir, '..');
   const runtimeRoot = path.join(dataDir, 'origo');
   const installRoot = path.join(runtimeRoot, 'current');
   const publishedRoot = path.join(runtimeRoot, 'published');
+  const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
+  const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const projectsDir = resolveRepoPath('qgisprojects');
   let standaloneServer = null;
   let standalonePort = null;
@@ -519,6 +523,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   await fs.promises.mkdir(runtimeRoot, { recursive: true });
   await fs.promises.mkdir(publishedRoot, { recursive: true });
+  await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
 
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
@@ -544,6 +549,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   };
 
   const adminOnly = ensureAdmin(security);
+  const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
 
   // Public alias: rewrite `/Qtiler2Origo/maps/...` to the internal Origo mount
   // `/plugins/Qtiler2Origo/origo/...` so the viewer can be reached at the same
@@ -691,7 +697,153 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   const publishedProfilePath = (projectId) => path.join(publishedRoot, `${sanitizeFileToken(projectId)}.json`);
 
-  const collectPublishedProfiles = async (baseUrl = '') => {
+  const getDefaultPublishedBackground = (profile) => {
+    const backgrounds = Array.isArray(profile?.backgrounds) ? profile.backgrounds : [];
+    if (!backgrounds.length) return null;
+    const defaultKey = String(profile?.defaultBackgroundKey || '').trim();
+    const match = (defaultKey
+      ? backgrounds.find((bg) => String(bg?.key || '').trim() === defaultKey)
+      : null) || backgrounds.find((bg) => bg?.isDefault === true) || null;
+    if (!match) return null;
+    const type = toBackgroundType(match?.type);
+    if (type === 'layer') {
+      const sourceProjectId = normalizeProjectId(match?.sourceProjectId || profile?.backgroundProjectId || '');
+      const name = String(match?.name || '').trim();
+      if (!sourceProjectId || !name) return null;
+      return { type, sourceProjectId, name, key: String(match?.key || '').trim() };
+    }
+    if (type === 'osm') return { type, key: String(match?.key || '').trim() };
+    if (type === 'none') return { type, key: String(match?.key || '').trim() };
+    return null;
+  };
+
+  const getRequestApiKey = (req) => String(
+    req?.get?.('x-api-key')
+    || req?.get?.('x-qtiler-key')
+    || req?.get?.('x-api_key')
+    || req?.query?.api_key
+    || req?.query?.apikey
+    || req?.query?.apiKey
+    || req?.query?.API_KEY
+    || ''
+  ).trim();
+
+  const buildPublishedThumbnailQuery = ({ mainLayerNames, background, apiKey = '' }) => {
+    const params = new URLSearchParams();
+    const layerNames = Array.isArray(mainLayerNames)
+      ? mainLayerNames.map((name) => String(name || '').trim()).filter(Boolean)
+      : [];
+    if (layerNames.length) params.set('LAYERS', layerNames.join(','));
+    if (background?.type === 'layer' && background?.sourceProjectId && background?.name) {
+      params.set('BGPROJECT', background.sourceProjectId);
+      params.set('BGLAYER', background.name);
+    } else if (background?.type === 'osm') {
+      params.set('BGTYPE', 'osm');
+    }
+    if (apiKey) params.set('api_key', apiKey);
+    return params.toString() ? `?${params.toString()}` : '';
+  };
+
+  const clearThumbnailRenderCaches = async (projectIds) => {
+    const ids = Array.from(new Set((Array.isArray(projectIds) ? projectIds : [])
+      .map((value) => normalizeProjectId(value || ''))
+      .filter(Boolean)));
+    let removed = 0;
+    for (const projectId of ids) {
+      const safeProjectId = sanitizeFileToken(projectId);
+      if (!safeProjectId) continue;
+      const targets = [
+        path.join(cacheRoot, safeProjectId, '_wms_tiles'),
+        path.join(cacheRoot, '_wms_tiles', safeProjectId)
+      ];
+      for (const target of targets) {
+        try {
+          await fs.promises.rm(target, { recursive: true, force: true });
+          removed += 1;
+        } catch (_) {}
+      }
+    }
+    return removed;
+  };
+
+  const publishedThumbnailFilename = (profileKey) => `${sanitizeFileToken(profileKey)}.jpg`;
+  const publishedThumbnailPath = (profileKey) => path.join(publishedThumbsRoot, publishedThumbnailFilename(profileKey));
+  const publishedThumbnailUrl = (profileKey, stamp = '') => {
+    const fileName = publishedThumbnailFilename(profileKey);
+    if (!fileName) return '';
+    return `/plugins/${pluginSlug}/published/thumbs/${encodeURIComponent(fileName)}${stamp ? `?v=${encodeURIComponent(String(stamp))}` : ''}`;
+  };
+  const readPublishedThumbnailMeta = async (profileKey) => {
+    const filePath = publishedThumbnailPath(profileKey);
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile() || stat.size <= 0) return null;
+      return {
+        filePath,
+        updatedAt: stat.mtimeMs,
+        url: publishedThumbnailUrl(profileKey, stat.mtimeMs)
+      };
+    } catch {
+      return null;
+    }
+  };
+  const resolvePublishedProfileRecord = async (profileToken) => {
+    const directKey = sanitizeFileToken(profileToken);
+    if (directKey) {
+      const direct = await readPublishedProfile(directKey);
+      if (direct?.projectId) return { profileKey: directKey, profile: direct };
+    }
+    const allProfiles = await readAllPublishedProfiles();
+    const wanted = String(profileToken || '').trim().toLowerCase();
+    const match = allProfiles.find((profile) => {
+      return [profile?.profileKey, profile?.projectId, profile?.name].some((candidate) => String(candidate || '').trim().toLowerCase() === wanted);
+    }) || null;
+    return match?.projectId ? { profileKey: String(match.profileKey || '').trim(), profile: match } : null;
+  };
+  const regeneratePublishedThumbnail = async ({ profileKey, profile, baseUrl, cookieHeader, apiKey = '', authorization = '', clearCaches = true }) => {
+    const safeProfileKey = sanitizeFileToken(profileKey || profile?.profileKey || profile?.name || '');
+    const projectId = normalizeProjectId(profile?.projectId || '');
+    const mainLayerNames = (Array.isArray(profile?.layers) ? profile.layers : [])
+      .filter((layer) => layer?.role === 'main')
+      .map((layer) => String(layer?.name || '').trim())
+      .filter(Boolean);
+    if (!safeProfileKey || !projectId || !mainLayerNames.length) return null;
+    const background = getDefaultPublishedBackground(profile);
+    await fs.promises.unlink(publishedThumbnailPath(safeProfileKey)).catch(() => {});
+    if (clearCaches) {
+      await clearThumbnailRenderCaches([
+        projectId,
+        background?.type === 'layer' ? background.sourceProjectId : null
+      ]);
+    }
+    const layerAttempts = Array.from(new Set([
+      mainLayerNames,
+      mainLayerNames.slice(0, 12),
+      mainLayerNames.slice(0, 6),
+      mainLayerNames.slice(0, 1)
+    ].filter((list) => Array.isArray(list) && list.length).map((list) => list.join(','))));
+
+    let generatedPath = null;
+    for (const layers of layerAttempts) {
+      const cacheEntry = buildThumbnailCacheEntry(projectId, layers, background);
+      if (!cacheEntry) continue;
+      await fs.promises.unlink(cacheEntry.thumbPath).catch(() => {});
+      generatedPath = await generateThumbnail(projectId, layers, baseUrl, cookieHeader, {
+        background,
+        apiKey,
+        authorization
+      });
+      if (generatedPath) break;
+    }
+    if (!generatedPath) return null;
+    await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
+    const targetPath = publishedThumbnailPath(safeProfileKey);
+    await fs.promises.copyFile(generatedPath, targetPath);
+    return readPublishedThumbnailMeta(safeProfileKey);
+  };
+
+  const collectPublishedProfiles = async (baseUrl = '', options = {}) => {
+    const apiKey = String(options?.apiKey || '').trim();
     let entries;
     try {
       entries = await fs.promises.readdir(publishedRoot, { withFileTypes: true });
@@ -720,14 +872,14 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const standaloneLaunch = baseLaunch
           ? `${baseLaunch}/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
           : `/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
-        const mainLayerNames = (parsed?.layers || []).filter((l) => l.role === 'main').map((l) => l.name);
+        const thumbnailMeta = await readPublishedThumbnailMeta(profileKey);
         rows.push({
           projectId,
           profileKey,
           name: parsed?.name || projectId,
           description: parsed?.description || null,
           generatedAt: parsed?.generatedAt || null,
-          mainLayerNames,
+          thumbnailUrl: thumbnailMeta?.url || '',
           url,
           absoluteUrl: baseUrl ? `${baseUrl}${url}` : url,
           launchUrl: standaloneLaunch
@@ -830,12 +982,221 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return profiles;
   };
 
+  const slugifyPortalToken = (value) => String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  const defaultPortalGdprSettings = () => ({
+    enabled: false,
+    companyName: 'Qtiler',
+    privacyUrl: '',
+    cookiePolicyUrl: '',
+    contactUrl: '',
+    bannerTitle: 'Privacy and cookies',
+    bannerText: 'This portal uses essential storage for language and consent settings. Embedded maps and external media are only loaded after consent.',
+    acceptLabel: 'Accept all',
+    rejectLabel: 'Only necessary',
+    manageLabel: 'Manage settings'
+  });
+
+  const defaultPortalPagesState = () => ({
+    homePageSlug: '',
+    gdpr: defaultPortalGdprSettings(),
+    pages: []
+  });
+
+  const normalizePortalGdprSettings = (value) => {
+    const source = value && typeof value === 'object' ? value : {};
+    const defaults = defaultPortalGdprSettings();
+    return {
+      enabled: source.enabled === true,
+      companyName: String(source.companyName || defaults.companyName).trim() || defaults.companyName,
+      privacyUrl: String(source.privacyUrl || '').trim(),
+      cookiePolicyUrl: String(source.cookiePolicyUrl || '').trim(),
+      contactUrl: String(source.contactUrl || '').trim(),
+      bannerTitle: String(source.bannerTitle || defaults.bannerTitle).trim() || defaults.bannerTitle,
+      bannerText: String(source.bannerText || defaults.bannerText).trim() || defaults.bannerText,
+      acceptLabel: String(source.acceptLabel || defaults.acceptLabel).trim() || defaults.acceptLabel,
+      rejectLabel: String(source.rejectLabel || defaults.rejectLabel).trim() || defaults.rejectLabel,
+      manageLabel: String(source.manageLabel || defaults.manageLabel).trim() || defaults.manageLabel
+    };
+  };
+
+  const normalizePortalAudience = (value, { allowInherit = false } = {}) => {
+    const source = value && typeof value === 'object' ? value : {};
+    let access = String(source.access || source.mode || '').trim().toLowerCase();
+    if (allowInherit && access === 'inherit') access = 'inherit';
+    else if (access === 'authenticated') access = 'authenticated';
+    else if (access === 'restricted') access = 'restricted';
+    else access = 'public';
+    return {
+      access,
+      users: toArray(source.users),
+      roles: toArray(source.roles)
+    };
+  };
+
+  const normalizePortalCardItems = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value.map((item, index) => {
+      const source = item && typeof item === 'object' ? item : {};
+      const title = String(source.title || '').trim();
+      const text = String(source.text || source.body || '').trim();
+      const url = String(source.url || '').trim();
+      const label = String(source.label || source.ctaLabel || '').trim();
+      const icon = String(source.icon || '').trim().toLowerCase();
+      const meta = String(source.meta || source.date || '').trim();
+      const imageUrl = String(source.imageUrl || source.image || '').trim();
+      if (!title && !text && !url && !label && !meta && !imageUrl) return null;
+      return {
+        id: slugifyPortalToken(source.id || `${title || 'item'}-${index + 1}`) || `item_${index + 1}`,
+        title,
+        text,
+        url,
+        label,
+        icon,
+        meta,
+        imageUrl
+      };
+    }).filter(Boolean);
+  };
+
+  const normalizePortalBlock = (value, index = 0) => {
+    const source = value && typeof value === 'object' ? value : {};
+    const type = String(source.type || 'text').trim().toLowerCase();
+    const blockType = ['hero', 'text', 'maps', 'cards', 'social'].includes(type) ? type : 'text';
+    const id = slugifyPortalToken(source.id || `${blockType}-${index + 1}`) || `${blockType}_${index + 1}`;
+    const profileKeys = Array.isArray(source.profileKeys)
+      ? source.profileKeys.map((item) => String(item || '').trim()).filter(Boolean)
+      : String(source.profileKeys || '').split(',').map((item) => item.trim()).filter(Boolean);
+    return {
+      id,
+      type: blockType,
+      title: String(source.title || '').trim(),
+      eyebrow: String(source.eyebrow || '').trim(),
+      subtitle: String(source.subtitle || '').trim(),
+      body: String(source.body || source.html || '').trim(),
+      backgroundUrl: String(source.backgroundUrl || '').trim(),
+      imageUrl: String(source.imageUrl || '').trim(),
+      ctaLabel: String(source.ctaLabel || '').trim(),
+      ctaUrl: String(source.ctaUrl || '').trim(),
+      intro: String(source.intro || '').trim(),
+      layout: String(source.layout || '').trim().toLowerCase() === 'featured' ? 'featured' : 'grid',
+      displayMode: ['thumbnail', 'embed', 'open'].includes(String(source.displayMode || '').trim().toLowerCase())
+        ? String(source.displayMode || '').trim().toLowerCase()
+        : 'thumbnail',
+      profileKeys,
+      items: normalizePortalCardItems(source.items),
+      visibility: normalizePortalAudience(source.visibility, { allowInherit: true })
+    };
+  };
+
+  const readAuthCatalog = () => {
+    if (!isAuthActive()) {
+      return { users: [], roles: [] };
+    }
+    try {
+      const db = getAuthDb(dataRoot);
+      const rows = db.prepare('SELECT username, role FROM users WHERE status = ? ORDER BY username COLLATE NOCASE').all('active');
+      const users = rows.map((row) => String(row?.username || '').trim()).filter(Boolean);
+      const roles = Array.from(new Set(rows.map((row) => String(row?.role || '').trim()).filter(Boolean)));
+      return { users, roles };
+    } catch (err) {
+      console.warn('[Qtiler2Origo] auth catalog unavailable:', err?.message || err);
+      return { users: [], roles: [] };
+    }
+  };
+
+  const normalizePortalPage = (value, index = 0) => {
+    const source = value && typeof value === 'object' ? value : {};
+    const title = String(source.title || '').trim() || `Page ${index + 1}`;
+    const slug = slugifyPortalToken(source.slug || source.id || title);
+    if (!slug) return null;
+    const rawHeaderHeight = Number(source.headerHeight);
+    return {
+      id: slugifyPortalToken(source.id || slug) || slug,
+      slug,
+      title,
+      navLabel: String(source.navLabel || title).trim() || title,
+      summary: String(source.summary || '').trim(),
+      showInNav: source.showInNav !== false,
+      showHeader: source.showHeader !== false,
+      headerHeight: Number.isFinite(rawHeaderHeight) ? Math.max(0, Math.min(320, Math.round(rawHeaderHeight))) : 120,
+      headerLogoUrl: String(source.headerLogoUrl || '').trim(),
+      visibility: normalizePortalAudience(source.visibility),
+      blocks: (Array.isArray(source.blocks) ? source.blocks : []).map((block, blockIndex) => normalizePortalBlock(block, blockIndex)).filter(Boolean)
+    };
+  };
+
+  const normalizePortalPagesState = (value) => {
+    const source = value && typeof value === 'object' ? value : {};
+    const pages = (Array.isArray(source.pages) ? source.pages : []).map((page, index) => normalizePortalPage(page, index)).filter(Boolean);
+    const seenSlugs = new Set();
+    const dedupedPages = [];
+    for (const page of pages) {
+      if (seenSlugs.has(page.slug)) continue;
+      seenSlugs.add(page.slug);
+      dedupedPages.push(page);
+    }
+    const homePageSlug = slugifyPortalToken(source.homePageSlug || '');
+    return {
+      homePageSlug: dedupedPages.some((page) => page.slug === homePageSlug) ? homePageSlug : (dedupedPages[0]?.slug || ''),
+      gdpr: normalizePortalGdprSettings(source.gdpr),
+      pages: dedupedPages
+    };
+  };
+
+  const readPortalPagesState = async () => {
+    try {
+      const raw = await fs.promises.readFile(portalPagesPath, 'utf8');
+      return normalizePortalPagesState(JSON.parse(raw || '{}'));
+    } catch {
+      return defaultPortalPagesState();
+    }
+  };
+
+  const writePortalPagesState = async (value) => {
+    const normalized = normalizePortalPagesState(value);
+    await fs.promises.mkdir(runtimeRoot, { recursive: true });
+    await fs.promises.writeFile(portalPagesPath, JSON.stringify(normalized, null, 2), 'utf8');
+    return normalized;
+  };
+
+  const userMatchesPortalAudience = (audience, user) => {
+    if (!isAuthActive()) return true;
+    const scope = normalizePortalAudience(audience);
+    if (user?.role === 'admin') return true;
+    if (scope.access === 'public') return true;
+    if (scope.access === 'authenticated') return !!user;
+    if (!user) return false;
+    const userId = String(user?.id || user?.username || '').trim();
+    const userRole = String(user?.role || '').trim();
+    return scope.users.includes(userId) || scope.roles.includes(userRole);
+  };
+
+  const filterPortalBlocksByAudience = (blocks, user) => (Array.isArray(blocks) ? blocks : [])
+    .filter((block) => {
+      const scope = normalizePortalAudience(block?.visibility, { allowInherit: true });
+      if (scope.access === 'inherit') return true;
+      return userMatchesPortalAudience(scope, user);
+    });
+
+  const buildPortalPageUrl = (slug) => `/Qtiler2Origo/pages/${encodeURIComponent(String(slug || '').trim())}`;
+
   /**
    * Filter profiles based on QtilerAuth permissions
    */
-  const filterProfilesByAccess = (profiles, user) => profiles;;
+  const filterProfilesByAccess = (profiles, user) => {
+    const list = Array.isArray(profiles) ? profiles : [];
+    if (!isAuthActive()) return list;
+    const snapshot = readAccessSnapshot(dataRoot);
+    return list.filter((profile) => userCanAccessProject(snapshot, user || null, profile?.projectId));
+  };
 
   const profileRequiresAuthentication = (profile) => {
+    if (!isAuthActive()) return false;
     const projectId = normalizeProjectId(profile?.projectId || '');
     if (!projectId) return false;
     const snapshot = readAccessSnapshot(dataRoot);
@@ -951,11 +1312,156 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
    */
   const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const thumbPendingRequests = new Map(); // key -> Promise (in-flight requests)
-  const generateThumbnail = async (projectId, layers, baseUrl, cookieHeader) => {
+  const normalizeThumbnailBackground = (input) => {
+    const source = input && typeof input === 'object' ? input : {};
+    const type = toBackgroundType(source.type);
+    if (type === 'layer') {
+      const sourceProjectId = normalizeProjectId(source.sourceProjectId || source.projectId || '');
+      const name = String(source.name || source.layer || '').trim();
+      if (!sourceProjectId || !name) return null;
+      return { type, sourceProjectId, name };
+    }
+    if (type === 'osm') return { type };
+    if (type === 'none') return { type };
+    return null;
+  };
+  const buildThumbnailCacheEntry = (projectId, layers, background) => {
     const safePid = sanitizeFileToken(projectId);
     if (!safePid) return null;
-    const hash = layers ? sanitizeFileToken(layers.replace(/,/g, '_')) : '_all';
-    const thumbPath = path.join(thumbCacheDir, `${safePid}_${hash}.jpg`);
+    const layerKey = String(layers || '').trim();
+    const bg = normalizeThumbnailBackground(background);
+    const bgKey = bg?.type === 'layer'
+      ? `|bg:${bg.sourceProjectId}:${bg.name}`
+      : bg?.type === 'osm'
+        ? '|bg:osm'
+        : '';
+    const hash = sanitizeFileToken(`${layerKey}${bgKey}`.replace(/,/g, '_')) || '_all';
+    return {
+      safePid,
+      hash,
+      thumbPath: path.join(thumbCacheDir, `${safePid}_${hash}.jpg`),
+      dedupKey: `${safePid}|${hash}`,
+      background: bg
+    };
+  };
+  const fetchImageBuffer = (imageUrl, auth = {}) => new Promise((resolve) => {
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const reqOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {}
+      };
+      if (auth.cookieHeader) reqOptions.headers.cookie = auth.cookieHeader;
+      if (auth.apiKey) reqOptions.headers['x-api-key'] = auth.apiKey;
+      if (auth.authorization) reqOptions.headers.authorization = auth.authorization;
+      const fetcher = imageUrl.startsWith('https') ? https : http;
+      const proxyReq = fetcher.get(reqOptions, (proxyRes) => {
+        try {
+          const contentType = String(proxyRes.headers['content-type'] || '');
+          if (!contentType.startsWith('image/')) {
+            proxyRes.resume();
+            return resolve(null);
+          }
+          const chunks = [];
+          proxyRes.on('data', (chunk) => chunks.push(chunk));
+          proxyRes.on('end', () => resolve(Buffer.concat(chunks)));
+          proxyRes.on('error', () => resolve(null));
+        } catch {
+          resolve(null);
+        }
+      });
+      proxyReq.setTimeout(60_000, () => {
+        try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
+      });
+      proxyReq.on('error', () => resolve(null));
+    } catch {
+      resolve(null);
+    }
+  });
+  const buildOsmThumbnailBuffer = async (bboxWgs84, width, height) => {
+    const clampLat = (lat) => Math.max(-85.05112878, Math.min(85.05112878, Number(lat)));
+    const clampLon = (lon) => Math.max(-180, Math.min(180, Number(lon)));
+    const mercY = (lat) => {
+      const rad = clampLat(lat) * Math.PI / 180;
+      return (1 - Math.log(Math.tan(rad) + (1 / Math.cos(rad))) / Math.PI) / 2;
+    };
+    const worldX = (lon, zoom) => ((clampLon(lon) + 180) / 360) * (256 * 2 ** zoom);
+    const worldY = (lat, zoom) => mercY(lat) * (256 * 2 ** zoom);
+
+    if (!Array.isArray(bboxWgs84) || bboxWgs84.length < 4) return null;
+    const minLon = clampLon(bboxWgs84[0]);
+    const minLat = clampLat(bboxWgs84[1]);
+    const maxLon = clampLon(bboxWgs84[2]);
+    const maxLat = clampLat(bboxWgs84[3]);
+    if (!(maxLon > minLon) || !(maxLat > minLat)) return null;
+
+    const lonSpan = Math.max(0.000001, maxLon - minLon);
+    const latSpanNorm = Math.max(0.000001, Math.abs(mercY(maxLat) - mercY(minLat)));
+    const zoomX = Math.log2((width * 360) / (256 * lonSpan));
+    const zoomY = Math.log2(height / (256 * latSpanNorm));
+    const zoom = Math.max(0, Math.min(19, Math.floor(Math.min(zoomX, zoomY))));
+
+    const left = worldX(minLon, zoom);
+    const right = worldX(maxLon, zoom);
+    const top = worldY(maxLat, zoom);
+    const bottom = worldY(minLat, zoom);
+    const tileMinX = Math.floor(left / 256);
+    const tileMaxX = Math.floor((right - 1) / 256);
+    const tileMinY = Math.floor(top / 256);
+    const tileMaxY = Math.floor((bottom - 1) / 256);
+    const tileCount = (tileMaxX - tileMinX + 1) * (tileMaxY - tileMinY + 1);
+    if (!Number.isFinite(tileCount) || tileCount < 1 || tileCount > 64) return null;
+
+    const worldTiles = 2 ** zoom;
+    const composites = [];
+    for (let tileY = tileMinY; tileY <= tileMaxY; tileY += 1) {
+      if (tileY < 0 || tileY >= worldTiles) continue;
+      for (let tileX = tileMinX; tileX <= tileMaxX; tileX += 1) {
+        const wrappedX = ((tileX % worldTiles) + worldTiles) % worldTiles;
+        const tileUrl = `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`;
+        const tileBuffer = await fetchImageBuffer(tileUrl, null);
+        if (!tileBuffer) continue;
+        composites.push({
+          input: tileBuffer,
+          left: (tileX - tileMinX) * 256,
+          top: (tileY - tileMinY) * 256
+        });
+      }
+    }
+    if (!composites.length) return null;
+
+    const canvasWidth = (tileMaxX - tileMinX + 1) * 256;
+    const canvasHeight = (tileMaxY - tileMinY + 1) * 256;
+    const cropLeft = Math.max(0, Math.floor(left - tileMinX * 256));
+    const cropTop = Math.max(0, Math.floor(top - tileMinY * 256));
+    const cropWidth = Math.max(1, Math.ceil(right - left));
+    const cropHeight = Math.max(1, Math.ceil(bottom - top));
+
+    return sharp({
+      create: {
+        width: canvasWidth,
+        height: canvasHeight,
+        channels: 3,
+        background: '#f8fafc'
+      }
+    })
+      .composite(composites)
+      .extract({ left: cropLeft, top: cropTop, width: Math.min(cropWidth, canvasWidth - cropLeft), height: Math.min(cropHeight, canvasHeight - cropTop) })
+      .resize(width, height, { fit: 'fill' })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+  };
+  const generateThumbnail = async (projectId, layers, baseUrl, cookieHeader, options = {}) => {
+    const cacheEntry = buildThumbnailCacheEntry(projectId, layers, options.background);
+    if (!cacheEntry) return null;
+    const { thumbPath, dedupKey, background } = cacheEntry;
+    const authContext = {
+      cookieHeader,
+      apiKey: String(options.apiKey || '').trim(),
+      authorization: String(options.authorization || '').trim()
+    };
     try {
       const stat = await fs.promises.stat(thumbPath);
       if (stat.isFile() && stat.size > 0) {
@@ -964,7 +1470,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     } catch { /* not cached yet */ }
 
     // Dedup concurrent requests for the same thumbnail.
-    const dedupKey = `${safePid}|${hash}`;
     if (thumbPendingRequests.has(dedupKey)) {
       return thumbPendingRequests.get(dedupKey);
     }
@@ -990,6 +1495,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return [minx - padX, miny - padY, maxx + padX, maxy + padY];
     };
     let bbox = null;
+    let bboxWgs84 = null;
     let crs = null;
     const requestedLayers = String(layers || '').split(',').map((v) => String(v || '').trim()).filter(Boolean);
     if (requestedLayers.length === 1) {
@@ -1002,10 +1508,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           return cand && (cand === layerName || safeLayerNameForWfs(cand) === safeLayerNameForWfs(layerName));
         });
         const layerExtent = parseExtentArray(cached?.extent || cached?.project_extent);
+        const layerExtentWgs84 = parseExtentArray(cached?.extent_wgs84 || cached?.project_extent_wgs84);
         if (layerExtent) {
           bbox = padExtent(layerExtent);
           crs = String(cached?.layer_crs || cached?.crs || cached?.project_crs || '').trim() || null;
         }
+        if (layerExtentWgs84) bboxWgs84 = padExtent(layerExtentWgs84);
       } catch {
         bbox = null;
       }
@@ -1013,44 +1521,63 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     if (!bbox) {
       const extent = await getProjectExtent(projectId);
       bbox = extent?.native || [-20037508, -20037508, 20037508, 20037508];
+      bboxWgs84 = parseExtentArray(extent?.wgs84) || bboxWgs84;
       crs = extent?.crs || 'EPSG:3857';
     }
     if (!crs) crs = 'EPSG:3857';
-    const wmsParams = new URLSearchParams({
-      SERVICE: 'WMS', REQUEST: 'GetMap', VERSION: '1.3.0',
-      LAYERS: layers, STYLES: '', CRS: crs,
-      BBOX: bbox.join(','), WIDTH: '280', HEIGHT: '160',
-      FORMAT: 'image/jpeg', TRANSPARENT: 'false', project: projectId
-    });
-    const wmsUrl = `${baseUrl}/wms?${wmsParams.toString()}`;
-    const parsedUrl = new URL(wmsUrl);
-    const reqOptions = {
-      hostname: parsedUrl.hostname, port: parsedUrl.port,
-      path: parsedUrl.pathname + parsedUrl.search, headers: {}
-    };
-    if (cookieHeader) reqOptions.headers.cookie = cookieHeader;
-
     const promise = new Promise((resolve) => {
-      const fetcher = wmsUrl.startsWith('https') ? https : http;
-      const proxyReq = fetcher.get(reqOptions, async (proxyRes) => {
+      (async () => {
         try {
-          const contentType = String(proxyRes.headers['content-type'] || '');
-          if (!contentType.startsWith('image/')) {
-            proxyRes.resume();
-            return resolve(null);
+          const buildWmsUrl = ({ targetProjectId, targetLayers, format, transparent }) => {
+            const wmsParams = new URLSearchParams({
+              SERVICE: 'WMS', REQUEST: 'GetMap', VERSION: '1.3.0',
+              LAYERS: targetLayers, STYLES: '', CRS: crs,
+              BBOX: bbox.join(','), WIDTH: '280', HEIGHT: '160',
+              FORMAT: format, TRANSPARENT: transparent ? 'true' : 'false', project: targetProjectId
+            });
+            return `${baseUrl}/wms?${wmsParams.toString()}`;
+          };
+
+          let backgroundBuffer = null;
+          if (background?.type === 'layer' && background?.sourceProjectId && background?.name) {
+            const bgUrl = buildWmsUrl({
+              targetProjectId: background.sourceProjectId,
+              targetLayers: background.name,
+              format: 'image/png',
+              transparent: false
+            });
+            backgroundBuffer = await fetchImageBuffer(bgUrl, authContext);
+          } else if (background?.type === 'osm' && bboxWgs84) {
+            backgroundBuffer = await buildOsmThumbnailBuffer(bboxWgs84, 280, 160);
           }
+
+          const overlayUrl = buildWmsUrl({
+            targetProjectId: projectId,
+            targetLayers: layers,
+            format: backgroundBuffer ? 'image/png' : 'image/jpeg',
+            transparent: !!backgroundBuffer
+          });
+          const overlayBuffer = await fetchImageBuffer(overlayUrl, authContext);
+          if (!overlayBuffer) return resolve(null);
+
           await fs.promises.mkdir(thumbCacheDir, { recursive: true });
-          const ws = fs.createWriteStream(thumbPath);
-          proxyRes.pipe(ws);
-          ws.on('finish', () => resolve(thumbPath));
-          ws.on('error', () => { try { fs.promises.unlink(thumbPath).catch(() => {}); } catch (_) {} resolve(null); });
-        } catch { resolve(null); }
-      });
-      // 60 s socket timeout: QGIS rendering can be slow on first hit.
-      proxyReq.setTimeout(60_000, () => {
-        try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
-      });
-      proxyReq.on('error', () => resolve(null));
+          if (backgroundBuffer) {
+            const composed = await sharp(backgroundBuffer)
+              .resize(280, 160, { fit: 'fill' })
+              .composite([{ input: overlayBuffer }])
+              .jpeg({ quality: 82 })
+              .toBuffer();
+            await fs.promises.writeFile(thumbPath, composed);
+            return resolve(thumbPath);
+          }
+
+          await fs.promises.writeFile(thumbPath, overlayBuffer);
+          return resolve(thumbPath);
+        } catch {
+          try { await fs.promises.unlink(thumbPath).catch(() => {}); } catch (_) {}
+          resolve(null);
+        }
+      })();
     }).finally(() => { thumbPendingRequests.delete(dedupKey); });
 
     thumbPendingRequests.set(dedupKey, promise);
@@ -1704,7 +2231,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       tiled: true,
       // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
       // Use an assets-relative path that resolves to /plugins/...
-      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${mainLayers.length ? `?LAYERS=${encodeURIComponent(mainLayers.map((l) => String(l.name || '').trim()).filter(Boolean).join(','))}` : ''}`
+      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${buildPublishedThumbnailQuery({ mainLayerNames: mainLayers.map((l) => String(l.name || '').trim()).filter(Boolean), background: getDefaultPublishedBackground(profile) })}`
     };
 
     // If this profile has view3d enabled, add map3d so QWC2 shows the 3D button.
@@ -1759,9 +2286,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       item.editConfig = rootEditConfig;
     }
 
-    // Add WFS edit config for editable/queryable vector layers
+    // Only advertise WFS endpoints when a layer is explicitly editable or
+    // explicitly published as WFS. Vector geometry alone must remain WMS.
     const wfsLayers = mainLayers.filter((l) => {
-      const cached = cachedLayers.find((c) => c.name === l.name);
       const cfgFlags = (() => {
         const direct = projectLayerFlags?.[l.name] && typeof projectLayerFlags[l.name] === 'object' ? projectLayerFlags[l.name] : null;
         if (direct) return direct;
@@ -1770,8 +2297,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
         return null;
       })();
-      const isVectorLike = cached?.type === 'vector' || !!cached?.geometry_type;
-      return l?.editable === true || cfgFlags?.wfsEditable === true || isVectorLike;
+      return l?.editable === true || l?.serveAsWfs === true || cfgFlags?.wfsEditable === true;
     });
     if (wfsLayers.length > 0) {
       // Primary WFS endpoint used by some QWC2 plugins
@@ -2204,23 +2730,24 @@ ${mapIcon}
     const bgLayer = String(payload.bgLayer || '').trim();
     // Use absolute URL for config so the <base> tag does not interfere
     const baseUrl = getRequestBaseUrl(req);
-    const cfgQs = stateId
-      ? `state=${encodeURIComponent(stateId)}`
-      : [
-          `project=${encodeURIComponent(payload.project || '')}`,
-          layers ? `layers=${encodeURIComponent(layers)}` : '',
-          String(payload.layerRules || '').trim() ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
-          bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
-          bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
-          payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
-          payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
-          payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
-          payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
-          payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
-          payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
-          payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
-          payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
-        ].filter(Boolean).join('&');
+    const cfgParams = [
+      stateId ? `state=${encodeURIComponent(stateId)}` : '',
+      `project=${encodeURIComponent(payload.project || '')}`,
+      layers ? `layers=${encodeURIComponent(layers)}` : '',
+      String(payload.groups || '').trim() ? `groups=${encodeURIComponent(payload.groups)}` : '',
+      String(payload.layerRules || '').trim() ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
+      bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
+      bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
+      payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
+      payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
+      payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
+      payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
+      payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
+      payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
+      payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
+      payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
+    ];
+    const cfgQs = cfgParams.filter(Boolean).join('&');
     const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
     // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
     const base = `/plugins/${pluginSlug}/origo/`;
@@ -2319,9 +2846,26 @@ ${mapIcon}
     prunePreviewStateStore();
     const stateId = createPreviewStateId();
     previewStateStore.set(stateId, { createdAt: Date.now(), payload });
+    const previewParams = [
+      `state=${encodeURIComponent(stateId)}`,
+      `project=${encodeURIComponent(payload.project || '')}`,
+      payload.layers ? `layers=${encodeURIComponent(payload.layers)}` : '',
+      payload.groups ? `groups=${encodeURIComponent(payload.groups)}` : '',
+      payload.layerRules ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
+      payload.bgProject ? `bgProject=${encodeURIComponent(payload.bgProject)}` : '',
+      payload.bgLayer ? `bgLayer=${encodeURIComponent(payload.bgLayer)}` : '',
+      payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
+      payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
+      payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
+      payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
+      payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
+      payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
+      payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
+      payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
+    ].filter(Boolean).join('&');
     return res.json({
       state: stateId,
-      url: `/plugins/${pluginSlug}/api/preview-page?state=${encodeURIComponent(stateId)}`
+      url: `/plugins/${pluginSlug}/api/preview-page?${previewParams}`
     });
   });
 
@@ -3114,6 +3658,7 @@ ${mapIcon}
     const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
     const rawLayers = String(payload.layers || '').trim();
+    const rawGroups = String(payload.groups || '').trim();
     const rawLayerRules = String(payload.layerRules || '').trim();
     const baseUrl = getRequestBaseUrl(req);
     const bgProject = sanitizeFileToken(String(payload.bgProject || '').trim());
@@ -3155,6 +3700,30 @@ ${mapIcon}
       return text.split(',').map(normalizeSpec).filter(Boolean);
     };
     const previewLayerSpecs = parsePreviewLayers(rawLayers);
+    const parsePreviewGroups = (raw) => {
+      const text = String(raw || '').trim();
+      if (!text) return [];
+      const normalizeGroup = (entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const name = String(entry.name || '').trim();
+        if (!name || name === 'root' || name === 'background') return null;
+        const group = {
+          name,
+          title: String(entry.title || name).trim() || name,
+          expanded: entry.expanded !== false
+        };
+        const parent = String(entry.parent || '').trim();
+        if (parent && parent !== name && parent !== 'background') group.parent = parent;
+        return group;
+      };
+      try {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed.map(normalizeGroup).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    };
+    const previewGroups = parsePreviewGroups(rawGroups);
     const parsePreviewLayerRules = (raw) => {
       const text = String(raw || '').trim();
       if (!text) return {};
@@ -3386,7 +3955,7 @@ ${mapIcon}
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
         : ((previewLayerRules[layerName] && typeof previewLayerRules[layerName] === 'object') ? previewLayerRules[layerName] : {});
-      const useWfs = rule?.serveAsWfs === true || rule?.editable === true || rule?.wfsStyle != null;
+      const useWfs = rule?.serveAsWfs === true || rule?.editable === true;
       if (useWfs) {
         const wfsMeta = await fetchWfsLayerMeta(baseUrl, sourceProjectId, layerName);
         const wfsSourceKey = ensurePreviewWfsSource(sourceProjectId, projCode);
@@ -3534,6 +4103,18 @@ ${mapIcon}
       }
     }
 
+    const configGroups = [
+      { name: 'background', title: 'Background', expanded: false, exclusive: true },
+      ...previewGroups
+    ];
+    const knownPreviewGroups = new Set(configGroups.map((group) => String(group?.name || '').trim()).filter(Boolean));
+    for (const layerSpec of previewLayerSpecs) {
+      const groupName = String(layerSpec?.group || '').trim();
+      if (!groupName || groupName === 'root' || groupName === 'background' || knownPreviewGroups.has(groupName)) continue;
+      configGroups.push({ name: groupName, title: groupName, expanded: true });
+      knownPreviewGroups.add(groupName);
+    }
+
     const config = {
       projectionCode: projCode,
       projectionExtent: finalProjectionExtent,
@@ -3555,9 +4136,7 @@ ${mapIcon}
       zoom: zoomOverride != null ? zoomOverride : zoom,
       controls: previewControls,
       source: sourceMap,
-      groups: [
-        { name: 'background', title: 'Background', expanded: false, exclusive: true }
-      ],
+      groups: configGroups,
       layers: layersArr
     };
     if (Object.keys(previewStyles).length > 0) config.styles = previewStyles;
@@ -3627,7 +4206,7 @@ ${mapIcon}
       // other projects to their own published Origo map (opens in new tab).
       try {
         const baseUrl = getRequestBaseUrl(req);
-        const allProfiles2 = await collectPublishedProfiles(baseUrl);
+        const allProfiles2 = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
         const accessibleSet = new Set(accessible.map((p) => p.projectId));
         const projectMap = {};
         const titleMap = {};
@@ -4014,6 +4593,7 @@ ${mapIcon}
     const state = await readState();
     const installed = await hasQwc2Install();
     const branding = await getBrandingStatus();
+    const authCatalog = readAuthCatalog();
     res.json({
       plugin: pluginSlug,
       installed,
@@ -4025,6 +4605,7 @@ ${mapIcon}
       lastSyncAt: state.lastSyncAt,
       lastError: state.lastError,
       branding,
+      authCatalog,
       origoUrl: installed ? `/plugins/${pluginSlug}/origo` : null,
       standalone: { running: false, port: null, url: null }
     });
@@ -4343,7 +4924,8 @@ ${mapIcon}
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
         const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
-        // Honour wfsStyle from style editor: if present, treat layer as WFS-served so the style applies in Origo.
+        // Preserve wfsStyle from the style editor without implicitly forcing
+        // the layer onto the WFS path. WFS stays explicit via serveAsWfs/editable.
         const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
         const out = {
           name,
@@ -4467,7 +5049,18 @@ ${mapIcon}
 
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
-      await syncRuntimeFilesForProfile(payload, getRequestBaseUrl(req).replace(/\/+$/,''));
+      const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
+      const thumbMeta = await regeneratePublishedThumbnail({
+        profileKey,
+        profile: payload,
+        baseUrl: syncBaseUrl,
+        cookieHeader: req.headers.cookie,
+        apiKey: getRequestApiKey(req),
+        authorization: req.get?.('authorization') || ''
+      }).catch(() => null);
+      void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
+        console.warn('[Qtiler2Origo] publish runtime sync warning:', syncErr?.message || syncErr);
+      });
 
       // If editing and name changed, remove old profile file
       if (existingProfileId && sanitizeFileToken(existingProfileId) !== profileKey) {
@@ -4476,7 +5069,7 @@ ${mapIcon}
       }
 
       const state = await readState();
-      const base = getRequestBaseUrl(req).replace(/\/+$/,'');
+      const base = syncBaseUrl;
       res.json({
         status: 'published',
         name,
@@ -4485,7 +5078,8 @@ ${mapIcon}
         catalogUrl: `/plugins/${pluginSlug}/api/projects`,
         // Use the plugin-local Origo path for launching the map.
         launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
-        publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`
+        publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
+        thumbnailUrl: thumbMeta?.url ? `${base}${thumbMeta.url}` : ''
       });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_failed', details: String(err?.message || err) });
@@ -4535,7 +5129,7 @@ ${mapIcon}
   app.get(`/plugins/${pluginSlug}/api/publish/list`, adminOnly, async (req, res) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
-      const items = await collectPublishedProfiles(baseUrl);
+      const items = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
       res.json({ items });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_list_failed', details: String(err?.message || err) });
@@ -4573,6 +5167,21 @@ ${mapIcon}
       parsed.generatedAt = new Date().toISOString();
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(parsed, null, 2), 'utf8');
+      const sourceThumbPath = publishedThumbnailPath(sourceKey);
+      const targetThumbPath = publishedThumbnailPath(newKey);
+      try {
+        await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
+        await fs.promises.copyFile(sourceThumbPath, targetThumbPath);
+      } catch (_) {
+        await regeneratePublishedThumbnail({
+          profileKey: newKey,
+          profile: parsed,
+          baseUrl: getRequestBaseUrl(req).replace(/\/+$/,''),
+          cookieHeader: req.headers.cookie,
+          apiKey: getRequestApiKey(req),
+          authorization: req.get?.('authorization') || ''
+        }).catch(() => null);
+      }
       try { await syncRuntimeFilesForProfile(parsed, getRequestBaseUrl(req).replace(/\/+$/,'')); } catch (e) { console.warn('duplicate sync warn', e?.message || e); }
       const base = getRequestBaseUrl(req).replace(/\/+$/,'');
       res.json({
@@ -4592,7 +5201,7 @@ ${mapIcon}
   app.get(`/plugins/${pluginSlug}/api/public-maps`, async (req, res) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
-      const all = await collectPublishedProfiles(baseUrl);
+      const all = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
       const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
       let items = all;
       if (authActive) {
@@ -4616,6 +5225,84 @@ ${mapIcon}
     }
   });
 
+  app.get(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, async (_req, res) => {
+    try {
+      const state = await readPortalPagesState();
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json(state);
+    } catch (err) {
+      console.error('XERR portal-pages get', err);
+      res.status(500).json({ error: 'portal_pages_read_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, express.json({ limit: '2mb' }), async (req, res) => {
+    try {
+      const saved = await writePortalPagesState(req.body || {});
+      res.json({ status: 'saved', ...saved });
+    } catch (err) {
+      console.error('XERR portal-pages save', err);
+      res.status(500).json({ error: 'portal_pages_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/portal-content`, async (req, res) => {
+    try {
+      const state = await readPortalPagesState();
+      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      const baseUrl = getRequestBaseUrl(req);
+      const allMaps = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
+      const items = authActive
+        ? (() => {
+            const snapshot = readAccessSnapshot(dataRoot);
+            return allMaps.filter((item) => userCanAccessProject(snapshot, req.user || null, item.projectId));
+          })()
+        : allMaps;
+      const slug = slugifyPortalToken(req.query?.slug || '');
+      const visiblePages = state.pages.filter((page) => userMatchesPortalAudience(page.visibility, req.user || null));
+      let currentPage = null;
+      if (slug) currentPage = visiblePages.find((page) => page.slug === slug) || null;
+      if (!currentPage && !slug && state.homePageSlug) {
+        currentPage = visiblePages.find((page) => page.slug === state.homePageSlug) || null;
+      }
+      if (!currentPage && !slug) currentPage = visiblePages[0] || null;
+      if (slug && !currentPage) {
+        return res.status(404).json({ error: 'portal_page_not_found' });
+      }
+      let logoUrl = null;
+      try { logoUrl = await getLogoPublicUrl(); } catch { logoUrl = null; }
+      if (!logoUrl) logoUrl = '/css/images/Qtiler.png';
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({
+        authActive,
+        user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
+        logoUrl,
+        items,
+        gdpr: state.gdpr,
+        portal: {
+          homePageSlug: state.homePageSlug,
+          pages: visiblePages.map((page) => ({
+            id: page.id,
+            slug: page.slug,
+            title: page.title,
+            navLabel: page.navLabel,
+            summary: page.summary,
+            showInNav: page.showInNav,
+            url: buildPortalPageUrl(page.slug)
+          })),
+          currentPage: currentPage ? {
+            ...currentPage,
+            url: buildPortalPageUrl(currentPage.slug),
+            blocks: filterPortalBlocksByAudience(currentPage.blocks, req.user || null)
+          } : null
+        }
+      });
+    } catch (err) {
+      console.error('XERR portal-content', err);
+      res.status(500).json({ error: 'portal_content_failed', details: String(err?.message || err) });
+    }
+  });
+
   app.delete(`/plugins/${pluginSlug}/api/publish/:profileName`, adminOnly, async (req, res) => {
     try {
       const profileName = String(req.params?.profileName || '').trim();
@@ -4626,6 +5313,7 @@ ${mapIcon}
 
       // Capture the projectId BEFORE deleting so we can clean its cached thumbnails.
       let projectIdForThumbs = null;
+      const thumbPath = publishedThumbnailPath(profileName);
       try {
         const raw = await fs.promises.readFile(target, 'utf8');
         const parsed = JSON.parse(raw || '{}');
@@ -4633,6 +5321,7 @@ ${mapIcon}
       } catch (_) { /* missing or unreadable profile is fine */ }
 
       await fs.promises.rm(target, { force: true });
+  await fs.promises.rm(thumbPath, { force: true }).catch(() => {});
 
       // Remove cached thumbnails for this project only when no other published
       // profile still references the same projectId.
@@ -4682,6 +5371,90 @@ ${mapIcon}
     }
   });
 
+  app.post(`/plugins/${pluginSlug}/api/thumbnail/regenerate/:projectId`, adminOnly, async (req, res) => {
+    try {
+      const projectId = normalizeProjectId(req.params?.projectId || '');
+      if (!projectId) return res.status(400).json({ error: 'project_id_required' });
+      const reqApiKey = getRequestApiKey(req);
+      let layers = String(req.query?.LAYERS || req.body?.layers || '').trim();
+      const background = normalizeThumbnailBackground({
+        type: String(req.query?.BGPROJECT || req.body?.background?.sourceProjectId || req.body?.background?.projectId || '').trim() && String(req.query?.BGLAYER || req.body?.background?.name || req.body?.background?.layer || '').trim()
+          ? 'layer'
+          : String(req.query?.BGTYPE || req.body?.background?.type || '').trim(),
+        sourceProjectId: req.query?.BGPROJECT || req.body?.background?.sourceProjectId || req.body?.background?.projectId,
+        name: req.query?.BGLAYER || req.body?.background?.name || req.body?.background?.layer
+      });
+      if (!layers) {
+        const idx = await readCacheIndex(projectId);
+        const layerNames = (Array.isArray(idx?.layers) ? idx.layers : [])
+          .filter((l) => String(l?.kind || 'layer').toLowerCase() === 'layer')
+          .map((l) => String(l?.name || l?.layer || '').trim())
+          .filter(Boolean);
+        layers = layerNames.slice(0, 6).join(',');
+      }
+      if (!layers) return res.status(400).json({ error: 'layer_names_required' });
+
+      const cacheEntry = buildThumbnailCacheEntry(projectId, layers, background);
+      if (!cacheEntry) return res.status(400).json({ error: 'invalid_thumbnail_target' });
+      const { thumbPath } = cacheEntry;
+      await fs.promises.unlink(thumbPath).catch(() => {});
+      await clearThumbnailRenderCaches([
+        projectId,
+        background?.type === 'layer' ? background.sourceProjectId : null
+      ]);
+
+      const baseUrl = getRequestBaseUrl(req);
+      const generated = await generateThumbnail(projectId, layers, baseUrl, req.headers.cookie, {
+        background,
+        apiKey: reqApiKey,
+        authorization: req.get?.('authorization') || ''
+      });
+      const thumbQuery = buildPublishedThumbnailQuery({
+        mainLayerNames: layers.split(',').map((name) => String(name || '').trim()).filter(Boolean),
+        background,
+        apiKey: reqApiKey
+      });
+      const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${thumbQuery}${thumbQuery ? '&' : '?'}_=${Date.now()}`;
+      res.json({
+        status: generated ? 'regenerated' : 'placeholder',
+        projectId,
+        layers,
+        thumbUrl
+      });
+    } catch (err) {
+      console.error('[thumbnail-regenerate]', err);
+      res.status(500).json({ error: 'thumbnail_regenerate_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/publish/thumbnail/:profileKey`, adminOnly, async (req, res) => {
+    try {
+      const profileToken = String(req.params?.profileKey || '').trim();
+      if (!profileToken) return res.status(400).json({ error: 'profile_key_required' });
+      const record = await resolvePublishedProfileRecord(profileToken);
+      if (!record?.profile || !record?.profileKey) return res.status(404).json({ error: 'published_profile_not_found' });
+      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
+      const thumbMeta = await regeneratePublishedThumbnail({
+        profileKey: record.profileKey,
+        profile: record.profile,
+        baseUrl,
+        cookieHeader: req.headers.cookie,
+        apiKey: getRequestApiKey(req),
+        authorization: req.get?.('authorization') || ''
+      });
+      if (!thumbMeta?.url) return res.status(500).json({ error: 'thumbnail_regenerate_failed' });
+      res.json({
+        status: 'regenerated',
+        profileKey: record.profileKey,
+        projectId: record.profile.projectId,
+        thumbUrl: `${baseUrl}${thumbMeta.url}`
+      });
+    } catch (err) {
+      console.error('[published-thumbnail-regenerate]', err);
+      res.status(500).json({ error: 'published_thumbnail_regenerate_failed', details: String(err?.message || err) });
+    }
+  });
+
   app.get(`/plugins/${pluginSlug}/api/publish/:projectId/launch-url`, adminOnly, async (req, res) => {
     try {
       const profileOrProject = normalizeProjectId(req.params?.projectId || '');
@@ -4707,6 +5480,14 @@ ${mapIcon}
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       if (!projectId) return sendThumbnailPlaceholder(res, 'No preview');
+      const reqApiKey = getRequestApiKey(req);
+      const background = normalizeThumbnailBackground({
+        type: String(req.query?.BGPROJECT || '').trim() && String(req.query?.BGLAYER || '').trim()
+          ? 'layer'
+          : String(req.query?.BGTYPE || '').trim(),
+        sourceProjectId: req.query?.BGPROJECT,
+        name: req.query?.BGLAYER
+      });
       const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
       if (authActive) {
         const snapshot = readAccessSnapshot(dataRoot);
@@ -4725,7 +5506,11 @@ ${mapIcon}
       }
       if (!layers) return sendThumbnailPlaceholder(res, 'No layers');
       const baseUrl = getRequestBaseUrl(req);
-      const thumbPath = await generateThumbnail(projectId, layers, baseUrl, req.headers.cookie);
+      const thumbPath = await generateThumbnail(projectId, layers, baseUrl, req.headers.cookie, {
+        background,
+        apiKey: reqApiKey,
+        authorization: req.get?.('authorization') || ''
+      });
       if (thumbPath) {
         res.set('Cache-Control', 'public, max-age=300');
         return res.sendFile(thumbPath);
@@ -4767,6 +5552,8 @@ ${mapIcon}
 
   // ── Origo Maps Portal ──
     app.get('/Qtiler2Origo/maps', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
+    app.get('/Qtiler2Origo/pages/:slug', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
+    app.get('/Qtiler2Origo/pages', async (req, res) => { res.redirect('/Qtiler2Origo/maps'); });
 
 
   app.get('/Qtiler2Origo/terrain/:projectId/:filename', async (req, res) => {
