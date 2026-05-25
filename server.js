@@ -1184,7 +1184,7 @@ const defaultProjectConfig = (projectId) => ({
   extent: { bbox: null, crs: null, updatedAt: null },
   extentWgs84: { bbox: null, crs: "EPSG:4326", updatedAt: null },
   zoom: { min: null, max: null, updatedAt: null },
-  cachePreferences: { mode: "xyz", tileCrs: "EPSG:3857", allowRemote: false, throttleMs: 0, updatedAt: null },
+  cachePreferences: { mode: "xyz", tileCrs: "EPSG:3857", allowRemote: true, throttleMs: 0, updatedAt: null },
   layers: {},
   themes: {},
   recache: {
@@ -1969,6 +1969,10 @@ const readProjectConfig = (projectId, { useCache = true } = {}) => {
   } catch (err) {
     console.error("Failed to read project config", projectId, err);
   }
+  config.cachePreferences = {
+    ...(config.cachePreferences || {}),
+    allowRemote: true
+  };
   projectConfigCache.set(projectId, config);
   return config;
 };
@@ -1978,6 +1982,10 @@ const writeProjectConfig = (projectId, config, { skipReschedule = false } = {}) 
   merged.projectId = projectId;
   if (!merged.createdAt) merged.createdAt = new Date().toISOString();
   merged.updatedAt = new Date().toISOString();
+  merged.cachePreferences = {
+    ...(merged.cachePreferences || {}),
+    allowRemote: true
+  };
   if (merged.recache && Array.isArray(merged.recache.history)) {
     merged.recache.history = merged.recache.history.slice(-25);
   }
@@ -2546,7 +2554,7 @@ const buildProjectConfigPatch = (input = {}) => {
     patch.cachePreferences = {};
     if (typeof prefs.mode === "string") patch.cachePreferences.mode = prefs.mode;
     if (typeof prefs.tileCrs === "string") patch.cachePreferences.tileCrs = prefs.tileCrs;
-    if (typeof prefs.allowRemote === "boolean") patch.cachePreferences.allowRemote = prefs.allowRemote;
+    patch.cachePreferences.allowRemote = true;
     if (Number.isFinite(Number(prefs.throttleMs))) patch.cachePreferences.throttleMs = Number(prefs.throttleMs);
     patch.cachePreferences.updatedAt = prefs.updatedAt || new Date().toISOString();
   }
@@ -2806,7 +2814,7 @@ const buildScheduledFallbackParams = (projectId, targetMode, targetName, config,
   }
 
   // Basic options
-  out.allow_remote = prefs.allowRemote === true;
+  out.allow_remote = prefs.allowRemote !== false;
   if (Number.isFinite(Number(prefs.throttleMs)) && Number(prefs.throttleMs) > 0) {
     out.throttle_ms = Math.floor(Number(prefs.throttleMs));
   }
@@ -2946,7 +2954,7 @@ const runScheduledLayer = async (projectId, layerName, config) => {
 
     // If the project allows remote providers, enforce allow_remote for scheduled runs.
     // (generate_cache.py rejects remote WMS/WMTS/XYZ unless allow_remote is enabled.)
-    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote === true;
+    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote !== false;
     if (projectAllowsRemote && params.allow_remote !== true) {
       params.allow_remote = true;
     }
@@ -3057,7 +3065,7 @@ const runScheduledTheme = async (projectId, themeName, config) => {
     if (scheduleMin != null) params.zoom_min = scheduleMin;
     if (scheduleMax != null) params.zoom_max = scheduleMax;
 
-    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote === true;
+    const projectAllowsRemote = currentConfig?.cachePreferences?.allowRemote !== false;
     if (projectAllowsRemote && params.allow_remote !== true) {
       params.allow_remote = true;
     }
@@ -5245,7 +5253,7 @@ const seedProjectConfigFromBootstrap = (projectId, info = {}) => {
         patch.cachePreferences = {
           mode: info.tileProfile.scheme || prefs.mode || "xyz",
           tileCrs: info.tileProfile.tileCrs || prefs.tileCrs || BOOTSTRAP_TILE_CRS,
-          allowRemote: shouldEnableRemote ? true : (typeof prefs.allowRemote === "boolean" ? prefs.allowRemote : false),
+          allowRemote: true,
           throttleMs: Number.isFinite(Number(prefs.throttleMs)) ? Number(prefs.throttleMs) : 0,
           updatedAt: nowIso
         };
@@ -6041,7 +6049,7 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
     wmts = false,
     project_extent = null,
     extent_crs = null,
-    allow_remote = false,
+    allow_remote = true,
     throttle_ms = 0,
     render_timeout_ms = null,
     tile_retries = null,
@@ -6407,7 +6415,7 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
         cachePreferences: {
           mode: req.body.scheme || "auto",
           tileCrs: normalizedTileCrs || null,
-          allowRemote: !!req.body.allow_remote,
+          allowRemote: true,
           throttleMs: Number(req.body.throttle_ms) || 0,
           updatedAt: nowIso
         }

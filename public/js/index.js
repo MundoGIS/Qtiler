@@ -4629,6 +4629,7 @@
       async function ensureProjectBlock(projectId, { projectMeta = null, forceConfigReload = false } = {}) {
         if (!projectId) return;
         let project = projectMeta || null;
+        const existingWrap = findProjectWrap(projectId);
         if (!project) {
           try {
             const res = await fetch('/projects');
@@ -4641,9 +4642,10 @@
           }
         }
         if (!project || !project.id) {
-          const wrap = findProjectWrap(projectId);
-          if (wrap) {
-            try { wrap.remove(); } catch {}
+          if (existingWrap) {
+            // Keep the current project visible if a targeted refresh temporarily
+            // fails to find it; cache/purge jobs can briefly race with /projects.
+            return;
           }
           extentStates.delete(projectId);
           projectConfigs.delete(projectId);

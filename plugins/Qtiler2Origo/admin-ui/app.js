@@ -249,6 +249,11 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_attr': 'Attribute',
     'Qtiler2Origo.wfs_op': 'Operator',
     'Qtiler2Origo.wfs_value': 'Value',
+    'Qtiler2Origo.wfs_value_placeholder_any': 'Write a value',
+    'Qtiler2Origo.wfs_value_placeholder_suggested': 'Write a value or choose a suggestion',
+    'Qtiler2Origo.wfs_value_help_manual': 'You can type a value manually even if the attribute has no detected values.',
+    'Qtiler2Origo.wfs_value_help_suggested': 'Use an existing value or write a new one manually.',
+    'Qtiler2Origo.wfs_value_help_pick_field': 'Select an attribute first to filter by a value.',
     'Qtiler2Origo.wfs_no_filter': '— No filter (default) —',
     'Qtiler2Origo.wfs_symbol': 'Symbol',
     'Qtiler2Origo.wfs_circle': 'Circle',
@@ -637,6 +642,11 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_attr': 'Atributo',
     'Qtiler2Origo.wfs_op': 'Operador',
     'Qtiler2Origo.wfs_value': 'Valor',
+    'Qtiler2Origo.wfs_value_placeholder_any': 'Escribe un valor',
+    'Qtiler2Origo.wfs_value_placeholder_suggested': 'Escribe un valor o elige una sugerencia',
+    'Qtiler2Origo.wfs_value_help_manual': 'Puedes escribir un valor manualmente aunque el atributo no tenga valores detectados.',
+    'Qtiler2Origo.wfs_value_help_suggested': 'Usa un valor existente o escribe uno nuevo manualmente.',
+    'Qtiler2Origo.wfs_value_help_pick_field': 'Selecciona primero un atributo para filtrar por valor.',
     'Qtiler2Origo.wfs_no_filter': '— Sin filtro (por defecto) —',
     'Qtiler2Origo.wfs_symbol': 'Símbolo',
     'Qtiler2Origo.wfs_circle': 'Círculo',
@@ -1025,6 +1035,11 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_attr': 'Attribut',
     'Qtiler2Origo.wfs_op': 'Operator',
     'Qtiler2Origo.wfs_value': 'Värde',
+    'Qtiler2Origo.wfs_value_placeholder_any': 'Skriv ett värde',
+    'Qtiler2Origo.wfs_value_placeholder_suggested': 'Skriv ett värde eller välj ett förslag',
+    'Qtiler2Origo.wfs_value_help_manual': 'Du kan skriva ett värde manuellt även om attributet inte har några upptäckta värden.',
+    'Qtiler2Origo.wfs_value_help_suggested': 'Använd ett befintligt värde eller skriv ett nytt manuellt.',
+    'Qtiler2Origo.wfs_value_help_pick_field': 'Välj först ett attribut för att filtrera på ett värde.',
     'Qtiler2Origo.wfs_no_filter': '— Inget filter (standard) —',
     'Qtiler2Origo.wfs_symbol': 'Symbol',
     'Qtiler2Origo.wfs_circle': 'Cirkel',
@@ -1307,6 +1322,8 @@ const minZoomInput       = document.getElementById('origo-cfg-min-zoom');
 const maxZoomInput       = document.getElementById('origo-cfg-max-zoom');
 const previewIframe      = document.getElementById('origo-preview-iframe');
 const previewOverlay     = document.getElementById('origo-preview-overlay');
+const previewOverlayTitle = document.getElementById('origo-preview-overlay-title');
+const previewOverlayMessage = document.getElementById('origo-preview-overlay-message');
 const openPreviewTabBtn  = document.getElementById('btn-open-map-preview-tab');
 const origoConfigSummary = document.getElementById('origo-config-summary');
 
@@ -1527,7 +1544,7 @@ function setPublishModalTab(tabId) {
     renderPublishConfigSummary();
     try {
       window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => loadMapPreview({ silent: true }));
+        window.requestAnimationFrame(() => { loadMapPreview({ silent: true }).catch(() => {}); });
       });
     } catch {}
   }
@@ -2489,6 +2506,10 @@ function applyStyleDefinitionToDesigner(styleDef, geometryType) {
   if (wfsStyleStrokeWidth) wfsStyleStrokeWidth.value = String(clampNumber(strokeRule.width, 0, 12, 2));
   if (wfsStyleRadius) wfsStyleRadius.value = String(clampNumber(pointRule.radius || rule.radius, 2, 24, 6));
   if (wfsStyleDash) wfsStyleDash.value = dashKeyFromPattern(strokeRule.lineDash);
+  const embeddedPattern = rule && rule.qtilerPatternStyle && typeof rule.qtilerPatternStyle === 'object'
+    ? rule.qtilerPatternStyle
+    : null;
+  applyDesignerPatternOptions(embeddedPattern || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
   syncDesignerGeometryFields(geometryType);
 }
 
@@ -2509,6 +2530,9 @@ function buildStyleDefinitionFromDesigner(geometryType) {
     const pattern = getDesignerFillPattern();
     if (pattern !== 'outline') {
       rule.fill = fill;
+    }
+    if (['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) {
+      rule.qtilerPatternStyle = getDesignerPatternOptions();
     }
   }
   if (family === 'point' || family === 'generic') {
@@ -3824,7 +3848,7 @@ function closePublishModal() {
   document.body.classList.remove('publish-editor-open');
   // Clear preview iframe to remove residual
   if (previewIframe) previewIframe.src = '';
-  if (previewOverlay) previewOverlay.style.display = '';
+  setPreviewOverlayState('idle');
   publishState.editingProfileId = null;
   clearPublishStatusError();
   publishState.groups = [];
@@ -3894,8 +3918,23 @@ async function preparePublishModal(editProfileId = null) {
           geometryType: String(layer?.geometryType || publishState.mainRules[key]?.geometryType || '').trim() || null
         };
       });
-      // Background project
-      const bgProjectId = profile.backgroundProjectId || '';
+      // Background project and selected/default background state
+      const profileBackgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
+      const defaultLayerBackground = profileBackgrounds.find((bg) => bg && bg.type === 'layer' && bg.isDefault === true);
+      const firstLayerBackground = profileBackgrounds.find((bg) => bg && bg.type === 'layer' && bg.sourceProjectId && bg.name);
+      const bgProjectId = String(
+        profile.backgroundProjectId
+        || defaultLayerBackground?.sourceProjectId
+        || firstLayerBackground?.sourceProjectId
+        || ''
+      ).trim();
+      publishState.defaultBackgroundKey = String(
+        profile.defaultBackgroundKey
+        || defaultLayerBackground?.key
+        || (defaultLayerBackground?.sourceProjectId && defaultLayerBackground?.name
+          ? `layer:${defaultLayerBackground.sourceProjectId}:${defaultLayerBackground.name}`
+          : 'none')
+      ).trim() || 'none';
       if (backgroundProjectSelect) backgroundProjectSelect.value = bgProjectId;
       if (bgProjectId) {
         await loadProjectLayers(bgProjectId, 'background');
@@ -3904,14 +3943,14 @@ async function preparePublishModal(editProfileId = null) {
         // entries (each with type==='layer' and a `name`). Support both so
         // editing an existing profile pre-checks the correct boxes.
         let savedBgNames = Array.isArray(profile.backgroundLayerNames) ? profile.backgroundLayerNames.slice() : [];
-        if (!savedBgNames.length && Array.isArray(profile.backgrounds)) {
-          savedBgNames = profile.backgrounds
-            .filter((b) => b && b.type === 'layer' && b.name)
+        if (!savedBgNames.length && profileBackgrounds.length) {
+          savedBgNames = profileBackgrounds
+            .filter((b) => b && b.type === 'layer' && String(b.sourceProjectId || '').trim() === bgProjectId && b.name)
             .map((b) => String(b.name));
         }
         if (!savedBgNames.length) {
           savedBgNames = savedLayerRows
-            .filter((layer) => String(layer?.role || '').trim() === 'background')
+            .filter((layer) => String(layer?.role || '').trim() === 'background' && String(layer?.sourceProjectId || '').trim() === bgProjectId)
             .map((layer) => String(layer?.name || '').trim())
             .filter(Boolean);
         }
@@ -4592,7 +4631,7 @@ publishModalTabButtons.forEach((button) => {
 });
 
 /* ── Origo preview panel ── */
-function buildMapPreviewUrl() {
+function buildMapPreviewPayload() {
   const projectId = String(publishProjectSelect?.value || '').trim();
   if (!projectId) return '';
   const selectedLayers = getSelectedPublishLayers();
@@ -4635,34 +4674,90 @@ function buildMapPreviewUrl() {
   // levels for 3006) would clamp the preview no matter what the user typed.
   const minZoomStr = String(document.getElementById('origo-cfg-min-zoom')?.value || '').trim();
   const maxZoomStr = String(document.getElementById('origo-cfg-max-zoom')?.value || '').trim();
-  const controlsJson = JSON.stringify(getNormalizedControlsArray());
-  const qs = [
-    `project=${encodeURIComponent(projectId)}`,
-    layersParam ? `layers=${encodeURIComponent(layersParam)}` : '',
-    layerRulesParam ? `layerRules=${encodeURIComponent(layerRulesParam)}` : '',
-    bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
-    bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
-    bgKey ? `bgKey=${encodeURIComponent(bgKey)}` : '',
-    centerStr ? `center=${encodeURIComponent(centerStr)}` : '',
-    zoomStr   ? `zoom=${encodeURIComponent(zoomStr)}`     : '',
-    extentStr ? `extent=${encodeURIComponent(extentStr)}` : '',
-    centerCrs ? `centerCrs=${encodeURIComponent(centerCrs)}` : '',
-    minZoomStr ? `minZoom=${encodeURIComponent(minZoomStr)}` : '',
-    maxZoomStr ? `maxZoom=${encodeURIComponent(maxZoomStr)}` : '',
-    controlsJson && controlsJson !== '[]' ? `controls=${encodeURIComponent(controlsJson)}` : ''
-  ].filter(Boolean).join('&');
-  return `/plugins/Qtiler2Origo/api/preview-page?${qs}`;
+  return {
+    project: projectId,
+    layers: previewLayerSpecs,
+    layerRules: previewLayerRules,
+    bgProject,
+    bgLayer,
+    bgKey,
+    center: centerStr || '',
+    zoom: zoomStr || '',
+    extent: extentStr || '',
+    centerCrs: centerCrs || '',
+    minZoom: minZoomStr || '',
+    maxZoom: maxZoomStr || '',
+    controls: getNormalizedControlsArray()
+  };
 }
 
-function loadMapPreview(options = {}) {
+async function buildMapPreviewUrl() {
+  const payload = buildMapPreviewPayload();
+  if (!payload) return '';
+  const res = await fetch('/plugins/Qtiler2Origo/api/preview-state', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(detail || `Preview state failed (${res.status})`);
+  }
+  const data = await res.json().catch(() => null);
+  return typeof data?.url === 'string' ? data.url : '';
+}
+
+function setPreviewOverlayState(state, message = '') {
+  if (!previewOverlay) return;
+  const normalized = String(state || 'idle').trim().toLowerCase() || 'idle';
+  previewOverlay.dataset.state = normalized;
+  previewOverlay.style.display = normalized === 'ready' ? 'none' : '';
+  if (previewOverlayTitle) {
+    previewOverlayTitle.textContent = normalized === 'error' ? 'Interactive Map error' : 'Interactive Map';
+  }
+  if (previewOverlayMessage) {
+    previewOverlayMessage.textContent = String(message || (normalized === 'loading'
+      ? 'Cargando capas del mapa…'
+      : normalized === 'error'
+        ? 'No se pudo cargar el mapa.'
+        : 'Pulsa Load Preview para cargar el mapa'));
+  }
+}
+
+function formatPreviewErrorMessage(errorLike, fallback = 'No se pudo cargar el mapa.') {
+  const raw = typeof errorLike === 'string'
+    ? errorLike
+    : errorLike?.message || errorLike?.error || errorLike?.detail || '';
+  const text = String(raw || '').trim();
+  if (!text) return fallback;
+  try {
+    const parsed = JSON.parse(text);
+    const fromJson = parsed?.error || parsed?.details || parsed?.message || '';
+    if (String(fromJson || '').trim()) return String(fromJson).trim();
+  } catch {}
+  return text;
+}
+
+async function loadMapPreview(options = {}) {
   const { silent = false } = options;
-  const src = buildMapPreviewUrl();
+  let src = '';
+  setPreviewOverlayState('loading', 'Preparando Interactive Map…');
+  try {
+    src = await buildMapPreviewUrl();
+  } catch (err) {
+    const detail = formatPreviewErrorMessage(err, 'No se pudo preparar el preview.');
+    setPreviewOverlayState('error', detail);
+    if (!silent) addLog(`No se pudo preparar el preview: ${detail}`, 'error');
+    return '';
+  }
   if (!src) {
+    setPreviewOverlayState('error', 'Selecciona un proyecto principal primero.');
     if (!silent) addLog('Selecciona un proyecto principal primero.', 'error');
     return '';
   }
   if (previewIframe) previewIframe.src = src;
-  if (previewOverlay) previewOverlay.style.display = 'none';
+  setPreviewOverlayState('loading', 'Cargando capas del mapa…');
   if (!silent) addLog('Cargando mapa preview…', 'info');
   renderPublishConfigSummary();
   return src;
@@ -4674,24 +4769,37 @@ function schedulePreviewRefresh() {
   publishPreviewRefreshTimer = window.setTimeout(() => {
     publishPreviewRefreshTimer = null;
     if (activePublishTab === 'config') {
-      loadMapPreview({ silent: true });
+      loadMapPreview({ silent: true }).catch(() => {});
     }
   }, 150);
 }
 
 document.getElementById('btn-load-map-preview')?.addEventListener('click', () => {
-  loadMapPreview();
+  loadMapPreview().catch(() => {});
 });
-openPreviewTabBtn?.addEventListener('click', () => {
-  const src = loadMapPreview({ silent: true });
+openPreviewTabBtn?.addEventListener('click', async () => {
+  const src = await loadMapPreview({ silent: true });
   if (src) window.open(src, '_blank', 'noopener,noreferrer');
 });
 
 // Listen for origo-loaded message from the preview iframe
 window.addEventListener('message', (ev) => {
   if (ev.data?.type === 'origo-loaded') {
+    setPreviewOverlayState('ready');
     addLog('Mapa preview listo. Puedes capturar el extent.', 'ok');
+    return;
   }
+  if (ev.data?.type === 'origo-error') {
+    const detail = formatPreviewErrorMessage(ev.data?.message || ev.data?.error, 'No se pudo cargar el mapa interactivo.');
+    setPreviewOverlayState('error', detail);
+    addLog(`Error en Interactive Map: ${detail}`, 'error');
+  }
+});
+
+previewIframe?.addEventListener('error', () => {
+  const detail = 'El iframe del Interactive Map no pudo cargarse.';
+  setPreviewOverlayState('error', detail);
+  addLog(detail, 'error');
 });
 
 // Read the current OL view from the preview iframe. Returns null if the
@@ -5490,7 +5598,8 @@ function defaultRule(geomFamily) {
     filter: '',
     minScale: '',
     maxScale: '',
-    label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '' }
+    label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '' },
+    designerOptions: null
   };
   if (geomFamily === 'point') {
     r.point = { mode: 'circle', circle: { radius: 6, fill: '#3b82f6', fillOpacity: 0.7, stroke: '#2563eb', strokeWidth: 1, strokeOpacity: 1 }, icon: { src: '', scale: 0.05, opacity: 1, useColor: false, color: '#000000' } };
@@ -5603,6 +5712,14 @@ function rulesToOrigoStyle(rules) {
     } else {
       if (!r.fill.none) geomEntry.fill = { color: hexToRgba(r.fill.color, r.fill.opacity) };
       if (!r.stroke.none) geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width || 1, lineDash: dashKeyToArray(r.stroke.dash) };
+      const pattern = String(r?.designerOptions?.fillPattern || '').trim().toLowerCase();
+      if (['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) {
+        geomEntry.qtilerPatternStyle = {
+          ...getDefaultDesignerPatternOptions(pattern),
+          ...JSON.parse(JSON.stringify(r.designerOptions || {})),
+          fillPattern: pattern
+        };
+      }
     }
     const gMin = normScale(r.maxScale); // user input "Visible desde 1:N" → larger denominator hidden
     const gMax = normScale(r.minScale);
@@ -5709,6 +5826,9 @@ function origoStyleToRules(styleDef) {
       r.stroke.color = s.hex; r.stroke.opacity = s.op;
       r.stroke.width = (def.stroke && def.stroke.width) || 1;
       r.stroke.dash = dashArrayToKey(def.stroke && def.stroke.lineDash);
+      r.designerOptions = def.qtilerPatternStyle && typeof def.qtilerPatternStyle === 'object'
+        ? JSON.parse(JSON.stringify(def.qtilerPatternStyle))
+        : null;
     }
     out.push(r);
   }
@@ -5857,8 +5977,9 @@ function buildRuleEditorMarkup(rule, idx) {
         <div style="display:grid;grid-template-columns:2fr 1fr 2fr;gap:10px;align-items:end">
           <label>${T('wfs_attr')}<select data-rk="f.field">${fieldOptions.replace(`value="${ui.field}"`, `value="${ui.field}" selected`)}</select></label>
           <label>${T('wfs_op')}<select data-rk="f.op">${opOptions}</select></label>
-          <label>${T('wfs_value')}<input type="text" data-rk="f.value" value="${ui.value}" /></label>
+          <label>${T('wfs_value')}<input type="text" data-rk="f.value" value="${ui.value}" placeholder="${T('wfs_value_placeholder_any')}" autocomplete="off" /></label>
         </div>
+        <p class="help" data-rk="f.value-help" style="margin:8px 0 0">${T('wfs_value_help_pick_field')}</p>
       </fieldset>
 
       <fieldset>
@@ -5931,7 +6052,7 @@ function openBasicDesignerForRule(idx) {
   const geometryType = getLayerGeometryType(currentEditingWfsLayer);
   const styleDef = rulesToOrigoStyle([currentRules[idx]]);
   applyStyleDefinitionToDesigner(styleDef, geometryType);
-  applyDesignerPatternOptions(publishState.mainRules?.[currentEditingWfsLayer]?.designerOptions || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  applyDesignerPatternOptions(currentRules[idx]?.designerOptions || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
   closeRuleStyleEditor();
   setStyleEditorTab('designer');
   updateDesignerRuleModeNotice();
@@ -6230,7 +6351,11 @@ function rulePreviewSampleSvg(rule, geomFamily) {
   const fill = rule.fill.none ? 'none' : hexToRgba(rule.fill.color, rule.fill.opacity);
   const stroke = rule.stroke.none ? 'none' : hexToRgba(rule.stroke.color, rule.stroke.opacity);
   const sw = rule.stroke.none ? 0 : (rule.stroke.width || 1);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M8 ${H-6} L 18 8 L ${W-22} 6 L ${W-6} ${H-12} L ${W/2} ${H-4} Z" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"${dashAttr(rule.stroke.dash)}/></svg>`;
+  const patternMeta = rule?.designerOptions && typeof rule.designerOptions === 'object' ? rule.designerOptions : null;
+  const patternFill = patternMeta && ['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(String(patternMeta.fillPattern || '').trim().toLowerCase())
+    ? buildSvgPatternFill(fill === 'none' ? 'rgba(0,0,0,0)' : fill, stroke, sw || 1, patternMeta)
+    : { defs: '', fill };
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${patternFill.defs}<path d="M8 ${H-6} L 18 8 L ${W-22} 6 L ${W-6} ${H-12} L ${W/2} ${H-4} Z" fill="${patternFill.fill}" stroke="${stroke}" stroke-width="${sw}"${dashAttr(rule.stroke.dash)}/></svg>`;
 }
 
 function renderRulesPreviewGallery() {
@@ -6348,6 +6473,7 @@ saveStyleEditor = function() {
       convertedRule.maxScale = previousRule.maxScale;
       convertedRule.minScale = previousRule.minScale;
       convertedRule.label = JSON.parse(JSON.stringify(previousRule.label || defaultRule(currentLayerGeomFamily).label));
+      convertedRule.designerOptions = JSON.parse(JSON.stringify(getDesignerPatternOptions()));
       currentRules[currentDesignerRuleIndex] = convertedRule;
       currentRuleIndex = currentDesignerRuleIndex;
       const reopenIndex = currentDesignerRuleIndex;
@@ -6499,6 +6625,7 @@ function attachValueDatalistForRule(idx) {
   if (!card) return;
   const fieldSel = card.querySelector('[data-rk="f.field"]');
   const valueInput = card.querySelector('[data-rk="f.value"]');
+  const valueHelp = card.querySelector('[data-rk="f.value-help"]');
   if (!fieldSel || !valueInput) return;
   if (!fieldSel.dataset.dlBound) {
     fieldSel.dataset.dlBound = '1';
@@ -6507,19 +6634,42 @@ function attachValueDatalistForRule(idx) {
   const field = fieldSel.value;
   if (!field) {
     valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Origo.wfs_value_placeholder_any') || 'Write a value';
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Origo.wfs_value_help_pick_field') || 'Select an attribute first to filter by a value.';
     return;
   }
   const projectId = getLayerProjectId(currentEditingWfsLayer);
   const dlId = `dl-rule-${idx}-${field.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   loadLayerValues(projectId, currentEditingWfsLayer, field).then(values => {
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
     let dl = document.getElementById(dlId);
-    if (!dl) {
-      dl = document.createElement('datalist');
-      dl.id = dlId;
-      card.appendChild(dl);
+    if (Array.isArray(values) && values.length) {
+      if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = dlId;
+        card.appendChild(dl);
+      }
+      dl.innerHTML = values.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+      valueInput.setAttribute('list', dlId);
+      valueInput.placeholder = t('Qtiler2Origo.wfs_value_placeholder_suggested') || 'Write a value or choose a suggestion';
+      if (valueHelp) valueHelp.textContent = t('Qtiler2Origo.wfs_value_help_suggested') || 'Use an existing value or write a new one manually.';
+      return;
     }
-    dl.innerHTML = values.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
-    valueInput.setAttribute('list', dlId);
+    if (dl) {
+      try { dl.remove(); } catch {}
+    }
+    valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Origo.wfs_value_placeholder_any') || 'Write a value';
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Origo.wfs_value_help_manual') || 'You can type a value manually even if the attribute has no detected values.';
+  }).catch(() => {
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
+    valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Origo.wfs_value_placeholder_any') || 'Write a value';
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Origo.wfs_value_help_manual') || 'You can type a value manually even if the attribute has no detected values.';
   });
 }
 window.openStyleEditor = openStyleEditor;

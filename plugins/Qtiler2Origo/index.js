@@ -27,8 +27,55 @@ const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.
 const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
+const PREVIEW_STATE_TTL_MS = 10 * 60 * 1000;
+const previewStateStore = new Map();
 
 const nowIso = () => new Date().toISOString();
+
+const prunePreviewStateStore = () => {
+  const cutoff = Date.now() - PREVIEW_STATE_TTL_MS;
+  for (const [key, value] of previewStateStore.entries()) {
+    if (!value || !Number.isFinite(value.createdAt) || value.createdAt < cutoff) {
+      previewStateStore.delete(key);
+    }
+  }
+};
+
+const createPreviewStateId = () => `preview_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+const normalizePreviewStatePayload = (input) => {
+  const source = input && typeof input === 'object' ? input : {};
+  const normalizeJsonish = (value) => {
+    if (typeof value === 'string') return value.trim();
+    if (value == null) return '';
+    try { return JSON.stringify(value); } catch { return ''; }
+  };
+  return {
+    project: sanitizeFileToken(String(source.project || '').trim()),
+    layers: normalizeJsonish(source.layers),
+    layerRules: normalizeJsonish(source.layerRules),
+    bgProject: sanitizeFileToken(String(source.bgProject || '').trim()),
+    bgLayer: String(source.bgLayer || '').trim(),
+    bgKey: String(source.bgKey || '').trim(),
+    center: normalizeJsonish(source.center),
+    centerCrs: String(source.centerCrs || '').trim(),
+    zoom: String(source.zoom || '').trim(),
+    extent: normalizeJsonish(source.extent),
+    minZoom: String(source.minZoom || '').trim(),
+    maxZoom: String(source.maxZoom || '').trim(),
+    controls: normalizeJsonish(source.controls)
+  };
+};
+
+const resolvePreviewRequestPayload = (req) => {
+  prunePreviewStateStore();
+  const stateId = sanitizeFileToken(String(req.query?.state || '').trim());
+  const stored = stateId ? previewStateStore.get(stateId) : null;
+  return {
+    stateId,
+    payload: stored?.payload && typeof stored.payload === 'object' ? stored.payload : (req.query || {})
+  };
+};
 
 const probeStandaloneHealth = async (port) => {
   try {
@@ -922,9 +969,53 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return thumbPendingRequests.get(dedupKey);
     }
 
-    const extent = await getProjectExtent(projectId);
-    const bbox = extent?.native || [-20037508, -20037508, 20037508, 20037508];
-    const crs = extent?.crs || 'EPSG:3857';
+    const parseExtentArray = (value) => {
+      if (Array.isArray(value) && value.length >= 4) {
+        const nums = value.slice(0, 4).map(Number);
+        return nums.every(Number.isFinite) ? nums : null;
+      }
+      if (typeof value === 'string') {
+        const parts = value.trim().split(/[\s,]+/).map(Number);
+        return parts.length >= 4 && parts.slice(0, 4).every(Number.isFinite) ? parts.slice(0, 4) : null;
+      }
+      return null;
+    };
+    const padExtent = (bbox) => {
+      if (!Array.isArray(bbox) || bbox.length < 4) return bbox;
+      const [minx, miny, maxx, maxy] = bbox.map(Number);
+      const width = Math.max(1, maxx - minx);
+      const height = Math.max(1, maxy - miny);
+      const padX = width * 0.12;
+      const padY = height * 0.12;
+      return [minx - padX, miny - padY, maxx + padX, maxy + padY];
+    };
+    let bbox = null;
+    let crs = null;
+    const requestedLayers = String(layers || '').split(',').map((v) => String(v || '').trim()).filter(Boolean);
+    if (requestedLayers.length === 1) {
+      try {
+        const cacheIndex = await readCacheIndex(projectId);
+        const cachedLayers = Array.isArray(cacheIndex?.layers) ? cacheIndex.layers : [];
+        const layerName = requestedLayers[0];
+        const cached = cachedLayers.find((entry) => {
+          const cand = String(entry?.name || entry?.layer || entry?.title || '').trim();
+          return cand && (cand === layerName || safeLayerNameForWfs(cand) === safeLayerNameForWfs(layerName));
+        });
+        const layerExtent = parseExtentArray(cached?.extent || cached?.project_extent);
+        if (layerExtent) {
+          bbox = padExtent(layerExtent);
+          crs = String(cached?.layer_crs || cached?.crs || cached?.project_crs || '').trim() || null;
+        }
+      } catch {
+        bbox = null;
+      }
+    }
+    if (!bbox) {
+      const extent = await getProjectExtent(projectId);
+      bbox = extent?.native || [-20037508, -20037508, 20037508, 20037508];
+      crs = extent?.crs || 'EPSG:3857';
+    }
+    if (!crs) crs = 'EPSG:3857';
     const wmsParams = new URLSearchParams({
       SERVICE: 'WMS', REQUEST: 'GetMap', VERSION: '1.3.0',
       LAYERS: layers, STYLES: '', CRS: crs,
@@ -2103,29 +2194,33 @@ ${mapIcon}
 
   // ── Preview page: serves a minimal Origo HTML page loading a per-project config ──
   app.get(`/plugins/${pluginSlug}/api/preview-page`, async (req, res) => {
-    const projectId = sanitizeFileToken(String(req.query?.project || '').trim());
+    const { stateId, payload } = resolvePreviewRequestPayload(req);
+    const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
     const webRoot = await resolveQwc2WebRoot().catch(() => '');
     if (!webRoot) return res.status(503).json({ error: 'origo_not_installed' });
-    const layers = String(req.query?.layers || '').trim();
-    const bgProject = String(req.query?.bgProject || '').trim();
-    const bgLayer = String(req.query?.bgLayer || '').trim();
+    const layers = String(payload.layers || '').trim();
+    const bgProject = String(payload.bgProject || '').trim();
+    const bgLayer = String(payload.bgLayer || '').trim();
     // Use absolute URL for config so the <base> tag does not interfere
     const baseUrl = getRequestBaseUrl(req);
-    const cfgQs = [
-      `project=${encodeURIComponent(req.query?.project || '')}`,
-      layers ? `layers=${encodeURIComponent(layers)}` : '',
-      bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
-      bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
-      req.query?.bgKey ? `bgKey=${encodeURIComponent(req.query.bgKey)}` : '',
-      req.query?.center ? `center=${encodeURIComponent(req.query.center)}` : '',
-      req.query?.centerCrs ? `centerCrs=${encodeURIComponent(req.query.centerCrs)}` : '',
-      req.query?.zoom   ? `zoom=${encodeURIComponent(req.query.zoom)}`     : '',
-      req.query?.extent ? `extent=${encodeURIComponent(req.query.extent)}` : '',
-      req.query?.minZoom ? `minZoom=${encodeURIComponent(req.query.minZoom)}` : '',
-      req.query?.maxZoom ? `maxZoom=${encodeURIComponent(req.query.maxZoom)}` : '',
-      req.query?.controls ? `controls=${encodeURIComponent(req.query.controls)}` : ''
-    ].filter(Boolean).join('&');
+    const cfgQs = stateId
+      ? `state=${encodeURIComponent(stateId)}`
+      : [
+          `project=${encodeURIComponent(payload.project || '')}`,
+          layers ? `layers=${encodeURIComponent(layers)}` : '',
+          String(payload.layerRules || '').trim() ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
+          bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
+          bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
+          payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
+          payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
+          payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
+          payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
+          payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
+          payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
+          payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
+          payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
+        ].filter(Boolean).join('&');
     const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
     // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
     const base = `/plugins/${pluginSlug}/origo/`;
@@ -2144,6 +2239,21 @@ ${mapIcon}
 <script src="js/origo.js"></script>
 <script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>
 <script>
+  function notifyParent(type, message) {
+    try { window.parent.postMessage({ type: type, message: message }, '*'); } catch (e) {}
+  }
+  function stringifyErrorDetail(detail, fallback) {
+    if (detail == null || detail === '') return fallback;
+    if (typeof detail === 'string') return detail;
+    try { return JSON.stringify(detail); } catch (e) { return String(detail); }
+  }
+  window.addEventListener('error', function(ev) {
+    notifyParent('origo-error', stringifyErrorDetail(ev && (ev.message || ev.error), 'Runtime error while loading Interactive Map.'));
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    notifyParent('origo-error', stringifyErrorDetail(reason && (reason.message || reason.error || reason), 'Unhandled promise rejection while loading Interactive Map.'));
+  });
   // IMPORTANT: do NOT pass the config URL to Origo() directly. Origo's
   // loadResources() appends "${'$'}{urlParams.map}.json" to any URL it receives;
   // if the URL has no "#map=..." fragment, urlParams.map is undefined and
@@ -2151,7 +2261,19 @@ ${mapIcon}
   // which corrupts query params (Express then sees bgLayer with "/undefined.json"
   // appended). Fetch the JSON ourselves and pass the parsed object instead.
   fetch('${configUrl}', { credentials: 'same-origin' })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.text().then(function(text) {
+          throw new Error(text || ('Preview config failed (' + r.status + ')'));
+        });
+      }
+      return r.json().then(function(cfg) {
+        if (cfg && typeof cfg === 'object' && (cfg.error || cfg.details || cfg.message)) {
+          throw new Error(cfg.error || cfg.details || cfg.message);
+        }
+        return cfg;
+      });
+    })
     .then(function(cfg) {
       return window.Qtiler2OrigoOrigoBoot.bootOrigo(cfg);
     })
@@ -2180,13 +2302,27 @@ ${mapIcon}
       });
     })
     .catch(function(err) {
-      document.body.innerHTML = '<pre style="padding:1em;color:#b00">Failed to load preview config: ' + (err && err.message || err) + '</pre>';
+      var detail = stringifyErrorDetail(err && (err.message || err), 'Failed to load preview config.');
+      notifyParent('origo-error', detail);
+      document.body.innerHTML = '<pre style="padding:1em;color:#b00;white-space:pre-wrap">Failed to load preview config: ' + detail.replace(/[&<>]/g, function(ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]; }) + '</pre>';
     });
 </script>
 </body>
 </html>`;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(html);
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/preview-state`, express.json({ limit: '2mb' }), async (req, res) => {
+    const payload = normalizePreviewStatePayload(req.body);
+    if (!payload.project) return res.status(400).json({ error: 'missing_project' });
+    prunePreviewStateStore();
+    const stateId = createPreviewStateId();
+    previewStateStore.set(stateId, { createdAt: Date.now(), payload });
+    return res.json({
+      state: stateId,
+      url: `/plugins/${pluginSlug}/api/preview-page?state=${encodeURIComponent(stateId)}`
+    });
   });
 
   /**
@@ -2974,14 +3110,15 @@ ${mapIcon}
     }
   });
   app.get(`/plugins/${pluginSlug}/api/preview-config.json`, async (req, res) => {
-    const projectId = sanitizeFileToken(String(req.query?.project || '').trim());
+    const { payload } = resolvePreviewRequestPayload(req);
+    const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
-    const rawLayers = String(req.query?.layers || '').trim();
-    const rawLayerRules = String(req.query?.layerRules || '').trim();
+    const rawLayers = String(payload.layers || '').trim();
+    const rawLayerRules = String(payload.layerRules || '').trim();
     const baseUrl = getRequestBaseUrl(req);
-    const bgProject = sanitizeFileToken(String(req.query?.bgProject || '').trim());
-    const bgLayer = String(req.query?.bgLayer || '').trim();
-    const bgKey = String(req.query?.bgKey || '').trim().toLowerCase();
+    const bgProject = sanitizeFileToken(String(payload.bgProject || '').trim());
+    const bgLayer = String(payload.bgLayer || '').trim();
+    const bgKey = String(payload.bgKey || '').trim().toLowerCase();
     const parsePreviewLayers = (raw) => {
       const text = String(raw || '').trim();
       if (!text) return [];
@@ -3079,12 +3216,12 @@ ${mapIcon}
         return Array.isArray(v) ? v.map(Number) : null;
       } catch { return null; }
     };
-    const ovCenter = parseJsonArray(req.query?.center);
+    const ovCenter = parseJsonArray(payload.center);
     // CRS the captured overrides were originally expressed in. Discard the
     // overrides entirely if it does not match the active view CRS — otherwise
     // a center captured in 3857 but applied as 3006 (or vice versa) drops the
     // camera in the wrong hemisphere ("North Pole" symptom).
-    const ovCrs = String(req.query?.centerCrs || '').trim().toUpperCase();
+    const ovCrs = String(payload.centerCrs || '').trim().toUpperCase();
     const overridesCrsOk = !ovCrs || ovCrs === String(projCode || '').toUpperCase();
     // When OSM-only mode is forced, only honor a center override that looks
     // like it's already in Web Mercator metres (|x| ≤ ~20M). Otherwise the
@@ -3096,10 +3233,10 @@ ${mapIcon}
         && (!forceWebMercator || looksWebMercator(ovCenter))) {
       center = ovCenter;
     }
-    const ovZoom = Number(req.query?.zoom);
+    const ovZoom = Number(payload.zoom);
     let zoomOverride = null;
     if (overridesCrsOk && Number.isFinite(ovZoom)) zoomOverride = ovZoom;
-    const ovExtent = parseJsonArray(req.query?.extent);
+    const ovExtent = parseJsonArray(payload.extent);
     let extentOverride = null;
     if (overridesCrsOk && Array.isArray(ovExtent) && ovExtent.length === 4 && ovExtent.every(Number.isFinite)
         && (!forceWebMercator || (looksWebMercator([ovExtent[0], ovExtent[1]]) && looksWebMercator([ovExtent[2], ovExtent[3]])))) {
@@ -3123,7 +3260,7 @@ ${mapIcon}
     // The WMTS background only ships a few zoom levels (e.g. 14 for 3006);
     // without extending here, the View's maxZoom would clamp the admin to
     // that shallow pyramid no matter what they typed in the Max Zoom field.
-    const reqMaxZoom = Number(req.query?.maxZoom);
+    const reqMaxZoom = Number(payload.maxZoom);
     const targetLevels = Math.min(29, Math.max(
       28,
       Number.isFinite(reqMaxZoom) && reqMaxZoom > 0 ? Math.ceil(reqMaxZoom) + 1 : 0
@@ -3158,7 +3295,7 @@ ${mapIcon}
         { name: 'scaleline' }
       ];
       try {
-        const raw = JSON.parse(String(req.query?.controls || '[]'));
+        const raw = JSON.parse(String(payload.controls || '[]'));
         if (!Array.isArray(raw) || !raw.length) return defaults;
         const deduped = new Map();
         raw.forEach((entry) => {
@@ -3405,11 +3542,11 @@ ${mapIcon}
       // while editing — never the saved AoI (which would clamp the view).
       extent: finalViewExtent,
       maxZoom: (() => {
-        const m = Number(req.query?.maxZoom);
+        const m = Number(payload.maxZoom);
         return Number.isFinite(m) && m > 0 ? Math.min(m, finalMaxZoom) : finalMaxZoom;
       })(),
       ...((() => {
-        const m = Number(req.query?.minZoom);
+        const m = Number(payload.minZoom);
         return Number.isFinite(m) && m >= 0 ? { minZoom: Math.min(m, finalMaxZoom) } : {};
       })()),
       // Preview never honors a saved minZoom: the admin must be free to zoom

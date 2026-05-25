@@ -603,6 +603,31 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   padding: 1rem;
 }
 
+.publish-editor__preview-overlay[data-state="error"] {
+  background: rgba(255, 244, 244, 0.94);
+}
+
+.publish-editor__preview-overlay-content {
+  display: grid;
+  gap: 0.45rem;
+  max-width: 92%;
+}
+
+.publish-editor__preview-overlay-content strong {
+  color: #163760;
+  font-size: 1rem;
+}
+
+.publish-editor__preview-overlay[data-state="error"] .publish-editor__preview-overlay-content strong {
+  color: #9f1239;
+}
+
+.publish-editor__preview-overlay-content p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .publish-editor__preview-toolbar {
   justify-content: center;
   gap: 8px;
