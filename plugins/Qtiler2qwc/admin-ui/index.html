@@ -125,6 +125,32 @@
 
       </div>
 
+
+      <!-- ── Catalog page texts ── -->
+      <section id="catalogTextsSection" class="card">
+        <div class="card-header-row">
+          <h2 data-i18n="Qtiler2qwc.catalog_texts_section">Catalog page texts</h2>
+        </div>
+        <p class="help" data-i18n="Qtiler2qwc.catalog_texts_desc">Customize the heading and description shown on the /Qtiler2qwc/webmap/ catalog page.</p>
+        <div class="grid grid--form">
+          <label>
+            <span data-i18n="Qtiler2qwc.catalog_title_label">Page title</span>
+            <input id="catalogTitleInput" type="text" maxlength="200" placeholder="Available webmaps" />
+          </label>
+          <label>
+            <span data-i18n="Qtiler2qwc.catalog_desc_public_label">Description for public / unauthenticated visitors</span>
+            <textarea id="catalogDescPublicInput" rows="3" maxlength="1000" placeholder="Open the published maps available for your current session..."></textarea>
+          </label>
+          <label>
+            <span data-i18n="Qtiler2qwc.catalog_desc_auth_label">Description for authenticated users (leave empty to reuse the public text)</span>
+            <textarea id="catalogDescAuthInput" rows="3" maxlength="1000" placeholder="Same as the public description, or enter different text for signed-in users."></textarea>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="saveCatalogTextsBtn" class="button primary" data-i18n="Qtiler2qwc.catalog_texts_save">Save</button>
+        </div>
+      </section>
+
       <!-- ════════════════════════════════════
            TAB: Maps
            ════════════════════════════════════ -->

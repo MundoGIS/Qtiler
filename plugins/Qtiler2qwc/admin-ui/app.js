@@ -165,7 +165,17 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.title': '6. Security & privacy',
     'Qtiler2qwc.hiw.security.1': 'Network calls are limited to GitHub during install and to QtilerAuth for ACLs; no runtime telemetry.',
     'Qtiler2qwc.hiw.security.2': 'Admin actions (install/uninstall, branding, configs) require an authenticated admin user.',
-    'Qtiler2qwc.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qtiler2qwc/.'
+    'Qtiler2qwc.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qtiler2qwc/.',
+    'Qtiler2qwc.catalog_texts_section': 'Catalog page texts',
+    'Qtiler2qwc.catalog_texts_desc': 'Customize the heading and description shown on the /Qtiler2qwc/webmap/ catalog page. Leave a field empty to use the default text.',
+    'Qtiler2qwc.catalog_title_label': 'Page title',
+    'Qtiler2qwc.catalog_desc_public_label': 'Description for public / unauthenticated visitors',
+    'Qtiler2qwc.catalog_desc_auth_label': 'Description for authenticated users (leave empty to reuse the public text)',
+    'Qtiler2qwc.catalog_texts_save': 'Save',
+    'Qtiler2qwc.catalog_texts_saved': 'Saved.',
+    'Qtiler2qwc.catalog_title_ph': 'Available webmaps',
+    'Qtiler2qwc.catalog_desc_public_ph': 'Open the published maps available for your current session...',
+    'Qtiler2qwc.catalog_desc_auth_ph': 'Same as above, or enter different text for signed-in users.'
   },
   es: {
     'Qtiler2qwc.title': 'Puente QWC2 para Qtiler',
@@ -332,7 +342,17 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.title': '6. Seguridad y privacidad',
     'Qtiler2qwc.hiw.security.1': 'Las llamadas de red se limitan a GitHub al instalar y a QtilerAuth para ACLs; sin telemetría en tiempo de ejecución.',
     'Qtiler2qwc.hiw.security.2': 'Las acciones de administración (instalar/desinstalar, branding, configs) requieren un usuario admin autenticado.',
-    'Qtiler2qwc.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qtiler2qwc/.'
+    'Qtiler2qwc.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qtiler2qwc/.',
+    'Qtiler2qwc.catalog_texts_section': 'Textos de la página de catálogo',
+    'Qtiler2qwc.catalog_texts_desc': 'Personaliza el encabezado y la descripción que aparecen en la página /Qtiler2qwc/webmap/. Deja un campo vacío para usar el texto predeterminado.',
+    'Qtiler2qwc.catalog_title_label': 'Título de la página',
+    'Qtiler2qwc.catalog_desc_public_label': 'Descripción para visitantes públicos / no autenticados',
+    'Qtiler2qwc.catalog_desc_auth_label': 'Descripción para usuarios autenticados (déjalo vacío para reusar el texto público)',
+    'Qtiler2qwc.catalog_texts_save': 'Guardar',
+    'Qtiler2qwc.catalog_texts_saved': 'Guardado.',
+    'Qtiler2qwc.catalog_title_ph': 'Mapas disponibles',
+    'Qtiler2qwc.catalog_desc_public_ph': 'Abre los mapas publicados disponibles para tu sesión actual...',
+    'Qtiler2qwc.catalog_desc_auth_ph': 'Igual que el anterior, o escribe un texto diferente para usuarios autenticados.'
   },
   sv: {
     'Qtiler2qwc.title': 'QWC2-brygga för Qtiler',
@@ -499,7 +519,17 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.title': '6. Säkerhet och integritet',
     'Qtiler2qwc.hiw.security.1': 'Nätverksanrop sker endast mot GitHub vid installation och mot QtilerAuth för ACL:er; ingen körtidstelemetri.',
     'Qtiler2qwc.hiw.security.2': 'Adminhandlingar (installera/avinstallera, branding, configs) kräver en autentiserad adminanvändare.',
-    'Qtiler2qwc.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2qwc/.'
+    'Qtiler2qwc.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2qwc/.',
+    'Qtiler2qwc.catalog_texts_section': 'Katalogsidans texter',
+    'Qtiler2qwc.catalog_texts_desc': 'Anpassa rubriken och beskrivningen som visas på /Qtiler2qwc/webmap/. Lämna tomt för att använda standardtexten.',
+    'Qtiler2qwc.catalog_title_label': 'Sidrubrik',
+    'Qtiler2qwc.catalog_desc_public_label': 'Beskrivning för publika / ej inloggade besökare',
+    'Qtiler2qwc.catalog_desc_auth_label': 'Beskrivning för inloggade användare (lämna tomt för att återanvända den publika texten)',
+    'Qtiler2qwc.catalog_texts_save': 'Spara',
+    'Qtiler2qwc.catalog_texts_saved': 'Sparat.',
+    'Qtiler2qwc.catalog_title_ph': 'Tillgängliga webbkartor',
+    'Qtiler2qwc.catalog_desc_public_ph': 'Öppna de publicerade kartorna tillgängliga för din session...',
+    'Qtiler2qwc.catalog_desc_auth_ph': 'Samma som ovan, eller ange annan text för inloggade användare.'
   }
 };
 QTWC_I18N.no = { ...QTWC_I18N.sv };
@@ -1286,6 +1316,41 @@ removeLogoBtn?.addEventListener('click', async () => {
   }
 });
 
+/* ── Catalog page texts ── */
+const catalogTitleInput = document.getElementById('catalogTitleInput');
+const catalogDescPublicInput = document.getElementById('catalogDescPublicInput');
+const catalogDescAuthInput = document.getElementById('catalogDescAuthInput');
+const saveCatalogTextsBtn = document.getElementById('saveCatalogTextsBtn');
+
+const loadCatalogTexts = async () => {
+  try {
+    const data = await api('/plugins/Qtiler2qwc/api/catalog-texts');
+    if (catalogTitleInput) catalogTitleInput.value = data.title || '';
+    if (catalogDescPublicInput) catalogDescPublicInput.value = data.descPublic || '';
+    if (catalogDescAuthInput) catalogDescAuthInput.value = data.descAuth || '';
+  } catch (_err) { /* ignore */ }
+};
+
+saveCatalogTextsBtn?.addEventListener('click', async () => {
+  saveCatalogTextsBtn.disabled = true;
+  try {
+    await api('/plugins/Qtiler2qwc/api/catalog-texts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: (catalogTitleInput?.value || '').trim(),
+        descPublic: (catalogDescPublicInput?.value || '').trim(),
+        descAuth: (catalogDescAuthInput?.value || '').trim()
+      })
+    });
+    addLog(t('Qtiler2qwc.catalog_texts_saved'), 'ok');
+  } catch (err) {
+    addLog(t('Qtiler2qwc.log_error', { msg: err.message }), 'error');
+  } finally {
+    saveCatalogTextsBtn.disabled = false;
+  }
+});
+
 openPublishModalBtn?.addEventListener('click', async () => {
   openPublishModalBtn.disabled = true;
   try {
@@ -1494,7 +1559,8 @@ applyI18n();
 Promise.all([
   loadStatus().catch((err) => addLog(t('Qtiler2qwc.log_error', { msg: err.message }), 'error')),
   loadPublishedProfiles().catch(() => {}),
-  loadReleases().catch(() => {})
+  loadReleases().catch(() => {}),
+  loadCatalogTexts().catch(() => {})
 ]);
 /* === How it works modal wiring === */
 (function () {

@@ -539,7 +539,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       lastSyncAt: state?.lastSyncAt || null,
       lastError: state?.lastError || null,
       logoFile: state?.logoFile || null,
-      logoUpdatedAt: state?.logoUpdatedAt || null
+      logoUpdatedAt: state?.logoUpdatedAt || null,
+      catalogTexts: {
+        title: String(state?.catalogTexts?.title || ''),
+        descPublic: String(state?.catalogTexts?.descPublic || ''),
+        descAuth: String(state?.catalogTexts?.descAuth || '')
+      }
     };
   };
 
@@ -724,6 +729,16 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   const publishedProfilePath = (projectId) => path.join(publishedRoot, `${sanitizeFileToken(projectId)}.json`);
 
+  const buildWebmapLaunchUrl = (profileKey, projectId, baseUrl = '') => {
+    const safeProfileKey = String(profileKey || '').trim();
+    const safeProjectId = String(projectId || '').trim();
+    const baseLaunch = String(baseUrl || '').trim().replace(/\/+$/g, '');
+    if (baseLaunch) {
+      return `${baseLaunch}/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(safeProfileKey)}#/?t=${encodeURIComponent(safeProjectId)}`;
+    }
+    return `/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(safeProfileKey)}#/?t=${encodeURIComponent(safeProjectId)}`;
+  };
+
   const collectPublishedProfiles = async (baseUrl = '') => {
     let entries;
     try {
@@ -747,12 +762,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const projectId = normalizeProjectId(parsed?.projectId || fileName.replace(/\.json$/i, ''));
         if (!projectId) continue;
         const url = `/plugins/${pluginSlug}/published/${encodeURIComponent(fileName)}`;
-        // Launch URL: use the same-origin webmap path so auth/session is preserved
-        const baseLaunch = baseUrl ? baseUrl.replace(/\/+$/,'') : '';
         const profileKey = fileName.replace(/\.json$/i, '');
-        const standaloneLaunch = baseLaunch
-          ? `${baseLaunch}/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
-          : `/Qtiler2qwc/webmap/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
+        const standaloneLaunch = buildWebmapLaunchUrl(profileKey, projectId, baseUrl);
         const mainLayerNames = (parsed?.layers || []).filter((l) => l.role === 'main').map((l) => l.name);
         rows.push({
           projectId,
@@ -2082,6 +2093,178 @@ ${mapIcon}
 </div></body></html>`;
   };
 
+  const buildWebmapCatalogPage = (rows, authActive, user, texts = {}) => {
+    const DEFAULT_DESC_PUBLIC = 'Open the published maps available for your current session. Protected maps appear after you sign in; public maps stay visible without authentication.';
+    const catalogTitle = texts?.title?.trim() || 'Available webmaps';
+    const catalogDescPublic = texts?.descPublic?.trim() || DEFAULT_DESC_PUBLIC;
+    const catalogDescAuth = texts?.descAuth?.trim() || catalogDescPublic;
+    const pageSize = 15;
+    const escapeHtml = (value) => String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    const formatDate = (value) => {
+      if (!value) return '';
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return '';
+      try {
+        return parsed.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+      } catch {
+        return parsed.toLocaleString();
+      }
+    };
+    const visibleRows = Array.isArray(rows) ? rows.filter((row) => row?.projectId && row?.launchUrl) : [];
+    const authButton = authActive
+      ? (user
+        ? `<button class="session-btn" type="button" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>window.location.reload())">Sign out</button>`
+        : `<button class="session-btn" type="button" onclick="document.getElementById('loginPanel').hidden=false;document.getElementById('username').focus()">Sign in</button>`)
+      : '';
+    const sessionLabel = user
+      ? `<span class="session-pill">Signed in as <strong>${escapeHtml(user?.username || user?.id || 'User')}</strong></span>`
+      : (authActive ? '<span class="session-pill">Showing public maps</span>' : '<span class="session-pill">Published maps</span>');
+    const loginPanel = authActive && !user
+      ? `<section class="login-panel" id="loginPanel" hidden>
+          <h2>Sign in to see protected maps</h2>
+          <form id="catalogLoginForm" onsubmit="return false">
+            <label>Username<input type="text" id="username" autocomplete="username" required /></label>
+            <label>Password<input type="password" id="password" autocomplete="current-password" required /></label>
+            <div class="login-actions">
+              <button class="primary-btn" type="submit" id="loginBtn">Sign in</button>
+              <button class="ghost-btn" type="button" onclick="document.getElementById('loginPanel').hidden=true">Cancel</button>
+            </div>
+            <p class="login-error" id="loginError" hidden></p>
+          </form>
+        </section>`
+      : '';
+    const cards = visibleRows.map((row, index) => {
+      const page = Math.floor(index / pageSize) + 1;
+      const layersParam = encodeURIComponent(Array.isArray(row.mainLayerNames) ? row.mainLayerNames.join(',') : '');
+      const thumbUrl = `/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(row.projectId)}${layersParam ? `?LAYERS=${layersParam}` : ''}`;
+      const badge = row.isPublic ? 'Public' : 'Protected';
+      const badgeClass = row.isPublic ? 'map-badge map-badge--public' : 'map-badge map-badge--protected';
+      const generatedAt = formatDate(row.generatedAt);
+      return `<article class="map-card" data-page="${page}">
+        <a class="map-thumb" href="${escapeHtml(row.launchUrl)}">
+          <img src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" />
+        </a>
+        <div class="map-body">
+          <div class="map-topline">
+            <h2>${escapeHtml(row.name || row.projectId)}</h2>
+            <span class="${badgeClass}">${badge}</span>
+          </div>
+          ${row.description ? `<p class="map-desc">${escapeHtml(row.description)}</p>` : '<p class="map-desc map-desc--muted">No description available.</p>'}
+          <div class="map-meta">
+            <span>${escapeHtml(row.projectId)}</span>
+            ${generatedAt ? `<span>${escapeHtml(generatedAt)}</span>` : ''}
+          </div>
+          <div class="map-actions">
+            <a class="primary-btn" href="${escapeHtml(row.launchUrl)}">Open map</a>
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+    const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Qtiler Webmaps</title><style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,'Segoe UI',sans-serif;color:#1f2937;background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 100%)}
+a{text-decoration:none;color:inherit}img{display:block;max-width:100%}
+.page{max-width:1180px;margin:0 auto;padding:32px 20px 48px}
+.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:24px}
+.hero-copy{max-width:760px}.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{margin:0;color:#475569;font-size:1rem;line-height:1.6;max-width:65ch}
+.hero-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.session-pill{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;background:#fff;color:#334155;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.session-btn,.primary-btn,.ghost-btn{border:none;border-radius:12px;padding:12px 16px;font-size:.95rem;font-weight:600;cursor:pointer}.session-btn,.primary-btn{background:#0f766e;color:#fff}.session-btn:hover,.primary-btn:hover{background:#115e59}.ghost-btn{background:#fff;color:#334155;border:1px solid #cbd5e1}.ghost-btn:hover{background:#f8fafc}
+.login-panel{margin-bottom:24px;padding:18px;border-radius:20px;background:rgba(255,255,255,.88);box-shadow:0 18px 40px rgba(15,23,42,.08);backdrop-filter:blur(12px)}
+.login-panel h2{margin:0 0 12px;font-size:1.1rem}.login-panel form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:end}.login-panel label{display:flex;flex-direction:column;gap:6px;font-size:.9rem;color:#334155;font-weight:600}.login-panel input{width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:12px;font-size:.95rem}.login-actions{display:flex;gap:10px;flex-wrap:wrap}.login-error{margin:0;color:#b91c1c;font-size:.9rem}
+.catalog{display:flex;flex-direction:column;align-items:center;gap:22px}.grid{display:flex;flex-wrap:wrap;gap:18px;width:996px;max-width:100%}.map-card{flex:0 0 320px;width:320px;min-width:320px;max-width:320px;display:flex;flex-direction:column;overflow:hidden;border-radius:24px;background:rgba(255,255,255,.92);box-shadow:0 22px 50px rgba(15,23,42,.10);min-height:290px}
+.map-thumb{display:block;width:100%;flex:none;overflow:hidden;aspect-ratio:16/10;background:linear-gradient(135deg,#cbd5e1,#94a3b8)}.map-thumb img{width:100%;height:100%;object-fit:cover}
+.map-body{display:flex;flex:1;flex-direction:column;padding:18px}.map-topline{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.map-topline h2{margin:0;font-size:1.15rem;line-height:1.3}.map-badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}.map-badge--public{background:#dcfce7;color:#166534}.map-badge--protected{background:#fee2e2;color:#991b1b}
+.map-desc{margin:12px 0 16px;color:#475569;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.map-desc--muted{color:#94a3b8}.map-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:auto;margin-bottom:16px;font-size:.84rem;color:#64748b}
+.map-actions{display:flex;gap:10px;flex-wrap:wrap}.pager{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}.pager-status{min-width:120px;text-align:center;color:#475569;font-weight:600}.pager[hidden]{display:none}.pager-btn{border:none;border-radius:12px;padding:11px 16px;background:#0f172a;color:#fff;font-size:.95rem;font-weight:600;cursor:pointer}.pager-btn:hover{background:#1e293b}.pager-btn:disabled{cursor:default;opacity:.45}.empty{padding:28px;border-radius:24px;background:rgba(255,255,255,.92);box-shadow:0 22px 50px rgba(15,23,42,.10);color:#475569}
+@media (max-width:720px){.page{padding:24px 14px 36px}.hero{margin-bottom:18px}.catalog{align-items:stretch}.grid{width:100%}.map-card{flex:0 0 100%;width:100%;min-width:0;max-width:none}.map-body{padding:16px}}
+    </style></head><body><main class="page">
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Qtiler2qwc</span>
+          <h1>${escapeHtml(catalogTitle)}</h1>
+          <p>${escapeHtml(user ? catalogDescAuth : catalogDescPublic)}</p>
+        </div>
+        <div class="hero-actions">${sessionLabel}${authButton}</div>
+      </section>
+      ${loginPanel}
+      ${cards ? `<section class="catalog"><section class="grid" id="catalogGrid">${cards}</section><nav class="pager" id="catalogPager" ${pageCount > 1 ? '' : 'hidden'}><button class="pager-btn" type="button" id="catalogPrev">Previous</button><span class="pager-status" id="catalogStatus">Page 1 of ${pageCount}</span><button class="pager-btn" type="button" id="catalogNext">Next</button></nav></section>` : '<section class="empty">No published maps are available for this session.</section>'}
+    </main>
+    <script>
+      const loginForm = document.getElementById('catalogLoginForm');
+      if (loginForm) {
+        loginForm.addEventListener('submit', async () => {
+          const btn = document.getElementById('loginBtn');
+          const err = document.getElementById('loginError');
+          err.hidden = true;
+          btn.disabled = true;
+          btn.textContent = 'Signing in...';
+          try {
+            const response = await fetch('/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value
+              })
+            });
+            const payload = await response.json();
+            if (response.ok && payload.token) {
+              window.location.reload();
+              return;
+            }
+            err.textContent = payload.error || 'Invalid credentials';
+            err.hidden = false;
+          } catch (_error) {
+            err.textContent = 'Connection error';
+            err.hidden = false;
+          }
+          btn.disabled = false;
+          btn.textContent = 'Sign in';
+        });
+      }
+      const catalogGrid = document.getElementById('catalogGrid');
+      if (catalogGrid) {
+        const cards = Array.from(catalogGrid.querySelectorAll('.map-card'));
+        const prevBtn = document.getElementById('catalogPrev');
+        const nextBtn = document.getElementById('catalogNext');
+        const status = document.getElementById('catalogStatus');
+        const totalPages = Math.max(1, ${pageCount});
+        let currentPage = 1;
+        const renderPage = () => {
+          cards.forEach((card) => {
+            const page = Number(card.dataset.page || '1');
+            card.hidden = page !== currentPage;
+          });
+          if (status) status.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+          if (prevBtn) prevBtn.disabled = currentPage <= 1;
+          if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+        };
+        if (prevBtn) prevBtn.addEventListener('click', () => {
+          if (currentPage > 1) {
+            currentPage -= 1;
+            renderPage();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        });
+        if (nextBtn) nextBtn.addEventListener('click', () => {
+          if (currentPage < totalPages) {
+            currentPage += 1;
+            renderPage();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        });
+        renderPage();
+      }
+    </script>
+    </body></html>`;
+  };
+
   // startStandaloneServer removed — QWC2 served from same-origin under /Qtiler2qwc/webmap
   const startStandaloneServer = async (_port) => { return { port: null }; };
 
@@ -2278,17 +2461,52 @@ ${mapIcon}
     // Gate viewer entry with project permissions when QtilerAuth is enabled.
     // Keep static assets unrestricted so the login/no-access page can render.
     const isEntryRequest = p === '' || p === '/' || p === '/index.html';
+    const requestedProfile = String(req.query?.qtiler_profile || '').trim();
     const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
-    if (authActive && isEntryRequest) {
+    if (isEntryRequest && !requestedProfile) {
       const allProfiles = await readAllPublishedProfiles().catch(() => []);
       const accessiblePublic = filterProfilesByAccess(allProfiles, null);
       const accessible = filterProfilesByAccess(allProfiles, req.user);
-      if (!req.user && accessiblePublic.length === 0) {
+      if (authActive && !req.user && accessiblePublic.length === 0) {
         return res.status(401).type('html').send(buildNoAccessPage(true, false, null));
       }
-      if (req.user && accessible.length === 0) {
+      if (authActive && req.user && accessible.length === 0) {
         return res.status(403).type('html').send(buildNoAccessPage(true, true, req.user));
       }
+      const visibleProfiles = req.user ? accessible : accessiblePublic;
+      const visibleRows = visibleProfiles
+        .map((profile) => {
+          const projectId = normalizeProjectId(profile?.projectId || '');
+          const profileKey = String(profile?.profileKey || projectId || '').trim();
+          if (!projectId || !profileKey) return null;
+          const mainLayerNames = (Array.isArray(profile?.layers) ? profile.layers : [])
+            .filter((layer) => layer?.role === 'main')
+            .map((layer) => layer?.name)
+            .filter(Boolean);
+          return {
+            projectId,
+            profileKey,
+            name: profile?.name || projectId,
+            description: profile?.description || '',
+            generatedAt: profile?.generatedAt || null,
+            mainLayerNames,
+            isPublic: !profileRequiresAuthentication(profile),
+            launchUrl: buildWebmapLaunchUrl(profileKey, projectId, getRequestBaseUrl(req))
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => String(left.name || left.projectId).localeCompare(String(right.name || right.projectId)));
+      if (visibleRows.length > 0) {
+        const catState = await readState();
+        return res.status(200).type('html').send(buildWebmapCatalogPage(visibleRows, authActive, req.user || null, catState.catalogTexts));
+      }
+      if (authActive && !req.user) {
+        return res.status(401).type('html').send(buildNoAccessPage(true, false, null));
+      }
+      if (authActive) {
+        return res.status(403).type('html').send(buildNoAccessPage(true, true, req.user));
+      }
+      return res.status(200).type('html').send(buildNoAccessPage(false, false, null));
     }
 
     resolveQwc2WebRoot().then((webRoot) => {
@@ -2589,6 +2807,24 @@ ${mapIcon}
   });
 
   // Standalone start/stop endpoints removed — QWC2 is served via /Qtiler2qwc/webmap
+
+  app.get(`/plugins/${pluginSlug}/api/catalog-texts`, adminOnly, async (_req, res) => {
+    const state = await readState();
+    res.json(state.catalogTexts || { title: '', descPublic: '', descAuth: '' });
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/catalog-texts`, adminOnly, async (req, res) => {
+    const { title, descPublic, descAuth } = req.body || {};
+    await stateStore.update((draft) => ({
+      ...(draft || {}),
+      catalogTexts: {
+        title: String(title || '').slice(0, 200).trim(),
+        descPublic: String(descPublic || '').slice(0, 1000).trim(),
+        descAuth: String(descAuth || '').slice(0, 1000).trim()
+      }
+    }));
+    res.json({ ok: true });
+  });
 
   app.get(`/plugins/${pluginSlug}/api/releases`, adminOnly, async (req, res) => {
     try {
