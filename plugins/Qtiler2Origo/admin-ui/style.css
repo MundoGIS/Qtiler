@@ -2149,3 +2149,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 .q2o-config-row textarea {
   width: 260px;
 }
+
+
+/* Ensure aggressive scroll lock when modals or editors are open */
+html.is-clipped, html.is-clipped body {
+  overflow: hidden !important;
+  overscroll-behavior-y: none !important;
+}
+
+.publish-editor__body, .modal-card-body, .hiw-body { overscroll-behavior: contain; }

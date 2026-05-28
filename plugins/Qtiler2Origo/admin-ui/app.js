@@ -4,9 +4,13 @@
 (function setupModalScrollLock() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const sync = () => {
-    const modalOpen = !!document.querySelector('.modal.is-active');
+    const modalOpen = !!document.querySelector('.modal.is-active, .hiw-modal:not([hidden])');
     const publishOpen = !!document.querySelector('.publish-editor:not([hidden])');
-    document.body.classList.toggle('modal-open', modalOpen || publishOpen);
+    const shouldLock = modalOpen || publishOpen;
+    document.documentElement.classList.toggle('is-clipped', shouldLock);
+    document.documentElement.style.overflow = shouldLock ? 'hidden' : '';
+    document.body.style.overflow = shouldLock ? 'hidden' : '';
+    document.body.classList.toggle('modal-open', shouldLock);
     document.body.classList.toggle('publish-editor-open', publishOpen);
   };
   const obs = new MutationObserver(sync);
