@@ -83,6 +83,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Edit profile: {id}',
     'Qtiler2Origo.main_project': 'Main project',
     'Qtiler2Origo.project_layers': 'Project layers',
+    'Qtiler2Origo.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing \u2014 layers without WFS are served as WMS and displayed using a layer thumbnail.',
     'Qtiler2Origo.layer_include': 'Include',
     'Qtiler2Origo.layer_initial_visibility': 'Visible on map start',
     'Qtiler2Origo.layer_include_help': 'If enabled, this layer is included in the published map.',
@@ -110,6 +111,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'AttributeTable',
     'Qtiler2Origo.feat_routing': 'Routing',
     'Qtiler2Origo.publish_now': 'Publish',
+    'Qtiler2Origo.save_draft': 'Save draft',
+    'Qtiler2Origo.draft_saved': '✓ Draft saved',
+    'Qtiler2Origo.preview_btn': 'Preview',
     'Qtiler2Origo.cancel': 'Cancel',
     'Qtiler2Origo.no_layers': 'No layers found.',
     'Qtiler2Origo.no_bg_available': 'No backgrounds available.',
@@ -466,6 +470,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.install_origo2': 'Install Origo-map',
     'Qtiler2Origo.uninstall_origo2': 'Uninstall Origo-map',
     'Qtiler2Origo.attr_options_ph': 'One option per line',
+    'Qtiler2Origo.attr_detect_from_style': 'Detect from style',
+    'Qtiler2Origo.attr_detect_none': 'No == filter values found in style for "{attr}". Add rules with == filters in the style first.',
+    'Qtiler2Origo.attr_detect_ok': 'Detected {n} values from style for "{attr}".',
     'Qtiler2Origo.attr_title_ph': 'Display title',
     'Qtiler2Origo.pub_groups_legend': 'Groups & visibility',
     'Qtiler2Origo.pub_groups_help': "Define groups (and subgroups) and assign each visible layer to the group where it appears in the viewer's tree.",
@@ -590,6 +597,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Editar perfil: {id}',
     'Qtiler2Origo.main_project': 'Proyecto principal',
     'Qtiler2Origo.project_layers': 'Capas del proyecto',
+    'Qtiler2Origo.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opci\u00f3n \u2018Visible al abrir\u2019 controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edici\u00f3n \u2014 si no se activa WFS, la capa se sirve como WMS y se muestra con el thumbnail de la capa.',
     'Qtiler2Origo.layer_include': 'Incluir',
     'Qtiler2Origo.layer_initial_visibility': 'Visible al abrir',
     'Qtiler2Origo.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
@@ -617,6 +625,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'Tabla de atributos',
     'Qtiler2Origo.feat_routing': 'Rutas',
     'Qtiler2Origo.publish_now': 'Publicar',
+    'Qtiler2Origo.save_draft': 'Guardar borrador',
+    'Qtiler2Origo.draft_saved': '✓ Borrador guardado',
+    'Qtiler2Origo.preview_btn': 'Vista previa',
     'Qtiler2Origo.cancel': 'Cancelar',
     'Qtiler2Origo.no_layers': 'No se encontraron capas.',
     'Qtiler2Origo.no_bg_available': 'Sin fondos disponibles.',
@@ -973,6 +984,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.install_origo2': 'Instalar Origo-map',
     'Qtiler2Origo.uninstall_origo2': 'Desinstalar Origo-map',
     'Qtiler2Origo.attr_options_ph': 'Una opción por línea',
+    'Qtiler2Origo.attr_detect_from_style': 'Detectar del estilo',
+    'Qtiler2Origo.attr_detect_none': 'No se encontraron valores con filtro == en el estilo para "{attr}". Agrega reglas con filtros == en el estilo primero.',
+    'Qtiler2Origo.attr_detect_ok': 'Detectados {n} valores del estilo para "{attr}".',
     'Qtiler2Origo.attr_title_ph': 'Título a mostrar',
     'Qtiler2Origo.pub_groups_legend': 'Grupos y visibilidad',
     'Qtiler2Origo.pub_groups_help': 'Define grupos (y subgrupos) y asigna cada capa visible al grupo donde aparecerá en el árbol del visor.',
@@ -1097,6 +1111,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Redigera profil: {id}',
     'Qtiler2Origo.main_project': 'Huvudprojekt',
     'Qtiler2Origo.project_layers': 'Projektlager',
+    'Qtiler2Origo.project_layers_help': 'Aktivera lager f\u00f6r att inkludera dem i den publicerade kartan. V\u00e4xeln \u2018Synlig vid start\u2019 avg\u00f6r om ett inkluderat lager visas n\u00e4r kartan \u00f6ppnas. Vektorlager kan valfritt publiceras som WFS f\u00f6r att m\u00f6jligg\u00f6ra attributtabell och redigering \u2014 lager utan WFS serveras som WMS och visas med ett miniatyrbildsutsnitt av lagret.',
     'Qtiler2Origo.layer_include': 'Inkludera',
     'Qtiler2Origo.layer_initial_visibility': 'Synlig vid start',
     'Qtiler2Origo.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
@@ -1124,6 +1139,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'Attributtabell',
     'Qtiler2Origo.feat_routing': 'Ruttplanering',
     'Qtiler2Origo.publish_now': 'Publicera',
+    'Qtiler2Origo.save_draft': 'Spara utkast',
+    'Qtiler2Origo.draft_saved': '✓ Utkast sparat',
+    'Qtiler2Origo.preview_btn': 'Förhandsgranska',
     'Qtiler2Origo.cancel': 'Avbryt',
     'Qtiler2Origo.no_layers': 'Inga lager hittades.',
     'Qtiler2Origo.no_bg_available': 'Inga bakgrunder tillgängliga.',
@@ -1480,6 +1498,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.install_origo2': 'Installera Origo-map',
     'Qtiler2Origo.uninstall_origo2': 'Avinstallera Origo-map',
     'Qtiler2Origo.attr_options_ph': 'En alternativ per rad',
+    'Qtiler2Origo.attr_detect_from_style': 'Identifiera från stil',
+    'Qtiler2Origo.attr_detect_none': 'Inga ==-filtervärden hittades i stilen för "{attr}". Lägg till regler med ==-filter i stilen först.',
+    'Qtiler2Origo.attr_detect_ok': '{n} värden identifierade från stilen för "{attr}".',
     'Qtiler2Origo.attr_title_ph': 'Visningstitel',
     'Qtiler2Origo.pub_groups_legend': 'Grupper & synlighet',
     'Qtiler2Origo.pub_groups_help': 'Definiera grupper (och undergrupper) och tilldela varje synligt lager till gruppen där det visas i kartans träd.',
@@ -1539,9 +1560,23 @@ const QTWC_I18N = {
     'Qtiler2Origo.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2Origo/, inklusive kartpubliceraren, portalbyggaren och logiken för åtkomstfallback.'
   }
 };
-QTWC_I18N.no = QTWC_I18N.sv;
-QTWC_I18N.nb = QTWC_I18N.sv;
-QTWC_I18N.nn = QTWC_I18N.sv;
+
+QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
+  'Qtiler2Origo.project_layers': 'Prosjektlag',
+  'Qtiler2Origo.project_layers_help': 'Aktiver lag for å inkludere dem i det publiserte kartet. Bryteren \'Synlig ved start\' styrer om et inkludert lag vises når kartet åpnes. Vektorlag kan valgfritt publiseres som WFS for å aktivere attributtabell og redigering — lag uten WFS serveres som WMS og vises med et miniatyrbilde av laget.'
+});
+QTWC_I18N.nb = QTWC_I18N.no;
+QTWC_I18N.nn = QTWC_I18N.no;
+
+QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
+  'Qtiler2Origo.project_layers': 'Projektlag',
+  'Qtiler2Origo.project_layers_help': 'Aktivér lag for at inkludere dem i det offentliggjorte kort. Knappen \'Synlig ved start\' styrer, om et inkluderet lag vises, når kortet åbnes. Vektorlag kan valgfrit publiceres som WFS for at aktivere attributtabel og redigering — lag uden WFS serveres som WMS og vises med et miniaturebillede af laget.'
+});
+
+QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
+  'Qtiler2Origo.project_layers': 'Projektin tasot',
+  'Qtiler2Origo.project_layers_help': 'Aktivoi tasot sisällyttääksesi ne julkaistuun karttaan. \'Näkyvissä alussa\' -kytkin ohjaa, näytetäänkö sisällytetty taso, kun kartta avataan. Vektoritasot voidaan valinnaisesti julkaista WFS:nä, jotta ominaisuustaulukko ja muokkaus voidaan ottaa käyttöön — tasot ilman WFS:ää tarjotaan WMS:nä ja näytetään tason pikkukuvalla.'
+});
 
 /* ── DOM refs ── */
 // CRITICAL FIX: Moved tabMapsBadge to the top so syncUI doesn't crash on load!
@@ -1614,6 +1649,8 @@ const publishModalToggleFullscreen = document.getElementById('publishModalToggle
 const publishModalTabButtons = Array.from(document.querySelectorAll('[data-publish-tab]'));
 const publishModalPanels = Array.from(document.querySelectorAll('[data-publish-panel]'));
 const publishNowBtn = document.getElementById('publishNowBtn');
+const saveDraftBtn = document.getElementById('saveDraftBtn');
+const previewFooterBtn = document.getElementById('previewFooterBtn');
 const removeDemoBtn = document.getElementById('removeDemoBtn');
 const publishName = document.getElementById('publishName');
 const publishDescription = document.getElementById('publishDescription');
@@ -2310,17 +2347,18 @@ function renderControlConfigPanels() {
         // Crea un contenedor horizontal para cada campo
         const row = document.createElement('div');
         row.className = 'q2o-config-row';
-        row.style.display = 'flex';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '120px 1fr';
+        row.style.gap = '0.5rem';
         row.style.alignItems = 'center';
-        row.style.gap = '1.2rem';
         row.style.marginBottom = '0.4rem';
         const labelTxt = fieldLabel(field);
         if (field.type === 'bool') {
           // Label a la izquierda, checkbox a la derecha
           const label = document.createElement('label');
-          label.style.minWidth = '120px';
-          label.style.fontSize = '0.95em';
-          label.style.marginRight = '0.5rem';
+          label.style.fontSize = '0.85em';
+          label.style.overflow = 'hidden';
+          label.style.textOverflow = 'ellipsis';
           label.textContent = labelTxt;
           const cb = document.createElement('input');
           cb.type = 'checkbox';
@@ -2333,16 +2371,17 @@ function renderControlConfigPanels() {
         } else {
           // Label a la izquierda, input a la derecha
           const label = document.createElement('label');
-          label.style.minWidth = '120px';
-          label.style.fontSize = '0.95em';
-          label.style.marginRight = '0.5rem';
+          label.style.fontSize = '0.85em';
+          label.style.overflow = 'hidden';
+          label.style.textOverflow = 'ellipsis';
           label.textContent = labelTxt;
           let input;
           if (field.type === 'textarea' || field.type === 'json') {
             input = document.createElement('textarea');
             input.className = 'textarea is-small';
             input.rows = field.type === 'json' ? 3 : 4;
-            input.style.width = '260px';
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
           } else if (field.type === 'select') {
             input = document.createElement('div');
             input.className = 'select is-small is-fullwidth';
@@ -2358,7 +2397,7 @@ function renderControlConfigPanels() {
             input = document.createElement('input');
             input.className = 'input is-small';
             input.type = field.type === 'number' ? 'number' : 'text';
-            input.style.width = '220px';
+            input.style.width = '100%';
           }
           if (field.placeholder) {
             const target = input._sel || input;
@@ -2430,7 +2469,6 @@ function getLang() {
   if (!raw) { try { raw = localStorage.getItem('qtiler.lang') || ''; } catch (_) {} }
   if (!raw) raw = (navigator.language || 'en');
   raw = String(raw).toLowerCase();
-  if (raw.startsWith('nb') || raw.startsWith('nn') || raw.startsWith('no')) return 'sv';
   return raw.split('-')[0];
 }
 
@@ -4153,7 +4191,6 @@ function renderLayerChecklist(container, layers, rules = {}) {
     }
     const tagText = tags.length ? `<span class="Qtiler2Origo-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
     const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
-    const activeHint = !isMainLayerList ? '' : `<small class="help">${escapeHtml(t('Qtiler2Origo.layer_include_help'))} ${escapeHtml(t('Qtiler2Origo.layer_initial_visibility_help'))}</small>`;
     
     let styleButton = '';
     if (isVectorLayer) {
@@ -4199,7 +4236,6 @@ function renderLayerChecklist(container, layers, rules = {}) {
         <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Origo-layer-row__main">
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
-          ${activeHint}
         </${mainContentTag}>
         ${isMainLayerList ? `<div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
       </div>
@@ -5660,6 +5696,36 @@ defaultBackgroundList?.addEventListener('change', (event) => {
   }
 });
 
+saveDraftBtn?.addEventListener('click', () => {
+  try {
+    const draftKey = 'qtiler2origo-draft-' + String(publishState.editingProfileId || publishName?.value || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+    localStorage.setItem(draftKey, JSON.stringify({
+      mainRules: publishState.mainRules,
+      extraLayers: publishState.extraLayers,
+      backgrounds: publishState.backgrounds,
+      features: publishState.features,
+      controlsOptions: publishState.controlsOptions,
+      origoConfig: publishState.origoConfig,
+      editingProfileId: publishState.editingProfileId,
+      name: publishName?.value || '',
+      description: publishDescription?.value || '',
+      projectId: publishProjectSelect?.value || '',
+      savedAt: new Date().toISOString()
+    }));
+    const origText = saveDraftBtn.textContent;
+    saveDraftBtn.textContent = t('Qtiler2Origo.draft_saved') || '✓ Guardado';
+    saveDraftBtn.disabled = true;
+    setTimeout(() => {
+      saveDraftBtn.textContent = origText;
+      saveDraftBtn.disabled = false;
+    }, 2500);
+  } catch (e) { /* localStorage quota or serialization error */ }
+});
+
+previewFooterBtn?.addEventListener('click', () => {
+  setPublishModalTab('config');
+});
+
 publishNowBtn?.addEventListener('click', async () => {
   const mapName = String(publishName?.value || '').trim();
   const mapDescription = String(publishDescription?.value || '').trim();
@@ -6813,6 +6879,61 @@ let currentLayerGeomFamily = 'point'; // point|line|polygon
 let svgLibraryCache = null;
 let svgPickerTargetCb = null;
 
+// Extract unique values for a given attribute name from the current style rules.
+// Looks for equality filters: [attrName] == 'value' or [attrName] == value.
+// Returns the detected values in the order they appear in the rules.
+function extractDropdownOptionsFromRules(attrName) {
+  const name = String(attrName || '').trim().toLowerCase();
+  if (!name) return [];
+  const values = [];
+  const seen = new Set();
+  const seenFilters = new Set();
+  const filterStrings = [];
+
+  const addFilter = (f) => {
+    const s = String(f).trim();
+    if (s && !seenFilters.has(s)) { seenFilters.add(s); filterStrings.push(s); }
+  };
+
+  // Source 1: currentRules (in-memory, most up-to-date)
+  for (const rule of currentRules) {
+    if (rule.filter) addFilter(rule.filter);
+  }
+
+  // Source 2: publishState saved wfsStyle (authoritative stored state)
+  const collectFromStyleDef = (styleDef) => {
+    if (!Array.isArray(styleDef)) return;
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (node.filter != null) addFilter(node.filter);
+    };
+    styleDef.forEach(walk);
+  };
+  try {
+    const saved = publishState?.mainRules?.[currentEditingWfsLayer]?.wfsStyle;
+    if (Array.isArray(saved)) collectFromStyleDef(saved);
+  } catch { /* ignore */ }
+
+  // Source 3: JSON editor textarea (handles direct edits)
+  try {
+    if (wfsStyleJsonEditor?.value) collectFromStyleDef(JSON.parse(wfsStyleJsonEditor.value));
+  } catch { /* ignore */ }
+
+  // Match filter strings — no ^ anchor so leading whitespace is tolerated
+  for (const f of filterStrings) {
+    const m = f.match(/\[([^\]]+)\]\s*==\s*(.+)$/);
+    if (!m) continue;
+    if (m[1].trim().toLowerCase() !== name) continue;
+    let val = m[2].trim();
+    if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    if (val && !seen.has(val)) { seen.add(val); values.push(val); }
+  }
+  return values;
+}
+
 
 const attributesContainer = document.getElementById('wfs-attributes-container');
 const attributesAddBtn = document.getElementById('wfs-attributes-add');
@@ -6840,7 +6961,13 @@ function renderAttributesPanel() {
       .map(t => `<option value="${t}"${t === type ? ' selected' : ''}>${t}</option>`).join('');
     const maxLen = (attr.maxLength != null ? attr.maxLength : '');
     const optionsRow = (type === 'dropdown')
-      ? `<div style="grid-column: 1 / -1; margin-top:0.25rem"><textarea class="textarea is-small" rows="3" placeholder="${escapeHtml(t('Qtiler2Origo.attr_options_ph'))}" data-idx="${idx}" data-field="options">${Array.isArray(attr.options) ? attr.options.join('\n') : ''}</textarea></div>`
+      ? `<div style="grid-column: 1 / -1; margin-top:0.25rem">
+          <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">
+            <span style="font-size:0.8rem;color:#64748b">${escapeHtml(t('Qtiler2Origo.attr_options_ph'))}</span>
+            <button type="button" class="button is-small is-light" data-action="detect-options" data-idx="${idx}">${escapeHtml(t('Qtiler2Origo.attr_detect_from_style'))}</button>
+          </div>
+          <textarea class="textarea is-small" rows="3" data-idx="${idx}" data-field="options">${Array.isArray(attr.options) ? attr.options.join('\n') : ''}</textarea>
+        </div>`
       : '';
     row.innerHTML = `${nameField}
       <input type="text" class="input small" placeholder="${escapeHtml(t('Qtiler2Origo.attr_title_ph'))}" value="${attr.title || ''}" data-idx="${idx}" data-field="title">
@@ -6854,7 +6981,7 @@ function renderAttributesPanel() {
 
 if (attributesAddBtn) {
   attributesAddBtn.addEventListener('click', () => {
-    currentAttributes.push({ name: '', title: '', url: '' });
+    currentAttributes.push({ name: '', title: '', type: 'text', url: '' });
     renderAttributesPanel();
   });
 }
@@ -6872,6 +6999,14 @@ if (attributesContainer) {
       currentAttributes[idx].options = val.split('\n').map(s => s.trim()).filter(Boolean);
     } else {
       currentAttributes[idx][field] = val;
+      // When the user picks a field name, auto-fill the type from WFS metadata
+      // so Origo never receives type:undefined.
+      if (field === 'name' && val) {
+        const detected = (currentLayerFields || []).find(f => f.name === val);
+        if (detected?.type && !currentAttributes[idx].type) {
+          currentAttributes[idx].type = detected.type;
+        }
+      }
     }
     if (field === 'type') renderAttributesPanel();
   };
@@ -6884,6 +7019,46 @@ if (attributesContainer) {
       if (!isNaN(idx)) {
         currentAttributes.splice(idx, 1);
         renderAttributesPanel();
+      }
+    }
+    const detectBtn = e.target.closest ? e.target.closest('[data-action="detect-options"]') : (e.target.getAttribute('data-action') === 'detect-options' ? e.target : null);
+    if (detectBtn) {
+      const idx = parseInt(detectBtn.getAttribute('data-idx'));
+      if (isNaN(idx) || !currentAttributes[idx]) return;
+      const attrName = currentAttributes[idx].name;
+      const detected = extractDropdownOptionsFromRules(attrName);
+      const msgOk = (t('Qtiler2Origo.attr_detect_ok') || 'Detected {n} values for "{attr}".').replace('{n}', detected.length).replace('{attr}', attrName);
+      const msgNone = (t('Qtiler2Origo.attr_detect_none') || 'No values found for "{attr}".').replace('{attr}', attrName);
+      if (detected.length) {
+        currentAttributes[idx].options = detected;
+        renderAttributesPanel();
+      }
+      // Inline feedback next to the button (always visible regardless of wfsStyleError position)
+      const msgEl = detectBtn.parentElement?.querySelector('.detect-msg');
+      const showInline = (msg, color) => {
+        let el = detectBtn.parentElement?.querySelector('.detect-msg');
+        if (!el) {
+          el = document.createElement('span');
+          el.className = 'detect-msg';
+          el.style.cssText = 'font-size:0.75rem;margin-left:0.5rem';
+          detectBtn.insertAdjacentElement('afterend', el);
+        }
+        el.textContent = msg;
+        el.style.color = color;
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.remove(), 5000);
+      };
+      showInline(detected.length ? msgOk : msgNone, detected.length ? '#059669' : '#b45309');
+      // Also update wfsStyleError if present
+      if (wfsStyleError) {
+        wfsStyleError.textContent = detected.length ? msgOk : msgNone;
+        wfsStyleError.classList.remove('is-hidden');
+        wfsStyleError.style.color = detected.length ? '#059669' : '#b45309';
+        clearTimeout(wfsStyleError._detectTimer);
+        wfsStyleError._detectTimer = setTimeout(() => {
+          wfsStyleError.classList.add('is-hidden');
+          wfsStyleError.style.color = '';
+        }, 5000);
       }
     }
   });

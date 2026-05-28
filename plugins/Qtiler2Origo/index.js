@@ -3255,6 +3255,30 @@ ${mapIcon}
         if (!resolvedAttrs.length) {
           resolvedAttrs = [{ name: 'fid', title: 'fid', type: 'text' }];
         }
+        // Sanitize attribute types so Origo never receives type:undefined or an
+        // unrecognised value. When a type is missing or invalid we fall back to
+        // the type detected from WFS DescribeFeatureType, then to 'text'.
+        {
+          const VALID_ORIGO_ATTR_TYPES = new Set([
+            'text', 'textarea', 'number', 'decimal', 'date', 'datetime',
+            'checkbox', 'url', 'email', 'color', 'image', 'hidden', 'searchList'
+          ]);
+          const TYPE_ALIASES = { dropdown: 'searchList', integer: 'number', int: 'number', float: 'decimal', bool: 'checkbox', boolean: 'checkbox' };
+          const wfsMetaByName = Object.fromEntries(
+            (wfsMeta.attributes || []).map(a => [a.name, a])
+          );
+          resolvedAttrs = resolvedAttrs.map(attr => {
+            const raw = String(attr.type || '').trim();
+            if (VALID_ORIGO_ATTR_TYPES.has(raw)) return attr;
+            // Try alias mapping first
+            const aliased = TYPE_ALIASES[raw.toLowerCase()];
+            if (aliased) return { ...attr, type: aliased };
+            // Fall back to WFS DescribeFeatureType detected type
+            const detected = wfsMetaByName[attr.name]?.type;
+            const resolvedType = (detected && VALID_ORIGO_ATTR_TYPES.has(detected)) ? detected : 'text';
+            return { ...attr, type: resolvedType };
+          });
+        }
         const wfsDef = {
           name: layer.name,
           title: layer.name,
@@ -4952,6 +4976,7 @@ ${mapIcon}
           out.attributes = rule.attributes
             .map((a) => (a && typeof a === 'object') ? {
               name: String(a.name || '').trim(),
+              ...(a.type ? { type: String(a.type) } : {}),
               ...(a.title ? { title: String(a.title) } : {}),
               ...(a.url ? { url: String(a.url) } : {}),
               ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
