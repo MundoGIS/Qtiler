@@ -545,7 +545,15 @@
         en: Object.assign({}, README_EN, HIW_EN),
         es: Object.assign({}, README_ES, HIW_ES),
         sv: Object.assign({}, README_SV, HIW_SV),
-        nb: Object.assign({}, README_NB, HIW_NB)
+        nb: Object.assign({}, README_NB, HIW_NB),
+        no: Object.assign({}, README_NB, HIW_NB),
+        nn: Object.assign({}, README_NB, HIW_NB),
+        da: Object.assign({}, README_SV, HIW_SV, {
+          'hiw.button': 'Sådan fungerer det og sikkerhed'
+        }),
+        fi: Object.assign({}, README_EN, HIW_EN, {
+          'hiw.button': 'Miten se toimii ja turvallisuus'
+        })
       };
 
       const normalizeLang = (value) => {
@@ -553,6 +561,8 @@
         if (raw.startsWith('es')) return 'es';
         if (raw.startsWith('sv')) return 'sv';
         if (raw.startsWith('nb') || raw.startsWith('nn') || raw.startsWith('no')) return 'nb';
+        if (raw.startsWith('da')) return 'da';
+        if (raw.startsWith('fi')) return 'fi';
         return 'en';
       };
 

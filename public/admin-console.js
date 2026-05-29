@@ -305,8 +305,30 @@ const I18N = {
     searchableConfigureIntro: 'Välj sökkolumner och attribut för {layer}.',
     searchableApply: 'Använd',
     searchableCancel: 'Avbryt'
-  }
+  },
+  no: {},
+  da: {},
+  fi: {}
 };
+
+I18N.no = Object.assign({}, I18N.sv, {
+  'Dashboard': 'Oversikt',
+  'User guide': 'Brukerveiledning',
+  'Language': 'Språk',
+  'Login': 'Logg inn'
+});
+I18N.da = Object.assign({}, I18N.sv, {
+  'Dashboard': 'Oversigt',
+  'User guide': 'Brugervejledning',
+  'Language': 'Sprog',
+  'Login': 'Log ind'
+});
+I18N.fi = Object.assign({}, I18N.en, {
+  'Dashboard': 'Yleiskuva',
+  'User guide': 'Käyttöopas',
+  'Language': 'Kieli',
+  'Login': 'Kirjaudu sisään'
+});
 
 const PLUGIN_DOCS = {
   Qrigo: {
@@ -428,19 +450,21 @@ const PLUGIN_DOCS = {
 };
 
 function getPluginDocs(name) {
-  const lang = window.qtilerLang ? window.qtilerLang.get() : 'en';
+  const rawLang = window.qtilerLang ? window.qtilerLang.get() : 'en';
+  const lang = String(rawLang || 'en').toLowerCase().split('-')[0];
+  const fallbackLang = (lang === 'no' || lang === 'nb' || lang === 'nn' || lang === 'da') ? 'sv' : 'en';
   const pluginMeta = state.plugins?.meta?.[name] || null;
   const manifestDocs = pluginMeta && pluginMeta.docs && typeof pluginMeta.docs === 'object'
     ? pluginMeta.docs
     : null;
   if (manifestDocs) {
-    const byLang = manifestDocs[lang] || manifestDocs.en || null;
+    const byLang = manifestDocs[lang] || manifestDocs[fallbackLang] || manifestDocs.en || null;
     if (byLang) return byLang;
   }
 
   // Fallback for older plugin packages without docs in plugin.json.
   const fallback = PLUGIN_DOCS[name] || null;
-  if (fallback) return fallback[lang] || fallback.en || null;
+  if (fallback) return fallback[lang] || fallback[fallbackLang] || fallback.en || null;
 
   const manifestDescription = String(pluginMeta?.description || '').trim();
   return manifestDescription ? { description: manifestDescription, readme: [] } : null;

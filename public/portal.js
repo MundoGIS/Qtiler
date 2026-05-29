@@ -20,7 +20,7 @@ if (footerYearEl) {
 
 const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
   ? window.qtilerLang.SUPPORTED_LANGS
-  : ['en', 'es', 'sv', 'no'];
+  : ['en', 'es', 'sv', 'no', 'da', 'fi'];
 const normalizeLang = window.qtilerLang?.normalize || ((value) => {
   const raw = String(value || '').toLowerCase();
   if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -263,8 +263,27 @@ const TRANSLATIONS = {
     'portal.project.label': 'QGIS-prosjekt:',
     'portal.project.expand': 'Utvid',
     'portal.project.collapse': 'Skjul'
-  }
+  },
+  da: {},
+  fi: {}
 };
+
+TRANSLATIONS.da = Object.assign({}, TRANSLATIONS.sv, {
+  'Dashboard': 'Oversigt',
+  'User guide': 'Brugervejledning',
+  'Language': 'Sprog',
+  'portal.pageTitle': 'Qtiler · Offentlige kort',
+  'portal.login': 'Log ind',
+  'portal.logout': 'Log ud'
+});
+TRANSLATIONS.fi = Object.assign({}, TRANSLATIONS.en, {
+  'Dashboard': 'Yleiskuva',
+  'User guide': 'Käyttöopas',
+  'Language': 'Kieli',
+  'portal.pageTitle': 'Qtiler · Julkiset kartat',
+  'portal.login': 'Kirjaudu sisään',
+  'portal.logout': 'Kirjaudu ulos'
+});
 
 const tr = (key, params = {}) => {
   if (!key) return '';

@@ -30,6 +30,33 @@
         "Projektbehörighet synkas med public/authenticated/private-regler i QtilerAuth.",
         "Använd projektkatalog-endpointen för bridge-integrationer."
       ]
+    },
+    "no": {
+      "description": "Installerer QWC2 fra GitHub og serverer den via Qtiler med prosjekttilgang fra QtilerAuth.",
+      "readme": [
+        "Bruk administrasjonskonsollen til å installere eller avinstallere QWC2 fra en fast GitHub-tagg.",
+        "QWC2s statiske filer serveres av Qtiler på /plugins/Qtiler2qwc/qwc2.",
+        "Prosjekttilgang synkroniseres med public/authenticated/private-reglene i QtilerAuth.",
+        "Bruk endepunktet for prosjektkatalogen til bridge-integrasjoner."
+      ]
+    },
+    "da": {
+      "description": "Installerer QWC2 fra GitHub og serverer den via Qtiler med projektadgang fra QtilerAuth.",
+      "readme": [
+        "Brug administrationskonsollen til at installere eller afinstallere QWC2 fra et fast GitHub-tag.",
+        "QWC2s statiske filer serveres af Qtiler på /plugins/Qtiler2qwc/qwc2.",
+        "Projektadgang synkroniseres med public/authenticated/private-reglerne i QtilerAuth.",
+        "Brug endepunktet for projektkataloget til bridge-integrationer."
+      ]
+    },
+    "fi": {
+      "description": "Asentaa QWC2:n GitHubista ja julkaisee sen Qtilerin kautta projektien käyttöoikeuksia noudattaen.",
+      "readme": [
+        "Asenna tai poista QWC2 hallintakonsolista kiinnitetystä GitHub-tunnisteesta.",
+        "QWC2:n staattiset tiedostot tarjoillaan Qtilerista osoitteessa /plugins/Qtiler2qwc/qwc2.",
+        "Projektien näkyvyys synkronoidaan QtilerAuthin public/authenticated/private-säännöistä.",
+        "Käytä projektikatalogin rajapintaa bridge-integraatioihin."
+      ]
     }
   },
   "autoEnable": false,

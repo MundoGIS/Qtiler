@@ -50,7 +50,7 @@
 
       const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
         ? window.qtilerLang.SUPPORTED_LANGS
-        : ["en", "es", "sv", "no"];
+        : ["en", "es", "sv", "no", "da", "fi"];
       const normalizeLang = window.qtilerLang?.normalize || ((value) => {
         const raw = (value || "").toLowerCase();
         if (SUPPORTED_LANGS.includes(raw)) return raw;

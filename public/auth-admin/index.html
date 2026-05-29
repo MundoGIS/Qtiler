@@ -26,6 +26,8 @@
           <option value="es">Español</option>
           <option value="sv">Svenska</option>
           <option value="no">Norsk</option>
+          <option value="da">Dansk</option>
+          <option value="fi">Suomi</option>
         </select>
       </nav>
     </div>
@@ -55,7 +57,7 @@
     (function () {
       const SUPPORTED_LANGS = (window.qtilerLang && Array.isArray(window.qtilerLang.SUPPORTED_LANGS))
         ? window.qtilerLang.SUPPORTED_LANGS
-        : ["en", "es", "sv", "no"];
+        : ["en", "es", "sv", "no", "da", "fi"];
       const normalizeLang = window.qtilerLang?.normalize || ((value) => {
         const raw = (value || "").toLowerCase();
         if (SUPPORTED_LANGS.includes(raw)) return raw;
@@ -109,8 +111,27 @@
           "authInstall.help.repo": "Om du arbetar lokalt finns den senaste versionen i <code>dist/QtilerAuth.zip</code>.",
           "authInstall.help.credentials": "Efter installationen loggar du in med <strong>användare</strong> <code>admin</code> och <strong>tillfälligt lösenord</strong> <code>MundoGIS-2026</code>. Byt lösenord i konsolen innan du återvänder till panelen.",
           "authInstall.help.return": "När pluginet är installerat kan du återgå till hela konsolen på <a href=\"/plugins/auth-admin\">/plugins/auth-admin</a>."
-        }
+        },
+        no: {},
+        da: {},
+        fi: {}
       };
+
+      TRANSLATIONS.no = Object.assign({}, TRANSLATIONS.sv, {
+        "Dashboard": "Oversikt",
+        "User guide": "Brukerveiledning",
+        "Language": "Språk"
+      });
+      TRANSLATIONS.da = Object.assign({}, TRANSLATIONS.sv, {
+        "Dashboard": "Oversigt",
+        "User guide": "Brugervejledning",
+        "Language": "Sprog"
+      });
+      TRANSLATIONS.fi = Object.assign({}, TRANSLATIONS.en, {
+        "Dashboard": "Yleiskuva",
+        "User guide": "Käyttöopas",
+        "Language": "Kieli"
+      });
 
       const languageSelect = document.getElementById('language_selector');
 

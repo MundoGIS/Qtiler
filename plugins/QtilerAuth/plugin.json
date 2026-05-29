@@ -22,7 +22,10 @@
         "Crea y gestiona usuarios, roles, estado de cuenta, contrasenas y API keys.",
         "Define proyectos publicos/privados y asigna acceso privado por usuario.",
         "Soporta cookie de sesion, bearer token, basic auth y api_key.",
-        "Usalo como capa base de seguridad para dashboard y endpoints de servicios."
+        "Usalo como capa base de seguridad para dashboard y endpoints de servicios.",
+        "Produccion detras de IIS/URL Rewrite/ARR con DNS y HTTPS: define PUBLIC_BASE_URL con la URL HTTPS externa, usa QTILER_TRUST_PROXY=loopback cuando IIS y Qtiler corren en el mismo host, activa QTILER_ENABLE_HSTS=1 solo despues de verificar HTTPS y limita QTILER_CORS_ALLOWED_ORIGINS a los origins publicos confiables.",
+        "IIS debe terminar TLS con un certificado valido, redirigir HTTP a HTTPS, proxyear a http://127.0.0.1:3000, conservar el Host original y reenviar X-Forwarded-Proto=https, X-Forwarded-Host y X-Forwarded-For. Desactiva WebDAV o permite PATCH/DELETE explicitamente si IIS filtra esos metodos.",
+        "Endurecimiento recomendado en produccion: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE con un valor finito como 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 para guardar solo hashes de API keys y QTILER_WMTS_REQUIRE_AUTH=1 si deseas bloquear descubrimiento WMTS anonimo global. Usa QTILER_CORS_ALLOW_CREDENTIALS=1 solo cuando otro origin confiable necesite sesiones por cookie."
       ]
     },
     "sv": {
@@ -31,7 +34,46 @@
         "Skapa och hantera anvandare, roller, kontostatus, losenord och API-nycklar.",
         "Markera projekt som publika/privata och tilldela anvandarspecifik privat atkomst.",
         "Stodjer sessionscookie, bearer-token, basic auth och api_key-floden.",
-        "Anvand pluginet som grundlagret for sakerhet i dashboard och tjanste-endpoints."
+        "Anvand pluginet som grundlagret for sakerhet i dashboard och tjanste-endpoints.",
+        "Produktion bakom IIS/URL Rewrite/ARR med DNS och HTTPS: satt PUBLIC_BASE_URL till den externa HTTPS-URL:en, behall QTILER_TRUST_PROXY=loopback nar IIS och Qtiler kors pa samma vard, aktivera QTILER_ENABLE_HSTS=1 forst efter att HTTPS ar verifierat och satt QTILER_CORS_ALLOWED_ORIGINS till betrodda publika origins.",
+        "IIS maste terminera TLS med ett giltigt certifikat, dirigera om HTTP till HTTPS, proxya till http://127.0.0.1:3000, behalla original-Host och vidarebefordra X-Forwarded-Proto=https, X-Forwarded-Host och X-Forwarded-For. Inaktivera WebDAV eller tillat PATCH/DELETE uttryckligen om IIS filtrerar metoderna.",
+        "Rekommenderad produktionshardning: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE satt till ett begransat varde som 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 for endast hashad API-nyckellagring och QTILER_WMTS_REQUIRE_AUTH=1 om anonym global WMTS-upptackt ska blockeras. Anvand QTILER_CORS_ALLOW_CREDENTIALS=1 endast nar en annan betrodd origin behover cookiesessioner."
+      ]
+    },
+    "no": {
+      "description": "Legger til autentisering, roller og prosjekttilgang for sikre Qtiler-installasjoner.",
+      "readme": [
+        "Opprett og administrer brukere, roller, kontostatus, passord og API-nøkler.",
+        "Sett prosjekter som offentlige/private og tildel brukerspesifikk privat tilgang.",
+        "Støtter session-cookie, bearer-token, basic auth og api_key-flyter.",
+        "Bruk det som sikkerhetsgrunnlag for dashboard og tjenesteendepunkter.",
+        "Produksjon bak IIS/URL Rewrite/ARR med DNS og HTTPS: sett PUBLIC_BASE_URL til ekstern HTTPS-URL, behold QTILER_TRUST_PROXY=loopback når IIS og Qtiler kjører på samme vert, aktiver QTILER_ENABLE_HSTS=1 først etter at HTTPS er verifisert, og sett QTILER_CORS_ALLOWED_ORIGINS til betrodde offentlige origins.",
+        "IIS må terminere TLS med gyldig sertifikat, videresende HTTP til HTTPS, proxye til http://127.0.0.1:3000, bevare original Host og videresende X-Forwarded-Proto=https, X-Forwarded-Host og X-Forwarded-For. Deaktiver WebDAV eller tillat PATCH/DELETE eksplisitt hvis IIS filtrerer metodene.",
+        "Anbefalt produksjonsherding: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE satt til en endelig verdi som 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 for kun hash-lagring av API-nøkler, og QTILER_WMTS_REQUIRE_AUTH=1 hvis anonym global WMTS-oppdagelse skal blokkeres. Bruk QTILER_CORS_ALLOW_CREDENTIALS=1 bare når en annen betrodd origin trenger cookie-økter."
+      ]
+    },
+    "da": {
+      "description": "Tilføjer autentificering, roller og projektadgang til sikre Qtiler-installationer.",
+      "readme": [
+        "Opret og administrer brugere, roller, kontostatus, adgangskoder og API-nøgler.",
+        "Sæt projekter som offentlige/private, og tildel brugerspecifik privat adgang.",
+        "Understøtter session-cookie, bearer-token, basic auth og api_key-flows.",
+        "Brug det som sikkerhedsgrundlag for dashboard og service-endepunkter.",
+        "Produktion bag IIS/URL Rewrite/ARR med DNS og HTTPS: sæt PUBLIC_BASE_URL til den eksterne HTTPS-URL, behold QTILER_TRUST_PROXY=loopback når IIS og Qtiler kører på samme host, aktivér QTILER_ENABLE_HSTS=1 først efter at HTTPS er verificeret, og sæt QTILER_CORS_ALLOWED_ORIGINS til betroede offentlige origins.",
+        "IIS skal terminere TLS med et gyldigt certifikat, omdirigere HTTP til HTTPS, proxye til http://127.0.0.1:3000, bevare den oprindelige Host og videresende X-Forwarded-Proto=https, X-Forwarded-Host og X-Forwarded-For. Deaktivér WebDAV eller tillad PATCH/DELETE eksplicit, hvis IIS filtrerer metoderne.",
+        "Anbefalet produktionshærdning: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE sat til en endelig værdi som 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 for kun hash-lagring af API-nøgler og QTILER_WMTS_REQUIRE_AUTH=1 hvis anonym global WMTS-discovery skal blokeres. Brug kun QTILER_CORS_ALLOW_CREDENTIALS=1 når en anden betroet origin har brug for cookie-sessioner."
+      ]
+    },
+    "fi": {
+      "description": "Lisää todennuksen, roolit ja projektikohtaisen käyttöoikeuksien hallinnan turvallisiin Qtiler-asennuksiin.",
+      "readme": [
+        "Luo ja hallitse käyttäjiä, rooleja, tilien tilaa, salasanoja ja API-avaimia.",
+        "Määritä projektit julkisiksi tai yksityisiksi ja anna käyttäjäkohtainen yksityinen käyttöoikeus.",
+        "Tukee istuntoevästettä, bearer-tokenia, basic authia ja api_key-työnkulkuja.",
+        "Käytä sitä dashboardin ja palvelurajapintojen turvallisuuden perustasona.",
+        "Tuotanto IIS/URL Rewrite/ARR:n takana DNS:n ja HTTPS:n kanssa: aseta PUBLIC_BASE_URL ulkoiseen HTTPS-osoitteeseen, pidä QTILER_TRUST_PROXY=loopback kun IIS ja Qtiler toimivat samalla palvelimella, ota QTILER_ENABLE_HSTS=1 käyttöön vasta HTTPS-varmistuksen jälkeen ja rajaa QTILER_CORS_ALLOWED_ORIGINS luotettuihin julkisiin origineihin.",
+        "IIS:n on päätettävä TLS voimassa olevalla sertifikaatilla, ohjattava HTTP HTTPS:ään, proxytettava osoitteeseen http://127.0.0.1:3000, säilytettävä alkuperäinen Host ja välitettävä X-Forwarded-Proto=https, X-Forwarded-Host ja X-Forwarded-For. Poista WebDAV käytöstä tai salli PATCH/DELETE erikseen, jos IIS suodattaa nämä metodit.",
+        "Suositeltu tuotantokovennus: AUTH_CAPTCHA_PROVIDER=pow, AUTH_API_RATE_LIMIT_PER_MINUTE rajattuun arvoon kuten 1000, AUTH_STORE_PLAINTEXT_API_KEYS=0 jotta API-avaimet tallennetaan vain hasheina, ja QTILER_WMTS_REQUIRE_AUTH=1 jos anonyymi globaali WMTS-haku halutaan estää. Käytä QTILER_CORS_ALLOW_CREDENTIALS=1 vain kun toinen luotettu origin tarvitsee evästeistuntoja."
       ]
     }
   },

@@ -30,6 +30,33 @@
         "Anvand Info-knappen for att kopiera exakt kod for layers, source och search i Origo.",
         "Klistra in kodsnuttarna i Origo-konfigurationen, publicera och validera hela flodet."
       ]
+    },
+    "no": {
+      "description": "Kobler Qtiler-prosjekter til Origo med veiledede kodeutdrag og verktøy for lagoppsett.",
+      "readme": [
+        "Åpne et lag i dashboardet og klikk Origo-knappen i lagdetaljene.",
+        "Origo-panelet viser tilgjengelige lag og markerer hvilke lag som er søkbare og redigerbare.",
+        "Bruk Info-knappen til å kopiere nøyaktig kode for layers, source og search i Origo.",
+        "Lim inn kodeutdragene i Origo-konfigurasjonen, publiser og valider hele flyten."
+      ]
+    },
+    "da": {
+      "description": "Forbinder Qtiler-projekter med Origo via guidede kodeuddrag og værktøjer til lagopsætning.",
+      "readme": [
+        "Åbn et lag i dashboardet, og klik på Origo-knappen i lagdetaljerne.",
+        "Origo-panelet viser tilgængelige lag og markerer, hvilke lag der kan søges i og redigeres.",
+        "Brug Info-knappen til at kopiere den præcise kode for layers, source og search i Origo.",
+        "Indsæt kodeuddragene i Origo-konfigurationen, publicér og validér hele flowet."
+      ]
+    },
+    "fi": {
+      "description": "Yhdistää Qtiler-projektit Origoon ohjatuilla koodikatkelmilla ja tasojen määritystyökaluilla.",
+      "readme": [
+        "Avaa taso hallintanäkymässä ja napsauta tason tiedoissa Origo-painiketta.",
+        "Origo-paneeli näyttää käytettävissä olevat tasot ja kertoo, mitkä tasot ovat haettavia ja muokattavia.",
+        "Kopioi Info-painikkeella tarkka koodi Origon layers-, source- ja search-osioihin.",
+        "Liitä katkelmat Origon määritykseen, julkaise ja tarkista koko työnkulku."
+      ]
     }
   },
   "autoEnable": false,

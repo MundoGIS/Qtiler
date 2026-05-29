@@ -5,7 +5,7 @@
  */
 
 (function () {
-  const SUPPORTED_LANGS = ["en", "es", "sv", "no"];
+  const SUPPORTED_LANGS = ["en", "es", "sv", "no", "da", "fi"];
   const COOKIE_NAME = "qtiler_lang";
   const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 año
 
@@ -1327,6 +1327,27 @@
     "portal.logout": "Logg ut",
     "portal.section.viewers": "Visere"
   };
+  TRANSLATIONS.da = Object.assign({}, TRANSLATIONS.sv, {
+    "Language": "Sprog",
+    "Dashboard": "Oversigt",
+    "User guide": "Brugervejledning",
+    "portal.pageTitle": "Qtiler · Offentlige kort",
+    "portal.tagline": "WMTS-tjenester delt af MundoGIS",
+    "portal.login": "Log ind",
+    "portal.logout": "Log ud",
+    "portal.section.viewers": "Visere"
+  });
+
+  TRANSLATIONS.fi = Object.assign({}, TRANSLATIONS.en, {
+    "Language": "Kieli",
+    "Dashboard": "Yleiskuva",
+    "User guide": "Käyttöopas",
+    "portal.pageTitle": "Qtiler · Julkiset kartat",
+    "portal.tagline": "MundoGISin jakamat WMTS-palvelut",
+    "portal.login": "Kirjaudu sisään",
+    "portal.logout": "Kirjaudu ulos",
+    "portal.section.viewers": "Katselimet"
+  });
 
 
   // Expose global translations so legacy inline scripts can keep using `TRANSLATIONS`

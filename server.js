@@ -324,7 +324,7 @@ const ensureProjectAccessFromQuery = (param = "project") => ensureProjectAccess(
   return null;
 });
 
-const supportedLanguages = ["en", "es", "sv", "no"];
+const supportedLanguages = ["en", "es", "sv", "no", "da", "fi"];
 const defaultLanguage = "en";
 
 const normalizeLanguageCode = (value) => {
