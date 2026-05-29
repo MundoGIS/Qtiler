@@ -250,6 +250,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.portal_item_image': 'Image URL',
     'Qtiler2Origo.portal_move_up': 'Up',
     'Qtiler2Origo.portal_move_down': 'Down',
+    'Qtiler2Origo.portal_edit_page': 'Edit page',
     'Qtiler2Origo.portal_delete': 'Delete',
     'Qtiler2Origo.portal_home_badge': 'Home',
     'Qtiler2Origo.portal_hidden_badge': 'Hidden from nav',
@@ -764,6 +765,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.portal_item_image': 'URL de imagen',
     'Qtiler2Origo.portal_move_up': 'Subir',
     'Qtiler2Origo.portal_move_down': 'Bajar',
+    'Qtiler2Origo.portal_edit_page': 'Editar pagina',
     'Qtiler2Origo.portal_delete': 'Eliminar',
     'Qtiler2Origo.portal_home_badge': 'Inicio',
     'Qtiler2Origo.portal_hidden_badge': 'Oculta en navegación',
@@ -1278,6 +1280,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.portal_item_image': 'Bild-URL',
     'Qtiler2Origo.portal_move_up': 'Upp',
     'Qtiler2Origo.portal_move_down': 'Ner',
+    'Qtiler2Origo.portal_edit_page': 'Redigera sida',
     'Qtiler2Origo.portal_delete': 'Ta bort',
     'Qtiler2Origo.portal_home_badge': 'Start',
     'Qtiler2Origo.portal_hidden_badge': 'Dold i navigation',
@@ -1614,6 +1617,15 @@ const portalToggleFullscreenBtn = document.getElementById('portalToggleFullscree
 const portalSaveBtn = document.getElementById('portalSaveBtn');
 const portalOpenPageBtn = document.getElementById('portalOpenPageBtn');
 const portalGdprEnabled = document.getElementById('portalGdprEnabled');
+const portalSiteTitle = document.getElementById('portalSiteTitle');
+const portalSiteSubtitle = document.getElementById('portalSiteSubtitle');
+const portalSiteLogoUrl = document.getElementById('portalSiteLogoUrl');
+const portalSiteHeaderHeight = document.getElementById('portalSiteHeaderHeight');
+const portalSiteHeaderFont = document.getElementById('portalSiteHeaderFont');
+const portalSiteHeaderColor1 = document.getElementById('portalSiteHeaderColor1');
+const portalSiteHeaderColor2 = document.getElementById('portalSiteHeaderColor2');
+const portalSiteHeaderTextColor = document.getElementById('portalSiteHeaderTextColor');
+const portalSiteHeaderBackgroundUrl = document.getElementById('portalSiteHeaderBackgroundUrl');
 const portalGdprCompany = document.getElementById('portalGdprCompany');
 const portalGdprPrivacyUrl = document.getElementById('portalGdprPrivacyUrl');
 const portalGdprCookieUrl = document.getElementById('portalGdprCookieUrl');
@@ -1643,6 +1655,97 @@ const portalApplyTemplateBtn = document.getElementById('portalApplyTemplateBtn')
 const portalAddBlockType = document.getElementById('portalAddBlockType');
 const portalAddBlockBtn = document.getElementById('portalAddBlockBtn');
 const portalBlocksList = document.getElementById('portalBlocksList');
+
+const adminEditorParams = new URLSearchParams(window.location.search);
+const detachedEditorMode = String(adminEditorParams.get('editor') || '').trim().toLowerCase();
+const detachedEditorProfile = String(adminEditorParams.get('profile') || '').trim();
+const detachedEditorPageId = String(adminEditorParams.get('page') || '').trim();
+const isDetachedMapEditor = detachedEditorMode === 'map';
+const isDetachedPortalEditor = detachedEditorMode === 'portal';
+const isDetachedEditorWindow = isDetachedMapEditor || isDetachedPortalEditor;
+const publishedProfilesRefreshKey = 'qtiler2origo-published-profiles-refresh';
+const publishedProfilesChannel = (() => {
+  try { return 'BroadcastChannel' in window ? new BroadcastChannel('qtiler2origo-published-profiles') : null; } catch (_) { return null; }
+})();
+let publishedProfilesRefreshInFlight = null;
+
+async function refreshPublishedProfilesAfterExternalChange() {
+  if (isDetachedMapEditor) return;
+  if (publishedProfilesRefreshInFlight) return publishedProfilesRefreshInFlight;
+  publishedProfilesRefreshInFlight = (async () => {
+  const results = await Promise.allSettled([loadStatus(), loadPublishedProfiles()]);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) addLog(t('Qtiler2Origo.log_error', { msg: failed.reason?.message || failed.reason }), 'error');
+  })();
+  try {
+    await publishedProfilesRefreshInFlight;
+  } finally {
+    publishedProfilesRefreshInFlight = null;
+  }
+}
+
+function notifyPublishedProfilesChanged() {
+  const message = { type: 'Qtiler2Origo:published-profiles-changed', at: Date.now() };
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(message, window.location.origin);
+    }
+  } catch (_) {}
+  try {
+    localStorage.setItem(publishedProfilesRefreshKey, JSON.stringify(message));
+  } catch (_) {}
+  try {
+    publishedProfilesChannel?.postMessage(message);
+  } catch (_) {}
+}
+
+publishedProfilesChannel?.addEventListener('message', (event) => {
+  if (event.data?.type !== 'Qtiler2Origo:published-profiles-changed') return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin) return;
+  if (event.data?.type !== 'Qtiler2Origo:published-profiles-changed') return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+window.addEventListener('storage', (event) => {
+  if (event.key !== publishedProfilesRefreshKey || !event.newValue) return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+function getDetachedEditorUrl(mode, id = '') {
+  const url = new URL(window.location.href);
+  url.searchParams.set('editor', mode);
+  url.searchParams.delete('profile');
+  url.searchParams.delete('page');
+  if (mode === 'map' && id) url.searchParams.set('profile', id);
+  if (mode === 'portal' && id) url.searchParams.set('page', id);
+  url.hash = '';
+  return url.toString();
+}
+
+function openDetachedEditorWindow(mode, id = '') {
+  const safeId = String(id || 'new').replace(/[^a-z0-9_-]/gi, '_');
+  const features = 'popup=yes,width=1480,height=940,resizable=yes,scrollbars=yes';
+  const win = window.open(getDetachedEditorUrl(mode, id), `Qtiler2Origo_${mode}_${safeId}`, features);
+  if (win) {
+    win.focus();
+    if (mode === 'map' && !isDetachedMapEditor) {
+      const timer = window.setInterval(() => {
+        if (!win.closed) return;
+        window.clearInterval(timer);
+        refreshPublishedProfilesAfterExternalChange();
+      }, 1000);
+    }
+  }
+  return win;
+}
+
+if (isDetachedEditorWindow) {
+  document.body.classList.add('admin-editor-detached', `admin-editor-detached--${detachedEditorMode}`);
+}
 const portalPreviewHost = document.getElementById('portalPreviewHost');
 const portalPreviewDeviceButtons = Array.from(document.querySelectorAll('[data-portal-preview-device]'));
 const publishModal = document.getElementById('publishModal');
@@ -3239,6 +3342,40 @@ function toPortalCsv(value) {
   return Array.isArray(value) ? value.join(', ') : '';
 }
 
+const PORTAL_SOCIAL_PLATFORMS = [
+  ['facebook', 'Facebook'],
+  ['instagram', 'Instagram'],
+  ['linkedin', 'LinkedIn'],
+  ['x', 'X / Twitter'],
+  ['youtube', 'YouTube'],
+  ['tiktok', 'TikTok'],
+  ['whatsapp', 'WhatsApp'],
+  ['telegram', 'Telegram'],
+  ['email', 'Email'],
+  ['web', 'Website']
+];
+
+function getPortalSocialPlatformLabel(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return PORTAL_SOCIAL_PLATFORMS.find(([platform]) => platform === key)?.[1] || (key ? key : 'Social');
+}
+
+function getPortalSocialPlatformOptionsHtml(selected) {
+  const current = String(selected || '').trim().toLowerCase();
+  return PORTAL_SOCIAL_PLATFORMS.map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
+}
+
+function getPortalSocialPlatformKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'twitter') return 'x';
+  return PORTAL_SOCIAL_PLATFORMS.some(([platform]) => platform === key) ? key : 'web';
+}
+
+function renderPortalSocialIconBadge(platform, extraClass = '') {
+  const key = getPortalSocialPlatformKey(platform);
+  return `<span class="portal-social-icon portal-social-icon--${escapeHtml(key)} ${escapeHtml(extraClass)}" aria-hidden="true">${escapeHtml(getPortalSocialIcon(key))}</span>`;
+}
+
 function makePortalId(prefix = 'portal') {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -3314,7 +3451,7 @@ function createDefaultPortalBlock(type = 'text') {
       ...common,
       title: 'Follow us',
       intro: 'Share social channels, contact links or external resources.',
-      items: [{ id: makePortalId('social'), title: 'Facebook', text: '', url: 'https://facebook.com/', label: 'Open', icon: 'facebook', meta: 'Community', imageUrl: '' }]
+      items: [{ id: makePortalId('social'), title: 'Facebook', text: '', url: 'https://facebook.com/', label: 'Open', icon: 'facebook', meta: '', imageUrl: '' }]
     };
   }
   return {
@@ -3474,12 +3611,12 @@ function setPortalFullscreen(enabled) {
 }
 
 function getPortalPageUrl(page) {
-  if (!page) return '/Qtiler2Origo/maps';
+  if (!page) return '/Qtiler2Origo/portal';
   const slug = String(page.slug || '').trim();
-  if (!slug) return '/Qtiler2Origo/maps';
+  if (!slug) return '/Qtiler2Origo/portal';
   return portalPagesState.homePageSlug && slug === portalPagesState.homePageSlug
-    ? '/Qtiler2Origo/maps'
-    : `/Qtiler2Origo/pages/${encodeURIComponent(slug)}`;
+    ? '/Qtiler2Origo/portal'
+    : `/Qtiler2Origo/portal/${encodeURIComponent(slug)}`;
 }
 
 function updatePortalPublicLink() {
@@ -3512,6 +3649,7 @@ function renderPortalPageList() {
         <button type="button" class="button ghost small" data-portal-select="${escapeHtml(page.id)}">${escapeHtml(page.title || page.slug)}</button>
         <div class="portal-page-item__meta">/${escapeHtml(page.slug)} · ${escapeHtml(getPortalAccessLabel(page.visibility?.access || 'public'))}${badges ? ` · ${escapeHtml(badges)}` : ''}</div>
         <div class="portal-page-item__actions">
+          <button type="button" class="button small is-info" data-portal-edit-window="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_edit_page'))}</button>
           <button type="button" class="button small" data-portal-move="up" data-portal-page-id="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_up'))}</button>
           <button type="button" class="button small" data-portal-move="down" data-portal-page-id="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_down'))}</button>
           <button type="button" class="button small" data-portal-delete-page="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
@@ -3529,6 +3667,10 @@ function getPortalBlockTypeOptionsHtml(selected) {
 function getPortalVisibilityOptionsHtml(selected, includeInherit = false) {
   const values = includeInherit ? ['inherit', 'public', 'authenticated', 'restricted'] : ['public', 'authenticated', 'restricted'];
   return values.map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(getPortalAccessLabel(value, includeInherit && value === 'inherit'))}</option>`).join('');
+}
+
+function renderPortalRichEditorField(labelKey, field, blockId, value, rows = 4) {
+  return `<div class="portal-rich-field"><span class="portal-rich-field__label">${escapeHtml(t(labelKey))}</span><textarea class="textarea" rows="${Number(rows) || 4}" data-portal-block-field="${escapeHtml(field)}" data-portal-block-id="${escapeHtml(blockId)}">${escapeHtml(value || '')}</textarea></div>`;
 }
 
 function renderPortalRepeaterItems(block) {
@@ -3551,6 +3693,23 @@ function renderPortalRepeaterItems(block) {
       </div>`).join('')}</div>`;
 }
 
+function renderPortalSocialItems(block) {
+  const items = Array.isArray(block.items) ? block.items : [];
+  if (!items.length) return `<p class="help">${escapeHtml(t('Qtiler2Origo.portal_no_blocks_preview'))}</p>`;
+  return `<div class="portal-social-list">${items.map((item, index) => {
+    const platform = String(item.icon || 'facebook').trim().toLowerCase();
+    const label = item.title || getPortalSocialPlatformLabel(platform);
+    return `
+      <div class="portal-social-item">
+        <div class="portal-social-item__icon">${renderPortalSocialIconBadge(platform)}</div>
+        <label><span>${escapeHtml(t('Qtiler2Origo.portal_block_social'))}</span><select class="input" data-portal-item-field="icon" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}">${getPortalSocialPlatformOptionsHtml(platform)}</select></label>
+        <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_url'))}</span><input class="input" type="url" value="${escapeHtml(item.url || '')}" placeholder="https://" data-portal-item-field="url" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
+        <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_label'))}</span><input class="input" type="text" value="${escapeHtml(label)}" data-portal-item-field="title" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
+        <button type="button" class="button danger small" data-portal-item-delete="${escapeHtml(block.id)}" data-item-index="${index}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
+      </div>`;
+  }).join('')}</div>`;
+}
+
 function renderPortalBlocksList() {
   if (!portalBlocksList) return;
   const page = getSelectedPortalPage();
@@ -3565,18 +3724,6 @@ function renderPortalBlocksList() {
     return;
   }
   portalBlocksList.innerHTML = blocks.map((block, index) => {
-    const audience = block.visibility || { access: 'inherit', users: [], roles: [] };
-    const authCatalog = getPortalAuthCatalog();
-    const common = `
-      <div class="portal-block-card__grid">
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_block_visibility'))}</span><select class="input" data-portal-block-field="visibility.access" data-portal-block-id="${escapeHtml(block.id)}">${getPortalVisibilityOptionsHtml(audience.access || 'inherit', true)}</select></label>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_users'))}</span><input class="input" type="text" value="${escapeHtml(toPortalCsv(audience.users))}" data-value-kind="csv" data-portal-block-field="visibility.users" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_roles'))}</span><input class="input" type="text" value="${escapeHtml(toPortalCsv(audience.roles))}" data-value-kind="csv" data-portal-block-field="visibility.roles" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-      </div>
-      <div class="portal-block-card__grid">
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_users_catalog'))}</span><select class="input portal-multiselect" multiple size="5" data-portal-block-field="visibility.users" data-value-kind="multi-option" data-portal-block-id="${escapeHtml(block.id)}">${renderPortalMultiSelectOptions(authCatalog.users, audience.users, t('Qtiler2Origo.portal_no_users'))}</select></label>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_roles_catalog'))}</span><select class="input portal-multiselect" multiple size="4" data-portal-block-field="visibility.roles" data-value-kind="multi-option" data-portal-block-id="${escapeHtml(block.id)}">${renderPortalMultiSelectOptions(authCatalog.roles, audience.roles, t('Qtiler2Origo.portal_no_roles'))}</select></label>
-      </div>`;
     let specific = '';
     if (block.type === 'hero') {
       specific = `
@@ -3587,13 +3734,13 @@ function renderPortalBlocksList() {
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_cta_label'))}</span><input class="input" type="text" value="${escapeHtml(block.ctaLabel || '')}" data-portal-block-field="ctaLabel" data-portal-block-id="${escapeHtml(block.id)}" /></label>
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_cta_url'))}</span><input class="input" type="text" value="${escapeHtml(block.ctaUrl || '')}" data-portal-block-field="ctaUrl" data-portal-block-id="${escapeHtml(block.id)}" /></label>
         </div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_intro'))}</span><textarea class="textarea" rows="3" data-portal-block-field="subtitle" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.subtitle || '')}</textarea></label>`;
+        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'subtitle', block.id, block.subtitle, 5)}`;
     } else if (block.type === 'text') {
       specific = `
         <div class="portal-block-card__grid">
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
         </div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_body'))}</span><textarea class="textarea" rows="6" data-portal-block-field="body" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.body || '')}</textarea></label>`;
+        ${renderPortalRichEditorField('Qtiler2Origo.portal_body', 'body', block.id, block.body, 8)}`;
     } else if (block.type === 'maps') {
       const mapOptions = (publishedItems || []).map((item) => ({
         value: String(item.profileKey || item.projectId || item.name || '').trim(),
@@ -3606,14 +3753,22 @@ function renderPortalBlocksList() {
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_map_display'))}</span><select class="input" data-portal-block-field="displayMode" data-portal-block-id="${escapeHtml(block.id)}"><option value="thumbnail" ${String(block.displayMode || 'thumbnail') === 'thumbnail' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_thumbnail'))}</option><option value="embed" ${String(block.displayMode || '') === 'embed' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_embed'))}</option><option value="open" ${String(block.displayMode || '') === 'open' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_open'))}</option></select></label>
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_map_profiles'))}</span><input class="input" type="text" value="${escapeHtml(toPortalCsv(block.profileKeys))}" data-value-kind="csv" data-portal-block-field="profileKeys" data-portal-block-id="${escapeHtml(block.id)}" /></label>
         </div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_intro'))}</span><textarea class="textarea" rows="3" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.intro || '')}</textarea></label>
+        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
         <label><span>${escapeHtml(t('Qtiler2Origo.portal_maps_catalog'))}</span><select class="input portal-multiselect" multiple size="8" data-portal-block-field="profileKeys" data-value-kind="multi-option" data-portal-block-id="${escapeHtml(block.id)}">${mapOptions.length ? mapOptions.map((item) => `<option value="${escapeHtml(item.value)}" ${Array.isArray(block.profileKeys) && block.profileKeys.includes(item.value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('') : `<option value="">${escapeHtml(t('Qtiler2Origo.no_profiles'))}</option>`}</select></label>`;
+    } else if (block.type === 'social') {
+      specific = `
+        <div class="portal-block-card__grid">
+          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
+        </div>
+        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
+        ${renderPortalSocialItems(block)}
+        <button type="button" class="button small info" data-portal-add-item="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_add_item'))}</button>`;
     } else {
       specific = `
         <div class="portal-block-card__grid">
           <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
         </div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_intro'))}</span><textarea class="textarea" rows="3" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.intro || '')}</textarea></label>
+        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
         ${renderPortalRepeaterItems(block)}
         <button type="button" class="button small" data-portal-add-item="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_add_item'))}</button>`;
     }
@@ -3630,21 +3785,115 @@ function renderPortalBlocksList() {
             <button type="button" class="button small" data-portal-block-delete="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
           </div>
         </div>
-        ${common}
         ${specific}
       </article>`;
   }).join('');
+  
+  if (typeof initRichTextEditors === 'function') {
+    initRichTextEditors();
+  }
+}
+
+let quillInstances = {};
+
+function uploadPortalEditorImage(file) {
+  if (!file) return Promise.reject(new Error('image_required'));
+  const body = new FormData();
+  body.append('image', file);
+  return api('/plugins/Qtiler2Origo/api/portal-assets/image', { method: 'POST', body })
+    .then((payload) => {
+      const url = String(payload?.url || '').trim();
+      if (!url) throw new Error('missing_uploaded_image_url');
+      return url;
+    });
+}
+
+function selectAndInsertPortalEditorImage(quill) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/webp,image/gif';
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const range = quill.getSelection(true);
+    try {
+      const url = await uploadPortalEditorImage(file);
+      quill.insertEmbed(range?.index ?? quill.getLength(), 'image', url, 'user');
+      quill.setSelection((range?.index ?? quill.getLength()) + 1, 0, 'silent');
+    } catch (err) {
+      addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+    }
+  });
+  input.click();
+}
+
+function initRichTextEditors() {
+  if (typeof Quill === 'undefined') return;
+  const richTextareas = portalBlocksList?.querySelectorAll('textarea[data-portal-block-field="body"], textarea[data-portal-block-field="intro"], textarea[data-portal-block-field="subtitle"]');
+  if (!richTextareas) return;
+  richTextareas.forEach(textarea => {
+    if (textarea.dataset.quillInitialized) return;
+    
+    const container = document.createElement('div');
+    container.className = 'quill-editor-container';
+    container.style.backgroundColor = 'white';
+    container.style.color = 'black';
+    // Remove pointer-events if we get an issue, but standard Quill should work.
+    textarea.style.display = 'none';
+    textarea.parentNode.insertBefore(container, textarea.nextSibling);
+    
+    const quill = new Quill(container, {
+      theme: 'snow',
+      modules: {
+        toolbar: {
+          container: [
+            [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'script': 'sub'}, { 'script': 'super' }],
+            ['blockquote', 'code-block'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'indent': '-1'}, { 'indent': '+1' }],
+            [{ 'direction': 'rtl' }],
+            [{ 'align': [] }],
+            ['link', 'image', 'video'],
+            ['clean']
+          ],
+          handlers: {
+            image() { selectAndInsertPortalEditorImage(this.quill); }
+          }
+        }
+      }
+    });
+
+    quill.root.innerHTML = textarea.value;
+
+    quill.on('text-change', () => {
+      textarea.value = quill.root.innerHTML;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    
+    textarea.dataset.quillInitialized = 'true';
+    const id = textarea.getAttribute('data-portal-block-id');
+    const field = textarea.getAttribute('data-portal-block-field');
+    quillInstances[id + '-' + field] = quill;
+  });
 }
 
 function getPortalSocialIcon(icon) {
   const raw = String(icon || '').trim().toLowerCase();
   const map = {
     facebook: 'f',
-    instagram: 'ig',
+    instagram: '◎',
     linkedin: 'in',
     x: 'x',
     twitter: 'x',
-    youtube: 'yt',
+    youtube: '▶',
+    tiktok: '♪',
+    whatsapp: '☎',
+    telegram: '➤',
+    email: '@',
     web: 'www',
     news: 'n'
   };
@@ -3674,17 +3923,21 @@ function renderPortalPreview() {
   const previewHeader = page.showHeader !== false
     ? `<div class="portal-preview__site-header" style="min-height:${Math.max(0, Number(page.headerHeight) || 120)}px">${page.headerLogoUrl ? `<img class="portal-preview__site-logo" src="${escapeHtml(page.headerLogoUrl)}" alt="" />` : ''}<div class="portal-preview__site-brand"><strong>${escapeHtml(page.title || t('Qtiler2Origo.portal_page_title'))}</strong>${page.summary ? `<span>${escapeHtml(page.summary)}</span>` : ''}</div></div>`
     : '';
+  const sanitizePortalRichHtml = (html) => String(html || '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/javascript:/gi, '');
   portalPreviewHost.innerHTML = `<div class="${previewClass}"><div class="portal-preview-frame__topbar"><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__url">${escapeHtml(getPortalPageUrl(page))}</span></div><div class="portal-preview">${previewHeader}${blocks.map((block) => {
     if (block.type === 'hero') {
       const bg = block.backgroundUrl ? ` style="background-image: linear-gradient(135deg, rgba(0, 87, 216, 0.92), rgba(13, 148, 136, 0.72)), url('${escapeHtml(block.backgroundUrl)}');"` : '';
-      return `<section class="portal-preview__hero"${bg}><div class="portal-preview__eyebrow">${escapeHtml(block.eyebrow || '')}</div><h1>${escapeHtml(block.title || page.title)}</h1><p>${escapeHtml(block.subtitle || '')}</p>${block.ctaLabel ? `<a class="portal-preview__cta" href="${escapeHtml(block.ctaUrl || '#')}">${escapeHtml(block.ctaLabel)}</a>` : ''}</section>`;
+      return `<section class="portal-preview__hero"${bg}><div class="portal-preview__eyebrow">${escapeHtml(block.eyebrow || '')}</div><h1>${escapeHtml(block.title || page.title)}</h1><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.subtitle || '')}</div>${block.ctaLabel ? `<a class="portal-preview__cta" href="${escapeHtml(block.ctaUrl || '#')}">${escapeHtml(block.ctaLabel)}</a>` : ''}</section>`;
     }
     if (block.type === 'text') {
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__richtext">${escapeHtml(block.body || '')}</div></section>`;
+      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.body || '')}</div></section>`;
     }
     if (block.type === 'maps') {
       const cards = (block.profileKeys || []).map((token) => findPublishedMapProfile(token)).filter(Boolean);
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<p class="portal-preview__lead">${escapeHtml(block.intro)}</p>` : ''}<div class="portal-preview__maps ${block.layout === 'featured' ? 'is-featured' : ''} ${block.displayMode === 'embed' ? 'is-embed' : ''} ${block.displayMode === 'open' ? 'is-open' : ''}">${cards.map((item) => {
+      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__maps ${block.layout === 'featured' ? 'is-featured' : ''} ${block.displayMode === 'embed' ? 'is-embed' : ''} ${block.displayMode === 'open' ? 'is-open' : ''}">${cards.map((item) => {
         const thumbUrl = item?.projectId ? `/plugins/Qtiler2Origo/api/thumbnail/${encodeURIComponent(item.projectId)}` : '';
         if (block.displayMode === 'embed') {
           return `<div class="portal-preview__map portal-preview__map--embed"><div class="portal-preview__embed-shell"><iframe src="${escapeHtml(item?.launchUrl || '/Qtiler2Origo/maps')}" loading="lazy" referrerpolicy="same-origin"></iframe></div><strong>${escapeHtml(item?.name || item?.profileKey || '')}</strong><p>${escapeHtml(item?.description || '')}</p></div>`;
@@ -3696,14 +3949,27 @@ function renderPortalPreview() {
       }).join('') || `<div class="portal-preview__card">${escapeHtml(t('Qtiler2Origo.no_profiles'))}</div>`}</div></section>`;
     }
     if (block.type === 'social') {
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<p class="portal-preview__lead">${escapeHtml(block.intro)}</p>` : ''}<div class="portal-preview__social">${(block.items || []).map((item) => `<a class="portal-preview__social-link" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noreferrer">${item.imageUrl ? `<span class="portal-preview__social-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></span>` : `<span class="portal-preview__social-icon">${escapeHtml(getPortalSocialIcon(item.icon))}</span>`}<span>${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || '')}</strong>${item.text ? `<br>${escapeHtml(item.text)}` : ''}</span></a>`).join('')}</div></section>`;
+      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__social">${(block.items || []).map((item) => `<a class="portal-preview__social-link" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noreferrer">${item.imageUrl ? `<span class="portal-preview__social-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></span>` : renderPortalSocialIconBadge(item.icon, 'portal-preview__social-icon')}<span>${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || getPortalSocialPlatformLabel(item.icon))}</strong>${item.text ? `<br>${escapeHtml(item.text)}` : ''}</span></a>`).join('')}</div></section>`;
     }
-    return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<p class="portal-preview__lead">${escapeHtml(block.intro)}</p>` : ''}<div class="portal-preview__cards">${(block.items || []).map((item) => `<article class="portal-preview__card">${item.imageUrl ? `<div class="portal-preview__card-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></div>` : ''}${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.text || '')}</p>${item.label ? `<span class="button small">${escapeHtml(item.label)}</span>` : ''}</article>`).join('')}</div></section>`;
+    return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__cards">${(block.items || []).map((item) => `<article class="portal-preview__card">${item.imageUrl ? `<div class="portal-preview__card-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></div>` : ''}${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.text || '')}</p>${item.label ? `<span class="button small">${escapeHtml(item.label)}</span>` : ''}</article>`).join('')}</div></section>`;
   }).join('')}</div></div>`;
 }
 
 function renderPortalEditor() {
   renderPortalPageList();
+  
+  const site = portalPagesState?.site || {};
+  const setIfNotActive = (input, value) => { if (input && document.activeElement !== input) input.value = value; };
+  setIfNotActive(portalSiteTitle, site.title || '');
+  setIfNotActive(portalSiteSubtitle, site.subtitle || '');
+  setIfNotActive(portalSiteLogoUrl, site.headerLogoUrl || '');
+  setIfNotActive(portalSiteHeaderHeight, site.headerHeight ? String(site.headerHeight) : '');
+  setIfNotActive(portalSiteHeaderFont, site.headerFont || 'fraunces');
+  setIfNotActive(portalSiteHeaderColor1, site.headerColor1 || '#0f766e');
+  setIfNotActive(portalSiteHeaderColor2, site.headerColor2 || '#2563eb');
+  setIfNotActive(portalSiteHeaderTextColor, site.headerTextColor || '#ffffff');
+  setIfNotActive(portalSiteHeaderBackgroundUrl, site.headerBackgroundUrl || '');
+
   const gdpr = portalPagesState?.gdpr || {};
   if (portalGdprEnabled) portalGdprEnabled.checked = gdpr.enabled === true;
   if (portalGdprCompany) portalGdprCompany.value = gdpr.companyName || '';
@@ -3775,6 +4041,7 @@ function updatePortalPageField(field, rawValue) {
 function loadPortalPagesState(payload) {
   portalPagesState = {
     gdpr: payload?.gdpr && typeof payload.gdpr === 'object' ? { ...payload.gdpr } : {},
+    site: payload?.site && typeof payload.site === 'object' ? { ...payload.site } : {},
     homePageSlug: String(payload?.homePageSlug || '').trim(),
     pages: Array.isArray(payload?.pages) ? payload.pages : []
   };
@@ -3792,6 +4059,13 @@ async function savePortalPages() {
   const payload = await api('/plugins/Qtiler2Origo/api/portal-pages', { method: 'POST', body: portalPagesState });
   loadPortalPagesState(payload);
   addLog(t('Qtiler2Origo.portal_saved'), 'ok');
+}
+
+function updatePortalSiteField(field, rawValue) {
+  if (!portalPagesState.site || typeof portalPagesState.site !== 'object') portalPagesState.site = {};
+  if (field === 'headerHeight') portalPagesState.site[field] = Math.max(72, Math.min(360, Number(rawValue) || 120));
+  else portalPagesState.site[field] = String(rawValue || '');
+  queuePortalPersist();
 }
 
 function updatePortalGdprField(field, rawValue) {
@@ -4020,6 +4294,41 @@ async function loadPublishedProfiles() {
   renderPortalEditor();
 }
 
+async function initDetachedEditorWindow() {
+  if (!isDetachedEditorWindow) return;
+  document.body.classList.add('admin-editor-detached', `admin-editor-detached--${detachedEditorMode}`);
+
+  if (isDetachedMapEditor) {
+    document.title = detachedEditorProfile ? `Edit map - ${detachedEditorProfile}` : 'New map';
+    await preparePublishModal(detachedEditorProfile || null);
+    publishModal?.classList.add('publish-editor--detached');
+    return;
+  }
+
+  if (isDetachedPortalEditor) {
+    const pages = getPortalPages();
+    const requestedPage = pages.find((page) => page.id === detachedEditorPageId || page.slug === detachedEditorPageId);
+    if (requestedPage) {
+      selectedPortalPageId = requestedPage.id;
+    } else if (!pages.length) {
+      const page = createDefaultPortalPage();
+      portalPagesState.pages = [page];
+      portalPagesState.homePageSlug = page.slug;
+      selectedPortalPageId = page.id;
+      queuePortalPersist();
+    } else {
+      selectedPortalPageId = selectedPortalPageId || pages[0].id;
+    }
+
+    document.querySelectorAll('.tab-btn').forEach((button) => button.classList.toggle('tab-btn--active', button.getAttribute('data-tab') === 'portal'));
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('tab-panel--active', panel.getAttribute('data-panel') === 'portal'));
+    portalSection?.classList.add('portal-section--detached');
+    const selectedPage = getSelectedPortalPage();
+    document.title = selectedPage?.title ? `Portal editor - ${selectedPage.title}` : 'Portal editor';
+    renderPortalEditor();
+  }
+}
+
 function movePortalArrayItem(items, fromIndex, toIndex) {
   if (!Array.isArray(items)) return;
   if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return;
@@ -4082,7 +4391,11 @@ function addPortalItem(blockId) {
   const { block } = getPortalBlockById(blockId);
   if (!block) return;
   if (!Array.isArray(block.items)) block.items = [];
-  block.items.push({ id: makePortalId('item'), title: '', text: '', url: '', label: '', icon: '', meta: '', imageUrl: '' });
+  if (block.type === 'social') {
+    block.items.push({ id: makePortalId('social'), title: 'Instagram', text: '', url: 'https://instagram.com/', label: '', icon: 'instagram', meta: '', imageUrl: '' });
+  } else {
+    block.items.push({ id: makePortalId('item'), title: '', text: '', url: '', label: '', icon: '', meta: '', imageUrl: '' });
+  }
   renderPortalEditor();
   queuePortalPersist();
 }
@@ -4099,6 +4412,9 @@ function updatePortalItemField(blockId, itemIndex, field, rawValue) {
   const { block } = getPortalBlockById(blockId);
   if (!block || !Array.isArray(block.items) || !block.items[itemIndex]) return;
   block.items[itemIndex][field] = String(rawValue || '');
+  if (block.type === 'social' && field === 'icon') {
+    block.items[itemIndex].title = getPortalSocialPlatformLabel(rawValue);
+  }
   renderPortalPreview();
 }
 
@@ -4539,7 +4855,7 @@ function ensureExternalLayerModal() {
     <div class="modal-card" style="width:min(920px, calc(100vw - 32px))">
       <header class="modal-card-head">
         <p class="modal-card-title">Add layers from another project</p>
-        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal></button>
+        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal>Quitar</button>
       </header>
       <section class="modal-card-body">
         <label class="field">
@@ -4745,7 +5061,7 @@ function renderLayerAssignments() {
       ? '<span title="active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex:0 0 8px"></span>'
       : '<span title="inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#cbd5e1;flex:0 0 8px"></span>';
     const removeBtn = isActive
-      ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">Quitar</button>`
+      ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.pub_search_source_remove'))}</button>`
       : '<span></span>';
     return `<div style="display:grid;grid-template-columns:14px 1fr 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
       ${dot}
@@ -5043,6 +5359,7 @@ function closePublishModal() {
   publishState.controls = {};
   publishState.extraLayers = [];
   updatePublishModalFullscreenButton();
+  if (isDetachedMapEditor) window.close();
 }
 
 async function preparePublishModal(editProfileId = null) {
@@ -5333,7 +5650,7 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
   });
 });
 
-portalAddPageBtn?.addEventListener('click', () => {
+portalAddPageBtn?.addEventListener('click', async () => {
   const page = createDefaultPortalPage();
   portalPagesState.pages = getPortalPages().concat(page);
   if (!portalPagesState.homePageSlug) portalPagesState.homePageSlug = page.slug;
@@ -5356,11 +5673,34 @@ portalDuplicatePageBtn?.addEventListener('click', () => {
   queuePortalPersist();
 });
 
-portalToggleFullscreenBtn?.addEventListener('click', () => {
-  setPortalFullscreen(!portalEditorFullscreen);
+portalToggleFullscreenBtn?.addEventListener('click', async () => {
+  const page = getSelectedPortalPage();
+  if (!page || isDetachedPortalEditor) {
+    setPortalFullscreen(!portalEditorFullscreen);
+    return;
+  }
+  try {
+    await savePortalPages();
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  }
+  if (!openDetachedEditorWindow('portal', page.id)) {
+    setPortalFullscreen(true);
+  }
 });
 
 portalGdprEnabled?.addEventListener('change', () => updatePortalGdprField('enabled', portalGdprEnabled.checked));
+
+portalSiteTitle?.addEventListener('input', () => updatePortalSiteField('title', portalSiteTitle.value));
+portalSiteSubtitle?.addEventListener('input', () => updatePortalSiteField('subtitle', portalSiteSubtitle.value));
+portalSiteLogoUrl?.addEventListener('input', () => updatePortalSiteField('headerLogoUrl', portalSiteLogoUrl.value));
+portalSiteHeaderHeight?.addEventListener('input', () => updatePortalSiteField('headerHeight', portalSiteHeaderHeight.value));
+portalSiteHeaderFont?.addEventListener('change', () => updatePortalSiteField('headerFont', portalSiteHeaderFont.value));
+portalSiteHeaderColor1?.addEventListener('input', () => updatePortalSiteField('headerColor1', portalSiteHeaderColor1.value));
+portalSiteHeaderColor2?.addEventListener('input', () => updatePortalSiteField('headerColor2', portalSiteHeaderColor2.value));
+portalSiteHeaderTextColor?.addEventListener('input', () => updatePortalSiteField('headerTextColor', portalSiteHeaderTextColor.value));
+portalSiteHeaderBackgroundUrl?.addEventListener('input', () => updatePortalSiteField('headerBackgroundUrl', portalSiteHeaderBackgroundUrl.value));
+
 [portalGdprCompany, portalGdprPrivacyUrl, portalGdprCookieUrl, portalGdprContactUrl, portalGdprTitle, portalGdprText]
   .filter(Boolean)
   .forEach((input) => {
@@ -5450,6 +5790,12 @@ portalPreviewDeviceButtons.forEach((button) => {
 });
 
 portalPagesList?.addEventListener('click', (event) => {
+  const editWindowBtn = event.target.closest('[data-portal-edit-window]');
+  if (editWindowBtn) {
+    const pageId = String(editWindowBtn.getAttribute('data-portal-edit-window') || '').trim();
+    selectPortalPage(pageId);
+    return;
+  }
   const selectBtn = event.target.closest('[data-portal-select]');
   if (selectBtn) {
     selectPortalPage(selectBtn.getAttribute('data-portal-select'));
@@ -5520,6 +5866,25 @@ portalBlocksList?.addEventListener('change', (event) => {
       valueKind === 'multi-option' ? getPortalSelectedOptions(blockField) : blockField.value,
       valueKind
     );
+  }
+  const itemField = event.target.closest('[data-portal-item-field]');
+  if (itemField && itemField.tagName === 'SELECT') {
+    const fieldName = itemField.getAttribute('data-portal-item-field');
+    const blockId = itemField.getAttribute('data-portal-block-id');
+    const itemIndex = Number(itemField.getAttribute('data-item-index'));
+    updatePortalItemField(
+      blockId,
+      itemIndex,
+      fieldName,
+      itemField.value
+    );
+    if (fieldName === 'icon') {
+      const labelInput = Array.from(portalBlocksList.querySelectorAll('input[data-portal-item-field="title"]'))
+        .find((input) => input.getAttribute('data-portal-block-id') === blockId && Number(input.getAttribute('data-item-index')) === itemIndex);
+      if (labelInput) labelInput.value = getPortalSocialPlatformLabel(itemField.value);
+      const iconHost = itemField.closest('.portal-social-item')?.querySelector('.portal-social-item__icon');
+      if (iconHost) iconHost.innerHTML = renderPortalSocialIconBadge(itemField.value);
+    }
   }
 });
 
@@ -5597,6 +5962,7 @@ removeLogoBtn?.addEventListener('click', async () => {
 });
 
 openPublishModalBtn?.addEventListener('click', async () => {
+  if (!isDetachedMapEditor && openDetachedEditorWindow('map')) return;
   openPublishModalBtn.disabled = true;
   try {
     await preparePublishModal(null);
@@ -5840,9 +6206,9 @@ publishNowBtn?.addEventListener('click', async () => {
       }
     });
     addLog(t('Qtiler2Origo.log_published', { id: mapName }), 'ok');
+    await Promise.allSettled([loadStatus(), loadPublishedProfiles()]);
+    notifyPublishedProfilesChanged();
     closePublishModal();
-    await loadStatus();
-    await loadPublishedProfiles();
   } catch (err) {
     if (err.message && err.message.includes('409')) {
       if (publishNameError) { publishNameError.textContent = t('Qtiler2Origo.name_duplicate'); publishNameError.style.display = ''; }
@@ -5980,6 +6346,7 @@ publishedProfilesList?.addEventListener('click', async (event) => {
   if (editBtn) {
     const projectId = String(editBtn.getAttribute('data-edit-published') || '').trim();
     if (!projectId) return;
+    if (!isDetachedMapEditor && openDetachedEditorWindow('map', projectId)) return;
     try { await preparePublishModal(projectId); } catch (err) { addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'); }
     return;
   }
@@ -6374,7 +6741,7 @@ Promise.all([
   loadPublishedProfiles().catch(() => {}),
   loadPortalPages().catch(() => {}),
   loadReleases().catch(() => {})
-]);
+]).then(() => initDetachedEditorWindow().catch((err) => addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error')));
 
 
 

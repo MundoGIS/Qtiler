@@ -13,19 +13,20 @@
     html, body { min-height: 100%; }
     body { background: radial-gradient(circle at top, #dbeafe 0, #f8fafc 36%, #eef2ff 100%); display: flex; flex-direction: column; min-height: 100vh; font-family: "Manrope", "Segoe UI", sans-serif; color: #0f172a; }
     main.maps-main { flex: 1 0 auto; }
-    .hero.is-origo { background: linear-gradient(135deg, #0f766e, #2563eb 48%, #0f172a); color: #fff; position: relative; overflow: hidden; }
-    .hero.is-origo::after { content: ''; position: absolute; width: 420px; height: 420px; border-radius: 999px; right: -120px; top: -120px; background: radial-gradient(circle, rgba(255,255,255,0.22), rgba(255,255,255,0)); }
-    .hero.is-origo .hero-body { min-height: var(--portal-header-height, 120px); display: flex; align-items: center; }
-    .hero.is-origo h1 { color: #fff; }
-    .hero.is-origo .subtitle { color: rgba(255,255,255,0.85); }
+    .hero.is-origo { background: var(--portal-header-bg, linear-gradient(135deg, #0f766e, #2563eb 48%, #0f172a)); color: var(--portal-header-text, #fff); position: relative; overflow: hidden; background-size: cover; background-position: center; }
+    .hero.is-origo::after { content: ''; position: absolute; width: 420px; height: 420px; border-radius: 999px; right: -120px; top: -120px; background: radial-gradient(circle, rgba(255,255,255,0.22), rgba(255,255,255,0)); z-index: 1; pointer-events: none; }
+    .hero.is-origo .hero-body { min-height: var(--portal-header-height, 120px); display: flex; align-items: center; position: relative; z-index: 2; }
+    .hero.is-origo h1 { color: var(--portal-header-text, #fff); }
+    .hero.is-origo .subtitle { color: var(--portal-header-subtitle, rgba(255,255,255,0.85)); }
     .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     .brand { display: flex; align-items: center; gap: 0.9rem; }
     .brand img { max-height: 56px; max-width: 200px; background: rgba(255,255,255,0.92); padding: 4px 8px; border-radius: 10px; box-shadow: 0 12px 30px rgba(15,23,42,0.15); }
-    .brand-text h1 { margin: 0; font-family: "Fraunces", Georgia, serif; letter-spacing: -.02em; }
+    .brand-text h1 { margin: 0; font-family: var(--portal-header-font, "Fraunces", Georgia, serif); letter-spacing: -.02em; }
+    .brand-text p { font-family: var(--portal-header-font, "Manrope", "Segoe UI", sans-serif); }
     .brand-text p { margin: 0; }
     .top-actions { display: flex; align-items: center; gap: 0.6rem; }
     .top-actions select { font-size: 0.85rem; }
-    .auth-bar { display: flex; align-items: center; gap: 0.6rem; color: #fff; }
+    .auth-bar { display: flex; align-items: center; gap: 0.6rem; color: var(--portal-header-text, #fff); }
     .auth-bar .user-name { font-weight: 600; }
     .login-modal .box { max-width: 380px; margin: 0 auto; }
     .portal-nav-wrap { background: rgba(255,255,255,0.82); border-bottom: 1px solid rgba(226,232,240,0.9); backdrop-filter: blur(18px); position: sticky; top: 0; z-index: 20; }
@@ -55,6 +56,7 @@
     .portal-section h2 { margin: 0 0 0.55rem; font-size: 1.85rem; color: #0f172a; font-family: "Fraunces", Georgia, serif; }
     .portal-section__intro { color: #475569; line-height: 1.7; margin: 0 0 1rem; }
     .portal-richtext { color: #334155; line-height: 1.75; white-space: pre-wrap; }
+    .portal-richtext img { max-width: 100%; height: auto; border-radius: 8px; }
     .portal-cards, .portal-social, .portal-maps { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .portal-card, .portal-social-link, .portal-map-card { border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: 1rem; box-shadow: 0 12px 24px rgba(15,23,42,0.05); }
     .portal-card p, .portal-map-card p { color: #475569; }
@@ -112,15 +114,6 @@
           </div>
         </div>
         <div class="top-actions">
-          <label class="visually-hidden" for="lang-selector" data-i18n="qtiler2origo.maps.language">Language</label>
-          <div class="select is-small">
-            <select id="lang-selector" aria-label="Language">
-              <option value="en">English</option>
-              <option value="es">Español</option>
-              <option value="sv">Svenska</option>
-              <option value="no">Norsk</option>
-            </select>
-          </div>
           <div id="auth-box" class="auth-bar" hidden></div>
         </div>
       </div>
@@ -172,7 +165,7 @@
       <span class="footer-links">
         <span id="footer-policy-links"></span>
         <button id="footer-cookie-settings" class="footer-cookie-settings" type="button" hidden>Cookie settings</button>
-        <a href="https://qtiler.com" target="_blank" rel="noopener noreferrer">qtiler.com</a>
+        <a href="https://mundogis.se" target="_blank" rel="noopener noreferrer">Qtiler</a>
       </span>
     </div>
   </footer>
@@ -324,6 +317,15 @@
     const escapeHtml = (s) => String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const isSafeCssColor = (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim());
+    const cssUrl = (value) => String(value || '').trim().replace(/["'()\\]/g, '');
+    const getHeaderFontFamily = (value) => {
+      const key = String(value || '').trim().toLowerCase();
+      if (key === 'manrope') return '"Manrope", "Segoe UI", sans-serif';
+      if (key === 'serif') return 'Georgia, "Times New Roman", serif';
+      if (key === 'sans') return '"Segoe UI", "Noto Sans", sans-serif';
+      return '"Fraunces", Georgia, serif';
+    };
 
     const getLang = () => (window.qtilerLang && window.qtilerLang.get && window.qtilerLang.get()) || 'en';
     const t = (key) => {
@@ -341,10 +343,12 @@
 
     /* Lang selector wiring */
     const langSelector = document.getElementById('lang-selector');
-    const syncLangSelector = () => { if (langSelector.value !== getLang()) langSelector.value = getLang(); };
-    langSelector.addEventListener('change', () => {
-      if (window.qtilerLang && window.qtilerLang.set) window.qtilerLang.set(langSelector.value);
-    });
+    const syncLangSelector = () => { if (langSelector && langSelector.value !== getLang()) langSelector.value = getLang(); };
+    if (langSelector) {
+      langSelector.addEventListener('change', () => {
+        if (window.qtilerLang && window.qtilerLang.set) window.qtilerLang.set(langSelector.value);
+      });
+    }
     if (window.qtilerLang && window.qtilerLang.subscribe) {
       window.qtilerLang.subscribe(() => { syncLangSelector(); applyI18n(); rerenderDynamic(); });
     }
@@ -431,12 +435,45 @@
     function applyPortalHeader(currentPage, payload) {
       const page = currentPage || null;
       const showHeader = page ? page.showHeader !== false : true;
-      const headerHeight = page ? Math.max(0, Math.min(320, Number(page.headerHeight) || 120)) : 120;
-      const logoUrl = (page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : '');
+      const site = payload?.site || {};
+      const headerHeight = Math.max(72, Math.min(360, Number(site.headerHeight) || (page ? Number(page.headerHeight) : 0) || 120));
+      const logoUrl = site.headerLogoUrl || ((page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : ''));
+      const headerColor1 = isSafeCssColor(site.headerColor1) ? site.headerColor1 : '#0f766e';
+      const headerColor2 = isSafeCssColor(site.headerColor2) ? site.headerColor2 : '#2563eb';
+      const headerTextColor = isSafeCssColor(site.headerTextColor) ? site.headerTextColor : '#ffffff';
+      const headerBackgroundUrl = cssUrl(site.headerBackgroundUrl || '');
+      const headerFont = getHeaderFontFamily(site.headerFont);
       if (portalHeader) {
         portalHeader.hidden = !showHeader;
         portalHeader.style.setProperty('--portal-header-height', showHeader ? (headerHeight + 'px') : '0px');
+        portalHeader.style.setProperty('--portal-header-font', headerFont);
+        portalHeader.style.setProperty('--portal-header-text', headerTextColor);
+        portalHeader.style.setProperty('--portal-header-subtitle', headerTextColor === '#ffffff' ? 'rgba(255,255,255,0.85)' : headerTextColor);
+        const gradient = `linear-gradient(135deg, ${headerColor1}, ${headerColor2} 56%, #0f172a)`;
+        portalHeader.style.setProperty('--portal-header-bg', headerBackgroundUrl ? `linear-gradient(135deg, ${headerColor1}dd, ${headerColor2}bb), url("${headerBackgroundUrl}")` : gradient);
       }
+      
+      const brandTextH1 = document.querySelector('.brand-text h1.title');
+      const brandTextP = document.querySelector('.brand-text p.subtitle');
+      if (brandTextH1) {
+        if (payload?.site?.title) {
+          brandTextH1.removeAttribute('data-i18n');
+          brandTextH1.textContent = payload.site.title;
+        } else {
+          brandTextH1.setAttribute('data-i18n', 'qtiler2origo.maps.heading');
+          brandTextH1.textContent = typeof t === 'function' ? t('qtiler2origo.maps.heading') : 'Map Portal';
+        }
+      }
+      if (brandTextP) {
+        if (payload?.site?.subtitle) {
+          brandTextP.removeAttribute('data-i18n');
+          brandTextP.textContent = payload.site.subtitle;
+        } else {
+          brandTextP.setAttribute('data-i18n', 'qtiler2origo.maps.subtitle');
+          brandTextP.textContent = typeof t === 'function' ? t('qtiler2origo.maps.subtitle') : 'Interactive maps published via Origo Bridge';
+        }
+      }
+
       if (logoUrl) {
         brandLogo.src = logoUrl;
         brandLogo.hidden = false;
@@ -449,8 +486,14 @@
 
     const getCurrentPortalSlug = () => {
       const path = window.location.pathname || '';
-      const match = path.match(/^\/Qtiler2Origo\/pages\/([^/?#]+)/i);
+      const match = path.match(/^\/Qtiler2Origo\/portal\/([^/?#]+)/i);
       return match ? decodeURIComponent(match[1]) : '';
+    };
+
+    const isMapsOnlyMode = () => {
+      const path = (window.location.pathname || '').toLowerCase();
+      // If it's specifically the maps endpoint, we ignore portal rendering.
+      return path === '/qtiler2origo/maps' || path === '/qtiler2origo/maps/';
     };
 
     const getSocialIcon = (icon) => {
@@ -479,7 +522,12 @@
       let payload;
       try {
         const slug = getCurrentPortalSlug();
-        const url = '/plugins/Qtiler2Origo/api/portal-content' + (slug ? ('?slug=' + encodeURIComponent(slug)) : '');
+        const modeFlag = isMapsOnlyMode() ? 'mode=maps' : '';
+        const qsParams = [];
+        if (slug) qsParams.push('slug=' + encodeURIComponent(slug));
+        if (modeFlag) qsParams.push(modeFlag);
+
+        const url = '/plugins/Qtiler2Origo/api/portal-content' + (qsParams.length ? ('?' + qsParams.join('&')) : '');
         const res = await fetch(url, { credentials: 'same-origin' });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -567,18 +615,18 @@
             : '';
           return '<section class="portal-section portal-section--hero"' + bg + '><div class="portal-section__body">'
             + '<div class="portal-section__eyebrow">' + escapeHtml(block.eyebrow || '') + '</div>'
-            + '<h2>' + escapeHtml(block.title || page.title || t('qtiler2origo.maps.heading')) + '</h2>'
-            + '<p>' + escapeHtml(block.subtitle || page.summary || '') + '</p>'
+            + '<h2>' + escapeHtml(block.title || page.title || typeof t === 'function' ? t('qtiler2origo.maps.heading') : 'Map Portal') + '</h2>'
+            + '<div class="portal-richtext">' + (block.subtitle || page.summary || '') + '</div>'
             + (block.ctaLabel ? '<a class="portal-cta" href="' + escapeHtml(block.ctaUrl || '/Qtiler2Origo/maps') + '">' + escapeHtml(block.ctaLabel) + '</a>' : '')
             + '</div></section>';
         }
         if (block.type === 'text') {
-          return '<section class="portal-section"><div class="portal-section__body"><h2>' + escapeHtml(block.title || '') + '</h2><div class="portal-richtext">' + escapeHtml(block.body || '') + '</div></div></section>';
+          return '<section class="portal-section"><div class="portal-section__body"><h2>' + escapeHtml(block.title || '') + '</h2><div class="portal-richtext">' + (block.body || '') + '</div></div></section>';
         }
         if (block.type === 'maps') {
           const cards = (Array.isArray(block.profileKeys) ? block.profileKeys : []).map((token) => findMapProfile(profiles, token)).filter(Boolean);
           return '<section class="portal-section"><div class="portal-section__body"><h2>' + escapeHtml(block.title || '') + '</h2>'
-            + (block.intro ? '<p class="portal-section__intro">' + escapeHtml(block.intro) + '</p>' : '')
+            + (block.intro ? '<div class="portal-section__intro portal-richtext">' + (block.intro) + '</div>' : '')
             + '<div class="portal-maps ' + (block.layout === 'featured' ? 'is-featured' : '') + ' ' + (block.displayMode === 'embed' ? 'is-embed' : '') + ' ' + (block.displayMode === 'open' ? 'is-open' : '') + '">' + ((cards.map((item) => {
               const thumbUrl = String(item?.thumbnailUrl || '').trim();
               if (block.displayMode === 'embed') {
@@ -597,11 +645,11 @@
         }
         if (block.type === 'social') {
           return '<section class="portal-section"><div class="portal-section__body"><h2>' + escapeHtml(block.title || '') + '</h2>'
-            + (block.intro ? '<p class="portal-section__intro">' + escapeHtml(block.intro) + '</p>' : '')
+            + (block.intro ? '<div class="portal-section__intro portal-richtext">' + (block.intro) + '</div>' : '')
             + '<div class="portal-social">' + (Array.isArray(block.items) ? block.items : []).map((item) => '<a class="portal-social-link" href="' + escapeHtml(item.url || '#') + '" target="_blank" rel="noreferrer">' + (item.imageUrl ? '<span class="portal-social-link__image" style="background-image:url(' + escapeHtml(item.imageUrl) + ')"></span>' : '<span class="portal-social-link__icon">' + escapeHtml(getSocialIcon(item.icon)) + '</span>') + '<span>' + (item.meta ? '<small class="portal-social-link__meta">' + escapeHtml(item.meta) + '</small>' : '') + '<strong>' + escapeHtml(item.title || '') + '</strong>' + (item.text ? '<br>' + escapeHtml(item.text) : '') + '</span></a>').join('') + '</div></div></section>';
         }
         return '<section class="portal-section"><div class="portal-section__body"><h2>' + escapeHtml(block.title || '') + '</h2>'
-          + (block.intro ? '<p class="portal-section__intro">' + escapeHtml(block.intro) + '</p>' : '')
+          + (block.intro ? '<div class="portal-section__intro portal-richtext">' + (block.intro) + '</div>' : '')
           + '<div class="portal-cards">' + (Array.isArray(block.items) ? block.items : []).map((item) => '<article class="portal-card">' + (item.imageUrl ? '<div class="portal-card__image" style="background-image:url(' + escapeHtml(item.imageUrl) + ')"></div>' : '') + (item.meta ? '<small class="portal-card__meta">' + escapeHtml(item.meta) + '</small>' : '') + '<strong>' + escapeHtml(item.title || '') + '</strong><p>' + escapeHtml(item.text || '') + '</p>' + (item.label ? '<a class="portal-card__action" href="' + escapeHtml(item.url || '#') + '">' + escapeHtml(item.label) + '</a>' : '') + '</article>').join('') + '</div></div></section>';
       }).join('') + '</div>';
     }

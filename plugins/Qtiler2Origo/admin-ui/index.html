@@ -18,6 +18,11 @@
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldcode.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/brace-fold.js"></script>
+
+    <!-- Quill Editor for Rich Text -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
     <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css" />
     <style>
       .hiw-actions { margin-top: 0.75rem; }
@@ -419,164 +424,280 @@
             <a id="portalOpenPageBtn" class="button ghost is-disabled" href="/Qtiler2Origo/maps" target="_blank" rel="noreferrer" data-i18n="Qtiler2Origo.portal_open_page">Open page</a>
           </div>
 
-          <div class="portal-meta-grid" style="margin-bottom:1rem;">
-            <div class="field portal-meta-grid__checks">
-              <label class="checkbox"><input id="portalGdprEnabled" type="checkbox" /> <span>Enable GDPR / cookie consent</span></label>
-            </div>
-            <div class="field">
-              <label class="label" for="portalGdprCompany">Company / brand</label>
-              <div class="control"><input id="portalGdprCompany" class="input" type="text" maxlength="120" placeholder="Qtiler" /></div>
-            </div>
-            <div class="field">
-              <label class="label" for="portalGdprPrivacyUrl">Privacy policy URL</label>
-              <div class="control"><input id="portalGdprPrivacyUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy" /></div>
-            </div>
-            <div class="field">
-              <label class="label" for="portalGdprCookieUrl">Cookie policy URL</label>
-              <div class="control"><input id="portalGdprCookieUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/cookies" /></div>
-            </div>
-            <div class="field">
-              <label class="label" for="portalGdprContactUrl">GDPR contact URL</label>
-              <div class="control"><input id="portalGdprContactUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy-contact" /></div>
-            </div>
-            <div class="field">
-              <label class="label" for="portalGdprTitle">Banner title</label>
-              <div class="control"><input id="portalGdprTitle" class="input" type="text" maxlength="160" placeholder="Privacy and cookies" /></div>
-            </div>
-          </div>
-          <div class="field" style="margin-bottom:1rem;">
-            <label class="label" for="portalGdprText">Banner text</label>
-            <div class="control"><textarea id="portalGdprText" class="textarea" rows="3" placeholder="Explain essential cookies, embedded maps and consent."></textarea></div>
+          
+          <!-- Global Portal Navigation -->
+          <div class="tabs is-boxed is-small" style="margin-bottom: 0; background: var(--surface);">
+            <ul>
+              <li class="is-active" id="gTabPages"><a><span class="icon"><i class="fas fa-file-alt"></i></span><span>Pages (Editor)</span></a></li>
+              <li id="gTabIdentity"><a><span class="icon"><i class="fas fa-paint-brush"></i></span><span>Site Identity</span></a></li>
+              <li id="gTabGdpr"><a><span class="icon"><i class="fas fa-shield-alt"></i></span><span>GDPR & Privacy</span></a></li>
+            </ul>
           </div>
 
-          <div class="portal-editor">
-            <aside class="portal-editor__sidebar">
-              <div class="portal-editor__sidebar-head">
-                <strong data-i18n="Qtiler2Origo.portal_pages_list">Pages</strong>
-              </div>
-              <div id="portalPagesList" class="portal-pages-list"></div>
-            </aside>
+          <!-- GLOBAL TAB 1: Pages Editor (The Main Workspace) -->
+          <div id="gPanelPages" class="global-portal-panel" style="padding: 1rem 0;">
+            <div class="portal-editor">
+              <aside class="portal-editor__sidebar">
+                <div class="portal-editor__sidebar-head">
+                  <strong data-i18n="Qtiler2Origo.portal_pages_list">Your Pages</strong>
+                </div>
+                <div id="portalPagesList" class="portal-pages-list"></div>
+              </aside>
 
-            <section class="portal-editor__workspace">
-              <div id="portalPageEmpty" class="portal-editor__empty" data-i18n="Qtiler2Origo.portal_empty">Create the first page to turn the maps portal into an editorial landing page.</div>
+              <section class="portal-editor__workspace">
+                <div id="portalPageEmpty" class="portal-editor__empty" data-i18n="Qtiler2Origo.portal_empty">
+                  Create the first page to turn the maps portal into an editorial landing page.
+                </div>
 
-              <div id="portalPageEditor" hidden>
-                <div class="portal-template-bar">
-                  <div>
-                    <strong data-i18n="Qtiler2Origo.portal_templates">Templates</strong>
-                    <p class="help" data-i18n="Qtiler2Origo.portal_templates_help">Start from a polished layout and then adapt text, maps and news blocks.</p>
-                  </div>
-                  <div class="portal-template-bar__controls">
-                    <div class="select is-small">
-                      <select id="portalTemplateSelect">
-                        <option value="story">Story landing</option>
-                        <option value="newsroom">Newsroom</option>
-                        <option value="campaign">Campaign / product</option>
-                      </select>
+                <div id="portalPageEditor" hidden>
+                  <div class="portal-template-bar" style="margin-bottom:1rem;">
+                    <div>
+                      <strong data-i18n="Qtiler2Origo.portal_templates">Page Templates</strong>
+                      <p class="help" data-i18n="Qtiler2Origo.portal_templates_help">Start from a polished layout and adapt.</p>
                     </div>
-                    <button id="portalApplyTemplateBtn" class="button small" type="button" data-i18n="Qtiler2Origo.portal_apply_template">Apply template</button>
-                  </div>
-                </div>
-
-                <div class="portal-meta-grid">
-                  <div class="field">
-                    <label class="label" for="portalPageTitle" data-i18n="Qtiler2Origo.portal_page_title">Page title</label>
-                    <div class="control"><input id="portalPageTitle" class="input" type="text" maxlength="120" /></div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageSlug" data-i18n="Qtiler2Origo.portal_page_slug">Slug</label>
-                    <div class="control"><input id="portalPageSlug" class="input" type="text" maxlength="120" placeholder="about-us" /></div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageNavLabel" data-i18n="Qtiler2Origo.portal_page_nav">Navigation label</label>
-                    <div class="control"><input id="portalPageNavLabel" class="input" type="text" maxlength="80" /></div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageSummary" data-i18n="Qtiler2Origo.portal_page_summary">Short summary</label>
-                    <div class="control"><input id="portalPageSummary" class="input" type="text" maxlength="180" /></div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageHeaderLogoUrl" data-i18n="Qtiler2Origo.portal_header_logo">Header logo URL</label>
-                    <div class="control"><input id="portalPageHeaderLogoUrl" class="input" type="text" maxlength="400" placeholder="/plugins/Qtiler2Origo/api/branding/logo-file" /></div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageHeaderHeight" data-i18n="Qtiler2Origo.portal_header_height">Header height</label>
-                    <div class="control"><input id="portalPageHeaderHeight" class="input" type="number" min="0" max="320" step="4" /></div>
-                  </div>
-                </div>
-
-                <div class="portal-meta-grid portal-meta-grid--audience">
-                  <div class="field">
-                    <label class="label" for="portalPageVisibility" data-i18n="Qtiler2Origo.portal_visibility">Page visibility</label>
-                    <div class="control">
-                      <div class="select is-fullwidth">
-                        <select id="portalPageVisibility">
-                          <option value="public" data-i18n="Qtiler2Origo.portal_vis_public">Public</option>
-                          <option value="authenticated" data-i18n="Qtiler2Origo.portal_vis_authenticated">Authenticated users</option>
-                          <option value="restricted" data-i18n="Qtiler2Origo.portal_vis_restricted">Specific users / roles</option>
+                    <div class="portal-template-bar__controls">
+                      <div class="select is-small">
+                        <select id="portalTemplateSelect">
+                          <option value="story">Story landing</option>
+                          <option value="newsroom">Newsroom</option>
+                          <option value="campaign">Campaign / product</option>
                         </select>
                       </div>
+                      <button id="portalApplyTemplateBtn" class="button small primary" type="button" data-i18n="Qtiler2Origo.portal_apply_template">Apply template</button>
                     </div>
                   </div>
-                  <div class="field">
-                    <label class="label" for="portalPageUsers" data-i18n="Qtiler2Origo.portal_users">Allowed users</label>
-                    <div class="control"><input id="portalPageUsers" class="input" type="text" placeholder="anna, diego" /></div>
-                    <div class="control">
-                      <select id="portalPageUsersCatalog" class="input portal-multiselect" multiple size="6"></select>
-                    </div>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="portalPageRoles" data-i18n="Qtiler2Origo.portal_roles">Allowed roles</label>
-                    <div class="control"><input id="portalPageRoles" class="input" type="text" placeholder="editor, customer" /></div>
-                    <div class="control">
-                      <select id="portalPageRolesCatalog" class="input portal-multiselect" multiple size="4"></select>
-                    </div>
-                  </div>
-                  <div class="field portal-meta-grid__checks">
-                    <label class="checkbox"><input id="portalPageShowInNav" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_in_nav">Show in navigation</span></label>
-                    <label class="checkbox"><input id="portalPageIsHome" type="checkbox" /> <span data-i18n="Qtiler2Origo.portal_set_home">Use as portal home</span></label>
-                    <label class="checkbox"><input id="portalPageShowHeader" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_header">Show header</span></label>
-                  </div>
-                </div>
 
-                <div class="portal-blocks-head">
-                  <div>
-                    <h3 data-i18n="Qtiler2Origo.portal_blocks">Sections</h3>
-                    <p class="help" data-i18n="Qtiler2Origo.portal_blocks_help">Combine hero, text, card, social and map sections to build a polished landing page.</p>
+                  <!-- Inner Page Tabs -->
+                  <div class="tabs is-toggle is-small is-fullwidth" style="margin-bottom:1rem;">
+                    <ul>
+                      <li class="is-active" id="pTabContent"><a><span>Content & Blocks</span></a></li>
+                      <li id="pTabSettings"><a><span>Page Settings</span></a></li>
+                      <li id="pTabSecurity"><a><span>Access & Security</span></a></li>
+                      <li id="pTabPreview"><a><span>Preview</span></a></li>
+                    </ul>
                   </div>
-                  <div class="portal-blocks-actions">
-                    <div class="select is-small">
-                      <select id="portalAddBlockType">
-                        <option value="hero">Hero</option>
-                        <option value="text">Text</option>
-                        <option value="cards">Cards / news</option>
-                        <option value="maps">Featured maps</option>
-                        <option value="social">Social links</option>
-                      </select>
+
+                  <!-- PAGE TAB 1: Content & Blocks -->
+                  <div id="pPanelContent" class="page-portal-panel">
+                    <div class="portal-blocks-head">
+                      <div>
+                        <h3 data-i18n="Qtiler2Origo.portal_blocks">Story Sections</h3>
+                        <p class="help" data-i18n="Qtiler2Origo.portal_blocks_help">Combine hero, text, maps and news sections.</p>
+                      </div>
+                      <div class="portal-blocks-actions">
+                        <button id="portalAddBlockBtn" class="button small info" type="button" data-i18n="Qtiler2Origo.portal_add_block">Add Section</button>
+                      </div>
                     </div>
-                    <button id="portalAddBlockBtn" class="button small" type="button" data-i18n="Qtiler2Origo.portal_add_block">Add section</button>
+                    <div id="portalBlocksList" class="portal-blocks-list" style="margin-bottom: 2rem;"></div>
                   </div>
-                </div>
 
-                <div id="portalBlocksList" class="portal-blocks-list"></div>
+                  <!-- PAGE TAB 2: Settings -->
+                  <div id="pPanelSettings" class="page-portal-panel" style="display:none;">
+                    <div class="portal-meta-grid card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px; margin-bottom:1rem;">
+                      <div class="field">
+                        <label class="label" for="portalPageTitle" data-i18n="Qtiler2Origo.portal_page_title">Page title</label>
+                        <div class="control"><input id="portalPageTitle" class="input" type="text" maxlength="120" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageSlug" data-i18n="Qtiler2Origo.portal_page_slug">Slug (URL path)</label>
+                        <div class="control"><input id="portalPageSlug" class="input" type="text" maxlength="120" placeholder="about-us" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageNavLabel" data-i18n="Qtiler2Origo.portal_page_nav">Navigation label</label>
+                        <div class="control"><input id="portalPageNavLabel" class="input" type="text" maxlength="80" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageSummary" data-i18n="Qtiler2Origo.portal_page_summary">Short summary</label>
+                        <div class="control"><input id="portalPageSummary" class="input" type="text" maxlength="180" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageHeaderLogoUrl" data-i18n="Qtiler2Origo.portal_header_logo">Header logo URL</label>
+                        <div class="control"><input id="portalPageHeaderLogoUrl" class="input" type="text" maxlength="400" placeholder="/plugins/Qtiler2Origo/api/branding/logo-file" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageHeaderHeight" data-i18n="Qtiler2Origo.portal_header_height">Header height (px)</label>
+                        <div class="control"><input id="portalPageHeaderHeight" class="input" type="number" min="0" max="320" step="4" /></div>
+                      </div>
+                    </div>
+                    
+                    <div class="field portal-meta-grid__checks card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageShowInNav" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_in_nav">Show in navigation menu</span></label>
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageIsHome" type="checkbox" /> <span data-i18n="Qtiler2Origo.portal_set_home">Use as default portal homepage</span></label>
+                      <label class="checkbox" style="display:block;"><input id="portalPageShowHeader" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_show_header">Show navigation header</span></label>
+                    </div>
+                  </div>
 
-                <div class="portal-preview-card">
-                  <div class="card-header-row">
-                    <h3 data-i18n="Qtiler2Origo.portal_preview">Live preview</h3>
-                    <div class="portal-preview-toolbar">
-                      <span class="badge badge--muted" data-i18n="Qtiler2Origo.portal_preview_note">Desktop preview</span>
-                      <div class="portal-preview-devices">
-                        <button type="button" class="button small is-active" data-portal-preview-device="desktop" data-i18n="Qtiler2Origo.portal_device_desktop">Desktop</button>
-                        <button type="button" class="button small" data-portal-preview-device="tablet" data-i18n="Qtiler2Origo.portal_device_tablet">Tablet</button>
-                        <button type="button" class="button small" data-portal-preview-device="mobile" data-i18n="Qtiler2Origo.portal_device_mobile">Mobile</button>
+                  <!-- PAGE TAB 3: Security -->
+                  <div id="pPanelSecurity" class="page-portal-panel" style="display:none;">
+                    <div class="portal-meta-grid portal-meta-grid--audience card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+                      <div class="field">
+                        <label class="label" for="portalPageVisibility" data-i18n="Qtiler2Origo.portal_visibility">Page visibility</label>
+                        <div class="control">
+                          <div class="select is-fullwidth">
+                            <select id="portalPageVisibility">
+                              <option value="public" data-i18n="Qtiler2Origo.portal_vis_public">Public</option>
+                              <option value="authenticated" data-i18n="Qtiler2Origo.portal_vis_authenticated">Authenticated users</option>
+                              <option value="restricted" data-i18n="Qtiler2Origo.portal_vis_restricted">Specific users / roles</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageUsers" data-i18n="Qtiler2Origo.portal_users">Allowed users</label>
+                        <div class="control"><input id="portalPageUsers" class="input" type="text" placeholder="anna, diego" /></div>
+                        <div class="control">
+                          <select id="portalPageUsersCatalog" class="input portal-multiselect" multiple size="6"></select>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageRoles" data-i18n="Qtiler2Origo.portal_roles">Allowed roles</label>
+                        <div class="control"><input id="portalPageRoles" class="input" type="text" placeholder="editor, customer" /></div>
+                        <div class="control">
+                          <select id="portalPageRolesCatalog" class="input portal-multiselect" multiple size="4"></select>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div id="portalPreviewHost" class="portal-preview-host"></div>
+
+                  <!-- PAGE TAB 4: Preview -->
+                  <div id="pPanelPreview" class="page-portal-panel" style="display:none;">
+                  <div class="portal-preview-card">
+                    <div class="card-header-row">
+                      <h3 data-i18n="Qtiler2Origo.portal_preview">Live Preview</h3>
+                      <div class="portal-preview-toolbar">
+                        <span class="badge badge--muted" data-i18n="Qtiler2Origo.portal_preview_note">Desktop view</span>
+                        <div class="portal-preview-devices">
+                          <button type="button" class="button small is-active" data-portal-preview-device="desktop" data-i18n="Qtiler2Origo.portal_device_desktop">Desktop</button>
+                          <button type="button" class="button small" data-portal-preview-device="tablet" data-i18n="Qtiler2Origo.portal_device_tablet">Tablet</button>
+                          <button type="button" class="button small" data-portal-preview-device="mobile" data-i18n="Qtiler2Origo.portal_device_mobile">Mobile</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="portalPreviewHost" class="portal-preview-host"></div>
+                  </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- GLOBAL TAB 2: Site Identity -->
+          <div id="gPanelIdentity" class="global-portal-panel" style="display:none; padding:1.5rem;">
+            <h3 style="margin-bottom:1rem;">Global Site Identity</h3>
+            <p class="help" style="margin-bottom:1rem;">These fields change the public header next to the login button on the maps portal.</p>
+            <div class="portal-meta-grid">
+              <div class="field">
+                <label class="label">Header title</label>
+                <div class="control"><input id="portalSiteTitle" class="input" type="text" maxlength="80" placeholder="Kartportal" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header subtitle</label>
+                <div class="control"><input id="portalSiteSubtitle" class="input" type="text" maxlength="200" placeholder="Interaktiva kartor publicerade via Origo Bridge" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Portal logo URL</label>
+                <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="/plugins/Qtiler2Origo/api/branding/logo-file" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header height</label>
+                <div class="control"><input id="portalSiteHeaderHeight" class="input" type="number" min="72" max="360" step="4" placeholder="120" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header font</label>
+                <div class="control">
+                  <div class="select is-fullwidth">
+                    <select id="portalSiteHeaderFont">
+                      <option value="fraunces">Fraunces</option>
+                      <option value="manrope">Manrope</option>
+                      <option value="serif">Georgia serif</option>
+                      <option value="sans">Segoe UI sans</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </section>
+              <div class="field">
+                <label class="label">Header color 1</label>
+                <div class="control"><input id="portalSiteHeaderColor1" class="input" type="color" value="#0f766e" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header color 2</label>
+                <div class="control"><input id="portalSiteHeaderColor2" class="input" type="color" value="#2563eb" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header text color</label>
+                <div class="control"><input id="portalSiteHeaderTextColor" class="input" type="color" value="#ffffff" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header background image URL</label>
+                <div class="control"><input id="portalSiteHeaderBackgroundUrl" class="input" type="text" maxlength="500" placeholder="https://... or /plugins/Qtiler2Origo/..." /></div>
+              </div>
+            </div>
           </div>
+
+          <!-- GLOBAL TAB 3: GDPR & Privacy -->
+          <div id="gPanelGdpr" class="global-portal-panel" style="display:none; padding:1.5rem;">
+            <h3 style="margin-bottom:1rem;">Privacy & GDPR Compliance</h3>
+            <div class="field portal-meta-grid__checks" style="margin-bottom:1.5rem;">
+              <label class="checkbox is-large"><input id="portalGdprEnabled" type="checkbox" /> <strong>Enable GDPR / cookie consent banner</strong></label>
+            </div>
+            
+            <div class="portal-meta-grid card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+              <div class="field">
+                <label class="label" for="portalGdprCompany">Company / Brand Name</label>
+                <div class="control"><input id="portalGdprCompany" class="input" type="text" maxlength="120" placeholder="Qtiler" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprTitle">Banner Title</label>
+                <div class="control"><input id="portalGdprTitle" class="input" type="text" maxlength="160" placeholder="Privacy and cookies" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprPrivacyUrl">Privacy Policy URL</label>
+                <div class="control"><input id="portalGdprPrivacyUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprCookieUrl">Cookie Policy URL</label>
+                <div class="control"><input id="portalGdprCookieUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/cookies" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprContactUrl">GDPR Contact URL</label>
+                <div class="control"><input id="portalGdprContactUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy-contact" /></div>
+              </div>
+              <div class="field" style="grid-column: 1 / -1;">
+                <label class="label" for="portalGdprText">Banner Text</label>
+                <div class="control"><textarea id="portalGdprText" class="textarea" rows="3" placeholder="Explain essential cookies, embedded maps and consent."></textarea></div>
+              </div>
+            </div>
+          </div>
+          
+          <script>
+            // Inline tab logic for the Portal editor
+            document.addEventListener("DOMContentLoaded", () => {
+              // Global tabs
+              ['gTabPages', 'gTabIdentity', 'gTabGdpr'].forEach((tabId, idx) => {
+                const el = document.getElementById(tabId);
+                const panels = ['gPanelPages', 'gPanelIdentity', 'gPanelGdpr'];
+                if(el) el.addEventListener('click', () => {
+                  ['gTabPages', 'gTabIdentity', 'gTabGdpr'].forEach(t => document.getElementById(t)?.classList.remove('is-active'));
+                  el.classList.add('is-active');
+                  panels.forEach(p => { const pEl = document.getElementById(p); if(pEl) pEl.style.display = 'none'; });
+                  document.getElementById(panels[idx]).style.display = 'block';
+                });
+              });
+
+              // Page tabs
+              ['pTabContent', 'pTabSettings', 'pTabSecurity', 'pTabPreview'].forEach((tabId, idx) => {
+                const el = document.getElementById(tabId);
+                const panels = ['pPanelContent', 'pPanelSettings', 'pPanelSecurity', 'pPanelPreview'];
+                if(el) el.addEventListener('click', () => {
+                  ['pTabContent', 'pTabSettings', 'pTabSecurity', 'pTabPreview'].forEach(t => document.getElementById(t)?.classList.remove('is-active'));
+                  el.classList.add('is-active');
+                  panels.forEach(p => { const pEl = document.getElementById(p); if(pEl) pEl.style.display = 'none'; });
+                  document.getElementById(panels[idx]).style.display = 'block';
+                });
+              });
+            });
+          </script>
+
         </section>
       </div>
 

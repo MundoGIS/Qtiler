@@ -27,7 +27,9 @@ const DEFAULT_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.
 const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTILER_ORIGO_AUTOSTART || process.env.QTWC_QWC2_AUTOSTART || '0').toLowerCase());
 const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+const MAX_PORTAL_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
+const ALLOWED_PORTAL_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const PREVIEW_STATE_TTL_MS = 10 * 60 * 1000;
 const previewStateStore = new Map();
 
@@ -503,6 +505,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedRoot = path.join(runtimeRoot, 'published');
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
+  const portalAssetsRoot = path.join(runtimeRoot, 'portal-assets');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const projectsDir = resolveRepoPath('qgisprojects');
@@ -525,6 +528,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedRoot, { recursive: true });
   await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
+  await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
 
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
     const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
@@ -581,6 +585,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       const ext = path.extname(String(file?.originalname || '')).toLowerCase();
       if (!ALLOWED_LOGO_EXTENSIONS.has(ext)) {
         return cb(new Error('invalid_logo_extension'));
+      }
+      cb(null, true);
+    }
+  });
+
+  const portalImageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_PORTAL_IMAGE_BYTES },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
+      if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) {
+        return cb(new Error('invalid_portal_image_extension'));
       }
       cb(null, true);
     }
@@ -1004,6 +1020,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const defaultPortalPagesState = () => ({
     homePageSlug: '',
     gdpr: defaultPortalGdprSettings(),
+    site: { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerLink: '', footerText: '' },
     pages: []
   });
 
@@ -1144,6 +1161,19 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return {
       homePageSlug: dedupedPages.some((page) => page.slug === homePageSlug) ? homePageSlug : (dedupedPages[0]?.slug || ''),
       gdpr: normalizePortalGdprSettings(source.gdpr),
+      site: (source.site && typeof source.site === 'object') ? {
+        title: String(source.site.title || '').trim(),
+        subtitle: String(source.site.subtitle || '').trim(),
+        headerLogoUrl: String(source.site.headerLogoUrl || '').trim(),
+        headerHeight: String(source.site.headerHeight || '').trim(),
+        headerFont: String(source.site.headerFont || '').trim(),
+        headerColor1: String(source.site.headerColor1 || '').trim(),
+        headerColor2: String(source.site.headerColor2 || '').trim(),
+        headerTextColor: String(source.site.headerTextColor || '').trim(),
+        headerBackgroundUrl: String(source.site.headerBackgroundUrl || '').trim(),
+        footerLink: String(source.site.footerLink || '').trim(),
+        footerText: String(source.site.footerText || '').trim()
+      } : { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerLink: '', footerText: '' },
       pages: dedupedPages
     };
   };
@@ -1183,7 +1213,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return userMatchesPortalAudience(scope, user);
     });
 
-  const buildPortalPageUrl = (slug) => `/Qtiler2Origo/pages/${encodeURIComponent(String(slug || '').trim())}`;
+  const buildPortalPageUrl = (slug) => `/Qtiler2Origo/portal/${encodeURIComponent(String(slug || '').trim())}`;
 
   /**
    * Filter profiles based on QtilerAuth permissions
@@ -2787,7 +2817,7 @@ ${mapIcon}
   // the resulting fetch becomes ".../preview-config.json?...&bgLayer=NAME/undefined.json"
   // which corrupts query params (Express then sees bgLayer with "/undefined.json"
   // appended). Fetch the JSON ourselves and pass the parsed object instead.
-  fetch('${configUrl}', { credentials: 'same-origin' })
+  fetch(${JSON.stringify(configUrl)}, { credentials: 'same-origin' })
     .then(function(r) {
       if (!r.ok) {
         return r.text().then(function(text) {
@@ -4692,6 +4722,49 @@ ${mapIcon}
     });
   });
 
+  app.use(`/plugins/${pluginSlug}/portal-assets`, express.static(portalAssetsRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '30d'
+  }));
+
+  app.post(`/plugins/${pluginSlug}/api/portal-assets/image`, adminOnly, (req, res) => {
+    portalImageUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const msg = String(err?.message || err || 'portal_image_upload_failed');
+        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'portal_image_too_large', details: `max_bytes_${MAX_PORTAL_IMAGE_BYTES}` });
+        }
+        if (msg.includes('invalid_portal_image_extension')) {
+          return res.status(400).json({ error: 'invalid_portal_image_extension' });
+        }
+        return res.status(400).json({ error: 'portal_image_upload_failed', details: msg });
+      }
+
+      try {
+        const uploaded = req.file;
+        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
+          return res.status(400).json({ error: 'portal_image_required' });
+        }
+
+        const ext = path.extname(String(uploaded.originalname || '')).toLowerCase();
+        if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) {
+          return res.status(400).json({ error: 'invalid_portal_image_extension' });
+        }
+
+        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'image'), ext)).slice(0, 80) || 'image';
+        const fileName = `${Date.now()}-${stem}${ext}`;
+        const targetPath = path.join(portalAssetsRoot, fileName);
+        await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
+        await fs.promises.writeFile(targetPath, uploaded.buffer);
+        const url = `/plugins/${pluginSlug}/portal-assets/${encodeURIComponent(fileName)}`;
+        return res.status(201).json({ status: 'uploaded', url });
+      } catch (uploadErr) {
+        return res.status(500).json({ error: 'portal_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
+  });
+
   app.delete(`/plugins/${pluginSlug}/api/branding/logo`, adminOnly, async (_req, res) => {
     try {
       const state = await readState();
@@ -5261,7 +5334,7 @@ ${mapIcon}
     }
   });
 
-  app.post(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, express.json({ limit: '2mb' }), async (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const saved = await writePortalPagesState(req.body || {});
       res.json({ status: 'saved', ...saved });
@@ -5283,17 +5356,22 @@ ${mapIcon}
             return allMaps.filter((item) => userCanAccessProject(snapshot, req.user || null, item.projectId));
           })()
         : allMaps;
+      const mode = String(req.query?.mode || '').trim();
       const slug = slugifyPortalToken(req.query?.slug || '');
       const visiblePages = state.pages.filter((page) => userMatchesPortalAudience(page.visibility, req.user || null));
       let currentPage = null;
-      if (slug) currentPage = visiblePages.find((page) => page.slug === slug) || null;
-      if (!currentPage && !slug && state.homePageSlug) {
-        currentPage = visiblePages.find((page) => page.slug === state.homePageSlug) || null;
+
+      if (mode !== 'maps') {
+        if (slug) currentPage = visiblePages.find((page) => page.slug === slug) || null;
+        if (!currentPage && !slug && state.homePageSlug) {
+          currentPage = visiblePages.find((page) => page.slug === state.homePageSlug) || null;
+        }
+        if (!currentPage && !slug) currentPage = visiblePages[0] || null;
+        if (slug && !currentPage) {
+          return res.status(404).json({ error: 'portal_page_not_found' });
+        }
       }
-      if (!currentPage && !slug) currentPage = visiblePages[0] || null;
-      if (slug && !currentPage) {
-        return res.status(404).json({ error: 'portal_page_not_found' });
-      }
+
       let logoUrl = null;
       try { logoUrl = await getLogoPublicUrl(); } catch { logoUrl = null; }
       if (!logoUrl) logoUrl = '/css/images/Qtiler.png';
@@ -5304,6 +5382,7 @@ ${mapIcon}
         logoUrl,
         items,
         gdpr: state.gdpr,
+        site: state.site || { title: '', subtitle: '', footerLink: '', footerText: '' },
         portal: {
           homePageSlug: state.homePageSlug,
           pages: visiblePages.map((page) => ({
@@ -5577,8 +5656,8 @@ ${mapIcon}
 
   // ── Origo Maps Portal ──
     app.get('/Qtiler2Origo/maps', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
-    app.get('/Qtiler2Origo/pages/:slug', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
-    app.get('/Qtiler2Origo/pages', async (req, res) => { res.redirect('/Qtiler2Origo/maps'); });
+    app.get('/Qtiler2Origo/portal/:slug', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
+    app.get('/Qtiler2Origo/portal', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
 
 
   app.get('/Qtiler2Origo/terrain/:projectId/:filename', async (req, res) => {

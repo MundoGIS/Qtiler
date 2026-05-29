@@ -24,6 +24,13 @@ body {
   color: var(--ink);
 }
 
+body.admin-editor-detached {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #eef3f9;
+}
+
 h1, h2, h3, h4, .portal-preview__hero h1 {
   font-family: "Fraunces", Georgia, serif;
 }
@@ -34,6 +41,35 @@ h1, h2, h3, h4, .portal-preview__hero h1 {
   padding: 24px;
   display: grid;
   gap: 16px;
+}
+
+body.admin-editor-detached .page {
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: block;
+  overflow: hidden;
+}
+
+body.admin-editor-detached .hero,
+body.admin-editor-detached .tab-bar,
+body.admin-editor-detached--map .tab-panel[data-panel="portal"] {
+  display: none !important;
+}
+
+body.admin-editor-detached--portal .tab-panel:not([data-panel="portal"]),
+body.admin-editor-detached--map .tab-panel:not([data-panel="maps"]) {
+  display: none !important;
+}
+
+body.admin-editor-detached--map .tab-panel[data-panel="maps"] {
+  display: block !important;
+}
+
+body.admin-editor-detached--map .tab-panel[data-panel="maps"] > :not(#publishModal) {
+  display: none !important;
 }
 
 .hero h1 {
@@ -321,6 +357,126 @@ input {
   gap: 14px;
 }
 
+body.admin-editor-detached--portal .tab-panel[data-panel="portal"],
+body.admin-editor-detached--portal .tab-panel--active[data-panel="portal"] {
+  display: flex !important;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.admin-editor-detached--portal #portalSection {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+body.admin-editor-detached--portal #portalSection > .card-header-row {
+  flex: 0 0 auto;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+body.admin-editor-detached--portal #portalSection > .help,
+body.admin-editor-detached--portal #portalSection > .tabs {
+  display: none !important;
+}
+
+body.admin-editor-detached--portal #gPanelPages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.admin-editor-detached--portal .portal-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+body.admin-editor-detached--portal .portal-editor__sidebar,
+body.admin-editor-detached--portal .portal-editor__workspace {
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.admin-editor-detached--portal .portal-editor__sidebar {
+  overflow-y: auto;
+  position: static;
+  border-width: 0 1px 0 0;
+}
+
+body.admin-editor-detached--portal .portal-editor__workspace {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+}
+
+body.admin-editor-detached--portal #portalPageEditor {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.admin-editor-detached--portal #portalPageEditor > .portal-template-bar,
+body.admin-editor-detached--portal #portalPageEditor > .tabs {
+  flex: 0 0 auto;
+}
+
+body.admin-editor-detached--portal #portalPageEditor > .portal-template-bar {
+  display: none !important;
+}
+
+body.admin-editor-detached--portal .page-portal-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+body.admin-editor-detached--portal #pPanelPreview {
+  overflow: hidden;
+  padding-right: 0;
+}
+
+body.admin-editor-detached--portal #pPanelPreview .portal-preview-card {
+  height: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.admin-editor-detached--portal #pPanelPreview .portal-preview-card > .card-header-row {
+  flex: 0 0 auto;
+}
+
+body.admin-editor-detached--portal #pPanelPreview .portal-preview-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .portal-editor__empty {
   border: 1px dashed var(--line);
   border-radius: 18px;
@@ -443,9 +599,101 @@ body.portal-builder-fullscreen-open {
   gap: 10px;
 }
 
+.portal-rich-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.portal-rich-field__label {
+  color: var(--ink);
+}
+
+.quill-editor-container {
+  min-height: 300px;
+  max-height: 72vh;
+  resize: vertical;
+  overflow: auto;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.quill-editor-container .ql-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+}
+
+.quill-editor-container .ql-container {
+  min-height: 220px;
+  border-radius: 0 0 12px 12px;
+  font-size: 0.96rem;
+}
+
+.quill-editor-container .ql-editor {
+  min-height: 220px;
+}
+
+.quill-editor-container .ql-picker-options {
+  z-index: 50;
+}
+
 .portal-repeater {
   display: grid;
   gap: 10px;
+}
+
+.portal-social-list {
+  display: grid;
+  gap: 10px;
+}
+
+.portal-social-item {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 0.8fr) minmax(220px, 1.2fr) minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid #dbe2ea;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff;
+}
+
+.portal-social-item__icon {
+  align-self: center;
+}
+
+.portal-social-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #334155;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  line-height: 1;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+  text-transform: lowercase;
+}
+
+.portal-social-icon--facebook { background: #1877f2; }
+.portal-social-icon--instagram { background: radial-gradient(circle at 30% 30%, #feda75 0 18%, #fa7e1e 32%, #d62976 55%, #962fbf 78%, #4f5bd5 100%); }
+.portal-social-icon--linkedin { background: #0a66c2; }
+.portal-social-icon--x { background: #0f172a; }
+.portal-social-icon--youtube { background: #ff0033; font-size: 1rem; }
+.portal-social-icon--tiktok { background: linear-gradient(135deg, #00f2ea, #111 48%, #ff0050); }
+.portal-social-icon--whatsapp { background: #25d366; }
+.portal-social-icon--telegram { background: #229ed9; }
+.portal-social-icon--email { background: #c2410c; }
+.portal-social-icon--web { background: #0f766e; font-size: 0.72rem; }
+
+.portal-social-item .button {
+  white-space: nowrap;
 }
 
 .portal-repeater__item {
@@ -738,15 +986,7 @@ body.portal-builder-fullscreen-open {
 }
 
 .portal-preview__social-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #eff6ff;
-  color: var(--primary);
-  font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .portal-preview__empty {
@@ -783,6 +1023,12 @@ body.portal-builder-fullscreen-open {
 .button.primary {
   background: var(--primary);
   border-color: var(--primary);
+  color: #fff;
+}
+
+.button.info {
+  background: var(--primary-2);
+  border-color: var(--primary-2);
   color: #fff;
 }
 
@@ -881,6 +1127,8 @@ body.portal-builder-fullscreen-open {
   display: flex !important;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  padding: 16px;
 }
 .modal.is-active .modal-background {
   position: fixed !important;
@@ -889,12 +1137,29 @@ body.portal-builder-fullscreen-open {
 .modal.is-active .modal-card {
   position: relative;
   margin: 0 auto;
-  max-height: 96vh;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
   width: min(1200px, 96vw);
+  overflow: hidden;
   transform: translate(var(--qt-modal-offset-x, 0px), var(--qt-modal-offset-y, 0px));
 }
-body.modal-open { overflow: hidden; }
-body.publish-editor-open { overflow: hidden; }
+.modal.is-active .modal-card-head,
+.modal.is-active .modal-card-foot {
+  flex: 0 0 auto;
+}
+.modal.is-active .modal-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+html.modal-open,
+html.publish-editor-open,
+body.modal-open,
+body.publish-editor-open {
+  overflow: hidden !important;
+  overscroll-behavior-y: none;
+}
 body.modal-open:not(.publish-editor-open) .page > :not(.modal):not(.publish-editor) {
   pointer-events: none;
   user-select: none;
@@ -923,10 +1188,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   height: calc(100vh - 24px);
   max-height: calc(100vh - 24px);
   transform: none !important;
+  overflow: hidden;
 }
 
 .modal.Qtiler2Origo-modal--fullscreen .modal-card-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -951,10 +1218,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   max-height: 96vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .Qtiler2origo-modal-card > .modal-card-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -970,8 +1239,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   z-index: 1000;
   margin: 0;
   padding: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
   background: rgba(15, 23, 42, 0.45);
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   justify-content: center;
   overflow: hidden;
@@ -980,6 +1253,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 .publish-editor__header,
 .publish-editor__tabs,
 .publish-editor__footer {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1050,6 +1324,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 .publish-editor__body {
   padding: 18px;
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   background: #fff;
 }
@@ -1074,7 +1349,6 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 }
 .publish-editor {
   /* stack header / body / footer vertically inside the overlay */
-  flex-direction: column;
   padding: 24px 0;
 }
 .publish-editor.publish-editor--fullscreen {
@@ -1599,6 +1873,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   min-height: 60vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .Qtiler2Origo-style-modal--fullscreen {
@@ -1610,10 +1885,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   max-width: none;
   min-height: calc(100vh - 24px);
   height: calc(100vh - 24px);
+  max-height: calc(100vh - 24px);
 }
 
 .Qtiler2Origo-style-modal--fullscreen .modal-card-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1794,6 +2071,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   width: min(900px, 94vw);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .Qtiler2Origo-rule-editor-shell {
@@ -1904,6 +2182,10 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   }
 
   .portal-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-social-item {
     grid-template-columns: 1fr;
   }
 
@@ -2158,3 +2440,91 @@ html.is-clipped, html.is-clipped body {
 }
 
 .publish-editor__body, .modal-card-body, .hiw-body { overscroll-behavior: contain; }
+
+/* Added for Portal Tabs */
+.card-box { background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+.tabs.is-boxed ul { border-bottom-color: var(--line); }
+.tabs.is-boxed a { border-color: transparent; } .tabs.is-boxed li.is-active a { background-color: var(--surface); border-color: var(--line); border-bottom-color: transparent !important; color: var(--primary); }
+
+/* Fullscreen Publish Editor Always */
+.publish-editor { background: #fff; padding: 0; width: 100vw; height: 100vh; max-height: 100vh; }
+.publish-editor > .publish-editor__header, .publish-editor > .publish-editor__tabs, .publish-editor > .publish-editor__body, .publish-editor > .publish-editor__footer { width: 100vw; max-width: none; margin: 0; border-radius: 0; }
+
+#publishModalToggleFullscreen { display: none !important; }
+
+/* Fix colored buttons text *//* Add important white text to colored buttons if not ghost or light */
+button.is-primary, button.is-info, button.is-success, button.is-danger, button.is-warning, button.primary, button.info, button.danger, button.success { color: #fff !important; }
+button.is-light, button.ghost, button.is-warning { color: var(--ink) !important; }
+
+/* Fix colored buttons text *//* Add important white text to colored buttons if not ghost or light */
+.button.is-primary, .button.is-info, .button.is-success, .button.is-danger, .button.primary, .button.info, .button.danger, .button.success { color: #fff !important; }
+.button.is-light, .button.ghost, .button.is-warning { color: var(--ink) !important; }
+
+/* Final button contrast fix */
+
+/* Definitive Contrast */
+/* Colored solid buttons */
+.button.is-primary:not(.is-light), .button.is-info:not(.is-light), .button.is-success:not(.is-light), .button.is-danger:not(.is-light), .button.primary:not(.ghost), .button.info:not(.ghost), .button.success:not(.ghost) { color: #fff !important; }
+/* Specific case for Delete/Radera (danger small) */
+.button.danger { color: #fff !important; background: var(--danger) !important; }
+/* Warnings are yellow, so ink text is better */
+.button.is-warning { color: var(--ink) !important; }
+/* Ghost / transparent / light buttons get ink text */
+.button.ghost, .button.is-light, .button.danger.small { color: var(--danger) !important; background: transparent !important; }
+.button.ghost.is-disabled { color: var(--ink) !important; }
+
+.button.danger.small:hover { background: var(--danger) !important; color: #fff !important; }
+
+/* Fix light ghost stuff */
+.button.ghost { color: var(--ink) !important; }
+.button.danger.small { color: var(--danger) !important; }
+
+/* Portal editor uses normal page flow in the main admin; detached/fullscreen
+   modes define their own fixed-height scroll containers above. */
+.tab-panel[data-panel="portal"] {
+  height: auto;
+  flex-direction: column;
+  overflow: visible;
+}
+
+#gPanelPages {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  padding: 0 !important;
+}
+
+.portal-editor {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  flex: none;
+  overflow: visible;
+  height: auto;
+}
+
+.portal-editor__sidebar {
+  overflow-y: visible;
+  border-right: 1px solid var(--line);
+  padding: 16px;
+  position: sticky;
+  top: 20px;
+}
+
+.portal-editor__workspace {
+  overflow-y: visible;
+  padding: 24px;
+}
+
+/* Make inner scroll container for portal Page Editor so tabs stay on top */
+#portalPageEditor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.page-portal-panel {
+  flex: 1;
+}
+
+
+.tab-panel--active[data-panel="portal"] { display: flex !important; }
