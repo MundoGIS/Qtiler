@@ -85,13 +85,13 @@
     .cookie-banner__copy p { margin: 0; color: rgba(255,255,255,0.82); }
     .cookie-banner__actions { display: flex; gap: .65rem; flex-wrap: wrap; }
     .footer-links { display: flex; gap: .85rem; flex-wrap: wrap; align-items: center; }
-    .footer-cookie-settings { background: transparent; border: 1px solid rgba(147,197,253,0.45); color: #93c5fd; border-radius: 999px; padding: .35rem .8rem; cursor: pointer; }
+    .footer-cookie-settings { background: transparent; border: 1px solid color-mix(in srgb, var(--portal-footer-link, #93c5fd) 45%, transparent); color: var(--portal-footer-link, #93c5fd); border-radius: 999px; padding: .35rem .8rem; cursor: pointer; }
     .cookie-modal .box { max-width: 560px; margin: 0 auto; }
     .cookie-preference { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: .9rem 0; border-top: 1px solid #e2e8f0; }
     .cookie-preference:first-of-type { border-top: 0; padding-top: 0; }
     .cookie-preference p { margin: .25rem 0 0; color: #475569; }
-    .qtiler-footer { flex-shrink: 0; background: #1f2933; color: #cbd5e1; padding: 1.25rem 0; margin-top: 2rem; }
-    .qtiler-footer a { color: #93c5fd; }
+    .qtiler-footer { flex-shrink: 0; background: var(--portal-footer-bg, #1f2933); color: var(--portal-footer-text, #cbd5e1); padding: 1.25rem 0; margin-top: 2rem; }
+    .qtiler-footer a { color: var(--portal-footer-link, #93c5fd); }
     .qtiler-footer .footer-inner { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; }
     @media (max-width: 768px) {
       .portal-section--hero .portal-section__body { padding: 1.5rem; }
@@ -159,13 +159,13 @@
     </section>
   </main>
 
-  <footer class="qtiler-footer">
+  <footer id="portal-footer" class="qtiler-footer">
     <div class="container footer-inner">
       <span id="footer-copyright">© <span id="footer-year"></span> Qtiler · MundoGIS</span>
       <span class="footer-links">
         <span id="footer-policy-links"></span>
         <button id="footer-cookie-settings" class="footer-cookie-settings" type="button" hidden>Cookie settings</button>
-        <a href="https://mundogis.se" target="_blank" rel="noopener noreferrer">Qtiler</a>
+        <a id="footer-main-link" href="https://mundogis.se" target="_blank" rel="noopener noreferrer">Qtiler</a>
       </span>
     </div>
   </footer>
@@ -229,7 +229,7 @@
         'qtiler2origo.maps.cancel': 'Cancel',
         'qtiler2origo.maps.open_map': 'Open map',
         'qtiler2origo.maps.no_maps': 'No maps published yet.',
-        'qtiler2origo.maps.no_public_maps': 'No public maps available. Please log in to see private maps.',
+        'qtiler2origo.maps.no_public_maps': 'Sorry, there are no public maps in this section.',
         'qtiler2origo.maps.failed': 'Failed to load maps.',
         'qtiler2origo.maps.login_failed': 'Login failed: ',
         'qtiler2origo.maps.default_desc': 'Interactive map',
@@ -253,7 +253,7 @@
         'qtiler2origo.maps.cancel': 'Cancelar',
         'qtiler2origo.maps.open_map': 'Abrir mapa',
         'qtiler2origo.maps.no_maps': 'Aún no hay mapas publicados.',
-        'qtiler2origo.maps.no_public_maps': 'No hay mapas públicos disponibles. Inicia sesión para ver mapas privados.',
+        'qtiler2origo.maps.no_public_maps': 'Lo sentimos, no hay mapas públicos en esta sección.',
         'qtiler2origo.maps.failed': 'No se pudieron cargar los mapas.',
         'qtiler2origo.maps.login_failed': 'Error al iniciar sesión: ',
         'qtiler2origo.maps.default_desc': 'Mapa interactivo',
@@ -277,7 +277,7 @@
         'qtiler2origo.maps.cancel': 'Avbryt',
         'qtiler2origo.maps.open_map': 'Öppna karta',
         'qtiler2origo.maps.no_maps': 'Inga publicerade kartor ännu.',
-        'qtiler2origo.maps.no_public_maps': 'Inga publika kartor tillgängliga. Logga in för att se privata kartor.',
+        'qtiler2origo.maps.no_public_maps': 'Tyvärr finns det inga publika kartor i den här sektionen.',
         'qtiler2origo.maps.failed': 'Kunde inte ladda kartor.',
         'qtiler2origo.maps.login_failed': 'Inloggning misslyckades: ',
         'qtiler2origo.maps.default_desc': 'Interaktiv karta',
@@ -301,7 +301,7 @@
         'qtiler2origo.maps.cancel': 'Avbryt',
         'qtiler2origo.maps.open_map': 'Åpne kart',
         'qtiler2origo.maps.no_maps': 'Ingen publiserte kart enda.',
-        'qtiler2origo.maps.no_public_maps': 'Ingen offentlige kart tilgjengelig. Logg inn for å se private kart.',
+        'qtiler2origo.maps.no_public_maps': 'Beklager, det finnes ingen offentlige kart i denne seksjonen.',
         'qtiler2origo.maps.failed': 'Kunne ikke laste kart.',
         'qtiler2origo.maps.login_failed': 'Innlogging mislyktes: ',
         'qtiler2origo.maps.default_desc': 'Interaktivt kart',
@@ -319,6 +319,7 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const isSafeCssColor = (value) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || '').trim());
     const cssUrl = (value) => String(value || '').trim().replace(/["'()\\]/g, '');
+    const currentYear = String(new Date().getFullYear());
     const getHeaderFontFamily = (value) => {
       const key = String(value || '').trim().toLowerCase();
       if (key === 'manrope') return '"Manrope", "Segoe UI", sans-serif';
@@ -355,7 +356,7 @@
     syncLangSelector();
 
     /* Footer year */
-    document.getElementById('footer-year').textContent = String(new Date().getFullYear());
+    document.getElementById('footer-year').textContent = currentYear;
 
     /* DOM refs */
     const authBox = document.getElementById('auth-box');
@@ -365,6 +366,27 @@
     const portalHeader = document.getElementById('portal-header');
     const footerPolicyLinks = document.getElementById('footer-policy-links');
     const footerCookieSettings = document.getElementById('footer-cookie-settings');
+    const portalFooter = document.getElementById('portal-footer');
+    const footerCopyright = document.getElementById('footer-copyright');
+    const footerMainLink = document.getElementById('footer-main-link');
+
+    function applyPortalFooter(payload) {
+      const site = payload?.site || {};
+      const footerBg = isSafeCssColor(site.footerBackgroundColor) ? site.footerBackgroundColor : '#1f2933';
+      const footerTextColor = isSafeCssColor(site.footerTextColor) ? site.footerTextColor : '#cbd5e1';
+      const footerLinkColor = isSafeCssColor(site.footerLinkColor) ? site.footerLinkColor : '#93c5fd';
+      if (portalFooter) {
+        portalFooter.style.setProperty('--portal-footer-bg', footerBg);
+        portalFooter.style.setProperty('--portal-footer-text', footerTextColor);
+        portalFooter.style.setProperty('--portal-footer-link', footerLinkColor);
+      }
+      if (footerCopyright) footerCopyright.textContent = String(site.footerText || ('© ' + currentYear + ' Qtiler · MundoGIS')).replace(/\{year\}/g, currentYear);
+      if (footerMainLink) {
+        const linkUrl = String(site.footerLink || 'https://mundogis.se').trim();
+        footerMainLink.href = linkUrl || 'https://mundogis.se';
+        footerMainLink.textContent = String(site.footerLinkLabel || 'Qtiler').trim() || 'Qtiler';
+      }
+    }
     const cookieBanner = document.getElementById('cookie-banner');
     const cookieBannerTitle = document.getElementById('cookie-banner-title');
     const cookieBannerText = document.getElementById('cookie-banner-text');
@@ -510,6 +532,7 @@
 
     function rerenderDynamic() {
       if (lastPayload) {
+        applyPortalFooter(lastPayload);
         renderCookieUi(lastPayload);
         renderAuth(lastPayload);
         renderPortalNav(lastPayload);
@@ -545,6 +568,7 @@
       }
       lastPayload = payload;
       applyPortalHeader(payload?.portal?.currentPage || null, payload);
+      applyPortalFooter(payload);
       renderCookieUi(payload);
       renderAuth(payload);
       renderPortalNav(payload);
@@ -581,10 +605,7 @@
     function renderGrid(payload) {
       const profiles = Array.isArray(payload?.items) ? payload.items : [];
       if (!profiles.length) {
-        const msgKey = payload?.authActive && !payload?.user
-          ? 'qtiler2origo.maps.no_public_maps'
-          : 'qtiler2origo.maps.no_maps';
-        grid.innerHTML = '<div class="notification is-warning has-text-centered">' + escapeHtml(t(msgKey)) + '</div>';
+        grid.innerHTML = '<div class="notification is-warning has-text-centered">' + escapeHtml(t('qtiler2origo.maps.no_public_maps')) + '</div>';
         return;
       }
       const columns = document.createElement('div');

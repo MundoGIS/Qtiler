@@ -1626,6 +1626,12 @@ const portalSiteHeaderColor1 = document.getElementById('portalSiteHeaderColor1')
 const portalSiteHeaderColor2 = document.getElementById('portalSiteHeaderColor2');
 const portalSiteHeaderTextColor = document.getElementById('portalSiteHeaderTextColor');
 const portalSiteHeaderBackgroundUrl = document.getElementById('portalSiteHeaderBackgroundUrl');
+const portalSiteFooterText = document.getElementById('portalSiteFooterText');
+const portalSiteFooterLinkLabel = document.getElementById('portalSiteFooterLinkLabel');
+const portalSiteFooterLink = document.getElementById('portalSiteFooterLink');
+const portalSiteFooterBackgroundColor = document.getElementById('portalSiteFooterBackgroundColor');
+const portalSiteFooterTextColor = document.getElementById('portalSiteFooterTextColor');
+const portalSiteFooterLinkColor = document.getElementById('portalSiteFooterLinkColor');
 const portalGdprCompany = document.getElementById('portalGdprCompany');
 const portalGdprPrivacyUrl = document.getElementById('portalGdprPrivacyUrl');
 const portalGdprCookieUrl = document.getElementById('portalGdprCookieUrl');
@@ -3969,6 +3975,12 @@ function renderPortalEditor() {
   setIfNotActive(portalSiteHeaderColor2, site.headerColor2 || '#2563eb');
   setIfNotActive(portalSiteHeaderTextColor, site.headerTextColor || '#ffffff');
   setIfNotActive(portalSiteHeaderBackgroundUrl, site.headerBackgroundUrl || '');
+  setIfNotActive(portalSiteFooterText, site.footerText || '');
+  setIfNotActive(portalSiteFooterLinkLabel, site.footerLinkLabel || '');
+  setIfNotActive(portalSiteFooterLink, site.footerLink || '');
+  setIfNotActive(portalSiteFooterBackgroundColor, site.footerBackgroundColor || '#1f2933');
+  setIfNotActive(portalSiteFooterTextColor, site.footerTextColor || '#cbd5e1');
+  setIfNotActive(portalSiteFooterLinkColor, site.footerLinkColor || '#93c5fd');
 
   const gdpr = portalPagesState?.gdpr || {};
   if (portalGdprEnabled) portalGdprEnabled.checked = gdpr.enabled === true;
@@ -5700,6 +5712,12 @@ portalSiteHeaderColor1?.addEventListener('input', () => updatePortalSiteField('h
 portalSiteHeaderColor2?.addEventListener('input', () => updatePortalSiteField('headerColor2', portalSiteHeaderColor2.value));
 portalSiteHeaderTextColor?.addEventListener('input', () => updatePortalSiteField('headerTextColor', portalSiteHeaderTextColor.value));
 portalSiteHeaderBackgroundUrl?.addEventListener('input', () => updatePortalSiteField('headerBackgroundUrl', portalSiteHeaderBackgroundUrl.value));
+portalSiteFooterText?.addEventListener('input', () => updatePortalSiteField('footerText', portalSiteFooterText.value));
+portalSiteFooterLinkLabel?.addEventListener('input', () => updatePortalSiteField('footerLinkLabel', portalSiteFooterLinkLabel.value));
+portalSiteFooterLink?.addEventListener('input', () => updatePortalSiteField('footerLink', portalSiteFooterLink.value));
+portalSiteFooterBackgroundColor?.addEventListener('input', () => updatePortalSiteField('footerBackgroundColor', portalSiteFooterBackgroundColor.value));
+portalSiteFooterTextColor?.addEventListener('input', () => updatePortalSiteField('footerTextColor', portalSiteFooterTextColor.value));
+portalSiteFooterLinkColor?.addEventListener('input', () => updatePortalSiteField('footerLinkColor', portalSiteFooterLinkColor.value));
 
 [portalGdprCompany, portalGdprPrivacyUrl, portalGdprCookieUrl, portalGdprContactUrl, portalGdprTitle, portalGdprText]
   .filter(Boolean)

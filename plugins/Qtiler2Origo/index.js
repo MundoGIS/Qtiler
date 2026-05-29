@@ -1020,7 +1020,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const defaultPortalPagesState = () => ({
     homePageSlug: '',
     gdpr: defaultPortalGdprSettings(),
-    site: { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerLink: '', footerText: '' },
+    site: { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
     pages: []
   });
 
@@ -1171,9 +1171,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         headerColor2: String(source.site.headerColor2 || '').trim(),
         headerTextColor: String(source.site.headerTextColor || '').trim(),
         headerBackgroundUrl: String(source.site.headerBackgroundUrl || '').trim(),
+        footerText: String(source.site.footerText || '').trim(),
+        footerLinkLabel: String(source.site.footerLinkLabel || '').trim(),
         footerLink: String(source.site.footerLink || '').trim(),
-        footerText: String(source.site.footerText || '').trim()
-      } : { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerLink: '', footerText: '' },
+        footerBackgroundColor: String(source.site.footerBackgroundColor || '').trim(),
+        footerTextColor: String(source.site.footerTextColor || '').trim(),
+        footerLinkColor: String(source.site.footerLinkColor || '').trim()
+      } : { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
       pages: dedupedPages
     };
   };
