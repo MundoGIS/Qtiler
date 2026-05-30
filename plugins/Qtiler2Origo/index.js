@@ -2331,7 +2331,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
         return null;
       })();
-      return l?.editable === true || l?.serveAsWfs === true || cfgFlags?.wfsEditable === true;
+      return shouldUseWfsForPublishedLayer(l, cfgFlags?.wfsEditable === true);
     });
     if (wfsLayers.length > 0) {
       // Primary WFS endpoint used by some QWC2 plugins
@@ -2610,6 +2610,36 @@ ${mapIcon}
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
   app.use(`/plugins/${pluginSlug}/client`, express.static(clientDir));
+  app.get(`/plugins/${pluginSlug}/published/thumbs/:fileName`, async (req, res, next) => {
+    try {
+      const fileName = String(req.params?.fileName || '').trim();
+      if (!fileName || !/\.jpg$/i.test(fileName)) return next();
+      const profileKey = sanitizeFileToken(fileName.replace(/\.jpg$/i, ''));
+      if (!profileKey) return next();
+
+      const existing = await readPublishedThumbnailMeta(profileKey);
+      if (existing?.filePath) return res.sendFile(existing.filePath);
+
+      const record = await resolvePublishedProfileRecord(profileKey);
+      if (!record?.profile || !record?.profileKey) return next();
+
+      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
+      const regenerated = await regeneratePublishedThumbnail({
+        profileKey: record.profileKey,
+        profile: record.profile,
+        baseUrl,
+        cookieHeader: req.headers.cookie,
+        apiKey: getRequestApiKey(req),
+        authorization: req.get?.('authorization') || '',
+        clearCaches: false
+      }).catch(() => null);
+
+      if (regenerated?.filePath) return res.sendFile(regenerated.filePath);
+      return next();
+    } catch {
+      return next();
+    }
+  });
   app.use(`/plugins/${pluginSlug}/published`, express.static(publishedRoot, { index: false }));
   // Serve dynamic, sanitized config/themes for the plugin-local QWC2 path so
   // the admin UI and local links always receive runtime-built configs.
@@ -3038,6 +3068,29 @@ ${mapIcon}
     } catch { return style; }
   };
 
+  const normalizeInfoclickAttributes = (attrs) => {
+    return (Array.isArray(attrs) ? attrs : [])
+      .map((attr) => {
+        if (!attr || typeof attr !== 'object') return null;
+        const name = String(attr.name || '').trim();
+        if (!name) return null;
+        const rawTitle = attr.title == null ? '' : String(attr.title);
+        return {
+          ...attr,
+          name,
+          title: rawTitle.trim() ? rawTitle : `${name}: `
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const shouldUseWfsForPublishedLayer = (layerLike, fallbackEditable = false) => {
+    if (!layerLike || typeof layerLike !== 'object') return fallbackEditable === true;
+    if (layerLike.serveAsWfs === true) return true;
+    if (layerLike.serveAsWfs === false) return false;
+    return layerLike.editable === true || fallbackEditable === true;
+  };
+
   // Fetch WFS DescribeFeatureType and parse attributes, geometry column and
   // target namespace. Mirrors what Qrigo does on the client so Origo's editor
   // has everything it needs: attributes (filterable list), geometryName (used
@@ -3241,7 +3294,7 @@ ${mapIcon}
     for (const layer of mainLayers) {
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
       const cachedLayers = await getCachedLayersForProject(srcProjId);
-      if (layer.serveAsWfs === true || layer.editable === true) {
+      if (shouldUseWfsForPublishedLayer(layer)) {
         // Fetch real WFS meta (attributes + geometryName + featureNS) so the
         // Origo editor can finishDrawing without crashing on undefined.filter
         // and so WFS-T POSTs target the right namespace/geometry column.
@@ -3284,8 +3337,8 @@ ${mapIcon}
         // with `Cannot read properties of undefined (reading 'reduce')`.
         // Always provide at least one attribute so the editor can open.
         let resolvedAttrs = (Array.isArray(layer.attributes) && layer.attributes.length)
-          ? layer.attributes
-          : (Array.isArray(wfsMeta.attributes) ? wfsMeta.attributes : []);
+          ? normalizeInfoclickAttributes(layer.attributes)
+          : normalizeInfoclickAttributes(Array.isArray(wfsMeta.attributes) ? wfsMeta.attributes : []);
         if (!resolvedAttrs.length) {
           resolvedAttrs = [{ name: 'fid', title: 'fid', type: 'text' }];
         }
@@ -3295,9 +3348,9 @@ ${mapIcon}
         {
           const VALID_ORIGO_ATTR_TYPES = new Set([
             'text', 'textarea', 'number', 'decimal', 'date', 'datetime',
-            'checkbox', 'url', 'email', 'color', 'image', 'hidden', 'searchList'
+            'checkbox', 'url', 'email', 'color', 'image', 'hidden', 'dropdown', 'searchList'
           ]);
-          const TYPE_ALIASES = { dropdown: 'searchList', integer: 'number', int: 'number', float: 'decimal', bool: 'checkbox', boolean: 'checkbox' };
+          const TYPE_ALIASES = { integer: 'number', int: 'number', float: 'decimal', bool: 'checkbox', boolean: 'checkbox' };
           const wfsMetaByName = Object.fromEntries(
             (wfsMeta.attributes || []).map(a => [a.name, a])
           );
@@ -3348,6 +3401,7 @@ ${mapIcon}
           group: String(layer.group || 'root'),
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
+          renderMode: 'image',
           queryable: true,
           visible: layer.visible !== false,
           style: thumbStyleName,
@@ -3426,6 +3480,7 @@ ${mapIcon}
             group: 'background',
             source: bgSrcKey || mainSourceKey,
             type: 'WMS',
+            renderMode: 'image',
             queryable: false,
             visible: !!bg.isDefault,
             style: bgThumbUrl ? bgStyleName : undefined,
@@ -4013,7 +4068,7 @@ ${mapIcon}
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
         : ((previewLayerRules[layerName] && typeof previewLayerRules[layerName] === 'object') ? previewLayerRules[layerName] : {});
-      const useWfs = rule?.serveAsWfs === true || rule?.editable === true;
+      const useWfs = shouldUseWfsForPublishedLayer(rule);
       if (useWfs) {
         const wfsMeta = await fetchWfsLayerMeta(baseUrl, sourceProjectId, layerName);
         const wfsSourceKey = ensurePreviewWfsSource(sourceProjectId, projCode);
@@ -4037,8 +4092,8 @@ ${mapIcon}
           previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
         }
         let resolvedAttrs = (Array.isArray(rule?.attributes) && rule.attributes.length)
-          ? rule.attributes
-          : (Array.isArray(wfsMeta?.attributes) ? wfsMeta.attributes : []);
+          ? normalizeInfoclickAttributes(rule.attributes)
+          : normalizeInfoclickAttributes(Array.isArray(wfsMeta?.attributes) ? wfsMeta.attributes : []);
         if (!resolvedAttrs.length) resolvedAttrs = [{ name: 'fid', title: 'fid', type: 'text' }];
         const wfsDef = {
           name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
@@ -4072,6 +4127,7 @@ ${mapIcon}
         group: String(layerSpec.group || 'root').trim() || 'root',
         source: ensurePreviewWmsSource(sourceProjectId),
         type: 'WMS',
+        renderMode: 'image',
         format: 'image/png',
         transparent: true,
         queryable: false,
@@ -4115,6 +4171,7 @@ ${mapIcon}
         group: 'background',
         source: ensurePreviewWmsSource(bgProject),
         type: 'WMS',
+        renderMode: 'image',
         format: 'image/png',
         transparent: false,
         queryable: false,
@@ -5050,7 +5107,7 @@ ${mapIcon}
         // them, and so buildOrigoIndexConfig can apply them as the popup
         // attribute filter for both WFS and WMS layers.
         if (Array.isArray(rule.attributes) && rule.attributes.length) {
-          out.attributes = rule.attributes
+          out.attributes = normalizeInfoclickAttributes(rule.attributes)
             .map((a) => (a && typeof a === 'object') ? {
               name: String(a.name || '').trim(),
               ...(a.type ? { type: String(a.type) } : {}),

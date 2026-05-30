@@ -954,7 +954,12 @@
               <section class="Qtiler2Origo-style-panel" data-style-panel="attributes" hidden>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap">
                   <div style="font-weight:600" data-i18n="Qtiler2Origo.wfs_attrs_header">Atributos del Popup (Infoclick)</div>
-                  <button type="button" class="button small is-primary" id="wfs-attributes-add" data-i18n="Qtiler2Origo.wfs_add_attr">+ Añadir atributo</button>
+                  <div style="display:flex;gap:0.4rem">
+                    <select id="wfs-attributes-copy-select" class="select small">
+                      <option value="" data-i18n="Qtiler2Origo.wfs_copy_attrs">-- Copiar atributos de capa --</option>
+                    </select>
+                    <button type="button" class="button small is-primary" id="wfs-attributes-add" data-i18n="Qtiler2Origo.wfs_add_attr">+ Añadir atributo</button>
+                  </div>
                 </div>
                 <div id="wfs-attributes-container" style="display:flex;flex-direction:column;gap:0.6rem;max-height:520px;overflow:auto"></div>
                 <p class="help" data-i18n="Qtiler2Origo.wfs_attrs_help">Define los atributos a mostrar. Si no llenas nada, se muestran todos.</p>

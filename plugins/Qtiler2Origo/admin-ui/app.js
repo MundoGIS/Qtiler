@@ -353,6 +353,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_save': 'Save style',
     'Qtiler2Origo.wfs_rules_header': 'Rules and filters',
     'Qtiler2Origo.wfs_copy_rules': '-- Copy rules from layer --',
+    'Qtiler2Origo.wfs_copy_attrs': '-- Copy attributes from layer --',
     'Qtiler2Origo.wfs_add_rule': '+ Add rule',
     'Qtiler2Origo.wfs_rules_help': 'Each rule is evaluated in order. For a default style, leave the filter empty in the last one.',
     'Qtiler2Origo.wfs_attrs_header': 'Popup attributes (Infoclick)',
@@ -429,6 +430,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_dashed': 'Dashed',
     'Qtiler2Origo.wfs_dotted': 'Dotted',
     'Qtiler2Origo.wfs_dashdot': 'Dash-dot',
+    'Qtiler2Origo.wfs_legend_label': 'Legend label',
     'Qtiler2Origo.wfs_visible_from': 'Visible from scale 1:',
     'Qtiler2Origo.wfs_visible_to': 'Visible up to scale 1:',
     'Qtiler2Origo.wfs_visible_from_tip': 'Minimum scale at which this symbol is visible (denominator, e.g. 1000)',
@@ -880,6 +882,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_save': 'Guardar estilo',
     'Qtiler2Origo.wfs_rules_header': 'Reglas y filtros',
     'Qtiler2Origo.wfs_copy_rules': '-- Copiar reglas de capa --',
+    'Qtiler2Origo.wfs_copy_attrs': '-- Copiar atributos de capa --',
     'Qtiler2Origo.wfs_add_rule': '+ Añadir regla',
     'Qtiler2Origo.wfs_rules_help': 'Cada regla se evalúa por orden. Si quieres una "por defecto", deja el filtro vacío en la última.',
     'Qtiler2Origo.wfs_attrs_header': 'Atributos del Popup (Infoclick)',
@@ -956,6 +959,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_dashed': 'Discontinua',
     'Qtiler2Origo.wfs_dotted': 'Punteada',
     'Qtiler2Origo.wfs_dashdot': 'Punto y raya',
+    'Qtiler2Origo.wfs_legend_label': 'Etiqueta de leyenda',
     'Qtiler2Origo.wfs_visible_from': 'Visible desde escala 1:',
     'Qtiler2Origo.wfs_visible_to': 'Visible hasta escala 1:',
     'Qtiler2Origo.wfs_visible_from_tip': 'Escala mínima a la que se ve este símbolo (denominador, ej: 1000)',
@@ -1407,6 +1411,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_save': 'Spara stil',
     'Qtiler2Origo.wfs_rules_header': 'Regler och filter',
     'Qtiler2Origo.wfs_copy_rules': '-- Kopiera regler från lager --',
+    'Qtiler2Origo.wfs_copy_attrs': '-- Kopiera attribut från lager --',
     'Qtiler2Origo.wfs_add_rule': '+ Lägg till regel',
     'Qtiler2Origo.wfs_rules_help': 'Varje regel utvärderas i ordning. För en standardstil, lämna filtret tomt i den sista.',
     'Qtiler2Origo.wfs_attrs_header': 'Popup-attribut (Infoclick)',
@@ -1483,6 +1488,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_dashed': 'Streckad',
     'Qtiler2Origo.wfs_dotted': 'Prickad',
     'Qtiler2Origo.wfs_dashdot': 'Streck-prick',
+    'Qtiler2Origo.wfs_legend_label': 'Legendetikett',
     'Qtiler2Origo.wfs_visible_from': 'Synlig från skala 1:',
     'Qtiler2Origo.wfs_visible_to': 'Synlig upp till skala 1:',
     'Qtiler2Origo.wfs_visible_from_tip': 'Minsta skala där symbolen syns (nämnare, t.ex. 1000)',
@@ -3277,7 +3283,7 @@ function buildCurrentWfsLayerConfig() {
       ? rulesToOrigoStyle(currentRules)
       : (ruleObj.wfsStyle || null),
     attributes: Array.isArray(currentAttributes) && currentAttributes.length
-      ? JSON.parse(JSON.stringify(currentAttributes))
+      ? normalizeAttributesList(currentAttributes)
       : (Array.isArray(ruleObj.attributes) ? ruleObj.attributes : [])
   };
 }
@@ -3296,7 +3302,7 @@ function applyWfsLayerJsonConfig(parsed) {
   if (typeof fullCfg.serveAsWfs === 'boolean') publishState.mainRules[layerName].serveAsWfs = fullCfg.serveAsWfs;
   if (fullCfg.geometryType) publishState.mainRules[layerName].geometryType = String(fullCfg.geometryType);
   currentAttributes = Array.isArray(fullCfg.attributes)
-    ? JSON.parse(JSON.stringify(fullCfg.attributes))
+    ? normalizeAttributesList(fullCfg.attributes)
     : [];
   renderAttributesPanel();
   applyStyleDefinitionToDesigner(styleObj, geometryType);
@@ -7119,8 +7125,9 @@ function openStyleEditor(layerName) {
   populateStyleCopySelect(layerName);
 
   const existingRules = publishState.mainRules[layerName] || {};
-  currentAttributes = existingRules.attributes || [];
+  currentAttributes = normalizeAttributesList(existingRules.attributes || []);
   renderAttributesPanel();
+  populateAttributesCopySelect(layerName);
   const existingStyle = existingRules.wfsStyle || defaultStyleDefinition(geometryType);
   applyStyleDefinitionToDesigner(existingStyle, geometryType);
   applyDesignerPatternOptions(existingRules?.designerOptions || { fillPattern: 'solid' });
@@ -7373,6 +7380,32 @@ let currentLayerGeomFamily = 'point'; // point|line|polygon
 let svgLibraryCache = null;
 let svgPickerTargetCb = null;
 
+function getDefaultAttributeTitle(name) {
+  const normalizedName = String(name || '').trim();
+  return normalizedName ? `${normalizedName}: ` : '';
+}
+
+function normalizeAttributeDefinition(attr) {
+  if (!attr || typeof attr !== 'object') return null;
+  const name = String(attr.name || '').trim();
+  if (!name) return null;
+  const rawTitle = attr.title == null ? '' : String(attr.title);
+  return {
+    name,
+    title: rawTitle.trim() ? rawTitle : getDefaultAttributeTitle(name),
+    ...(attr.type ? { type: String(attr.type) } : {}),
+    ...(attr.url ? { url: String(attr.url) } : {}),
+    ...(typeof attr.maxLength === 'number' && Number.isFinite(attr.maxLength) ? { maxLength: attr.maxLength } : {}),
+    ...(Array.isArray(attr.options) ? { options: attr.options.map((item) => String(item).trim()).filter(Boolean) } : {})
+  };
+}
+
+function normalizeAttributesList(list) {
+  return Array.isArray(list)
+    ? list.map(normalizeAttributeDefinition).filter(Boolean)
+    : [];
+}
+
 // Extract unique values for a given attribute name from the current style rules.
 // Looks for equality filters: [attrName] == 'value' or [attrName] == value.
 // Returns the detected values in the order they appear in the rules.
@@ -7431,6 +7464,7 @@ function extractDropdownOptionsFromRules(attrName) {
 
 const attributesContainer = document.getElementById('wfs-attributes-container');
 const attributesAddBtn = document.getElementById('wfs-attributes-add');
+const attributesCopySelect = document.getElementById('wfs-attributes-copy-select');
 
 function renderAttributesPanel() {
   if (!attributesContainer) return;
@@ -7473,12 +7507,37 @@ function renderAttributesPanel() {
   });
 }
 
+function populateAttributesCopySelect(currentLayer) {
+  if (!attributesCopySelect) return;
+  attributesCopySelect.innerHTML = `<option value="">${t('Qtiler2Origo.wfs_copy_attrs')}</option>`;
+  for (const layer of getAllPublishLayers()) {
+    const layerKey = getLayerKey(layer);
+    if (!layerKey || layerKey === currentLayer) continue;
+    const attrs = normalizeAttributesList(publishState.mainRules?.[layerKey]?.attributes);
+    if (!attrs.length) continue;
+    const opt = document.createElement('option');
+    opt.value = layerKey;
+    opt.textContent = layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim()
+      ? `${layer.name} [${layer.sourceProjectId}]`
+      : layer.name;
+    attributesCopySelect.appendChild(opt);
+  }
+}
+
 if (attributesAddBtn) {
   attributesAddBtn.addEventListener('click', () => {
     currentAttributes.push({ name: '', title: '', type: 'text', url: '' });
     renderAttributesPanel();
   });
 }
+
+attributesCopySelect?.addEventListener('change', () => {
+  const src = String(attributesCopySelect.value || '').trim();
+  if (!src) return;
+  currentAttributes = normalizeAttributesList(publishState.mainRules?.[src]?.attributes || []);
+  renderAttributesPanel();
+  attributesCopySelect.value = '';
+});
 
 if (attributesContainer) {
   const updateAttr = (e) => {
@@ -7499,6 +7558,9 @@ if (attributesContainer) {
         const detected = (currentLayerFields || []).find(f => f.name === val);
         if (detected?.type && !currentAttributes[idx].type) {
           currentAttributes[idx].type = detected.type;
+        }
+        if (!String(currentAttributes[idx].title || '').trim()) {
+          currentAttributes[idx].title = getDefaultAttributeTitle(val);
         }
       }
     }
@@ -7681,6 +7743,7 @@ enableManagedModal(svgPickerModal);
 function defaultRule(geomFamily) {
   const r = {
     filter: '',
+    legendLabel: '',
     minScale: '',
     maxScale: '',
     label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '' },
@@ -7773,6 +7836,7 @@ function rulesToOrigoStyle(rules) {
     const entries = [];
     const geomEntry = {};
     if (r.filter) geomEntry.filter = r.filter;
+    if (String(r.legendLabel || '').trim()) geomEntry.legendLabel = String(r.legendLabel).trim();
     if (currentLayerGeomFamily === 'point') {
       if (r.point && r.point.mode === 'icon' && r.point.icon && r.point.icon.src) {
         geomEntry.icon = {
@@ -7860,6 +7924,7 @@ function origoStyleToRules(styleDef) {
     }
     const def = geomEntry || entries[0];
     if (def && def.filter) r.filter = def.filter;
+    if (def && def.legendLabel != null) r.legendLabel = String(def.legendLabel).trim();
     if (def) {
       if (def.maxScale != null) r.maxScale = def.maxScale;
       if (def.minScale != null) r.minScale = def.minScale;
@@ -8069,6 +8134,9 @@ function buildRuleEditorMarkup(rule, idx) {
 
       <fieldset>
         <legend>${T('wfs_symbol')}</legend>
+        <div style="margin-bottom:10px">
+          <label>${T('wfs_legend_label')}<input type="text" data-rk="legendLabel" value="${escapeHtml(rule.legendLabel || '')}" placeholder="${T('wfs_rule_default')}" /></label>
+        </div>
         <div style="display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;margin-bottom:10px">
           <div class="Qtiler2Origo-rule-summary__sample">${rulePreviewSampleSvg(rule, currentLayerGeomFamily || 'polygon')}</div>
           <div class="help" style="margin:0">${T('wfs_edit_visual_style')}</div>
@@ -8181,6 +8249,7 @@ function ruleCard(rule, idx) {
   const filterText = rule.filter || T('wfs_rule_default');
   const labelText = rule.label && rule.label.enabled && rule.label.text ? rule.label.text : '';
   const chips = [];
+  if (String(rule.legendLabel || '').trim()) chips.push(`${T('wfs_legend_label')}: ${rule.legendLabel}`);
   if (rule.maxScale || rule.minScale) chips.push(`${T('wfs_visible_from')} ${rule.maxScale || T('wfs_no_limit')} / ${T('wfs_visible_to')} ${rule.minScale || T('wfs_no_limit')}`);
   if (labelText) chips.push(`${T('wfs_label')}: ${labelText}`);
   card.innerHTML = `
@@ -8246,6 +8315,11 @@ function updateRuleField(idx, key, value) {
   }
   if (key === 'edit') {
     openRuleStyleEditor(idx);
+    return;
+  }
+  if (key === 'legendLabel') {
+    r.legendLabel = String(value || '');
+    afterRuleChange();
     return;
   }
   if (key === 'stylebasic') {
@@ -8454,12 +8528,16 @@ function renderRulesPreviewGallery() {
   const html = currentRules.map((rule, i) => {
     const filterTxt = rule.filter ? rule.filter : '<em>(por defecto)</em>';
     const labelTxt = rule.label && rule.label.enabled && rule.label.text ? `${escapeHtml(t('Qtiler2Origo.wfs_label'))}: <code>${rule.label.text.replace(/</g,'&lt;')}</code>` : '';
+    const legendTxt = String(rule.legendLabel || '').trim()
+      ? `${escapeHtml(t('Qtiler2Origo.wfs_legend_label'))}: <code>${escapeHtml(rule.legendLabel)}</code>`
+      : '';
     const svg = rulePreviewSampleSvg(rule, fam);
     return `<div class="sample-row">
       <div class="sample-svg">${svg}</div>
       <div class="sample-meta">
         <strong>${escapeHtml(t('Qtiler2Origo.wfs_rule'))} ${i + 1} <span style="color:#789;font-weight:normal">(${famLabel})</span></strong>
         <code>${filterTxt}</code>
+        ${legendTxt ? `<code>${legendTxt}</code>` : ''}
         ${labelTxt ? `<code>${labelTxt}</code>` : ''}
       </div>
     </div>`;
@@ -8555,6 +8633,7 @@ saveStyleEditor = function() {
       const convertedRule = (origoStyleToRules(styleObj) || [defaultRule(currentLayerGeomFamily)])[0] || defaultRule(currentLayerGeomFamily);
       const previousRule = currentRules[currentDesignerRuleIndex] || defaultRule(currentLayerGeomFamily);
       convertedRule.filter = previousRule.filter;
+      convertedRule.legendLabel = previousRule.legendLabel;
       convertedRule.maxScale = previousRule.maxScale;
       convertedRule.minScale = previousRule.minScale;
       convertedRule.label = JSON.parse(JSON.stringify(previousRule.label || defaultRule(currentLayerGeomFamily).label));
@@ -8589,6 +8668,7 @@ saveStyleEditor = function() {
       if (parsed.editable !== undefined) r.editable = !!parsed.editable;
       if (parsed.serveAsWfs !== undefined) r.serveAsWfs = !!parsed.serveAsWfs;
       if (parsed.geometryType) r.geometryType = parsed.geometryType;
+      if (parsed.attributes !== undefined) r.attributes = normalizeAttributesList(parsed.attributes);
       const checkedNames = getCheckedLayerNames(projectLayersList);
       closeStyleEditor();
       renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
@@ -8599,13 +8679,15 @@ saveStyleEditor = function() {
     }
     return;
   }
-  if (activeRules) {
+  const activeAttributes = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'attributes' && !p.hidden);
+  if (activeRules || activeAttributes) {
     const styleObj = rulesToOrigoStyle(currentRules);
     if (!publishState.mainRules[layerName]) {
       publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: true };
     }
     publishState.mainRules[layerName].serveAsWfs = true;
     publishState.mainRules[layerName].wfsStyle = styleObj;
+    publishState.mainRules[layerName].attributes = normalizeAttributesList(currentAttributes);
     publishState.mainRules[layerName].geometryType = getLayerGeometryType(layerName) || null;
     const checkedNames = getCheckedLayerNames(projectLayersList);
     closeStyleEditor();
