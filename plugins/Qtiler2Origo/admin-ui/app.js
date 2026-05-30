@@ -4816,15 +4816,28 @@ function ensureExtraSections() {
     groupsSection.querySelector('#Qtiler2OrigoGroupsList')
       .addEventListener('input', (ev) => {
         const target = ev.target;
-        const idx = Number(target.getAttribute('data-group-idx'));
-        if (!Number.isInteger(idx) || !publishState.groups[idx]) return;
-        const field = target.getAttribute('data-group-field');
-        if (!field) return;
-        publishState.groups[idx][field] = String(target.value || '').trim();
-        if (field === 'name' || field === 'parent') renderLayerAssignments();
+        if (!(target instanceof HTMLInputElement) || target.type === 'checkbox') return;
+        if (target.getAttribute('data-group-field') !== 'title') return;
+        updateGroupFieldFromElement(target);
+      });
+    groupsSection.querySelector('#Qtiler2OrigoGroupsList')
+      .addEventListener('change', (ev) => {
+        const target = ev.target;
+        if (!updateGroupFieldFromElement(target)) return;
+        renderGroupsManager();
+        renderLayerAssignments();
       });
     groupsSection.querySelector('#Qtiler2OrigoGroupsList')
       .addEventListener('click', (ev) => {
+        const moveBtn = ev.target.closest('[data-move-group]');
+        if (moveBtn) {
+          const idx = Number(moveBtn.getAttribute('data-group-idx'));
+          const direction = moveBtn.getAttribute('data-move-group') === 'up' ? -1 : 1;
+          movePublishGroup(idx, direction);
+          renderGroupsManager();
+          renderLayerAssignments();
+          return;
+        }
         const btn = ev.target.closest('[data-remove-group]');
         if (!btn) return;
         const idx = Number(btn.getAttribute('data-remove-group'));
@@ -5134,6 +5147,80 @@ function getGroupOptionsHtml(selected) {
   }).join('');
 }
 
+function renameGroupReferences(oldName, newName) {
+  const prev = String(oldName || '').trim();
+  const next = String(newName || '').trim();
+  if (!prev || prev === next) return;
+  Object.keys(publishState.layerGroups || {}).forEach((layerKey) => {
+    if (publishState.layerGroups[layerKey] === prev) {
+      publishState.layerGroups[layerKey] = next || 'root';
+    }
+  });
+  (publishState.groups || []).forEach((group) => {
+    if (String(group?.parent || '').trim() === prev) {
+      group.parent = next || '';
+    }
+  });
+}
+
+function getGroupDescendantNames(groupName) {
+  const root = String(groupName || '').trim();
+  if (!root) return new Set();
+  const descendants = new Set();
+  const visit = (parentName) => {
+    (publishState.groups || []).forEach((group) => {
+      const name = String(group?.name || '').trim();
+      const parent = String(group?.parent || '').trim();
+      if (!name || descendants.has(name) || parent !== parentName) return;
+      descendants.add(name);
+      visit(name);
+    });
+  };
+  visit(root);
+  return descendants;
+}
+
+function movePublishGroup(fromIndex, direction) {
+  const from = Number(fromIndex);
+  const to = from + Number(direction);
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+  if (from < 0 || to < 0 || from >= publishState.groups.length || to >= publishState.groups.length) return;
+  const [moved] = publishState.groups.splice(from, 1);
+  publishState.groups.splice(to, 0, moved);
+}
+
+function updateGroupFieldFromElement(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  const idx = Number(target.getAttribute('data-group-idx'));
+  if (!Number.isInteger(idx) || !publishState.groups[idx]) return false;
+  const field = target.getAttribute('data-group-field');
+  if (!field) return false;
+  const group = publishState.groups[idx];
+  if (field === 'expanded' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+    group.expanded = target.checked;
+    return true;
+  }
+  const rawValue = String((target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) ? target.value : '').trim();
+  if (field === 'name') {
+    const oldName = String(group.name || '').trim();
+    group.name = rawValue;
+    renameGroupReferences(oldName, rawValue);
+    return true;
+  }
+  if (field === 'parent') {
+    const groupName = String(group.name || '').trim();
+    const blockedParents = getGroupDescendantNames(groupName);
+    if (rawValue === groupName || blockedParents.has(rawValue)) {
+      group.parent = '';
+      return true;
+    }
+    group.parent = rawValue;
+    return true;
+  }
+  group[field] = rawValue;
+  return true;
+}
+
 function renderGroupsManager() {
   const list = document.getElementById('Qtiler2OrigoGroupsList');
   if (!list) return;
@@ -5142,15 +5229,25 @@ function renderGroupsManager() {
     return;
   }
   list.innerHTML = publishState.groups.map((g, idx) => {
+    const groupName = String(g?.name || '').trim();
+    const blockedParents = getGroupDescendantNames(groupName);
     const parentOpts = [`<option value="">${escapeHtml(t('Qtiler2Origo.pub_no_parent'))}</option>`]
       .concat(publishState.groups
-        .filter((gg, j) => j !== idx && gg.name)
+        .filter((gg, j) => j !== idx && gg.name && !blockedParents.has(String(gg.name || '').trim()))
         .map((gg) => `<option value="${escapeHtml(gg.name)}" ${gg.name === g.parent ? 'selected' : ''}>${escapeHtml(gg.title || gg.name)}</option>`))
       .join('');
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center">
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === publishState.groups.length - 1 ? 'disabled' : '';
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto auto auto;gap:6px;margin-bottom:6px;align-items:center">
       <input class="input is-small" data-group-idx="${idx}" data-group-field="name" value="${escapeHtml(g.name || '')}" placeholder="${escapeHtml(t('Qtiler2Origo.pub_group_name_ph'))}" />
       <input class="input is-small" data-group-idx="${idx}" data-group-field="title" value="${escapeHtml(g.title || '')}" placeholder="${escapeHtml(t('Qtiler2Origo.pub_group_title_ph'))}" />
       <select class="input is-small" data-group-idx="${idx}" data-group-field="parent">${parentOpts}</select>
+      <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px">
+        <input type="checkbox" data-group-idx="${idx}" data-group-field="expanded" ${g.expanded !== false ? 'checked' : ''} />
+        ${escapeHtml(t('Qtiler2Origo.opt_expanded'))}
+      </label>
+      <button type="button" class="button is-small is-light" data-move-group="up" data-group-idx="${idx}" title="${escapeHtml(t('Qtiler2Origo.wfs_move_up'))}" ${upDisabled}>▲</button>
+      <button type="button" class="button is-small is-light" data-move-group="down" data-group-idx="${idx}" title="${escapeHtml(t('Qtiler2Origo.wfs_move_down'))}" ${downDisabled}>▼</button>
       <button type="button" class="button is-small is-danger is-light" data-remove-group="${idx}">×</button>
     </div>`;
   }).join('');

@@ -80,6 +80,24 @@ const wfsExceptionXml = (message, { code = 'NoApplicableCode' } = {}) => {
   );
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isQueueFullCode = (code) => String(code || '').trim().toLowerCase() === 'queue_full';
+
+const renderTileWithQueueRetry = async (tileRendererPool, params, { attempts = 3, baseDelayMs = 75 } = {}) => {
+  let lastErr;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await tileRendererPool.renderTile(params);
+    } catch (err) {
+      lastErr = err;
+      if (!isQueueFullCode(err?.code) || attempt >= attempts - 1) throw err;
+      await sleep(baseDelayMs * (attempt + 1));
+    }
+  }
+  throw lastErr;
+};
+
 const escXml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -202,6 +220,7 @@ const httpStatusForWorkerCode = (code) => {
   if (c === 'missingparametervalue') return 400;
   if (c === 'invalidparametervalue') return 400;
   if (c === 'operationnotsupported') return 400;
+  if (c === 'queue_full') return 503;
   return 500;
 };
 
@@ -212,6 +231,12 @@ const owsCodeForWorkerCode = (code) => {
   if (c === 'invalidparametervalue') return 'InvalidParameterValue';
   if (c === 'operationnotsupported') return 'OperationNotSupported';
   return 'NoApplicableCode';
+};
+
+const applyRetryAfterHeader = (res, status) => {
+  if (status === 503 && res && !res.headersSent) {
+    res.setHeader('Retry-After', '1');
+  }
 };
 
 export const registerWfsRoutes = ({
@@ -498,7 +523,7 @@ export const registerWfsRoutes = ({
     try {
       tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-tx-'));
       const outFile = path.join(tmpDir, 'tx.xml');
-      const result = await tileRendererPool.renderTile({
+      const result = await renderTileWithQueueRetry(tileRendererPool, {
         action: 'wfs_transaction',
         project_path: project.file,
         output_file: outFile,
@@ -573,7 +598,10 @@ export const registerWfsRoutes = ({
       return;
     } catch (err) {
       try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-      res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
+      const status = httpStatusForWorkerCode(err?.code);
+      const code = owsCodeForWorkerCode(err?.code);
+      applyRetryAfterHeader(res, status);
+      res.status(status).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err)), { code }));
       return;
     }
   };
@@ -611,7 +639,7 @@ export const registerWfsRoutes = ({
     try {
       tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-feature-fetch-'));
       const outFile = path.join(tmpDir, 'feature.json');
-      const result = await tileRendererPool.renderTile({
+      const result = await renderTileWithQueueRetry(tileRendererPool, {
         action: 'wfs_get_feature',
         project_path: projectFile,
         type_name: layerName,
@@ -659,7 +687,7 @@ export const registerWfsRoutes = ({
 
     if (requestUpper === 'GETCAPABILITIES') {
       try {
-        const list = await tileRendererPool.renderTile({
+        const list = await renderTileWithQueueRetry(tileRendererPool, {
           action: 'wfs_list',
           project_path: project.file
         });
@@ -714,7 +742,10 @@ export const registerWfsRoutes = ({
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type('text/xml').send(xml);
       } catch (err) {
-        res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
+        const status = httpStatusForWorkerCode(err?.code);
+        const code = owsCodeForWorkerCode(err?.code);
+        applyRetryAfterHeader(res, status);
+        res.status(status).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err)), { code }));
       }
       return;
     }
@@ -729,7 +760,7 @@ export const registerWfsRoutes = ({
       try {
         tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-xsd-'));
         const outFile = path.join(tmpDir, 'schema.xsd');
-        const result = await tileRendererPool.renderTile({
+        const result = await renderTileWithQueueRetry(tileRendererPool, {
           action: 'wfs_describe',
           project_path: project.file,
           type_name: typeName,
@@ -740,6 +771,7 @@ export const registerWfsRoutes = ({
           const msg = result?.message || result?.error || 'describe_failed';
           const status = httpStatusForWorkerCode(result?.code);
           const code = owsCodeForWorkerCode(result?.code);
+          applyRetryAfterHeader(res, status);
           res.status(status).type('application/xml').send(wfsExceptionXml(String(msg), { code }));
           return;
         }
@@ -750,7 +782,10 @@ export const registerWfsRoutes = ({
         });
       } catch (err) {
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-        res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
+        const status = httpStatusForWorkerCode(err?.code);
+        const code = owsCodeForWorkerCode(err?.code);
+        applyRetryAfterHeader(res, status);
+        res.status(status).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err)), { code }));
       }
       return;
     }
@@ -794,7 +829,7 @@ export const registerWfsRoutes = ({
         tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-feature-'));
         const outFile = path.join(tmpDir, `features.${ext}`);
 
-        const result = await tileRendererPool.renderTile({
+        const result = await renderTileWithQueueRetry(tileRendererPool, {
           action: 'wfs_get_feature',
           project_path: project.file,
           type_name: typeName,
@@ -813,6 +848,7 @@ export const registerWfsRoutes = ({
           const msg = result?.message || result?.error || 'get_feature_failed';
           const status = httpStatusForWorkerCode(result?.code);
           const code = owsCodeForWorkerCode(result?.code);
+          applyRetryAfterHeader(res, status);
           res.status(status).type('application/xml').send(wfsExceptionXml(String(msg), { code }));
           return;
         }
@@ -864,7 +900,10 @@ export const registerWfsRoutes = ({
         }
       } catch (err) {
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-        res.status(500).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err))));
+        const status = httpStatusForWorkerCode(err?.code);
+        const code = owsCodeForWorkerCode(err?.code);
+        applyRetryAfterHeader(res, status);
+        res.status(status).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err)), { code }));
       }
       return;
     }
@@ -1090,7 +1129,7 @@ export const registerWfsRoutes = ({
       const fidValue = featureId.includes('.') ? featureId : `${resolved.layerName}.${featureId}`;
       const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || normalizeSrsName(getQueryCI(req, 'crs')) || null;
 
-      const result = await tileRendererPool.renderTile({
+      const result = await renderTileWithQueueRetry(tileRendererPool, {
         action: 'wfs_get_feature',
         project_path: project.file,
         type_name: resolved.layerName,
@@ -1107,6 +1146,7 @@ export const registerWfsRoutes = ({
         const msg = result?.message || result?.error || 'get_feature_failed';
         const status = httpStatusForWorkerCode(result?.code);
         const code = owsCodeForWorkerCode(result?.code);
+        applyRetryAfterHeader(res, status);
         res.status(status).type('application/xml').send(wfsExceptionXml(String(msg), { code }));
         return;
       }
