@@ -6323,6 +6323,15 @@ previewFooterBtn?.addEventListener('click', () => {
 });
 
 publishNowBtn?.addEventListener('click', async () => {
+  if (currentEditingWfsLayer) {
+    try {
+      saveStyleEditor();
+    } catch (err) {
+      showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers');
+      return;
+    }
+  }
+
   const mapName = String(publishName?.value || '').trim();
   const mapDescription = String(publishDescription?.value || '').trim();
   clearPublishStatusError();
@@ -8025,7 +8034,11 @@ function rulesToOrigoStyle(rules) {
     const entries = [];
     const geomEntry = {};
     if (r.filter) geomEntry.filter = r.filter;
-    if (String(r.legendLabel || '').trim()) geomEntry.legendLabel = String(r.legendLabel).trim();
+    const legendLabel = String(r.legendLabel || '').trim();
+    if (legendLabel) {
+      geomEntry.legendLabel = legendLabel;
+      geomEntry.label = legendLabel;
+    }
     if (currentLayerGeomFamily === 'point') {
       if (r.point && r.point.mode === 'icon' && r.point.icon && r.point.icon.src) {
         geomEntry.icon = {
@@ -8113,7 +8126,9 @@ function origoStyleToRules(styleDef) {
     }
     const def = geomEntry || entries[0];
     if (def && def.filter) r.filter = def.filter;
-    if (def && def.legendLabel != null) r.legendLabel = String(def.legendLabel).trim();
+    if (def && (def.legendLabel != null || def.label != null)) {
+      r.legendLabel = String(def.legendLabel != null ? def.legendLabel : def.label).trim();
+    }
     if (def) {
       if (def.maxScale != null) r.maxScale = def.maxScale;
       if (def.minScale != null) r.minScale = def.minScale;
