@@ -209,6 +209,61 @@ if errorlevel 1 (
 echo.
 
 REM ----------------------------------------------------------------------
+REM  Step 5b: Start the Windows service and wait until HTTP is really ready
+REM ----------------------------------------------------------------------
+echo [Qtiler] Starting Windows service...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Service -Name 'QTiler' -ErrorAction Stop; Write-Host '  Service start requested.' } catch { if ($_.Exception.Message -notmatch 'already been started|already running') { Write-Host ('ERROR: ' + $_.Exception.Message); exit 1 } else { Write-Host '  Service already running.' } }"
+if errorlevel 1 (
+    echo ERROR: Could not start QTiler Windows service.
+    pause
+    exit /b 1
+)
+
+echo [Qtiler] Waiting for Qtiler HTTP endpoint to become ready on port %QTILER_PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$rootUrl = 'http://127.0.0.1:%QTILER_PORT%/';" ^
+    "$authUrl = 'http://127.0.0.1:%QTILER_PORT%/auth/login-status';" ^
+  "$deadline = (Get-Date).AddMinutes(2);" ^
+    "$rootReady = $false;" ^
+    "$authReady = $false;" ^
+    "$authBody = '{\"username\":\"__bootstrap_probe__\"}';" ^
+  "while ((Get-Date) -lt $deadline) {" ^
+    "  if (-not $rootReady) {" ^
+    "    try {" ^
+    "      $resp = Invoke-WebRequest -Uri $rootUrl -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0 -ErrorAction Stop;" ^
+    "      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $rootReady = $true }" ^
+    "    } catch {" ^
+    "      $status = $null;" ^
+    "      try { $status = [int]$_.Exception.Response.StatusCode } catch {}" ^
+    "      if ($status -and $status -ge 200 -and $status -lt 500) { $rootReady = $true }" ^
+    "    }" ^
+    "  }" ^
+    "  if ($rootReady -and -not $authReady) {" ^
+    "    try {" ^
+    "      $authResp = Invoke-RestMethod -Uri $authUrl -Method Post -UseBasicParsing -TimeoutSec 5 -ContentType 'application/json' -Body $authBody -ErrorAction Stop;" ^
+    "      if ($null -ne $authResp -and $authResp.PSObject.Properties.Name -contains 'requireCaptcha') { $authReady = $true }" ^
+    "    } catch {" ^
+    "      $authStatus = $null;" ^
+    "      try { $authStatus = [int]$_.Exception.Response.StatusCode } catch {}" ^
+    "      if ($authStatus -eq 200) { $authReady = $true }" ^
+    "    }" ^
+    "  }" ^
+    "  if ($rootReady -and $authReady) { break }" ^
+  "  Start-Sleep -Milliseconds 2000;" ^
+  "}" ^
+    "if (-not $rootReady) { Write-Host ('ERROR: Qtiler did not become ready at ' + $rootUrl + ' within the timeout.'); exit 1 }" ^
+    "if (-not $authReady) { Write-Host ('ERROR: QtilerAuth did not become ready at ' + $authUrl + ' within the timeout.'); exit 1 }" ^
+    "Write-Host ('  Qtiler is responding at ' + $rootUrl);" ^
+    "Write-Host ('  QtilerAuth is responding at ' + $authUrl)"
+if errorlevel 1 (
+        echo ERROR: Qtiler service started but Qtiler or QtilerAuth did not become ready in time.
+    echo Check logs in %QTILER_ROOT%\logs and Windows Services for QTiler startup details.
+    pause
+    exit /b 1
+)
+echo.
+
+REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
 powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Congratulations! You have successfully installed Qtiler.' + [Environment]::NewLine + [Environment]::NewLine + 'If you have any questions or need technical assistance, please contact MundoGIS at support@mundogis.se and we will reply within 24 hours.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
