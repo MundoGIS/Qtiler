@@ -19,6 +19,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
+import { createJsonStore } from '../../lib/jsonStore.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
 const DEFAULT_REPO = process.env.QTILER_ORIGO_REPO || process.env.QTWC_QWC2_REPO || 'origo-map/origo';
@@ -31,17 +32,23 @@ const MAX_PORTAL_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 const ALLOWED_PORTAL_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const PREVIEW_STATE_TTL_MS = 10 * 60 * 1000;
-const previewStateStore = new Map();
+let previewStateStore = null;
 
 const nowIso = () => new Date().toISOString();
 
-const prunePreviewStateStore = () => {
+const prunePreviewStateStore = async () => {
+  if (!previewStateStore) return {};
   const cutoff = Date.now() - PREVIEW_STATE_TTL_MS;
-  for (const [key, value] of previewStateStore.entries()) {
-    if (!value || !Number.isFinite(value.createdAt) || value.createdAt < cutoff) {
-      previewStateStore.delete(key);
+  const snapshot = await previewStateStore.update((draft) => {
+    const current = draft && typeof draft === 'object' ? draft : {};
+    for (const [key, value] of Object.entries(current)) {
+      if (!value || !Number.isFinite(value.createdAt) || value.createdAt < cutoff) {
+        delete current[key];
+      }
     }
-  }
+    return current;
+  });
+  return snapshot && typeof snapshot === 'object' ? snapshot : {};
 };
 
 const createPreviewStateId = () => `preview_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -71,10 +78,10 @@ const normalizePreviewStatePayload = (input) => {
   };
 };
 
-const resolvePreviewRequestPayload = (req) => {
-  prunePreviewStateStore();
+const resolvePreviewRequestPayload = async (req) => {
   const stateId = sanitizeFileToken(String(req.query?.state || '').trim());
-  const stored = stateId ? previewStateStore.get(stateId) : null;
+  const snapshot = stateId ? await prunePreviewStateStore() : null;
+  const stored = stateId && snapshot && typeof snapshot === 'object' ? snapshot[stateId] : null;
   return {
     stateId,
     payload: stored?.payload && typeof stored.payload === 'object' ? stored.payload : (req.query || {})
@@ -523,6 +530,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     logoFile: null,
     logoUpdatedAt: null
   });
+  previewStateStore = createJsonStore(path.join(runtimeRoot, 'preview-states.json'), {});
 
   await fs.promises.mkdir(runtimeRoot, { recursive: true });
   await fs.promises.mkdir(publishedRoot, { recursive: true });
@@ -2784,7 +2792,7 @@ ${mapIcon}
 
   // ── Preview page: serves a minimal Origo HTML page loading a per-project config ──
   app.get(`/plugins/${pluginSlug}/api/preview-page`, async (req, res) => {
-    const { stateId, payload } = resolvePreviewRequestPayload(req);
+    const { stateId, payload } = await resolvePreviewRequestPayload(req);
     const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
     const webRoot = await resolveQwc2WebRoot().catch(() => '');
@@ -2794,23 +2802,27 @@ ${mapIcon}
     const bgLayer = String(payload.bgLayer || '').trim();
     // Use absolute URL for config so the <base> tag does not interfere
     const baseUrl = getRequestBaseUrl(req);
-    const cfgParams = [
-      stateId ? `state=${encodeURIComponent(stateId)}` : '',
-      `project=${encodeURIComponent(payload.project || '')}`,
-      layers ? `layers=${encodeURIComponent(layers)}` : '',
-      String(payload.groups || '').trim() ? `groups=${encodeURIComponent(payload.groups)}` : '',
-      String(payload.layerRules || '').trim() ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
-      bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
-      bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
-      payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
-      payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
-      payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
-      payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
-      payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
-      payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
-      payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
-      payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
-    ];
+    const cfgParams = stateId
+      ? [
+          `state=${encodeURIComponent(stateId)}`,
+          `project=${encodeURIComponent(payload.project || '')}`
+        ]
+      : [
+          `project=${encodeURIComponent(payload.project || '')}`,
+          layers ? `layers=${encodeURIComponent(layers)}` : '',
+          String(payload.groups || '').trim() ? `groups=${encodeURIComponent(payload.groups)}` : '',
+          String(payload.layerRules || '').trim() ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
+          bgProject ? `bgProject=${encodeURIComponent(bgProject)}` : '',
+          bgLayer ? `bgLayer=${encodeURIComponent(bgLayer)}` : '',
+          payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
+          payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
+          payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
+          payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
+          payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
+          payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
+          payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
+          payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
+        ];
     const cfgQs = cfgParams.filter(Boolean).join('&');
     const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
     // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
@@ -2907,26 +2919,24 @@ ${mapIcon}
   app.post(`/plugins/${pluginSlug}/api/preview-state`, express.json({ limit: '2mb' }), async (req, res) => {
     const payload = normalizePreviewStatePayload(req.body);
     if (!payload.project) return res.status(400).json({ error: 'missing_project' });
-    prunePreviewStateStore();
     const stateId = createPreviewStateId();
-    previewStateStore.set(stateId, { createdAt: Date.now(), payload });
-    const previewParams = [
-      `state=${encodeURIComponent(stateId)}`,
-      `project=${encodeURIComponent(payload.project || '')}`,
-      payload.layers ? `layers=${encodeURIComponent(payload.layers)}` : '',
-      payload.groups ? `groups=${encodeURIComponent(payload.groups)}` : '',
-      payload.layerRules ? `layerRules=${encodeURIComponent(payload.layerRules)}` : '',
-      payload.bgProject ? `bgProject=${encodeURIComponent(payload.bgProject)}` : '',
-      payload.bgLayer ? `bgLayer=${encodeURIComponent(payload.bgLayer)}` : '',
-      payload.bgKey ? `bgKey=${encodeURIComponent(payload.bgKey)}` : '',
-      payload.center ? `center=${encodeURIComponent(payload.center)}` : '',
-      payload.centerCrs ? `centerCrs=${encodeURIComponent(payload.centerCrs)}` : '',
-      payload.zoom ? `zoom=${encodeURIComponent(payload.zoom)}` : '',
-      payload.extent ? `extent=${encodeURIComponent(payload.extent)}` : '',
-      payload.minZoom ? `minZoom=${encodeURIComponent(payload.minZoom)}` : '',
-      payload.maxZoom ? `maxZoom=${encodeURIComponent(payload.maxZoom)}` : '',
-      payload.controls ? `controls=${encodeURIComponent(payload.controls)}` : ''
-    ].filter(Boolean).join('&');
+    if (previewStateStore) {
+      await previewStateStore.update((draft) => {
+        const current = draft && typeof draft === 'object' ? draft : {};
+        const cutoff = Date.now() - PREVIEW_STATE_TTL_MS;
+        for (const [key, value] of Object.entries(current)) {
+          if (!value || !Number.isFinite(value.createdAt) || value.createdAt < cutoff) {
+            delete current[key];
+          }
+        }
+        current[stateId] = { createdAt: Date.now(), payload };
+        return current;
+      });
+    }
+      const previewParams = [
+        `state=${encodeURIComponent(stateId)}`,
+        `project=${encodeURIComponent(payload.project || '')}`
+      ].join('&');
     return res.json({
       state: stateId,
       url: `/plugins/${pluginSlug}/api/preview-page?${previewParams}`
@@ -3767,7 +3777,7 @@ ${mapIcon}
     }
   });
   app.get(`/plugins/${pluginSlug}/api/preview-config.json`, async (req, res) => {
-    const { payload } = resolvePreviewRequestPayload(req);
+    const { payload } = await resolvePreviewRequestPayload(req);
     const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
     const rawLayers = String(payload.layers || '').trim();

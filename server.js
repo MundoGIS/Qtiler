@@ -804,6 +804,20 @@ const INDEX_FLUSH_INTERVAL_MS = parseInt(process.env.INDEX_FLUSH_INTERVAL_MS || 
 
 // utilidades generales
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isQueueFullCode = (code) => String(code || '').trim().toLowerCase() === 'queue_full';
+const renderTileWithQueueRetry = async (tileRendererPool, params, { attempts = 3, baseDelayMs = 75 } = {}) => {
+  let lastErr;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await tileRendererPool.renderTile(params);
+    } catch (err) {
+      lastErr = err;
+      if (!isQueueFullCode(err?.code) || attempt >= attempts - 1) throw err;
+      await sleep(baseDelayMs * (attempt + 1));
+    }
+  }
+  throw lastErr;
+};
 
 // caché en memoria para configs y timers
 const projectConfigCache = new Map(); // id -> config
@@ -8743,7 +8757,7 @@ function queueTileRender(params, filePath, cb) {
 
   // 5. Enviar al Pool
   // tileRendererPool gestiona internamente la cola si todos los workers están ocupados
-  tileRendererPool.renderTile(task)
+  renderTileWithQueueRetry(tileRendererPool, task, { attempts: 4, baseDelayMs: 100 })
     .then((result) => {
       // Limpiar estado
       activeRenders.delete(key);

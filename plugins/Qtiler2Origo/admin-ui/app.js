@@ -6702,6 +6702,94 @@ function buildMapPreviewPayload() {
 async function buildMapPreviewUrl() {
   const payload = buildMapPreviewPayload();
   if (!payload) return '';
+  const pluginRootUrl = new URL('../', window.location.href);
+  const pluginRootPath = pluginRootUrl.pathname.replace(/\/+$/,'/');
+  const buildPreviewShellUrl = (configUrl) => {
+    const safeConfigUrl = String(configUrl || '').trim();
+    if (!safeConfigUrl) return '';
+    const origoCssUrl = `${pluginRootPath}origo/css/style.css`;
+    const origoJsUrl = `${pluginRootPath}origo/js/origo.js`;
+    const patternFillUrl = `${pluginRootPath}client/origo-pattern-fills.js`;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Preview</title>
+<link href="${origoCssUrl}" rel="stylesheet">
+<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
+</head>
+<body>
+<div id="app-wrapper"></div>
+<script src="${origoJsUrl}"><\/script>
+<script src="${patternFillUrl}"><\/script>
+<script>
+  function notifyParent(type, message) {
+    try { window.parent.postMessage({ type: type, message: message }, '*'); } catch (e) {}
+  }
+  function stringifyErrorDetail(detail, fallback) {
+    if (detail == null || detail === '') return fallback;
+    if (typeof detail === 'string') return detail;
+    try { return JSON.stringify(detail); } catch (e) { return String(detail); }
+  }
+  window.addEventListener('error', function(ev) {
+    notifyParent('origo-error', stringifyErrorDetail(ev && (ev.message || ev.error), 'Runtime error while loading Interactive Map.'));
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    notifyParent('origo-error', stringifyErrorDetail(reason && (reason.message || reason.error || reason), 'Unhandled promise rejection while loading Interactive Map.'));
+  });
+  fetch(${JSON.stringify(safeConfigUrl)}, { credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.text().then(function(text) {
+          throw new Error(text || ('Preview config failed (' + r.status + ')'));
+        });
+      }
+      return r.json().then(function(cfg) {
+        if (cfg && typeof cfg === 'object' && (cfg.error || cfg.details || cfg.message)) {
+          throw new Error(cfg.error || cfg.details || cfg.message);
+        }
+        return cfg;
+      });
+    })
+    .then(function(cfg) {
+      return window.Qtiler2OrigoOrigoBoot.bootOrigo(cfg);
+    })
+    .then(function(origoApp) {
+      window.origoApp = origoApp;
+      var refreshMapSize = function() {
+        try {
+          var viewer = typeof origoApp.api === 'function' ? origoApp.api() : null;
+          var map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
+          if (map && typeof map.updateSize === 'function') map.updateSize();
+        } catch (e) {}
+      };
+      requestAnimationFrame(function() {
+        requestAnimationFrame(refreshMapSize);
+      });
+      window.addEventListener('resize', refreshMapSize);
+      try {
+        var ro = new ResizeObserver(function() { refreshMapSize(); });
+        ro.observe(document.documentElement);
+        ro.observe(document.body);
+        ro.observe(document.getElementById('app-wrapper'));
+      } catch (e) {}
+      origoApp.on('load', function() {
+        refreshMapSize();
+        try { window.parent.postMessage({ type: 'origo-loaded' }, '*'); } catch(e){}
+      });
+    })
+    .catch(function(err) {
+      var detail = stringifyErrorDetail(err && (err.message || err), 'Failed to load preview config.');
+      notifyParent('origo-error', detail);
+      document.body.innerHTML = '<pre style="padding:1em;color:#b00;white-space:pre-wrap">Failed to load preview config: ' + detail.replace(/[&<>]/g, function(ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]; }) + '</pre>';
+    });
+</script>
+</body>
+</html>`;
+    return URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  };
   const params = new URLSearchParams();
   params.set('project', String(payload.project || ''));
   if (payload.layers?.length) params.set('layers', JSON.stringify(payload.layers));
@@ -6717,9 +6805,9 @@ async function buildMapPreviewUrl() {
   if (payload.minZoom) params.set('minZoom', String(payload.minZoom));
   if (payload.maxZoom) params.set('maxZoom', String(payload.maxZoom));
   if (payload.controls?.length) params.set('controls', JSON.stringify(payload.controls));
-  const directPreviewUrl = `/plugins/Qtiler2Origo/api/preview-page?${params.toString()}`;
+  const directConfigUrl = `${pluginRootPath}api/preview-config.json?${params.toString()}`;
   try {
-    const res = await fetch('/plugins/Qtiler2Origo/api/preview-state', {
+    const res = await fetch(`${pluginRootPath}api/preview-state`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -6733,11 +6821,15 @@ async function buildMapPreviewUrl() {
       throw new Error(detail || `Preview state failed (${res.status})`);
     }
     const data = await res.json().catch(() => null);
-    return typeof data?.url === 'string' ? data.url : directPreviewUrl;
+    if (typeof data?.state === 'string' && data.state.trim()) {
+      const stateConfigUrl = `${pluginRootPath}api/preview-config.json?state=${encodeURIComponent(data.state)}&project=${encodeURIComponent(String(payload.project || ''))}`;
+      return buildPreviewShellUrl(stateConfigUrl);
+    }
+    return buildPreviewShellUrl(directConfigUrl);
   } catch (err) {
     const aborted = err?.name === 'TimeoutError' || err?.name === 'AbortError' || /timed out|aborted/i.test(String(err?.message || err || ''));
-    if (directPreviewUrl.length <= 3500 || aborted) {
-      return directPreviewUrl;
+    if (directConfigUrl.length <= 3500 || aborted) {
+      return buildPreviewShellUrl(directConfigUrl);
     }
     throw err;
   }
