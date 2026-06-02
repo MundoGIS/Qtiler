@@ -6713,17 +6713,21 @@ async function buildMapPreviewUrl() {
   if (!payload) return '';
   const pluginRootUrl = new URL('../', window.location.href);
   const pluginRootPath = pluginRootUrl.pathname.replace(/\/+$/,'/');
+  const pluginRootHref = pluginRootUrl.href.replace(/\/+$/,'/');
   const buildPreviewShellUrl = (configUrl) => {
     const safeConfigUrl = String(configUrl || '').trim();
     if (!safeConfigUrl) return '';
-    const origoCssUrl = `${pluginRootPath}origo/css/style.css`;
-    const origoJsUrl = `${pluginRootPath}origo/js/origo.js`;
-    const patternFillUrl = `${pluginRootPath}client/origo-pattern-fills.js`;
+    const resolvedConfigUrl = new URL(safeConfigUrl, window.location.origin).href;
+    const origoCssUrl = new URL('origo/css/style.css', pluginRootHref).href;
+    const origoJsUrl = new URL('origo/js/origo.js', pluginRootHref).href;
+    const patternFillUrl = new URL('client/origo-pattern-fills.js', pluginRootHref).href;
+    const origoBaseHref = new URL('origo/', pluginRootHref).href;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<base href="${origoBaseHref}">
 <title>Preview</title>
 <link href="${origoCssUrl}" rel="stylesheet">
 <style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
@@ -6748,7 +6752,7 @@ async function buildMapPreviewUrl() {
     var reason = ev && ev.reason;
     notifyParent('origo-error', stringifyErrorDetail(reason && (reason.message || reason.error || reason), 'Unhandled promise rejection while loading Interactive Map.'));
   });
-  fetch(${JSON.stringify(safeConfigUrl)}, { credentials: 'same-origin' })
+  fetch(${JSON.stringify(resolvedConfigUrl)}, { credentials: 'same-origin' })
     .then(function(r) {
       if (!r.ok) {
         return r.text().then(function(text) {
@@ -8689,6 +8693,7 @@ function rulePreviewSampleSvg(rule, geomFamily) {
     return (arr && arr[0]) ? ` stroke-dasharray="${arr.join(' ')}"` : '';
   };
   if (geomFamily === 'point') {
+    if (!rule.point) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="6" fill="#3b82f6" stroke="#2563eb" stroke-width="1"/></svg>`;
     if (rule.point.mode === 'icon' && rule.point.icon && rule.point.icon.src) {
       let src = rule.point.icon.src;
       // If a color is set on a /qgis-svg/ icon, route through the server-side
@@ -8707,10 +8712,12 @@ function rulePreviewSampleSvg(rule, geomFamily) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${c.strokeWidth || 1}"/></svg>`;
   }
   if (geomFamily === 'line') {
+    if (!rule.stroke) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M6 ${H-10} Q ${W/3} 6 ${W/2} ${H/2} T ${W-6} 10" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/></svg>`;
     const stroke = hexToRgba(rule.stroke.color, rule.stroke.opacity);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M6 ${H-10} Q ${W/3} 6 ${W/2} ${H/2} T ${W-6} 10" fill="none" stroke="${stroke}" stroke-width="${rule.stroke.width || 2}" stroke-linecap="round"${dashAttr(rule.stroke.dash)}/></svg>`;
   }
   // polygon
+  if (!rule.fill || !rule.stroke) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M8 ${H-6} L 18 8 L ${W-22} 6 L ${W-6} ${H-12} L ${W/2} ${H-4} Z" fill="rgba(59,130,246,0.25)" stroke="#2563eb" stroke-width="2"/></svg>`;
   const fill = rule.fill.none ? 'none' : hexToRgba(rule.fill.color, rule.fill.opacity);
   const stroke = rule.stroke.none ? 'none' : hexToRgba(rule.stroke.color, rule.stroke.opacity);
   const sw = rule.stroke.none ? 0 : (rule.stroke.width || 1);
