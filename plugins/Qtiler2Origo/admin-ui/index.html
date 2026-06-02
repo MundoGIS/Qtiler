@@ -181,6 +181,7 @@
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="backgrounds" aria-selected="false" data-i18n="Qtiler2Origo.step_backgrounds">2. Backgrounds</button>
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="tools" aria-selected="false" data-i18n="Qtiler2Origo.step_controls_search">3. Controls &amp; search</button>
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false" data-i18n="Qtiler2Origo.step_origo_config">4. Origo Configuration</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="jsoneditor" aria-selected="false" data-i18n="Qtiler2Origo.step_json_editor">5. JSON Editor</button>
           </nav>
 
           <section class="modal-card-body publish-editor__body">
@@ -393,6 +394,35 @@
                         <textarea id="origo-cfg-extra" class="textarea is-small" rows="8" style="font-family: monospace;"></textarea>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </fieldset>
+            </section>
+
+            <section class="publish-editor__tab-panel" data-publish-panel="jsoneditor">
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Origo.step_json_editor">5. JSON Editor</legend>
+                <p class="help" style="margin-bottom:1rem" data-i18n="Qtiler2Origo.json_editor_help">Edit the complete map configuration JSON. Changes are validated in real-time.</p>
+                
+                <div class="field">
+                  <div class="buttons" style="margin-bottom: 0.75rem; position: sticky; top: 0; background: white; z-index: 10; padding: 0.5rem 0; border-bottom: 1px solid #dbdbdb;">
+                    <button type="button" id="btn-json-load" class="button is-small is-info" data-i18n="Qtiler2Origo.json_load">Load current config</button>
+                    <button type="button" id="btn-json-format" class="button is-small" data-i18n="Qtiler2Origo.json_format">Format JSON</button>
+                    <button type="button" id="btn-json-validate" class="button is-small" data-i18n="Qtiler2Origo.json_validate">Validate</button>
+                    <button type="button" id="btn-json-apply" class="button is-small is-primary" data-i18n="Qtiler2Origo.json_apply">Apply changes</button>
+                    <button type="button" id="btn-json-clear-log" class="button is-small is-light" data-i18n="Qtiler2Origo.json_clear_log">Clear log</button>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 400px; gap: 1rem; align-items: start;">
+                  <div class="field" style="margin: 0;">
+                    <label class="label is-small" data-i18n="Qtiler2Origo.json_editor_label">Map Configuration JSON</label>
+                    <div id="json-editor-container" style="border: 1px solid #dbdbdb; min-height: 600px;"></div>
+                  </div>
+
+                  <div class="field" style="margin: 0;">
+                    <label class="label is-small" data-i18n="Qtiler2Origo.json_log_label">Validation & Error Log</label>
+                    <div id="json-log-container" style="background: #f5f5f5; border: 1px solid #dbdbdb; padding: 0.75rem; min-height: 600px; max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 0.875rem; white-space: pre-wrap;"></div>
                   </div>
                 </div>
               </fieldset>

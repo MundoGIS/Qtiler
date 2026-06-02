@@ -281,6 +281,15 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_tools': '3. Tools',
     'Qtiler2Origo.step_controls_search': '3. Controls & search',
     'Qtiler2Origo.step_origo_config': '4. Origo Configuration',
+    'Qtiler2Origo.step_json_editor': '5. JSON Editor',
+    'Qtiler2Origo.json_editor_help': 'Edit the complete map configuration JSON. Changes are validated in real-time.',
+    'Qtiler2Origo.json_load': 'Load current config',
+    'Qtiler2Origo.json_format': 'Format JSON',
+    'Qtiler2Origo.json_validate': 'Validate',
+    'Qtiler2Origo.json_apply': 'Apply changes',
+    'Qtiler2Origo.json_clear_log': 'Clear log',
+    'Qtiler2Origo.json_editor_label': 'Map Configuration JSON',
+    'Qtiler2Origo.json_log_label': 'Validation & Error Log',
     'Qtiler2Origo.publish_editor_fixed_help': 'Fixed editor to create and edit maps without the page shifting.',
     'Qtiler2Origo.svg_picker_title': 'Select SVG icon (QGIS)',
     'Qtiler2Origo.default': 'Default',
@@ -810,6 +819,15 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_tools': '3. Herramientas',
     'Qtiler2Origo.step_controls_search': '3. Controles y búsqueda',
     'Qtiler2Origo.step_origo_config': '4. Configuración de Origo',
+    'Qtiler2Origo.step_json_editor': '5. Editor JSON',
+    'Qtiler2Origo.json_editor_help': 'Edita la configuración JSON completa del mapa. Los cambios se validan en tiempo real.',
+    'Qtiler2Origo.json_load': 'Cargar configuración actual',
+    'Qtiler2Origo.json_format': 'Formatear JSON',
+    'Qtiler2Origo.json_validate': 'Validar',
+    'Qtiler2Origo.json_apply': 'Aplicar cambios',
+    'Qtiler2Origo.json_clear_log': 'Limpiar registro',
+    'Qtiler2Origo.json_editor_label': 'Configuración JSON del mapa',
+    'Qtiler2Origo.json_log_label': 'Registro de validación y errores',
     'Qtiler2Origo.publish_editor_fixed_help': 'Editor fijo para crear y editar mapas sin desplazar la página.',
     'Qtiler2Origo.svg_picker_title': 'Seleccionar icono SVG (QGIS)',
     'Qtiler2Origo.default': 'Por defecto',
@@ -1339,6 +1357,15 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_tools': '3. Verktyg',
     'Qtiler2Origo.step_controls_search': '3. Kontroller och sökning',
     'Qtiler2Origo.step_origo_config': '4. Origo-konfiguration',
+    'Qtiler2Origo.step_json_editor': '5. JSON-redigerare',
+    'Qtiler2Origo.json_editor_help': 'Redigera den fullständiga kartkonfigurations-JSON. Ändringar valideras i realtid.',
+    'Qtiler2Origo.json_load': 'Ladda aktuell konfiguration',
+    'Qtiler2Origo.json_format': 'Formatera JSON',
+    'Qtiler2Origo.json_validate': 'Validera',
+    'Qtiler2Origo.json_apply': 'Tillämpa ändringar',
+    'Qtiler2Origo.json_clear_log': 'Rensa logg',
+    'Qtiler2Origo.json_editor_label': 'Kartkonfiguration JSON',
+    'Qtiler2Origo.json_log_label': 'Validerings- och fellogg',
     'Qtiler2Origo.publish_editor_fixed_help': 'Fast redigerare för att skapa och redigera kartor utan att sidan flyttas.',
     'Qtiler2Origo.svg_picker_title': 'Välj SVG-ikon (QGIS)',
     'Qtiler2Origo.default': 'Standard',
@@ -1971,6 +1998,15 @@ const previewOverlayTitle = document.getElementById('origo-preview-overlay-title
 const previewOverlayMessage = document.getElementById('origo-preview-overlay-message');
 const openPreviewTabBtn  = document.getElementById('btn-open-map-preview-tab');
 const origoConfigSummary = document.getElementById('origo-config-summary');
+
+/* ── JSON Editor panel ── */
+const jsonEditorContainer = document.getElementById('json-editor-container');
+const jsonLoadBtn = document.getElementById('btn-json-load');
+const jsonFormatBtn = document.getElementById('btn-json-format');
+const jsonValidateBtn = document.getElementById('btn-json-validate');
+const jsonApplyBtn = document.getElementById('btn-json-apply');
+const jsonClearLogBtn = document.getElementById('btn-json-clear-log');
+const jsonLogContainer = document.getElementById('json-log-container');
 
 /* Map of configurable tools: checkbox id → config panel + input */
 const TOOL_CONFIG_MAP = {
@@ -8978,6 +9014,388 @@ document.getElementById('wfs-style-format-json')?.addEventListener('click', () =
     setJsonEditorStatus((t('Qtiler2Origo.wfs_invalid_json') || 'Invalid JSON: ') + err.message, true);
   }
 });
+
+/* ======================================================================
+   Full Map JSON Editor
+   ====================================================================== */
+let _cmMapJsonEditor = null;
+let _cmMapJsonInitTried = false;
+
+function ensureMapJsonEditor() {
+  if (_cmMapJsonInitTried) return _cmMapJsonEditor;
+  _cmMapJsonInitTried = true;
+  const host = jsonEditorContainer;
+  if (!host) return null;
+  if (typeof CodeMirror === 'undefined') {
+    host.innerHTML = '<p class="help is-danger">CodeMirror not loaded. Cannot initialize JSON editor.</p>';
+    return null;
+  }
+  try {
+    _cmMapJsonEditor = CodeMirror(host, {
+      value: '{}',
+      mode: { name: 'javascript', json: true },
+      theme: 'eclipse',
+      lineNumbers: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      foldGutter: true,
+      gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: false
+    });
+    _cmMapJsonEditor.setSize('100%', '500px');
+    return _cmMapJsonEditor;
+  } catch (err) {
+    console.error('Map JSON editor init failed:', err);
+    if (host) host.innerHTML = `<p class="help is-danger">JSON editor init failed: ${String(err.message || err)}</p>`;
+    return null;
+  }
+}
+
+function logJsonEditor(message, type = 'info') {
+  if (!jsonLogContainer) return;
+  const timestamp = new Date().toLocaleTimeString();
+  const prefix = type === 'error' ? '[ERROR]' : type === 'warning' ? '[WARN]' : '[INFO]';
+  const color = type === 'error' ? '#c00' : type === 'warning' ? '#f90' : '#0a7d2c';
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = `${timestamp} ${prefix} ${message}`;
+  jsonLogContainer.appendChild(line);
+  jsonLogContainer.scrollTop = jsonLogContainer.scrollHeight;
+}
+
+function clearJsonEditorLog() {
+  if (!jsonLogContainer) return;
+  jsonLogContainer.innerHTML = '';
+  logJsonEditor('Log cleared.', 'info');
+}
+
+function generateMapConfigJson() {
+  try {
+    const mapName = String(publishName?.value || '').trim();
+    const mapDescription = String(publishDescription?.value || '').trim();
+    const projectId = String(publishProjectSelect?.value || '').trim();
+    
+    const allLayers = getAllPublishLayers();
+    const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+    const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+    
+    const layersPayload = selectedLayers.map((layer) => {
+      const key = getLayerKey(layer);
+      const rules = publishState.mainRules[key] || {};
+      return {
+        name: layer.name,
+        title: layer.title || layer.name,
+        sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+        visible: publishState.initialVisibility[key] !== false,
+        group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
+        searchable: rules.searchable || false,
+        editable: rules.editable || false,
+        serveAsWfs: rules.serveAsWfs || false,
+        wfsStyle: rules.wfsStyle || undefined,
+        attributes: rules.attributes || undefined,
+        geometryType: rules.geometryType || undefined
+      };
+    });
+
+    const backgroundProjectId = String(backgroundProjectSelect?.value || '').trim();
+    const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+      .map((layer) => String(layer?.name || '').trim())
+      .filter(Boolean);
+    
+    refreshBackgroundOptions();
+    const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+      key: item.key,
+      type: item.type,
+      title: item.title,
+      sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+      name: item.type === 'layer' ? item.name : null,
+      isDefault: item.key === publishState.defaultBackgroundKey
+    }));
+
+    let controls = [];
+    try {
+      controls = JSON.parse(controlsJsonInput?.value || '[]');
+    } catch (e) {
+      controls = [];
+    }
+
+    let pageSettings = undefined;
+    let featureinfoOptions = undefined;
+    try {
+      const extra = JSON.parse(extraJsonInput?.value || '{}');
+      pageSettings = extra.pageSettings;
+      featureinfoOptions = extra.featureinfoOptions;
+    } catch (e) {}
+
+    let extent = undefined;
+    try {
+      const v = JSON.parse(extentInput?.value || 'null');
+      extent = Array.isArray(v) ? v : undefined;
+    } catch (e) {}
+
+    let center = undefined;
+    let centerCrs = undefined;
+    try {
+      const v = JSON.parse(centerInput?.value || 'null');
+      center = Array.isArray(v) ? v : undefined;
+      centerCrs = String(centerInput?.dataset?.crs || '').trim() || undefined;
+    } catch (e) {}
+
+    let zoom = undefined;
+    try {
+      const z = parseFloat(zoomInput?.value);
+      zoom = isNaN(z) ? undefined : z;
+    } catch (e) {}
+
+    const minZoom = (() => { const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
+    const maxZoom = (() => { const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
+
+    const groups = (publishState.groups || [])
+      .map((g) => ({
+        name: String(g?.name || '').trim(),
+        title: String(g?.title || g?.name || '').trim(),
+        parent: String(g?.parent || '').trim(),
+        expanded: g?.expanded !== false
+      }))
+      .filter((g) => g.name && g.name !== 'root' && g.name !== 'background');
+
+    const searchSources = (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+      .map((src) => ({
+        projectId: String(src?.projectId || '').trim(),
+        layers: Array.isArray(src?.layers)
+          ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+          : []
+      }))
+      .filter((s) => s.projectId);
+
+    const config = {
+      name: mapName,
+      description: mapDescription,
+      editingProfileId: publishState.editingProfileId || null,
+      projectId,
+      layers: layersPayload,
+      backgroundProjectId: backgroundProjectId || null,
+      backgroundLayerNames,
+      backgrounds,
+      defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+      controls,
+      pageSettings,
+      featureinfoOptions,
+      extent,
+      center,
+      centerCrs,
+      zoom,
+      minZoom,
+      maxZoom,
+      toolConfig: {
+        shareServiceUrl: String(cfgShareUrl?.value || '').trim() || undefined,
+        routingServiceUrl: String(cfgRoutingUrl?.value || '').trim() || undefined,
+        elevationServiceUrl: String(cfgElevationUrl?.value || '').trim() || undefined,
+        dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim() || undefined
+      },
+      groups,
+      features: {
+        searchSources
+      }
+    };
+
+    return config;
+  } catch (err) {
+    logJsonEditor(`Error generating config: ${err.message || err}`, 'error');
+    throw err;
+  }
+}
+
+function loadCurrentConfigToEditor() {
+  try {
+    logJsonEditor('Loading current configuration...', 'info');
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    const config = generateMapConfigJson();
+    const json = JSON.stringify(config, null, 2);
+    _cmMapJsonEditor.setValue(json);
+    logJsonEditor(`Loaded ${json.split('\\n').length} lines`, 'info');
+  } catch (err) {
+    logJsonEditor(`Failed to load config: ${err.message || err}`, 'error');
+  }
+}
+
+function formatMapJson() {
+  try {
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    const raw = _cmMapJsonEditor.getValue();
+    const obj = JSON.parse(raw);
+    const formatted = JSON.stringify(obj, null, 2);
+    _cmMapJsonEditor.setValue(formatted);
+    logJsonEditor('JSON formatted successfully', 'info');
+  } catch (err) {
+    logJsonEditor(`Format error: ${err.message || err}`, 'error');
+  }
+}
+
+function validateMapJson() {
+  try {
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    const raw = _cmMapJsonEditor.getValue();
+    const obj = JSON.parse(raw);
+    
+    const errors = [];
+    if (!obj.name || typeof obj.name !== 'string' || !obj.name.trim()) {
+      errors.push('Missing or invalid "name" field');
+    }
+    if (!obj.projectId || typeof obj.projectId !== 'string') {
+      errors.push('Missing or invalid "projectId" field');
+    }
+    if (!Array.isArray(obj.layers)) {
+      errors.push('"layers" must be an array');
+    } else if (obj.layers.length === 0) {
+      errors.push('At least one layer is required');
+    }
+    
+    if (errors.length > 0) {
+      logJsonEditor(`Validation failed: ${errors.join('; ')}`, 'error');
+      return false;
+    }
+    
+    logJsonEditor('✓ JSON is valid', 'info');
+    return true;
+  } catch (err) {
+    logJsonEditor(`Validation error: ${err.message || err}`, 'error');
+    return false;
+  }
+}
+
+function applyMapJsonChanges() {
+  try {
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    if (!validateMapJson()) {
+      logJsonEditor('Cannot apply invalid JSON', 'error');
+      return;
+    }
+    
+    const raw = _cmMapJsonEditor.getValue();
+    const config = JSON.parse(raw);
+    
+    logJsonEditor('Applying changes to editor state...', 'info');
+    
+    // Apply basic fields
+    if (publishName) publishName.value = config.name || '';
+    if (publishDescription) publishDescription.value = config.description || '';
+    if (publishProjectSelect) publishProjectSelect.value = config.projectId || '';
+    publishState.editingProfileId = config.editingProfileId || null;
+    
+    // Apply extent, center, zoom
+    if (extentInput) extentInput.value = config.extent ? JSON.stringify(config.extent) : '';
+    if (centerInput) {
+      centerInput.value = config.center ? JSON.stringify(config.center) : '';
+      if (config.centerCrs) centerInput.dataset.crs = config.centerCrs;
+    }
+    if (zoomInput) zoomInput.value = config.zoom != null ? String(config.zoom) : '';
+    if (minZoomInput) minZoomInput.value = config.minZoom != null ? String(config.minZoom) : '';
+    if (maxZoomInput) maxZoomInput.value = config.maxZoom != null ? String(config.maxZoom) : '';
+    
+    // Apply controls and extra JSON
+    if (controlsJsonInput) {
+      controlsJsonInput.value = Array.isArray(config.controls) ? JSON.stringify(config.controls, null, 2) : '[]';
+    }
+    if (extraJsonInput) {
+      const extra = {};
+      if (config.pageSettings) extra.pageSettings = config.pageSettings;
+      if (config.featureinfoOptions) extra.featureinfoOptions = config.featureinfoOptions;
+      extraJsonInput.value = Object.keys(extra).length > 0 ? JSON.stringify(extra, null, 2) : '{}';
+    }
+    
+    // Apply tool config
+    if (config.toolConfig) {
+      if (cfgShareUrl) cfgShareUrl.value = config.toolConfig.shareServiceUrl || '';
+      if (cfgRoutingUrl) cfgRoutingUrl.value = config.toolConfig.routingServiceUrl || '';
+      if (cfgElevationUrl) cfgElevationUrl.value = config.toolConfig.elevationServiceUrl || '';
+      if (cfgDxfUrl) cfgDxfUrl.value = config.toolConfig.dxfExportServiceUrl || '';
+    }
+    
+    // Apply backgrounds
+    if (config.backgroundProjectId && backgroundProjectSelect) {
+      backgroundProjectSelect.value = config.backgroundProjectId;
+    }
+    publishState.backgroundOptions = config.backgrounds || [];
+    publishState.defaultBackgroundKey = config.defaultBackgroundKey || 'none';
+    
+    // Apply groups
+    publishState.groups = config.groups || [];
+    
+    // Apply search sources
+    if (config.features && config.features.searchSources) {
+      publishState.searchSources = config.features.searchSources;
+    }
+    
+    // Apply layers and rules
+    if (Array.isArray(config.layers)) {
+      publishState.initialVisibility = {};
+      publishState.layerGroups = {};
+      publishState.mainRules = {};
+      
+      config.layers.forEach(layer => {
+        const key = `${layer.sourceProjectId || config.projectId}::${layer.name}`;
+        publishState.initialVisibility[key] = layer.visible !== false;
+        publishState.layerGroups[key] = layer.group || 'root';
+        publishState.mainRules[key] = {
+          searchable: layer.searchable || false,
+          editable: layer.editable || false,
+          serveAsWfs: layer.serveAsWfs || false,
+          wfsStyle: layer.wfsStyle || undefined,
+          attributes: layer.attributes || undefined,
+          geometryType: layer.geometryType || undefined
+        };
+      });
+    }
+    
+    logJsonEditor('✓ Changes applied successfully', 'info');
+    logJsonEditor('Tip: Switch to other tabs to verify the changes', 'info');
+    
+  } catch (err) {
+    logJsonEditor(`Apply error: ${err.message || err}`, 'error');
+  }
+}
+
+// Event listeners for JSON editor buttons
+jsonLoadBtn?.addEventListener('click', loadCurrentConfigToEditor);
+jsonFormatBtn?.addEventListener('click', formatMapJson);
+jsonValidateBtn?.addEventListener('click', validateMapJson);
+jsonApplyBtn?.addEventListener('click', applyMapJsonChanges);
+jsonClearLogBtn?.addEventListener('click', clearJsonEditorLog);
+
+// Initialize when switching to JSON editor tab
+const originalSetPublishModalTab = setPublishModalTab;
+setPublishModalTab = function(tab) {
+  originalSetPublishModalTab(tab);
+  if (tab === 'jsoneditor') {
+    ensureMapJsonEditor();
+    if (jsonLogContainer && !jsonLogContainer.hasChildNodes()) {
+      logJsonEditor('JSON Editor initialized. Click "Load current config" to begin.', 'info');
+    }
+  }
+};
 
 /* ======================================================================
    Per-attribute value loader (for filter value dropdown)
