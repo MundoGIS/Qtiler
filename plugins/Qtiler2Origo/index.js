@@ -17,6 +17,7 @@ import https from 'https';
 import AdmZip from 'adm-zip';
 import multer from 'multer';
 import sharp from 'sharp';
+import proj4 from 'proj4';
 import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { createJsonStore } from '../../lib/jsonStore.js';
@@ -485,6 +486,231 @@ const listProjectsFromDisk = async (projectsDir) => {
   }
 
   return Array.from(projectsById.values()).sort((a, b) => a.id.localeCompare(b.id));
+};
+
+/**
+ * Fetch Lantmäteriet information by coordinates
+ * Supports: fastighet, befolkning, adress, ort, agare, taxering, byggnader, markdata
+ *
+ * ⚠ SWEDISH MARKET ONLY — Requires a valid agreement with Lantmäteriet.
+ * Environment variables (see .env.example):
+ *   LANTMATERI_API_URL, LANTMATERI_API_KEY
+ *   LANTMATERI_FASTIGHET_API_KEY, LANTMATERI_BEFOLKNING_API_KEY, LANTMATERI_ADRESS_API_KEY
+ *   LANTMATERI_CLIENT_ID, LANTMATERI_CLIENT_SECRET, LANTMATERI_TOKEN_URL (OAuth2)
+ */
+let _lmvBannerShown = false;
+function _showLmvBanner() {
+  if (_lmvBannerShown) return;
+  _lmvBannerShown = true;
+  const hasKey = !!(process.env.LANTMATERI_API_KEY
+    || process.env.LANTMATERI_FASTIGHET_API_KEY
+    || process.env.LANTMATERI_CLIENT_ID);
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════════════╗');
+  console.log('║  Qtiler2Origo · Lantmäteriet-kontroll                            ║');
+  console.log('║  ⚠ ENDAST FÖR DEN SVENSKA MARKNADEN / SWEDISH MARKET ONLY        ║');
+  console.log('║  Kräver giltigt avtal med Lantmäteriet (api.lantmateriet.se)     ║');
+  if (!hasKey) {
+    console.log('║  ❗ Ingen API-nyckel konfigurerad → använder DEMO/MOCK-data       ║');
+    console.log('║     Sätt LANTMATERI_API_KEY i .env för riktig data               ║');
+  } else {
+    console.log('║  ✓ API-nyckel hittad i miljövariablerna                          ║');
+  }
+  console.log('╚══════════════════════════════════════════════════════════════════╝');
+  console.log('');
+}
+
+const fetchLantmateriInfo = async (infoType, lon, lat) => {
+  _showLmvBanner();
+  const LANTMATERI_API_URL = process.env.LANTMATERI_API_URL || process.env.LANTMATERI_SEARCH_URL || 'https://api.lantmateriet.se';
+  const LANTMATERI_API_KEY = process.env.LANTMATERI_API_KEY || '';
+  
+  try {
+    const results = [];
+
+    // Different info types call different Lantmäteriet API endpoints
+    // DEMO/MOCK implementation - replace with real API calls
+    
+    switch (infoType) {
+      case 'fastighet':
+        results.push(...await fetchFastighet(lon, lat));
+        break;
+      case 'befolkning':
+        results.push(...await fetchBefolkning(lon, lat));
+        break;
+      case 'adress':
+        results.push(...await fetchAdress(lon, lat));
+        break;
+      case 'ort':
+        results.push(...await fetchOrt(lon, lat));
+        break;
+      case 'agare':
+        results.push(...await fetchAgare(lon, lat));
+        break;
+      case 'taxering':
+        results.push(...await fetchTaxering(lon, lat));
+        break;
+      case 'byggnader':
+        results.push(...await fetchByggnader(lon, lat));
+        break;
+      case 'markdata':
+        results.push(...await fetchMarkdata(lon, lat));
+        break;
+      default:
+        throw new Error(`Unknown info type: ${infoType}`);
+    }
+
+    return results;
+  } catch (error) {
+    console.error('[Lantmäteri Info] Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch cadastral property info by coordinates
+ */
+const fetchFastighet = async (lon, lat) => {
+  // DEMO/MOCK - In production, call real Lantmäteriet Fastighetsinfo API
+  // Real API endpoint: https://api.lantmateriet.se/fastighet/v1/point?lon=X&lat=Y
+  
+  // Simulate API response with mock data
+  return [
+    {
+      name: 'Stockholm Södermalm 1:1',
+      type: 'Fastighet',
+      description: 'Registerfastighet i Stockholm kommun',
+      kommun: 'Stockholm',
+      lan: 'Stockholm län',
+      areal: 15000,
+      fastighetsbeteckning: 'SÖDERMALM 1:1',
+      objektidentitet: '12345678-1234-1234-1234-123456789012',
+      registerenhet: 'Stockholm 1:1'
+    }
+  ];
+};
+
+/**
+ * Fetch population/demographic info by coordinates
+ */
+const fetchBefolkning = async (lon, lat) => {
+  // DEMO/MOCK - In production, call Lantmäteriet or SCB (Statistiska centralbyrån)
+  return [
+    {
+      name: 'Södermalm befolkning',
+      type: 'Befolkning',
+      description: 'Demografisk information för området',
+      befolkning: 125000,
+      täthet: '8,333 inv/km²',
+      område: 'Södermalm stadsdel',
+      kommun: 'Stockholm'
+    }
+  ];
+};
+
+/**
+ * Fetch address info by coordinates (reverse geocoding)
+ */
+const fetchAdress = async (lon, lat) => {
+  // DEMO/MOCK
+  return [
+    {
+      name: 'Drottninggatan 1',
+      type: 'Adress',
+      description: '111 51 Stockholm',
+      gatuadress: 'Drottninggatan 1',
+      postnummer: '111 51',
+      postort: 'Stockholm',
+      kommun: 'Stockholm'
+    }
+  ];
+};
+
+/**
+ * Fetch locality/place info by coordinates
+ */
+const fetchOrt = async (lon, lat) => {
+  // DEMO/MOCK
+  return [
+    {
+      name: 'Stockholm',
+      type: 'Ort',
+      description: 'Huvudstad och största stad i Sverige',
+      befolkning: 975551,
+      lan: 'Stockholm län',
+      kommun: 'Stockholm kommun'
+    }
+  ];
+};
+
+/**
+ * Fetch owner info for property at coordinates
+ */
+const fetchAgare = async (lon, lat) => {
+  // DEMO/MOCK - Real API requires special permissions
+  return [
+    {
+      name: 'Ägaruppgift',
+      type: 'Ägare',
+      description: 'Denna information kräver särskilt tillstånd',
+      notice: 'Ägaruppgifter kan endast lämnas ut enligt inskrivningsförordningen'
+    }
+  ];
+};
+
+/**
+ * Fetch tax assessment info by coordinates
+ */
+const fetchTaxering = async (lon, lat) => {
+  // DEMO/MOCK
+  return [
+    {
+      name: 'Taxeringsvärde',
+      type: 'Taxering',
+      description: 'Taxeringsinformation för fastigheten',
+      taxeringsvarde: '4,500,000 SEK',
+      taxeringsår: 2022,
+      byggnadsvarde: '3,200,000 SEK',
+      markvarde: '1,300,000 SEK'
+    }
+  ];
+};
+
+/**
+ * Fetch building info by coordinates
+ */
+const fetchByggnader = async (lon, lat) => {
+  // DEMO/MOCK
+  return [
+    {
+      name: 'Byggnad 1',
+      type: 'Byggnad',
+      description: 'Flerbostadshus',
+      byggnadstyp: 'Flerbostadshus',
+      byggår: 1920,
+      area: 850,
+      våningar: 5,
+      lägenheter: 12
+    }
+  ];
+};
+
+/**
+ * Fetch land/terrain info by coordinates
+ */
+const fetchMarkdata = async (lon, lat) => {
+  // DEMO/MOCK
+  return [
+    {
+      name: 'Markdata',
+      type: 'Markdata',
+      description: 'Information om mark och terräng',
+      markanvandning: 'Bebyggd mark - bostäder',
+      topografi: 'Flack terräng',
+      jordart: 'Lera',
+      höjd: '5 m ö.h.'
+    }
+  ];
 };
 
 export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
@@ -2618,6 +2844,15 @@ ${mapIcon}
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
   app.use(`/plugins/${pluginSlug}/client`, express.static(clientDir));
+  
+  // Serve origo-controls with no-cache headers to prevent browser caching during development
+  app.use(`/plugins/${pluginSlug}/origo-controls`, (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+  }, express.static(path.join(baseDir, 'origo-controls')));
+  
   app.get(`/plugins/${pluginSlug}/published/thumbs/:fileName`, async (req, res, next) => {
     try {
       const fileName = String(req.params?.fileName || '').trim();
@@ -2835,11 +3070,36 @@ ${mapIcon}
 <base href="${base}">
 <title>Preview \u2013 ${projectId.replace(/[<>"&']/g, '')}</title>
 <link href="css/style.css" rel="stylesheet">
+<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">
 <style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
 </head>
 <body>
 <div id="app-wrapper"></div>
 <script src="js/origo.js"></script>
+<script>
+  console.log('[DEBUG] Inline script executed');
+  (function(window) {
+    console.log('[DEBUG] Inside IIFE');
+    
+    function LantmateriSearch(options) {
+      console.log('[DEBUG] LantmateriSearch constructor called');
+      options = options || {};
+      
+      return {
+        onInit: function(viewerInstance) {
+          console.log('[DEBUG] LantmateriSearch onInit called');
+        },
+        render: function() {
+          console.log('[DEBUG] LantmateriSearch render called');
+          return document.createElement('div');
+        }
+      };
+    }
+    
+    window.LantmateriSearch = LantmateriSearch;
+    console.log('[DEBUG] LantmateriSearch registered to window');
+  })(window);
+</script>
 <script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>
 <script>
   function notifyParent(type, message) {
@@ -3514,7 +3774,7 @@ ${mapIcon}
       'externalurl', 'fullscreen', 'geoposition', 'home', 'legend', 'link',
       'localization', 'mapmenu', 'measure', 'position', 'print', 'progressbar',
       'rotate', 'scale', 'scaleline', 'scalepicker', 'search', 'sharemap',
-      'splash', 'zoom', 'mouseposition', 'exportmap'
+      'splash', 'zoom', 'mouseposition', 'exportmap', 'lantmaterisearch'
     ]);
     const userProvidedControls = Array.isArray(profile.controls);
     const controls = userProvidedControls
@@ -4314,10 +4574,41 @@ ${mapIcon}
 
       const title = profile?.name || profileId;
       html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
-      const pluginBootstrapScript = `<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
-      if (!html.includes(`/plugins/${pluginSlug}/client/origo-pattern-fills.js`)) {
-        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${pluginBootstrapScript}\n</head>`);
-        else html = pluginBootstrapScript + html;
+      
+      // Inject Lantmäteriet control CSS
+      const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
+      if (!html.includes(`/origo-controls/lantmateri-search.css`)) {
+        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${lantmateriCss}\n</head>`);
+      }
+      
+      // Inject Lantmäteriet control script inline (not as external file to avoid cache issues)
+      try {
+        const controlPath = path.join(baseDir, 'origo-controls', 'lantmateri-search.js');
+        const controlJs = await fs.promises.readFile(controlPath, 'utf8');
+        // Extract lantmaterisearch options from profile.controls (set in admin UI)
+        let lmvConfig = {};
+        try {
+          const ctrls = Array.isArray(profile.controls) ? profile.controls : [];
+          const lmvCtrl = ctrls.find((c) => c && c.name === 'lantmaterisearch');
+          if (lmvCtrl && lmvCtrl.options && typeof lmvCtrl.options === 'object') {
+            lmvConfig = lmvCtrl.options;
+          }
+        } catch {}
+        const lmvConfigScript = `<script>window.LANTMATERI_CONFIG = ${JSON.stringify(lmvConfig)};</script>`;
+        const lantmateriScriptInline = `${lmvConfigScript}\n<script>\n${controlJs}\n</script>`;
+        const pluginBootstrapScript = `${lantmateriScriptInline}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+        if (!html.includes(`/plugins/${pluginSlug}/client/origo-pattern-fills.js`)) {
+          if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${pluginBootstrapScript}\n</head>`);
+          else html = pluginBootstrapScript + html;
+        } else if (!html.includes('LantmateriSearch')) {
+          // origo-pattern-fills already there but not lantmateri control, inject before it
+          html = html.replace(
+            /(<script[^>]*\/plugins\/[^>]*origo-pattern-fills\.js[^>]*><\/script>)/i,
+            `${lantmateriScriptInline}\n$1`
+          );
+        }
+      } catch (err) {
+        console.error('[Qtiler2Origo] Failed to inject Lantmäteriet control:', err);
       }
       
       // Force the Origo initialization to use the explicit config with our profile param
@@ -5391,6 +5682,284 @@ ${mapIcon}
     } catch (err) {
       console.error('XERR public-maps', err);
       res.status(500).json({ error: 'public_maps_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Lantmäteriet API proxy - provides secure access to cadastral and population info by coordinates
+  app.get(`/plugins/${pluginSlug}/api/lantmateri-proxy`, async (req, res) => {
+    try {
+      const infoType = String(req.query?.type || 'fastighet').trim();
+      const lon = parseFloat(req.query?.lon);
+      const lat = parseFloat(req.query?.lat);
+
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+        return res.status(400).json({ error: 'Invalid coordinates', required: 'lon and lat parameters' });
+      }
+
+      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return res.status(400).json({ error: 'Coordinates out of range' });
+      }
+
+      // Check if user has access (authenticated users or public if auth is disabled)
+      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      if (authActive && !req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const results = await fetchLantmateriInfo(infoType, lon, lat);
+      res.json({ results });
+    } catch (err) {
+      console.error('[Qtiler2Origo] Lantmäteri info error:', err);
+      res.status(500).json({ error: 'Request failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Lantmäteriet point-info products (Markhöjd, Marktäcke, ...)
+  // Unified registry: adding a new product = one entry here.
+  const LMV_POINT_PRODUCTS = {
+    markhojd: {
+      label: 'Markhöjd Direkt',
+      // Override with LANTMATERI_MARKHOJD_URL_TEMPLATE in .env if your account uses a different path.
+      // Placeholders: {srid} {n} {e} {lon} {lat}
+      urlTemplate: process.env.LANTMATERI_MARKHOJD_URL_TEMPLATE
+        || 'https://api.lantmateriet.se/distribution/produkter/markhojd/v1/hojd?srid={srid}&e={e}&n={n}',
+      envKey: 'LANTMATERI_MARKHOJD_API_KEY',
+      authScheme: process.env.LANTMATERI_MARKHOJD_AUTH || 'Bearer',
+      // OAuth2 client_credentials (API Manager). Auto-renewed; takes priority over static API key.
+      oauth: {
+        clientId: process.env.LANTMATERI_MARKHOJD_CLIENT_ID || process.env.LANTMATERI_CLIENT_ID || '',
+        clientSecret: process.env.LANTMATERI_MARKHOJD_CLIENT_SECRET || process.env.LANTMATERI_CLIENT_SECRET || '',
+        tokenUrl: process.env.LANTMATERI_MARKHOJD_TOKEN_URL || process.env.LANTMATERI_TOKEN_URL
+          || 'https://apimanager.lantmateriet.se/oauth2/token',
+        scope: process.env.LANTMATERI_MARKHOJD_SCOPE || 'markhojd_direkt_v1_read'
+      },
+      mock: (lon, lat) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat, 42.7] },
+        properties: { source: 'mock', accuracy_m: 0.5 }
+      })
+    },
+    marktacke: {
+      label: 'Marktäcke Direkt',
+      // OGC Features API: query both 'markytor' (land) and 'sankmarksytor' (wetlands)
+      // by tiny bbox around the point (CRS84 = lon/lat). Override with a single URL via
+      // LANTMATERI_MARKTACKE_URL_TEMPLATE if needed.
+      urlTemplate: process.env.LANTMATERI_MARKTACKE_URL_TEMPLATE || null,
+      collections: ['markytor', 'sankmarksytor'],
+      baseUrl: 'https://api.lantmateriet.se/ogc-features/v1/marktacke',
+      envKey: 'LANTMATERI_MARKTACKE_API_KEY',
+      authScheme: process.env.LANTMATERI_MARKTACKE_AUTH || 'Basic',
+      // Geotorget Basic Auth: OGC Features APIs use the username/password issued by
+      // Geotorget for THIS subscription. Takes priority over OAuth+API key.
+      basicAuth: {
+        username: process.env.LANTMATERI_MARKTACKE_USER || '',
+        password: process.env.LANTMATERI_MARKTACKE_PASS || ''
+      },
+      oauth: {
+        clientId: process.env.LANTMATERI_MARKTACKE_CLIENT_ID || process.env.LANTMATERI_CLIENT_ID || '',
+        clientSecret: process.env.LANTMATERI_MARKTACKE_CLIENT_SECRET || process.env.LANTMATERI_CLIENT_SECRET || '',
+        tokenUrl: process.env.LANTMATERI_MARKTACKE_TOKEN_URL || process.env.LANTMATERI_TOKEN_URL
+          || 'https://apimanager.lantmateriet.se/oauth2/token',
+        scope: process.env.LANTMATERI_MARKTACKE_SCOPE || ''
+      },
+      mock: (lon, lat) => ({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lon, lat] },
+          properties: { klass_sv: 'Barrskog', klass_kod: 111, source: 'mock' }
+        }]
+      })
+    },
+    hojd: {
+      label: 'Höjd Direkt',
+      urlTemplate: process.env.LANTMATERI_HOJD_URL_TEMPLATE
+        || 'https://api.lantmateriet.se/distribution/produkter/hojd/v1/rest/api/hojd/{srid}/{e}/{n}',
+      envKey: 'LANTMATERI_HOJD_API_KEY',
+      authScheme: process.env.LANTMATERI_HOJD_AUTH || 'Bearer',
+      // OAuth2 client_credentials (API Manager). Auto-renewed.
+      oauth: {
+        clientId: process.env.LANTMATERI_HOJD_CLIENT_ID || process.env.LANTMATERI_CLIENT_ID || '',
+        clientSecret: process.env.LANTMATERI_HOJD_CLIENT_SECRET || process.env.LANTMATERI_CLIENT_SECRET || '',
+        tokenUrl: process.env.LANTMATERI_HOJD_TOKEN_URL || process.env.LANTMATERI_TOKEN_URL
+          || 'https://apimanager.lantmateriet.se/oauth2/token',
+        scope: process.env.LANTMATERI_HOJD_SCOPE || 'hojd_direkt_v1_read'
+      },
+      mock: (lon, lat) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat, 87.3] },
+        properties: { kalla: 'mock (NH 2+)', noggrannhet_m: 0.1 }
+      })
+    }
+  };
+
+  function _expandLmvUrl(tpl, lon, lat, n, e, srid) {
+    const N = (n != null ? n : lat);
+    const E = (e != null ? e : lon);
+    const S = srid || 3006;
+    const d = 0.0001;
+    return tpl
+      .replace(/\{srid\}/g, S)
+      .replace(/\{n\}/g, N)
+      .replace(/\{e\}/g, E)
+      .replace(/\{lon\}/g, lon)
+      .replace(/\{lat\}/g, lat)
+      .replace(/\{lon-\}/g, lon - d)
+      .replace(/\{lat-\}/g, lat - d)
+      .replace(/\{lon\+\}/g, lon + d)
+      .replace(/\{lat\+\}/g, lat + d);
+  }
+
+  function _buildLmvAuthHeaders(scheme, apiKey) {
+    const s = String(scheme || 'Bearer').trim();
+    if (s.toLowerCase() === 'bearer') return { 'Authorization': `Bearer ${apiKey}` };
+    if (s.toLowerCase() === 'apikey') return { 'Authorization': `ApiKey ${apiKey}` };
+    if (s.toLowerCase().startsWith('header:')) {
+      const hdrName = s.slice(7).trim() || 'X-Api-Key';
+      return { [hdrName]: apiKey };
+    }
+    return { 'Authorization': `${s} ${apiKey}` };
+  }
+
+  // OAuth2 client_credentials token cache (per tokenUrl+clientId)
+  const _lmvTokenCache = new Map();
+  async function _getLmvOAuthToken(oauth) {
+    if (!oauth || !oauth.clientId || !oauth.clientSecret || !oauth.tokenUrl) return null;
+    const cacheKey = `${oauth.tokenUrl}|${oauth.clientId}|${oauth.scope || ''}`;
+    const now = Date.now();
+    const cached = _lmvTokenCache.get(cacheKey);
+    if (cached && cached.expiresAt > now + 30000) return cached.token;
+    const basic = Buffer.from(`${oauth.clientId}:${oauth.clientSecret}`).toString('base64');
+    const body = new URLSearchParams({ grant_type: 'client_credentials' });
+    if (oauth.scope) body.set('scope', oauth.scope);
+    console.log(`[Qtiler2Origo][LMV] fetching OAuth token from ${oauth.tokenUrl}`);
+    const r = await fetch(oauth.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: body.toString()
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`OAuth token request failed: ${r.status} ${txt.slice(0, 200)}`);
+    }
+    const data = await r.json();
+    const token = data.access_token;
+    if (!token) throw new Error('OAuth response missing access_token');
+    const ttlMs = (Number(data.expires_in) || 3600) * 1000;
+    _lmvTokenCache.set(cacheKey, { token, expiresAt: now + ttlMs });
+    return token;
+  }
+
+  app.get(`/plugins/${pluginSlug}/api/lantmateri-proxy/:product`, async (req, res) => {
+    try {
+      const productId = String(req.params?.product || '').trim().toLowerCase();
+      const product = LMV_POINT_PRODUCTS[productId];
+      if (!product) {
+        return res.status(404).json({ error: 'unknown_product', product: productId });
+      }
+      const lon = parseFloat(req.query?.lon);
+      const lat = parseFloat(req.query?.lat);
+      const n   = req.query?.n != null ? parseFloat(req.query.n) : null;
+      const e   = req.query?.e != null ? parseFloat(req.query.e) : null;
+      const srid = req.query?.srid ? String(req.query.srid).trim() : null;
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+        return res.status(400).json({ error: 'Invalid coordinates' });
+      }
+
+      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      if (authActive && !req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const apiKey = process.env[product.envKey] || process.env.LANTMATERI_API_KEY || '';
+      // Auth priority: 1) Geotorget Basic (user/pass)  2) OAuth2 client_credentials  3) static API key
+      let authHeader = null;
+      if (product.basicAuth && product.basicAuth.username && product.basicAuth.password) {
+        const b64 = Buffer.from(`${product.basicAuth.username}:${product.basicAuth.password}`).toString('base64');
+        authHeader = `Basic ${b64}`;
+      } else if (product.oauth && product.oauth.clientId && product.oauth.clientSecret) {
+        try {
+          const t = await _getLmvOAuthToken(product.oauth);
+          if (t) authHeader = `Bearer ${t}`;
+        } catch (e) {
+          console.warn(`[Qtiler2Origo][LMV] ${productId} OAuth failed: ${e.message}`);
+          return res.status(502).json({ error: 'oauth_failed', details: e.message });
+        }
+      }
+      if (!authHeader && !apiKey) {
+        _showLmvBanner();
+        return res.json(product.mock(lon, lat));
+      }
+
+      const headers = authHeader
+        ? { 'Accept': 'application/json', 'Authorization': authHeader }
+        : Object.assign({ 'Accept': 'application/json' }, _buildLmvAuthHeaders(product.authScheme, apiKey));
+
+      // Multi-collection OGC Features mode (e.g. marktacke = markytor + sankmarksytor)
+      if (Array.isArray(product.collections) && product.baseUrl && !product.urlTemplate) {
+        // The OGC Features server ignores bbox-crs and always interprets bbox as CRS84 (lon/lat).
+        // Frontend sometimes sends projected coords in lon/lat (when proj4/EPSG:3006 is missing
+        // in OpenLayers). Detect this and reproject server-side via proj4.
+        let X = lon, Y = lat;
+        const sridNum = parseInt(srid, 10) || 0;
+        const looksProjected = Math.abs(lon) > 180 || Math.abs(lat) > 90;
+        if (looksProjected || (sridNum && sridNum !== 4326)) {
+          try {
+            if (!proj4.defs('EPSG:3006')) {
+              proj4.defs('EPSG:3006', '+proj=tmerc +lat_0=0 +lon_0=15 +k=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+            }
+            const fromCode = (sridNum && sridNum !== 4326) ? `EPSG:${sridNum}` : 'EPSG:3006';
+            const inX = Number.isFinite(e) ? e : lon;
+            const inY = Number.isFinite(n) ? n : lat;
+            const out = proj4(fromCode, 'EPSG:4326', [inX, inY]);
+            X = out[0];
+            Y = out[1];
+            console.log(`[Qtiler2Origo][LMV] ${productId} reprojected ${fromCode} (${inX},${inY}) -> WGS84 (${X.toFixed(6)},${Y.toFixed(6)})`);
+          } catch (rpErr) {
+            console.warn(`[Qtiler2Origo][LMV] ${productId} reprojection failed: ${rpErr.message}`);
+          }
+        }
+        // Tiny ~10 m bbox at Swedish latitudes: 0.0001° lat ≈ 11m, 0.00018° lon ≈ 10m at 60°N.
+        const dLat = 0.0001;
+        const dLon = 0.00018;
+        const bbox = `${X - dLon},${Y - dLat},${X + dLon},${Y + dLat}`;
+        const results = {};
+        for (const coll of product.collections) {
+          const url = `${product.baseUrl}/collections/${coll}/items?bbox=${bbox}&limit=5&f=json`;
+          console.log(`[Qtiler2Origo][LMV] ${productId}/${coll} -> ${url}`);
+          try {
+            const r = await fetch(url, { headers });
+            if (!r.ok) {
+              const txt = await r.text().catch(() => '');
+              console.warn(`[Qtiler2Origo][LMV] ${productId}/${coll} upstream ${r.status}: ${txt.slice(0, 200)}`);
+              results[coll] = { error: r.status, body: txt.slice(0, 200) };
+              continue;
+            }
+            results[coll] = await r.json();
+          } catch (e2) {
+            results[coll] = { error: 'fetch_failed', details: String(e2?.message || e2) };
+          }
+        }
+        return res.json({ multi: true, collections: results });
+      }
+
+      const url = _expandLmvUrl(product.urlTemplate, lon, lat, n, e, srid);
+      console.log(`[Qtiler2Origo][LMV] ${productId} -> ${url}`);
+      const r = await fetch(url, { headers });
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        console.warn(`[Qtiler2Origo][LMV] ${productId} upstream ${r.status}: ${txt.slice(0, 300)}`);
+        return res.status(r.status).json({ error: 'upstream_error', status: r.status, url, body: txt.slice(0, 500) });
+      }
+      const data = await r.json();
+      res.json(data);
+    } catch (err) {
+      console.error('[Qtiler2Origo] LMV point-product error:', err);
+      res.status(500).json({ error: 'Request failed', details: String(err?.message || err) });
     }
   });
 

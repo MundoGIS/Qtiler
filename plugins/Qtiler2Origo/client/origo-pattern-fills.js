@@ -328,13 +328,51 @@
       : Promise.resolve(configOrUrl);
 
     return loadConfig.then(function (cfg) {
+      // Register custom Qtiler2Origo controls before initializing Origo
+      if (window.LantmateriSearch) {
+        try {
+          // Register control in Origo's global controls object
+          if (!window.Origo) {
+            console.error('[Qtiler2Origo] window.Origo not available yet!');
+          } else {
+            // Try multiple registration methods
+            if (!window.Origo.controls) {
+              window.Origo.controls = {};
+            }
+            window.Origo.controls.lantmaterisearch = window.LantmateriSearch;
+            
+            // Also try registering with capital L (in case Origo normalizes names)
+            window.Origo.controls.Lantmaterisearch = window.LantmateriSearch;
+            window.Origo.controls.LantmateriSearch = window.LantmateriSearch;
+            
+            console.log('[Qtiler2Origo] Registered LantmateriSearch control', {
+              hasOrigo: !!window.Origo,
+              hasControls: !!window.Origo.controls,
+              registered: window.Origo.controls.lantmaterisearch === window.LantmateriSearch,
+              controlKeys: Object.keys(window.Origo.controls || {})
+            });
+            
+            // Log what controls will be in the config
+            if (cfg && cfg.controls) {
+              console.log('[Qtiler2Origo] Controls in config:', cfg.controls.map(c => c.name || c));
+            }
+          }
+        } catch (err) {
+          console.warn('[Qtiler2Origo] Failed to register Lantmäteriet search control:', err);
+        }
+      } else {
+        console.warn('[Qtiler2Origo] LantmateriSearch not loaded - control will not be available');
+      }
+      
       const app = Origo(cfg);
       window.origoApp = app;
+      
       try {
         applyRuntimePatternStyles(app, cfg);
       } catch (err) {
         console.warn('[Qtiler2Origo] Runtime pattern setup failed before load event:', err);
       }
+      
       if (app && typeof app.on === 'function') {
         app.on('load', function () {
           try {
@@ -344,6 +382,7 @@
           }
         });
       }
+      
       return app;
     });
   }

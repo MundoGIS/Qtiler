@@ -345,6 +345,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.ctrl_splash': 'Splash dialog',
     'Qtiler2Origo.ctrl_scale': 'Scale (text)',
     'Qtiler2Origo.ctrl_scalepicker': 'Scale picker',
+    'Qtiler2Origo.ctrl_lantmateri': 'Lantmäteriet Search (Property & Address)',
     'Qtiler2Origo.wfs_modal_title': 'Vector style editor',
     'Qtiler2Origo.wfs_layer': 'Layer',
     'Qtiler2Origo.wfs_tab_rules': 'Advanced design',
@@ -885,6 +886,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.ctrl_splash': 'Diálogo de bienvenida',
     'Qtiler2Origo.ctrl_scale': 'Escala (texto)',
     'Qtiler2Origo.ctrl_scalepicker': 'Selector de escala',
+    'Qtiler2Origo.ctrl_lantmateri': 'Búsqueda Lantmäteriet (Catastro y Direcciones)',
     'Qtiler2Origo.wfs_modal_title': 'Editor de estilo vectorial',
     'Qtiler2Origo.wfs_layer': 'Capa',
     'Qtiler2Origo.wfs_tab_rules': 'Diseño avanzado',
@@ -1425,6 +1427,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.ctrl_splash': 'Startdialog',
     'Qtiler2Origo.ctrl_scale': 'Skala (text)',
     'Qtiler2Origo.ctrl_scalepicker': 'Skalväljare',
+    'Qtiler2Origo.ctrl_lantmateri': 'Lantmäteriet-sökning (Fastighet och Adress)',
     'Qtiler2Origo.wfs_modal_title': 'Vektorstilredigerare',
     'Qtiler2Origo.wfs_layer': 'Lager',
     'Qtiler2Origo.wfs_tab_rules': 'Avancerad design',
@@ -2026,7 +2029,7 @@ const TOOL_CONFIG_MAP = {
 const ORIGO_CTRL_DEFS = [
   // Navigation
   { id: 'ctrl-home',        name: 'home',        options: { zoomOnStart: true }, labelKey: 'Qtiler2Origo.ctrl_home' },
-  { id: 'ctrl-zoom',        name: 'zoom',        options: null,                  labelKey: 'Qtiler2Origo.ctrl_zoom' },
+  // zoom is mandatory in Origo and always rendered automatically — not exposed
   { id: 'ctrl-rotate',      name: 'rotate',      options: null,                  labelKey: 'Qtiler2Origo.ctrl_rotate' },
   { id: 'ctrl-fullscreen',  name: 'fullscreen',  options: null,                  labelKey: 'Qtiler2Origo.ctrl_fullscreen' },
   { id: 'ctrl-geoposition', name: 'geoposition', options: null,                  labelKey: 'Qtiler2Origo.ctrl_geoposition' },
@@ -2046,7 +2049,7 @@ const ORIGO_CTRL_DEFS = [
   // Share & status
   { id: 'ctrl-sharemap',    name: 'sharemap',    options: null,                  labelKey: 'Qtiler2Origo.ctrl_sharemap' },
   { id: 'ctrl-progressbar', name: 'progressbar', options: null,                  labelKey: 'Qtiler2Origo.ctrl_progressbar' },
-  { id: 'ctrl-scaleline',   name: 'scaleline',   options: null,                  labelKey: 'Qtiler2Origo.ctrl_scaleline' },
+  // scaleline is mandatory in Origo and always rendered automatically — not exposed
   { id: 'ctrl-attribution', name: 'attribution', options: null,                  labelKey: 'Qtiler2Origo.ctrl_attribution' },
   { id: 'ctrl-about',       name: 'about',       options: null,                  labelKey: 'Qtiler2Origo.ctrl_about' },
   // Extras (documented in Origo controls reference)
@@ -2056,7 +2059,18 @@ const ORIGO_CTRL_DEFS = [
   { id: 'ctrl-link',        name: 'link',        options: null,                  labelKey: 'Qtiler2Origo.ctrl_link',        label: 'Link' },
   { id: 'ctrl-splash',      name: 'splash',      options: null,                  labelKey: 'Qtiler2Origo.ctrl_splash',      label: 'Splash' },
   { id: 'ctrl-scale',       name: 'scale',       options: null,                  labelKey: 'Qtiler2Origo.ctrl_scale',       label: 'Scale (text)' },
-  { id: 'ctrl-scalepicker', name: 'scalepicker', options: null,                  labelKey: 'Qtiler2Origo.ctrl_scalepicker', label: 'Scale picker' }
+  { id: 'ctrl-scalepicker', name: 'scalepicker', options: null,                  labelKey: 'Qtiler2Origo.ctrl_scalepicker', label: 'Scale picker' },
+  // Qtiler2Origo custom controls
+  { id: 'ctrl-lantmaterisearch', name: 'lantmaterisearch', options: {
+    proxyUrl: '/plugins/Qtiler2Origo/api/lantmateri-proxy',
+    searchTypes: ['fastighet', 'adress', 'ort'],
+    zoomLevel: 14,
+    gdprNotice: 'Information från Lantmäteriet kan innehålla personuppgifter (t.ex. ägare, befolkning). Använd endast i tjänsteutövning enligt gällande regler.',
+    gdprLinks: [
+      { label: 'Integritetspolicy', url: 'https://www.lantmateriet.se/sv/om-lantmateriet/Om-webbplatsen/integritetspolicy/' },
+      { label: 'Villkor', url: 'https://www.lantmateriet.se/sv/Om-Lantmateriet/villkor/' }
+    ]
+  }, labelKey: 'Qtiler2Origo.ctrl_lantmateri', label: 'Lantmäteriet Search' }
 ];
 
 /** Build the Origo controls array from the current checkbox states and write to the JSON textarea. */

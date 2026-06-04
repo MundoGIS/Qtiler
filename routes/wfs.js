@@ -665,6 +665,13 @@ export const registerWfsRoutes = ({
   const handleWfsKvp = async (req, res) => {
     const service = String(getQueryCI(req, 'SERVICE') || 'WFS').toUpperCase();
     if (service !== 'WFS') {
+      if (service === 'WMS') {
+        const qMarkIdx = req.originalUrl.indexOf('?');
+        const pathPart = qMarkIdx >= 0 ? req.originalUrl.substring(0, qMarkIdx) : req.originalUrl;
+        const queryPart = qMarkIdx >= 0 ? req.originalUrl.substring(qMarkIdx) : '';
+        const newPath = pathPart.replace(/\/wfs\/?$/i, '/wms');
+        return res.redirect(308, newPath + queryPart);
+      }
       res.status(400).type('application/xml').send(wfsExceptionXml('SERVICE must be WFS', { code: 'InvalidParameterValue' }));
       return;
     }

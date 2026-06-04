@@ -382,44 +382,63 @@ const featureInfoDataToXml = (payload) => {
   );
 };
 
-const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [] }) => {
+const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [], wmsVersion = "1.3.0" }) => {
   const now = new Date().toISOString();
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  
+  const is111 = wmsVersion === "1.1.1";
+  const rootOpenTag = is111 
+    ? `<WMT_MS_Capabilities version="1.1.1">` 
+    : `<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">`;
+  const rootCloseTag = is111 ? `</WMT_MS_Capabilities>` : `</WMS_Capabilities>`;
+  const srsTag = is111 ? "SRS" : "CRS";
+
   const rootCrs = Array.isArray(supportedCrs) && supportedCrs.length
     ? supportedCrs
     : ["EPSG:3857", "EPSG:4326"];
-  const rootCrsNodes = rootCrs.map((c) => `<CRS>${esc(c)}</CRS>`).join("");
+  const rootCrsNodes = rootCrs.map((c) => `<${srsTag}>${esc(c)}</${srsTag}>`).join("");
   const layerNodes = layers
     .map((l) => {
       const name = esc(l.name);
       const title = esc(l.title || l.name);
       const crsList = Array.isArray(l.crs) ? l.crs : [];
-      const crsNodes = crsList.map((c) => `<CRS>${esc(c)}</CRS>`).join("");
+      const crsNodes = crsList.map((c) => `<${srsTag}>${esc(c)}</${srsTag}>`).join("");
       const bbox = Array.isArray(l.bbox) && l.bbox.length === 4 ? l.bbox.map((n) => Number(n)) : null;
-      const bboxNode = bbox && bbox.every(Number.isFinite)
-        ? `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`
-        : "";
+      let bboxNode = "";
+      if (bbox && bbox.every(Number.isFinite)) {
+        if (is111) {
+          bboxNode = `<LatLonBoundingBox minx="${bbox[0]}" miny="${bbox[1]}" maxx="${bbox[2]}" maxy="${bbox[3]}"/>`;
+        } else {
+          bboxNode = `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`;
+        }
+        // In addition, WMS requires BoundingBox elements for advertised coordinate systems.
+        // We will supply a global 3857 bounding box as a fallback if no specific one exists.
+        // OpenLayers/QWC2 parser depends on having a BoundingBox for the active map CRS.
+        const srsLabel = is111 ? "SRS" : "CRS";
+        bboxNode += `<BoundingBox ${srsLabel}="EPSG:3857" minx="-20037508.34" miny="-20037508.34" maxx="20037508.34" maxy="20037508.34"/>`;
+        bboxNode += `<BoundingBox ${srsLabel}="EPSG:4326" minx="${bbox[1]}" miny="${bbox[0]}" maxx="${bbox[3]}" maxy="${bbox[2]}"/>`;
+      }
       return `<Layer queryable="1"><Name>${name}</Name><Title>${title}</Title>${crsNodes}${bboxNode}</Layer>`;
     })
     .join("");
 
   return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">` +
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `${rootOpenTag}\n` +
     `<Service>` +
-    `<Name>WMS</Name>` +
+    `<Name>OGC:WMS</Name>` +
     `<Title>${esc(`Qtiler WMS (${projectId})`)}</Title>` +
     `<Abstract>${esc("WMS endpoint powered by QGIS Core (no QGIS Server)")}</Abstract>` +
-    `<OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/>` +
+    `<OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/>` +
     `</Service>` +
     `<Capability>` +
     `<Request>` +
-    `<GetCapabilities><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetCapabilities>` +
-    `<GetMap><Format>image/png</Format><Format>image/jpeg</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetMap>` +
-    `<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
-    `<GetLegendGraphic><Format>image/png</Format><DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetLegendGraphic>` +
+    `<GetCapabilities><Format>application/vnd.ogc.wms_xml</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetCapabilities>` +
+    `<GetMap><Format>image/png</Format><Format>image/jpeg</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetMap>` +
+    `<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
+    `<GetLegendGraphic><Format>image/png</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetLegendGraphic>` +
     `</Request>` +
-    `<Exception><Format>XML</Format></Exception>` +
+    `<Exception><Format>application/vnd.ogc.se_xml</Format></Exception>` +
     `<Layer>` +
     `<Title>${esc(`Qtiler project ${projectId}`)}</Title>` +
     `${rootCrsNodes}` +
@@ -427,7 +446,7 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
     `</Layer>` +
     `</Capability>` +
     `<ExtendedCapabilities><GeneratedAt>${esc(now)}</GeneratedAt></ExtendedCapabilities>` +
-    `</WMS_Capabilities>`
+    `\n${rootCloseTag}`
   );
 };
 
@@ -517,6 +536,13 @@ export const registerWmsRoutes = ({
 
       const service = String(getQueryCI(req, "SERVICE") || "WMS").toUpperCase();
       if (service !== "WMS") {
+        if (service === "WFS") {
+          const qMarkIdx = req.originalUrl.indexOf('?');
+          const pathPart = qMarkIdx >= 0 ? req.originalUrl.substring(0, qMarkIdx) : req.originalUrl;
+          const queryPart = qMarkIdx >= 0 ? req.originalUrl.substring(qMarkIdx) : '';
+          const newPath = pathPart.replace(/\/wms\/?$/i, '/wfs');
+          return res.redirect(308, newPath + queryPart);
+        }
         res.status(400).type("application/xml").send(wmsExceptionXml("SERVICE must be WMS"));
         return;
       }
@@ -558,10 +584,14 @@ export const registerWmsRoutes = ({
         // Include the required `project` parameter in the advertised endpoint so clients that
         // follow the OnlineResource won't lose project context after GetCapabilities.
         const serviceUrl = `${getRequestBaseUrl(req)}/wms?project=${encodeURIComponent(projectId)}`;
+        
+        const reqVersion = String(getQueryCI(req, "VERSION") || "1.3.0").trim();
+        const negotiatedVersion = reqVersion.startsWith("1.1") ? "1.1.1" : "1.3.0";
+
         // NOTE: do not append ?api_key=… here. The capability document is cached
         // by clients and proxies; clients must send the key via the X-API-Key
         // header instead so it never lands in shared logs/caches.
-        const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs });
+        const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs, wmsVersion: negotiatedVersion });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type("text/xml").send(xml);
         return;

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Test Lantmäteriet Control</title>
+</head>
+<body>
+  <h1>Test Control Loading</h1>
+  <p>Open console to see logs</p>
+  
+  <script>
+    console.log('[TEST] HTML page loaded');
+  </script>
+  
+  <script src="/plugins/Qtiler2Origo/origo-controls/lantmateri-search.js"></script>
+  
+  <script>
+    console.log('[TEST] After control script tag');
+    console.log('[TEST] window.LantmateriSearch =', typeof window.LantmateriSearch);
+  </script>
+</body>
+</html>

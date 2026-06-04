@@ -9214,6 +9214,13 @@ app.get("/wmts", (req, res, next) => {
   const reqType = String(findQ('REQUEST') || findQ('request') || "").toUpperCase();
 
   if (svc !== "WMTS") {
+    if (svc === "WMS" || svc === "WFS") {
+      const qMarkIdx = req.originalUrl.indexOf('?');
+      const pathPart = qMarkIdx >= 0 ? req.originalUrl.substring(0, qMarkIdx) : req.originalUrl;
+      const queryPart = qMarkIdx >= 0 ? req.originalUrl.substring(qMarkIdx) : '';
+      const newPath = pathPart.replace(/\/wmts\/?$/i, svc === "WMS" ? '/wms' : '/wfs');
+      return res.redirect(308, newPath + queryPart);
+    }
     return next();
   }
 

@@ -81,7 +81,7 @@ external SaaS providers.
 
 ### Try before you buy
 
-QtilerAuth ships with a **one-month full-feature trial**. During trial it works
+QtilerAuth ships with a **three-months full-feature trial**. During trial it works
 exactly like the licensed product so you can validate users, ACLs, brute-force
 protection, captcha and API-key flows in your own environment. After expiry the
 plugin auto-disables and the base Qtiler server keeps running.
