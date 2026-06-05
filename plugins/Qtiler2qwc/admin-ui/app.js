@@ -97,6 +97,19 @@ const QTWC_I18N = {
     'Qtiler2qwc.loading': 'Loading...',
     'Qtiler2qwc.searchable': 'searchable',
     'Qtiler2qwc.editable': 'editable',
+    'Qtiler2qwc.fullscreen': 'Fullscreen',
+    'Qtiler2qwc.windowed': 'Exit fullscreen',
+    'Qtiler2qwc.layers_legend': 'Include = published · Visible = on at start',
+    'Qtiler2qwc.col_include': 'Include',
+    'Qtiler2qwc.col_visible': 'Visible',
+    'Qtiler2qwc.col_layer': 'Layer',
+    'Qtiler2qwc.extra_sources': 'Layers from other projects',
+    'Qtiler2qwc.add_extra_source': '+ Add project',
+    'Qtiler2qwc.extra_sources_help': 'Optional. Add layers from any other project — they will be served as external WMS layers and work even if their CRS differs from the main project.',
+    'Qtiler2qwc.extra_source_pick_project': '-- Select project --',
+    'Qtiler2qwc.no_extra_layers': 'Select a project to load its layers.',
+    'Qtiler2qwc.crs_label': 'CRS {crs}',
+    'Qtiler2qwc.remove': 'Remove',
     'Qtiler2qwc.layers_count': '{n} layers',
     'Qtiler2qwc.bg_count': '{n} backgrounds',
     'Qtiler2qwc.tab_setup': 'Setup',
@@ -167,10 +180,13 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.2': 'Admin actions (install/uninstall, branding, configs) require an authenticated admin user.',
     'Qtiler2qwc.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qtiler2qwc/.',
     'Qtiler2qwc.catalog_texts_section': 'Catalog page texts',
-    'Qtiler2qwc.catalog_texts_desc': 'Customize the heading and description shown on the /Qtiler2qwc/webmap/ catalog page. Leave a field empty to use the default text.',
+    'Qtiler2qwc.catalog_texts_desc': 'Customize the heading, description, header and footer shown on the /Qtiler2qwc/webmap/ catalog page. Leave a field empty to use the default.',
     'Qtiler2qwc.catalog_title_label': 'Page title',
     'Qtiler2qwc.catalog_desc_public_label': 'Description for public / unauthenticated visitors',
     'Qtiler2qwc.catalog_desc_auth_label': 'Description for authenticated users (leave empty to reuse the public text)',
+    'Qtiler2qwc.catalog_header_label': 'Header HTML (shown above the title)',
+    'Qtiler2qwc.catalog_footer_label': 'Footer HTML (shown below the map cards)',
+    'Qtiler2qwc.catalog_html_help': 'HTML allowed. Leave empty to hide.',
     'Qtiler2qwc.catalog_texts_save': 'Save',
     'Qtiler2qwc.catalog_texts_saved': 'Saved.',
     'Qtiler2qwc.catalog_title_ph': 'Available webmaps',
@@ -274,6 +290,19 @@ const QTWC_I18N = {
     'Qtiler2qwc.loading': 'Cargando...',
     'Qtiler2qwc.searchable': 'buscable',
     'Qtiler2qwc.editable': 'editable',
+    'Qtiler2qwc.fullscreen': 'Pantalla completa',
+    'Qtiler2qwc.windowed': 'Salir de pantalla completa',
+    'Qtiler2qwc.layers_legend': 'Incluir = publicada · Visible = activa al iniciar',
+    'Qtiler2qwc.col_include': 'Incluir',
+    'Qtiler2qwc.col_visible': 'Visible',
+    'Qtiler2qwc.col_layer': 'Capa',
+    'Qtiler2qwc.extra_sources': 'Capas de otros proyectos',
+    'Qtiler2qwc.add_extra_source': '+ Añadir proyecto',
+    'Qtiler2qwc.extra_sources_help': 'Opcional. Añade capas de cualquier otro proyecto — se sirven como capas WMS externas y funcionan aunque tengan un CRS distinto al del proyecto principal.',
+    'Qtiler2qwc.extra_source_pick_project': '-- Selecciona proyecto --',
+    'Qtiler2qwc.no_extra_layers': 'Selecciona un proyecto para cargar sus capas.',
+    'Qtiler2qwc.crs_label': 'CRS {crs}',
+    'Qtiler2qwc.remove': 'Eliminar',
     'Qtiler2qwc.layers_count': '{n} capas',
     'Qtiler2qwc.bg_count': '{n} fondos',
     'Qtiler2qwc.tab_setup': 'Configuración',
@@ -344,10 +373,13 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.2': 'Las acciones de administración (instalar/desinstalar, branding, configs) requieren un usuario admin autenticado.',
     'Qtiler2qwc.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qtiler2qwc/.',
     'Qtiler2qwc.catalog_texts_section': 'Textos de la página de catálogo',
-    'Qtiler2qwc.catalog_texts_desc': 'Personaliza el encabezado y la descripción que aparecen en la página /Qtiler2qwc/webmap/. Deja un campo vacío para usar el texto predeterminado.',
+    'Qtiler2qwc.catalog_texts_desc': 'Personaliza el encabezado, descripción, header y footer que aparecen en la página /Qtiler2qwc/webmap/. Deja un campo vacío para usar el predeterminado.',
     'Qtiler2qwc.catalog_title_label': 'Título de la página',
     'Qtiler2qwc.catalog_desc_public_label': 'Descripción para visitantes públicos / no autenticados',
     'Qtiler2qwc.catalog_desc_auth_label': 'Descripción para usuarios autenticados (déjalo vacío para reusar el texto público)',
+    'Qtiler2qwc.catalog_header_label': 'HTML del encabezado (encima del título)',
+    'Qtiler2qwc.catalog_footer_label': 'HTML del pie (debajo de las tarjetas)',
+    'Qtiler2qwc.catalog_html_help': 'Se permite HTML. Déjalo vacío para ocultar.',
     'Qtiler2qwc.catalog_texts_save': 'Guardar',
     'Qtiler2qwc.catalog_texts_saved': 'Guardado.',
     'Qtiler2qwc.catalog_title_ph': 'Mapas disponibles',
@@ -451,6 +483,19 @@ const QTWC_I18N = {
     'Qtiler2qwc.loading': 'Laddar...',
     'Qtiler2qwc.searchable': 'sökbar',
     'Qtiler2qwc.editable': 'redigerbar',
+    'Qtiler2qwc.fullscreen': 'Helskärm',
+    'Qtiler2qwc.windowed': 'Avsluta helskärm',
+    'Qtiler2qwc.layers_legend': 'Inkludera = publicerad · Synlig = på vid start',
+    'Qtiler2qwc.col_include': 'Inkludera',
+    'Qtiler2qwc.col_visible': 'Synlig',
+    'Qtiler2qwc.col_layer': 'Lager',
+    'Qtiler2qwc.extra_sources': 'Lager från andra projekt',
+    'Qtiler2qwc.add_extra_source': '+ Lägg till projekt',
+    'Qtiler2qwc.extra_sources_help': 'Valfritt. Lägg till lager från andra projekt — de levereras som externa WMS-lager och fungerar även om de har annan CRS.',
+    'Qtiler2qwc.extra_source_pick_project': '-- Välj projekt --',
+    'Qtiler2qwc.no_extra_layers': 'Välj ett projekt för att läsa in dess lager.',
+    'Qtiler2qwc.crs_label': 'CRS {crs}',
+    'Qtiler2qwc.remove': 'Ta bort',
     'Qtiler2qwc.layers_count': '{n} lager',
     'Qtiler2qwc.bg_count': '{n} bakgrunder',
     'Qtiler2qwc.tab_setup': 'Inställningar',
@@ -521,10 +566,13 @@ const QTWC_I18N = {
     'Qtiler2qwc.hiw.security.2': 'Adminhandlingar (installera/avinstallera, branding, configs) kräver en autentiserad adminanvändare.',
     'Qtiler2qwc.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2qwc/.',
     'Qtiler2qwc.catalog_texts_section': 'Katalogsidans texter',
-    'Qtiler2qwc.catalog_texts_desc': 'Anpassa rubriken och beskrivningen som visas på /Qtiler2qwc/webmap/. Lämna tomt för att använda standardtexten.',
+    'Qtiler2qwc.catalog_texts_desc': 'Anpassa rubrik, beskrivning, header och footer som visas på /Qtiler2qwc/webmap/. Lämna tomt för att använda standard.',
     'Qtiler2qwc.catalog_title_label': 'Sidrubrik',
     'Qtiler2qwc.catalog_desc_public_label': 'Beskrivning för publika / ej inloggade besökare',
     'Qtiler2qwc.catalog_desc_auth_label': 'Beskrivning för inloggade användare (lämna tomt för att återanvända den publika texten)',
+    'Qtiler2qwc.catalog_header_label': 'Header-HTML (ovanför rubriken)',
+    'Qtiler2qwc.catalog_footer_label': 'Footer-HTML (under kortrutan)',
+    'Qtiler2qwc.catalog_html_help': 'HTML tillåts. Lämna tomt för att dölja.',
     'Qtiler2qwc.catalog_texts_save': 'Spara',
     'Qtiler2qwc.catalog_texts_saved': 'Sparat.',
     'Qtiler2qwc.catalog_title_ph': 'Tillgängliga webbkartor',
@@ -803,6 +851,9 @@ const backgroundProjectSelect = document.getElementById('backgroundProjectSelect
 const projectLayersList = document.getElementById('projectLayersList');
 const backgroundLayersList = document.getElementById('backgroundLayersList');
 const defaultBackgroundList = document.getElementById('defaultBackgroundList');
+const publishModalToggleFullscreen = document.getElementById('publishModalToggleFullscreen');
+const extraSourcesList = document.getElementById('extraSourcesList');
+const addExtraSourceBtn = document.getElementById('addExtraSourceBtn');
 const featureSearch = document.getElementById('featureSearch');
 const featureSearchGlobal = document.getElementById('featureSearchGlobal');
 const featureView3D = document.getElementById('featureView3D');
@@ -946,8 +997,15 @@ const publishState = {
   mainRules: {},
   backgroundOptions: [],
   defaultBackgroundKey: 'none',
-  editingProfileId: null  // non-null = edit mode
+  editingProfileId: null,  // non-null = edit mode
+  // Per-layer state for main project: { [layerName]: { included: bool, visible: bool } }
+  mainLayerStates: {},
+  // Additional projects whose layers should be included as external WMS
+  // [{ uid, projectId, projectCrs, layers: [{name, geometry}], layerStates: { [name]: {included, visible} } }]
+  extraSources: []
 };
+
+let extraSourceUidCounter = 1;
 
 function getFixedBackgroundOptions() {
   return [
@@ -1169,26 +1227,125 @@ function renderLayerChecklist(container, layers, rules = {}) {
     container.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2qwc.no_layers'))}</p>`;
     return;
   }
+  if (isMainLayerList) {
+    renderLayerTable(container, layers, rules, publishState.mainLayerStates, { extraSourceUid: null });
+    return;
+  }
   container.innerHTML = layers.map((layer) => {
     const rule = rules[layer.name] || {};
     const tags = [];
     if (rule.searchable) tags.push(t('Qtiler2qwc.searchable'));
     if (rule.editable) tags.push(t('Qtiler2qwc.editable'));
     const tagText = tags.length ? `<span class="Qtiler2qwc-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
-    const activeHint = isMainLayerList ? `<small class="help">Activa al abrir mapa</small>` : '';
     return `
       <label class="checkbox Qtiler2qwc-layer-item">
         <input type="checkbox" data-layer-name="${escapeHtml(layer.name)}" />
         <span>${escapeHtml(layer.name)}</span>
-        ${activeHint}
         ${tagText}
       </label>
     `;
   }).join('');
 }
 
+/* ── Rich layer table with Include + Visible columns ── */
+function renderLayerTable(container, layers, rules, statesObj, opts = {}) {
+  const extraUid = opts.extraSourceUid || null;
+  const dataExtra = extraUid ? ` data-extra-uid="${escapeHtml(String(extraUid))}"` : '';
+  const head = `
+    <div class="Qtiler2qwc-layer-table__head"${dataExtra}>
+      <div class="Qtiler2qwc-layer-table__cell">${escapeHtml(t('Qtiler2qwc.col_include'))}</div>
+      <div class="Qtiler2qwc-layer-table__cell">${escapeHtml(t('Qtiler2qwc.col_visible'))}</div>
+      <div class="Qtiler2qwc-layer-table__cell Qtiler2qwc-layer-table__cell--name">${escapeHtml(t('Qtiler2qwc.col_layer'))}</div>
+      <div class="Qtiler2qwc-layer-table__cell"></div>
+    </div>`;
+  const rows = layers.map((layer) => {
+    const name = String(layer.name || '').trim();
+    if (!name) return '';
+    const state = statesObj[name] || { included: true, visible: true };
+    const included = state.included !== false;
+    const visible = included && state.visible !== false;
+    const rule = (rules || {})[name] || {};
+    const tags = [];
+    if (rule.searchable) tags.push(t('Qtiler2qwc.searchable'));
+    if (rule.editable) tags.push(t('Qtiler2qwc.editable'));
+    const tagHtml = tags.length
+      ? `<span class="Qtiler2qwc-layer-table__tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>`
+      : '';
+    return `
+      <div class="Qtiler2qwc-layer-table__row${included ? '' : ' is-excluded'}" data-layer-name="${escapeHtml(name)}"${dataExtra}>
+        <div class="Qtiler2qwc-layer-table__cell">
+          <input type="checkbox" data-role="include" data-layer-name="${escapeHtml(name)}"${dataExtra} ${included ? 'checked' : ''} aria-label="Include ${escapeHtml(name)}" />
+        </div>
+        <div class="Qtiler2qwc-layer-table__cell Qtiler2qwc-layer-table__visible-cell">
+          <input type="checkbox" data-role="visible" data-layer-name="${escapeHtml(name)}"${dataExtra} ${visible ? 'checked' : ''} ${included ? '' : 'disabled'} aria-label="Visible ${escapeHtml(name)}" />
+        </div>
+        <div class="Qtiler2qwc-layer-table__cell Qtiler2qwc-layer-table__cell--name">${escapeHtml(name)}</div>
+        <div class="Qtiler2qwc-layer-table__cell">${tagHtml}</div>
+      </div>`;
+  }).join('');
+  container.innerHTML = head + rows;
+}
+
+/* Wire up include/visible interactions for layer tables */
+function attachLayerTableHandlers() {
+  if (projectLayersList && !projectLayersList.dataset.handlersAttached) {
+    projectLayersList.addEventListener('change', (ev) => {
+      const target = ev.target;
+      if (!target || target.tagName !== 'INPUT') return;
+      handleLayerTableChange(target, publishState.mainLayerStates, projectLayersList);
+    });
+    projectLayersList.dataset.handlersAttached = '1';
+  }
+  if (extraSourcesList && !extraSourcesList.dataset.handlersAttached) {
+    extraSourcesList.addEventListener('change', (ev) => {
+      const target = ev.target;
+      if (!target || target.tagName !== 'INPUT') return;
+      const uid = target.getAttribute('data-extra-uid');
+      if (!uid) return;
+      const src = publishState.extraSources.find((s) => String(s.uid) === String(uid));
+      if (!src) return;
+      handleLayerTableChange(target, src.layerStates, extraSourcesList, uid);
+    });
+    extraSourcesList.dataset.handlersAttached = '1';
+  }
+}
+
+function handleLayerTableChange(input, statesObj, rootContainer, extraUid) {
+  const layerName = input.getAttribute('data-layer-name');
+  const role = input.getAttribute('data-role');
+  if (!layerName || !role) return;
+  if (!statesObj[layerName]) statesObj[layerName] = { included: true, visible: true };
+  const sel = extraUid
+    ? `.Qtiler2qwc-layer-table__row[data-layer-name="${cssEscape(layerName)}"][data-extra-uid="${cssEscape(String(extraUid))}"]`
+    : `.Qtiler2qwc-layer-table__row[data-layer-name="${cssEscape(layerName)}"]:not([data-extra-uid])`;
+  const row = rootContainer.querySelector(sel);
+  if (role === 'include') {
+    statesObj[layerName].included = !!input.checked;
+    if (!input.checked) statesObj[layerName].visible = false;
+    if (row) {
+      row.classList.toggle('is-excluded', !input.checked);
+      const vis = row.querySelector('input[data-role="visible"]');
+      if (vis) {
+        vis.disabled = !input.checked;
+        if (!input.checked) vis.checked = false;
+      }
+    }
+  } else if (role === 'visible') {
+    statesObj[layerName].visible = !!input.checked;
+  }
+}
+
+function cssEscape(s) {
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/["\\]/g, '\\$&');
+}
+
 function getCheckedLayerNames(container) {
   if (!container) return [];
+  // For the rich main layer table we read from state, not from DOM checkboxes
+  if (container === projectLayersList && container.querySelector('.Qtiler2qwc-layer-table__row')) {
+    return Object.keys(publishState.mainLayerStates).filter((name) => publishState.mainLayerStates[name]?.visible === true);
+  }
   return Array.from(container.querySelectorAll('input[type="checkbox"][data-layer-name]:checked'))
     .map((el) => String(el.getAttribute('data-layer-name') || '').trim())
     .filter(Boolean);
@@ -1196,6 +1353,21 @@ function getCheckedLayerNames(container) {
 
 function setCheckedLayerNames(container, names) {
   if (!container || !Array.isArray(names)) return;
+  // For the rich main layer table, update state and rerender
+  if (container === projectLayersList && Array.isArray(publishState.mainLayers) && publishState.mainLayers.length) {
+    const set = new Set(names);
+    publishState.mainLayers.forEach((layer) => {
+      const n = String(layer.name || '').trim();
+      if (!n) return;
+      const existing = publishState.mainLayerStates[n] || { included: true, visible: true };
+      publishState.mainLayerStates[n] = {
+        included: existing.included !== false,
+        visible: set.has(n)
+      };
+    });
+    renderLayerTable(container, publishState.mainLayers, publishState.mainRules, publishState.mainLayerStates, { extraSourceUid: null });
+    return;
+  }
   const set = new Set(names);
   container.querySelectorAll('input[type="checkbox"][data-layer-name]').forEach((el) => {
     el.checked = set.has(el.getAttribute('data-layer-name'));
@@ -1307,13 +1479,141 @@ async function loadProjectLayers(projectId, target = 'main') {
   if (target === 'main') {
     publishState.mainLayers = normalized;
     publishState.mainRules = await loadLayerRules(projectId);
+    // Initialize states: all included + visible by default (preserve prior state if any)
+    const prev = publishState.mainLayerStates || {};
+    const next = {};
+    normalized.forEach((l) => {
+      const n = String(l.name || '').trim();
+      if (!n) return;
+      const p = prev[n] || {};
+      next[n] = {
+        included: p.included !== false,
+        visible: p.included === false ? false : (p.visible !== false)
+      };
+    });
+    publishState.mainLayerStates = next;
     renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
-    projectLayersList.querySelectorAll('input[type="checkbox"]').forEach((el) => { el.checked = true; });
+    attachLayerTableHandlers();
     return;
   }
   publishState.backgroundLayers = normalized;
   renderLayerChecklist(backgroundLayersList, publishState.backgroundLayers, {});
   refreshBackgroundOptions();
+}
+
+/* ── Extra-source projects (cross-CRS layers) ── */
+function addExtraSource(prefill) {
+  attachLayerTableHandlers();
+  const uid = `es${extraSourceUidCounter++}`;
+  const src = {
+    uid,
+    projectId: '',
+    projectCrs: null,
+    layers: [],
+    layerStates: {}
+  };
+  publishState.extraSources.push(src);
+  renderExtraSources();
+  if (prefill && prefill.projectId) {
+    // Pre-populate after DOM exists
+    queueMicrotask(async () => {
+      const sel = extraSourcesList?.querySelector(`select[data-extra-uid="${cssEscape(uid)}"]`);
+      if (sel) sel.value = prefill.projectId;
+      await loadExtraSourceLayers(uid, prefill.projectId, prefill.layerStates || {});
+    });
+  }
+}
+
+function removeExtraSource(uid) {
+  publishState.extraSources = publishState.extraSources.filter((s) => String(s.uid) !== String(uid));
+  renderExtraSources();
+}
+
+function renderExtraSources() {
+  if (!extraSourcesList) return;
+  if (!publishState.extraSources.length) {
+    extraSourcesList.innerHTML = '';
+    return;
+  }
+  const projectOptions = publishState.projects
+    .filter((p) => p.id !== String(publishProjectSelect?.value || '').trim())
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || p.id)}</option>`)
+    .join('');
+  extraSourcesList.innerHTML = publishState.extraSources.map((src) => {
+    const crsTag = src.projectCrs
+      ? `<span class="Qtiler2qwc-extra-source__crs-tag">${escapeHtml(t('Qtiler2qwc.crs_label', { crs: src.projectCrs }))}</span>`
+      : '';
+    return `
+      <div class="Qtiler2qwc-extra-source" data-extra-uid="${escapeHtml(src.uid)}">
+        <div class="Qtiler2qwc-extra-source__head">
+          <div class="select is-small is-fullwidth" style="flex:1">
+            <select data-extra-uid="${escapeHtml(src.uid)}" data-role="project-pick">
+              <option value="">${escapeHtml(t('Qtiler2qwc.extra_source_pick_project'))}</option>
+              ${projectOptions}
+            </select>
+          </div>
+          ${crsTag}
+          <button type="button" class="Qtiler2qwc-extra-source__remove" data-extra-uid="${escapeHtml(src.uid)}" data-role="remove">${escapeHtml(t('Qtiler2qwc.remove'))}</button>
+        </div>
+        <div class="Qtiler2qwc-extra-source__layers" data-extra-uid="${escapeHtml(src.uid)}">
+          ${src.layers.length
+            ? '' /* will be filled below */
+            : `<p class="help">${escapeHtml(t('Qtiler2qwc.no_extra_layers'))}</p>`}
+        </div>
+      </div>`;
+  }).join('');
+
+  // Restore select values + render layer tables
+  publishState.extraSources.forEach((src) => {
+    const sel = extraSourcesList.querySelector(`select[data-extra-uid="${cssEscape(src.uid)}"]`);
+    if (sel) sel.value = src.projectId || '';
+    if (src.layers.length) {
+      const layersBox = extraSourcesList.querySelector(`.Qtiler2qwc-extra-source__layers[data-extra-uid="${cssEscape(src.uid)}"]`);
+      if (layersBox) {
+        renderLayerTable(layersBox, src.layers, {}, src.layerStates, { extraSourceUid: src.uid });
+      }
+    }
+  });
+}
+
+async function loadExtraSourceLayers(uid, projectId, prefillStates) {
+  const src = publishState.extraSources.find((s) => String(s.uid) === String(uid));
+  if (!src) return;
+  src.projectId = projectId;
+  if (!projectId) {
+    src.layers = [];
+    src.layerStates = {};
+    src.projectCrs = null;
+    renderExtraSources();
+    return;
+  }
+  try {
+    const layersResp = await api(`/projects/${encodeURIComponent(projectId)}/layers`);
+    src.layers = normalizeLayersPayload(layersResp);
+    const crs = String(
+      layersResp?.project?.crs ||
+      layersResp?.crs ||
+      layersResp?.projectCrs ||
+      (Array.isArray(layersResp?.layers) && layersResp.layers.find((l) => l?.layer_crs || l?.crs)?.layer_crs) ||
+      (Array.isArray(layersResp?.layers) && layersResp.layers.find((l) => l?.layer_crs || l?.crs)?.crs) ||
+      ''
+    ).trim();
+    src.projectCrs = crs || null;
+    src.layerStates = {};
+    src.layers.forEach((l) => {
+      const n = String(l.name || '').trim();
+      if (!n) return;
+      const p = (prefillStates && prefillStates[n]) || null;
+      src.layerStates[n] = p
+        ? { included: p.included !== false, visible: p.included === false ? false : (p.visible !== false) }
+        : { included: false, visible: false };  // default OFF for extra sources to avoid noise
+    });
+  } catch (err) {
+    src.layers = [];
+    src.layerStates = {};
+    addLog(t('Qtiler2qwc.log_error', { msg: `extra source ${projectId}: ${err.message || err}` }), 'error');
+  }
+  renderExtraSources();
 }
 
 async function loadProjectsForPublish() {
@@ -1339,8 +1639,18 @@ function openPublishModal() {
   if (publishModal) publishModal.classList.add('is-active');
 }
 function closePublishModal() {
-  if (publishModal) publishModal.classList.remove('is-active');
+  if (publishModal) {
+    publishModal.classList.remove('is-active');
+    publishModal.classList.remove('Qtiler2qwc-modal-fullscreen');
+  }
+  if (publishModalToggleFullscreen) {
+    publishModalToggleFullscreen.textContent = t('Qtiler2qwc.fullscreen');
+    publishModalToggleFullscreen.setAttribute('aria-pressed', 'false');
+  }
   publishState.editingProfileId = null;
+  publishState.extraSources = [];
+  publishState.mainLayerStates = {};
+  if (extraSourcesList) extraSourcesList.innerHTML = '';
 }
 
 async function preparePublishModal(editProfileId = null) {
@@ -1367,10 +1677,55 @@ async function preparePublishModal(editProfileId = null) {
       if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
 
       const savedLayers = Array.isArray(profile.layers) ? profile.layers : [];
-      const savedMain = savedLayers.filter((l) => !l?.role || l.role === 'main');
-      // Respect saved visibility flag (default true)
-      const visibleSet = new Set(savedMain.filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible)).map((l) => String(l.name || '').trim()));
-      setCheckedLayerNames(projectLayersList, Array.from(visibleSet));
+      const profileProjectId = String(profile.projectId || '').trim();
+      const savedMain = savedLayers.filter((l) => (!l?.role || l.role === 'main') && (!l?.sourceProjectId || String(l.sourceProjectId) === profileProjectId));
+      // Apply included/visible from profile to main layer states
+      const mainStateOverrides = {};
+      savedMain.forEach((l) => {
+        const n = String(l.name || '').trim();
+        if (!n) return;
+        const included = (typeof l.included === 'undefined') ? true : !!l.included;
+        const visible = included && ((typeof l.visible === 'undefined') ? true : !!l.visible);
+        mainStateOverrides[n] = { included, visible };
+      });
+      // For layers in mainLayers not present in saved profile, keep default (included+visible)
+      Object.keys(mainStateOverrides).forEach((n) => {
+        if (publishState.mainLayerStates[n]) publishState.mainLayerStates[n] = mainStateOverrides[n];
+      });
+      // Some old profiles only have a names + visible flag — fallback path
+      if (!savedMain.some((l) => typeof l.included !== 'undefined')) {
+        // Legacy: treat all present-in-profile layers as included
+        const presentSet = new Set(savedMain.map((l) => String(l.name || '').trim()).filter(Boolean));
+        Object.keys(publishState.mainLayerStates).forEach((n) => {
+          if (presentSet.size === 0) return; // no info: keep defaults
+          publishState.mainLayerStates[n].included = presentSet.has(n);
+          if (!publishState.mainLayerStates[n].included) publishState.mainLayerStates[n].visible = false;
+        });
+        const visibleSet = new Set(savedMain.filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible)).map((l) => String(l.name || '').trim()));
+        Object.keys(publishState.mainLayerStates).forEach((n) => {
+          publishState.mainLayerStates[n].visible = publishState.mainLayerStates[n].included && visibleSet.has(n);
+        });
+      }
+      renderLayerChecklist(projectLayersList, publishState.mainLayers, publishState.mainRules);
+      attachLayerTableHandlers();
+
+      // ── Extra sources (cross-project layers) ──
+      publishState.extraSources = [];
+      const extraByProject = {};
+      savedLayers.forEach((l) => {
+        const src = String(l?.sourceProjectId || '').trim();
+        if (!src || src === profileProjectId) return;
+        if (l?.role === 'background') return;
+        if (!extraByProject[src]) extraByProject[src] = {};
+        const n = String(l.name || '').trim();
+        if (!n) return;
+        const included = (typeof l.included === 'undefined') ? true : !!l.included;
+        const visible = included && ((typeof l.visible === 'undefined') ? true : !!l.visible);
+        extraByProject[src][n] = { included, visible };
+      });
+      for (const [extraProjectId, states] of Object.entries(extraByProject)) {
+        addExtraSource({ projectId: extraProjectId, layerStates: states });
+      }
 
       // Background project
       const savedBackgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
@@ -1429,6 +1784,9 @@ async function preparePublishModal(editProfileId = null) {
     if (publishDescription) publishDescription.value = '';
     if (publishNameError) publishNameError.style.display = 'none';
     publishState.defaultBackgroundKey = 'none';
+    publishState.extraSources = [];
+    publishState.mainLayerStates = {};
+    if (extraSourcesList) extraSourcesList.innerHTML = '';
     const mainProjectId = String(publishProjectSelect.value || '').trim();
     if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
     backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2qwc.optional_select'))}</p>`;
@@ -1551,6 +1909,8 @@ removeLogoBtn?.addEventListener('click', async () => {
 const catalogTitleInput = document.getElementById('catalogTitleInput');
 const catalogDescPublicInput = document.getElementById('catalogDescPublicInput');
 const catalogDescAuthInput = document.getElementById('catalogDescAuthInput');
+const catalogHeaderInput = document.getElementById('catalogHeaderInput');
+const catalogFooterInput = document.getElementById('catalogFooterInput');
 const saveCatalogTextsBtn = document.getElementById('saveCatalogTextsBtn');
 
 const loadCatalogTexts = async () => {
@@ -1559,6 +1919,8 @@ const loadCatalogTexts = async () => {
     if (catalogTitleInput) catalogTitleInput.value = data.title || '';
     if (catalogDescPublicInput) catalogDescPublicInput.value = data.descPublic || '';
     if (catalogDescAuthInput) catalogDescAuthInput.value = data.descAuth || '';
+    if (catalogHeaderInput) catalogHeaderInput.value = data.headerHtml || '';
+    if (catalogFooterInput) catalogFooterInput.value = data.footerHtml || '';
   } catch (_err) { /* ignore */ }
 };
 
@@ -1571,7 +1933,9 @@ saveCatalogTextsBtn?.addEventListener('click', async () => {
       body: JSON.stringify({
         title: (catalogTitleInput?.value || '').trim(),
         descPublic: (catalogDescPublicInput?.value || '').trim(),
-        descAuth: (catalogDescAuthInput?.value || '').trim()
+        descAuth: (catalogDescAuthInput?.value || '').trim(),
+        headerHtml: (catalogHeaderInput?.value || '').trim(),
+        footerHtml: (catalogFooterInput?.value || '').trim()
       })
     });
     addLog(t('Qtiler2qwc.catalog_texts_saved'), 'ok');
@@ -1600,6 +1964,37 @@ publishProjectSelect?.addEventListener('change', async () => {
     return;
   }
   try { await loadProjectLayers(projectId, 'main'); } catch (err) { addLog(t('Qtiler2qwc.log_error', { msg: err.message }), 'error'); }
+  renderExtraSources(); // refresh project picker exclusion list
+});
+
+addExtraSourceBtn?.addEventListener('click', () => {
+  addExtraSource(null);
+});
+
+extraSourcesList?.addEventListener('click', (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.matches('button[data-role="remove"]')) {
+    const uid = target.getAttribute('data-extra-uid');
+    if (uid) removeExtraSource(uid);
+  }
+});
+
+extraSourcesList?.addEventListener('change', (ev) => {
+  const target = ev.target;
+  if (target instanceof HTMLSelectElement && target.getAttribute('data-role') === 'project-pick') {
+    const uid = target.getAttribute('data-extra-uid');
+    const newProjectId = String(target.value || '').trim();
+    if (uid) loadExtraSourceLayers(uid, newProjectId).catch((err) => addLog(t('Qtiler2qwc.log_error', { msg: err.message }), 'error'));
+  }
+});
+
+publishModalToggleFullscreen?.addEventListener('click', () => {
+  if (!publishModal) return;
+  publishModal.classList.toggle('Qtiler2qwc-modal-fullscreen');
+  const isFs = publishModal.classList.contains('Qtiler2qwc-modal-fullscreen');
+  publishModalToggleFullscreen.textContent = isFs ? t('Qtiler2qwc.windowed') : t('Qtiler2qwc.fullscreen');
+  publishModalToggleFullscreen.setAttribute('aria-pressed', isFs ? 'true' : 'false');
 });
 
 backgroundProjectSelect?.addEventListener('change', async () => {
@@ -1662,9 +2057,42 @@ publishNowBtn?.addEventListener('click', async () => {
   const allLayerNames = Array.isArray(publishState.mainLayers) ? publishState.mainLayers.map((l) => l.name) : [];
   if (!allLayerNames.length) { addLog(t('Qtiler2qwc.log_error', { msg: 'no project layers available' }), 'error'); return; }
 
-  // Checkboxes represent "active on map start"; all layers are still published.
-  const checkedSet = new Set(layerNames);
-  const layersPayload = allLayerNames.map((name) => ({ name, visible: checkedSet.has(name) }));
+  // Each main-project layer carries its include + visible state.
+  // For backward compatibility, the layer object also exposes `visible` (visible on start).
+  const visibleSet = new Set(layerNames);
+  const mainLayersPayload = allLayerNames.map((name) => {
+    const state = publishState.mainLayerStates[name] || { included: true, visible: true };
+    const included = state.included !== false;
+    return {
+      name,
+      role: 'main',
+      sourceProjectId: projectId,
+      included,
+      visible: included && visibleSet.has(name)
+    };
+  });
+  // Layers from extra (cross-CRS) projects — only those with included=true
+  const extraLayersPayload = [];
+  (publishState.extraSources || []).forEach((src) => {
+    const srcProjectId = String(src.projectId || '').trim();
+    if (!srcProjectId) return;
+    (src.layers || []).forEach((layer) => {
+      const n = String(layer.name || '').trim();
+      if (!n) return;
+      const st = src.layerStates[n] || { included: false, visible: false };
+      if (!st.included) return;
+      extraLayersPayload.push({
+        name: n,
+        role: 'main',
+        sourceProjectId: srcProjectId,
+        sourceProjectCrs: src.projectCrs || null,
+        included: true,
+        visible: !!st.visible,
+        external: true
+      });
+    });
+  });
+  const layersPayload = [...mainLayersPayload, ...extraLayersPayload];
 
   const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
   const backgroundLayerNames = getCheckedLayerNames(backgroundLayersList);

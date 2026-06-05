@@ -39,14 +39,14 @@
 
       <!-- ═══════════ Tab bar ═══════════ -->
       <nav class="tab-bar">
-        <button class="tab-btn tab-btn--active" data-tab="setup">
-          <span class="tab-btn__icon">⚙</span>
-          <span data-i18n="Qtiler2qwc.tab_setup">Setup</span>
-        </button>
-        <button class="tab-btn" data-tab="maps">
+        <button class="tab-btn tab-btn--active" data-tab="maps">
           <span class="tab-btn__icon">🗺</span>
           <span data-i18n="Qtiler2qwc.tab_maps">Maps</span>
           <span id="tabMapsBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="setup">
+          <span class="tab-btn__icon">⚙</span>
+          <span data-i18n="Qtiler2qwc.tab_setup">Setup</span>
         </button>
         <button class="tab-btn" data-tab="log">
           <span class="tab-btn__icon">📋</span>
@@ -55,9 +55,29 @@
       </nav>
 
       <!-- ════════════════════════════════════
+           TAB: Maps (default)
+           ════════════════════════════════════ -->
+      <div class="tab-panel tab-panel--active" data-panel="maps">
+
+        <section id="publishSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.profiles_section">Published profiles</h2>
+            <span id="profilesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2qwc.profiles_desc">Manage generated profiles and launch links for QWC2 (webmap).</p>
+          <div class="actions">
+            <button id="openPublishModalBtn" class="button primary" data-i18n="Qtiler2qwc.publish_new">New profile</button>
+            <a id="catalogLink" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer" data-i18n="Qtiler2qwc.open_viewer">Open QWC2 viewer</a>
+          </div>
+          <div id="publishedProfilesList" class="published-list"></div>
+        </section>
+
+      </div>
+
+      <!-- ════════════════════════════════════
            TAB: Setup
            ════════════════════════════════════ -->
-      <div class="tab-panel tab-panel--active" data-panel="setup">
+      <div class="tab-panel" data-panel="setup">
 
         <!-- ── Installation ── -->
         <section class="card">
@@ -123,53 +143,43 @@
           </div>
         </section>
 
-      </div>
-
-
-      <!-- ── Catalog page texts ── -->
-      <section id="catalogTextsSection" class="card">
-        <div class="card-header-row">
-          <h2 data-i18n="Qtiler2qwc.catalog_texts_section">Catalog page texts</h2>
-        </div>
-        <p class="help" data-i18n="Qtiler2qwc.catalog_texts_desc">Customize the heading and description shown on the /Qtiler2qwc/webmap/ catalog page.</p>
-        <div class="grid grid--form">
-          <label>
-            <span data-i18n="Qtiler2qwc.catalog_title_label">Page title</span>
-            <input id="catalogTitleInput" type="text" maxlength="200" placeholder="Available webmaps" />
-          </label>
-          <label>
-            <span data-i18n="Qtiler2qwc.catalog_desc_public_label">Description for public / unauthenticated visitors</span>
-            <textarea id="catalogDescPublicInput" rows="3" maxlength="1000" placeholder="Open the published maps available for your current session..."></textarea>
-          </label>
-          <label>
-            <span data-i18n="Qtiler2qwc.catalog_desc_auth_label">Description for authenticated users (leave empty to reuse the public text)</span>
-            <textarea id="catalogDescAuthInput" rows="3" maxlength="1000" placeholder="Same as the public description, or enter different text for signed-in users."></textarea>
-          </label>
-        </div>
-        <div class="actions">
-          <button id="saveCatalogTextsBtn" class="button primary" data-i18n="Qtiler2qwc.catalog_texts_save">Save</button>
-        </div>
-      </section>
-
-      <!-- ════════════════════════════════════
-           TAB: Maps
-           ════════════════════════════════════ -->
-      <div class="tab-panel" data-panel="maps">
-
-        <section id="publishSection" class="card card--disabled">
+        <!-- ── Catalog page texts (moved inside Setup) ── -->
+        <section id="catalogTextsSection" class="card">
           <div class="card-header-row">
-            <h2 data-i18n="Qtiler2qwc.profiles_section">Published profiles</h2>
-            <span id="profilesBadge" class="badge badge--muted">0</span>
+            <h2 data-i18n="Qtiler2qwc.catalog_texts_section">Catalog page texts</h2>
           </div>
-          <p class="help" data-i18n="Qtiler2qwc.profiles_desc">Manage generated profiles and launch links for QWC2 (webmap).</p>
+          <p class="help" data-i18n="Qtiler2qwc.catalog_texts_desc">Customize the heading, description, header and footer shown on the /Qtiler2qwc/webmap/ catalog page.</p>
+          <div class="grid grid--form">
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_title_label">Page title</span>
+              <input id="catalogTitleInput" type="text" maxlength="200" placeholder="Available webmaps" />
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_desc_public_label">Description for public / unauthenticated visitors</span>
+              <textarea id="catalogDescPublicInput" rows="3" maxlength="1000" placeholder="Open the published maps available for your current session..."></textarea>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_desc_auth_label">Description for authenticated users (leave empty to reuse the public text)</span>
+              <textarea id="catalogDescAuthInput" rows="3" maxlength="1000" placeholder="Same as the public description, or enter different text for signed-in users."></textarea>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_header_label">Header HTML (shown above the title)</span>
+              <textarea id="catalogHeaderInput" rows="4" maxlength="4000" placeholder="&lt;div&gt;Welcome to our portal&lt;/div&gt;"></textarea>
+              <small class="help" data-i18n="Qtiler2qwc.catalog_html_help">HTML allowed. Leave empty to hide.</small>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_footer_label">Footer HTML (shown below the map cards)</span>
+              <textarea id="catalogFooterInput" rows="4" maxlength="4000" placeholder="&lt;p&gt;© 2025 My organization · &lt;a href=&quot;mailto:info@org.com&quot;&gt;Contact&lt;/a&gt;&lt;/p&gt;"></textarea>
+              <small class="help" data-i18n="Qtiler2qwc.catalog_html_help">HTML allowed. Leave empty to hide.</small>
+            </label>
+          </div>
           <div class="actions">
-            <button id="openPublishModalBtn" class="button primary" data-i18n="Qtiler2qwc.publish_new">New profile</button>
-            <a id="catalogLink" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer" data-i18n="Qtiler2qwc.open_viewer">Open QWC2 viewer</a>
+            <button id="saveCatalogTextsBtn" class="button primary" data-i18n="Qtiler2qwc.catalog_texts_save">Save</button>
           </div>
-          <div id="publishedProfilesList" class="published-list"></div>
         </section>
 
       </div>
+
 
       <!-- ════════════════════════════════════
            TAB: Log
@@ -246,7 +256,10 @@
       <div class="modal-card Qtiler2qwc-modal-card">
         <header class="modal-card-head">
           <p id="modalTitle" class="modal-card-title" data-i18n="Qtiler2qwc.modal_title">Publish project in QWC2</p>
-          <button id="closePublishModalTop" class="delete" aria-label="close"></button>
+          <div class="Qtiler2qwc-modal-head-actions">
+            <button id="publishModalToggleFullscreen" class="button is-small is-light" type="button" title="Fullscreen" data-i18n="Qtiler2qwc.fullscreen">Fullscreen</button>
+            <button id="closePublishModalTop" class="delete" aria-label="close"></button>
+          </div>
         </header>
         <section class="modal-card-body">
 
@@ -270,18 +283,31 @@
           <!-- ── Step 1: Projects & layers ── -->
           <fieldset class="modal-step">
             <legend class="modal-step__legend" data-i18n="Qtiler2qwc.step_layers">1. Layers</legend>
-            <div class="columns is-variable is-4">
-              <div class="column">
+            <div class="Qtiler2qwc-layers-grid">
+              <div class="Qtiler2qwc-layers-grid__col">
                 <div class="field">
                   <label class="label" data-i18n="Qtiler2qwc.main_project">Main project</label>
                   <div class="control"><div class="select is-fullwidth"><select id="publishProjectSelect"></select></div></div>
                 </div>
                 <div class="field">
-                  <label class="label" data-i18n="Qtiler2qwc.project_layers">Project layers</label>
-                  <div id="projectLayersList" class="Qtiler2qwc-checklist"></div>
+                  <div class="Qtiler2qwc-layers-head">
+                    <label class="label" style="margin:0" data-i18n="Qtiler2qwc.project_layers">Project layers</label>
+                    <small class="help" data-i18n="Qtiler2qwc.layers_legend">Include = published · Visible = on at start</small>
+                  </div>
+                  <div id="projectLayersList" class="Qtiler2qwc-layer-table"></div>
+                </div>
+
+                <!-- ── Extra projects (cross-CRS) ── -->
+                <div class="field Qtiler2qwc-extra-sources-field">
+                  <div class="Qtiler2qwc-layers-head">
+                    <label class="label" style="margin:0" data-i18n="Qtiler2qwc.extra_sources">Layers from other projects</label>
+                    <button id="addExtraSourceBtn" type="button" class="button is-small is-info is-light" data-i18n="Qtiler2qwc.add_extra_source">+ Add project</button>
+                  </div>
+                  <p class="help" data-i18n="Qtiler2qwc.extra_sources_help">Optional. Add layers from any other project — they will be served as external WMS layers and will work even if their CRS differs.</p>
+                  <div id="extraSourcesList" class="Qtiler2qwc-extra-sources"></div>
                 </div>
               </div>
-              <div class="column">
+              <div class="Qtiler2qwc-layers-grid__col">
                 <div class="field">
                   <label class="label" data-i18n="Qtiler2qwc.bg_project">Background project (optional)</label>
                   <div class="control"><div class="select is-fullwidth"><select id="backgroundProjectSelect"></select></div></div>

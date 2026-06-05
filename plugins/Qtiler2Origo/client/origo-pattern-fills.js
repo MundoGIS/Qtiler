@@ -363,7 +363,40 @@
       } else {
         console.warn('[Qtiler2Origo] LantmateriSearch not loaded - control will not be available');
       }
-      
+
+      // Safety net: strip Qtiler2Origo custom controls from cfg.controls when
+      // their implementation failed to load. Otherwise Origo.initControls
+      // crashes with "Cannot read properties of undefined" and the whole map
+      // fails to render. We only check OUR custom controls — built-in Origo
+      // controls (zoom, splash, mouseposition, ...) are imported internally by
+      // Origo and are NOT present on window.Origo.controls.
+      try {
+        const CUSTOM_CONTROLS = {
+          lantmaterisearch: 'LantmateriSearch'
+        };
+        if (cfg && Array.isArray(cfg.controls)) {
+          const dropped = [];
+          cfg.controls = cfg.controls.filter(function (c) {
+            if (!c) return false;
+            const name = typeof c === 'string' ? c : c.name;
+            if (!name) return true;
+            const key = String(name).toLowerCase();
+            const globalName = CUSTOM_CONTROLS[key];
+            if (!globalName) return true; // not a custom control, leave alone
+            const available = window[globalName]
+              || (window.Origo && window.Origo.controls && (window.Origo.controls[key] || window.Origo.controls[globalName]));
+            if (available) return true;
+            dropped.push(name);
+            return false;
+          });
+          if (dropped.length) {
+            console.warn('[Qtiler2Origo] Dropping unregistered custom controls to prevent crash:', dropped);
+          }
+        }
+      } catch (err) {
+        console.warn('[Qtiler2Origo] Could not sanitise controls list:', err);
+      }
+
       const app = Origo(cfg);
       window.origoApp = app;
       

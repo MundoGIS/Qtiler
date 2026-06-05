@@ -411,12 +411,6 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
         } else {
           bboxNode = `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`;
         }
-        // In addition, WMS requires BoundingBox elements for advertised coordinate systems.
-        // We will supply a global 3857 bounding box as a fallback if no specific one exists.
-        // OpenLayers/QWC2 parser depends on having a BoundingBox for the active map CRS.
-        const srsLabel = is111 ? "SRS" : "CRS";
-        bboxNode += `<BoundingBox ${srsLabel}="EPSG:3857" minx="-20037508.34" miny="-20037508.34" maxx="20037508.34" maxy="20037508.34"/>`;
-        bboxNode += `<BoundingBox ${srsLabel}="EPSG:4326" minx="${bbox[1]}" miny="${bbox[0]}" maxx="${bbox[3]}" maxy="${bbox[2]}"/>`;
       }
       return `<Layer queryable="1"><Name>${name}</Name><Title>${title}</Title>${crsNodes}${bboxNode}</Layer>`;
     })

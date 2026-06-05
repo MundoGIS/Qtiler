@@ -543,7 +543,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       catalogTexts: {
         title: String(state?.catalogTexts?.title || ''),
         descPublic: String(state?.catalogTexts?.descPublic || ''),
-        descAuth: String(state?.catalogTexts?.descAuth || '')
+        descAuth: String(state?.catalogTexts?.descAuth || ''),
+        headerHtml: String(state?.catalogTexts?.headerHtml || ''),
+        footerHtml: String(state?.catalogTexts?.footerHtml || '')
       }
     };
   };
@@ -764,7 +766,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const url = `/plugins/${pluginSlug}/published/${encodeURIComponent(fileName)}`;
         const profileKey = fileName.replace(/\.json$/i, '');
         const standaloneLaunch = buildWebmapLaunchUrl(profileKey, projectId, baseUrl);
-        const mainLayerNames = (parsed?.layers || []).filter((l) => l.role === 'main').map((l) => l.name);
+        const mainLayerNames = (parsed?.layers || []).filter((l) => l.role === 'main' && l.included !== false && l.external !== true).map((l) => l.name);
         rows.push({
           projectId,
           profileKey,
@@ -950,12 +952,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const safeName = sanitizeFileToken(projectId);
     if (!safeName) return null;
     const indexPath = path.join(process.cwd(), 'cache', safeName, 'index.json');
-    try {
-      const raw = await fs.promises.readFile(indexPath, 'utf8');
-      return JSON.parse(raw || '{}');
-    } catch {
-      return null;
+    for (const candidate of [indexPath, `${indexPath}.bak`]) {
+      try {
+        const raw = await fs.promises.readFile(candidate, 'utf8');
+        return JSON.parse(raw || '{}');
+      } catch {
+        // try backup below
+      }
     }
+    return null;
+  };
+
+  const findLayerTileMatrixPreset = async (projectId, layerName) => {
+    const cacheIndex = await readCacheIndex(projectId);
+    const layers = Array.isArray(cacheIndex?.layers) ? cacheIndex.layers : [];
+    const layer = layers.find((entry) => String(entry?.name || '') === String(layerName || '')) || null;
+    const preset = layer?.tile_matrix_set || layer?.tileMatrixSet || null;
+    if (preset && typeof preset === 'object' && Array.isArray(preset.matrices) && preset.matrices.length > 0) {
+      return preset;
+    }
+    return null;
   };
 
   /**
@@ -1427,22 +1443,42 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
    * Returns { theme: [...], global: [...] } where theme entries are per-theme
    * and global entries go in the top-level backgroundLayers array.
    */
-  const findTileGridPresetForCrs = async (crs) => {
+  const findTileGridPresetForCrs = async (crs, preferProjectId = null) => {
     try {
       const dir = path.join(process.cwd(), 'config', 'tile-grids');
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      const candidates = [];
       for (const ent of entries) {
         if (!ent.isFile() || !ent.name.toLowerCase().endsWith('.json')) continue;
         try {
           const raw = await fs.promises.readFile(path.join(dir, ent.name), 'utf8');
           const parsed = JSON.parse(raw || '{}');
-          const supported = parsed.supported_crs || parsed.coordinateReferenceSystem || parsed.coordinateReferenceSystems || null;
-          if (Array.isArray(parsed.supported_crs) && parsed.supported_crs.includes(crs)) return parsed;
-          if (String(parsed.coordinateReferenceSystem || '').trim() === crs) return parsed;
+          const matches = (Array.isArray(parsed.supported_crs) && parsed.supported_crs.includes(crs))
+            || (String(parsed.coordinateReferenceSystem || '').trim() === crs);
+          if (!matches) continue;
+          candidates.push({ fileBase: ent.name.replace(/\.json$/i, ''), preset: parsed });
         } catch (e) {
           // ignore parse errors
         }
       }
+      if (!candidates.length) return null;
+      // 1. Prefer a project-specific SCALES_<crs>_<projectId> preset (matches what
+      //    the on-demand tile renderer uses when the project declares
+      //    tile_profile_source = 'project_scales').
+      if (preferProjectId) {
+        const wantedSuffix = `_${preferProjectId}`.toLowerCase();
+        const exact = candidates.find((c) => {
+          const base = c.fileBase.toLowerCase();
+          return base.startsWith('scales_') && base.endsWith(wantedSuffix);
+        });
+        if (exact) return exact.preset;
+      }
+      // 2. Otherwise, prefer any SCALES_* preset (they originate from project scales
+      //    and tend to match real on-demand renderer behavior better than fixed grids).
+      const anyScales = candidates.find((c) => c.fileBase.toLowerCase().startsWith('scales_'));
+      if (anyScales) return anyScales.preset;
+      // 3. Fall back to the first match.
+      return candidates[0].preset;
     } catch (e) {
       // no presets
     }
@@ -1481,25 +1517,20 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           });
         }
       } else if (bg.type === 'none') {
-        const safeName = 'none';
-        // Use QWC2 built-in no-background entry to avoid duplicated options
-        // like "No background" + custom localized variants.
-        pushThemeBg(safeName, bg.isDefault === true);
-        if (!bgLayersGlobal.some((g) => g.name === safeName)) {
-          bgLayersGlobal.push({
-            name: safeName,
-            title: 'No background',
-            type: 'empty'
-          });
-        }
+        // QWC2's BackgroundSwitcher always renders a built-in "No background"
+        // option (localized per language, e.g. "Ingen bakgrund"). Adding our own
+        // 'none' layer here produces a duplicate entry. Skip it entirely so the
+        // single built-in option is shown.
+        continue;
       } else if (bg.type === 'layer' && bg.sourceProjectId && bg.name) {
         let preset = null;
         let bgExtent = null;
         try {
           bgExtent = await getProjectExtent(bg.sourceProjectId);
+          preset = await findLayerTileMatrixPreset(bg.sourceProjectId, bg.name);
           const crs = bgExtent?.crs || null;
-          if (crs) {
-            preset = await findTileGridPresetForCrs(crs);
+          if (!preset && crs) {
+            preset = await findTileGridPresetForCrs(crs, bg.sourceProjectId);
           }
         } catch (e) {
           // ignore and fallback below
@@ -1589,36 +1620,64 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       if (layerCrs && layerCrs !== projectCrs) additionalCrsSet.add(layerCrs);
     }
 
-    const mainLayers = (profile.layers || []).filter((l) => l.role === 'main');
+    // Filter out layers explicitly excluded from the published map.
+    // (Backward compat: layers without `included` are treated as included=true.)
+    const mainLayers = (profile.layers || [])
+      .filter((l) => l.role === 'main')
+      .filter((l) => l.included !== false);
+    // Track external (cross-project) WMS routes for the theme's externalLayers
+    const externalLayersList = [];
+    const externalLayerKeyByLayer = new Map();
     const sublayers = mainLayers.map((layer) => {
       // Title is the human-readable layer name from the profile
       const title = String(layer.title || layer.name || '').trim();
       // Use the real layer name so WMS legend/icons resolve correctly.
-      const name = String(layer.name || title || '').trim() || 'layer';
-      const cached = cachedLayers.find((c) => {
+      const realName = String(layer.name || title || '').trim() || 'layer';
+      // For external layers, we synthesize a unique sublayer id ("<srcProj>__<layer>")
+      // and route the actual WMS request to the source project's WMS via QWC2 externalLayers.
+      const isExternal = layer.external === true && layer.sourceProjectId && layer.sourceProjectId !== projectId;
+      const name = isExternal
+        ? `${safeLayerNameForWfs(layer.sourceProjectId) || sanitizeFileToken(layer.sourceProjectId) || 'src'}__${realName}`
+        : realName;
+      // For cross-project layers we don't have the cache entry of the current
+      // project — skip cache lookups.
+      const cached = isExternal ? null : cachedLayers.find((c) => {
         const cand = String(c?.name || c?.layer || c?.title || '').trim();
-        return cand && (cand === name || cand === title || safeLayerNameForWfs(cand) === safeLayerNameForWfs(name));
+        return cand && (cand === realName || cand === title || safeLayerNameForWfs(cand) === safeLayerNameForWfs(realName));
       });
-      const cfgFlags = (() => {
-        const direct = projectLayerFlags?.[name] && typeof projectLayerFlags[name] === 'object' ? projectLayerFlags[name] : null;
+      const cfgFlags = isExternal ? null : (() => {
+        const direct = projectLayerFlags?.[realName] && typeof projectLayerFlags[realName] === 'object' ? projectLayerFlags[realName] : null;
         if (direct) return direct;
         for (const [k, v] of Object.entries(projectLayerFlags || {})) {
-          if (safeLayerNameForWfs(k) === safeLayerNameForWfs(name) && v && typeof v === 'object') return v;
+          if (safeLayerNameForWfs(k) === safeLayerNameForWfs(realName) && v && typeof v === 'object') return v;
         }
         return null;
       })();
       const isVectorLike = cached?.type === 'vector' || !!cached?.geometry_type;
-      const isEditable = layer?.editable === true || cfgFlags?.wfsEditable === true;
+      const isEditable = !isExternal && (layer?.editable === true || cfgFlags?.wfsEditable === true);
       const sl = {
         name,
         wms_name: name,
-        title: title || name,
+        title: title || realName,
         visibility: (typeof layer.visible === 'undefined') ? true : !!layer.visible,
         queryable: true,
         geometryType: cached?.geometry_type || null,
         opacity: 255,
         bbox: { crs: 'EPSG:4326', bounds: cached?.extent_wgs84 || bboxWgs84 }
       };
+      if (isExternal) {
+        // QWC2 externalLayers contract: when a sublayer name matches
+        // `internalLayer`, QWC2 issues GetMap to the URL in `name` instead of
+        // the theme WMS. Format: "wms:<url>#<layername>".
+        const extWmsUrl = appendApiKey(`${qtilerBaseUrl}/wms?project=${encodeURIComponent(layer.sourceProjectId)}`, apiKey);
+        const extKey = `wms:${extWmsUrl}#${realName}`;
+        externalLayerKeyByLayer.set(name, extKey);
+        externalLayersList.push({ internalLayer: name, name: extKey });
+        // Surface the external project CRS so the OL projection is registered.
+        if (layer.sourceProjectCrs && layer.sourceProjectCrs !== projectCrs) {
+          additionalCrsSet.add(layer.sourceProjectCrs);
+        }
+      }
       if (isEditable) {
         const editLayerToken = safeLayerNameForWfs(name) || sanitizeFileToken(name) || 'layer';
         sl.editConfig = {
@@ -1643,11 +1702,11 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           }
         };
       }
-      const layer3d = qgis3dLayers.get(name) || qgis3dLayers.get(title);
+      const layer3d = isExternal ? null : (qgis3dLayers.get(realName) || qgis3dLayers.get(title));
       if (layer3d && /polygon/i.test(String(cached?.geometry_type || ''))) {
         sl.extrusionHeight = layer3d.extrusionHeight;
         if (layer3d.color) sl.color = layer3d.color;
-        const wfsLayerName = name;
+        const wfsLayerName = realName;
         const wfs3dId = `${projectId}:3d:${safeLayerNameForWfs(wfsLayerName) || sanitizeFileToken(wfsLayerName) || 'layer'}`;
         sl.wfs3dLayer = {
           id: wfs3dId,
@@ -1696,7 +1755,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       initialBbox: { crs: projectCrs, bounds: bboxNative },
       sublayers,
       expanded: true,
-      externalLayers: [],
+      externalLayers: externalLayersList,
       backgroundLayers: bgResult.theme,
       searchProviders,
       additionalMouseCrs: [...additionalCrsSet],
@@ -1972,6 +2031,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
 
     const globals = Array.isArray(themes.backgroundLayers) ? themes.backgroundLayers : [];
+    // Drop any legacy 'none' entries — QWC2 has a built-in no-background option.
+    for (let i = globals.length - 1; i >= 0; i--) {
+      if (String(globals[i]?.name || '').trim() === 'none') globals.splice(i, 1);
+    }
     for (const bg of globals) {
       if (!bg || typeof bg !== 'object') continue;
       if (typeof bg.thumbnail === 'string') bg.thumbnail = toAssetRelative(bg.thumbnail);
@@ -1982,6 +2045,11 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     for (const item of items) {
       if (!item || typeof item !== 'object') continue;
       if (typeof item.thumbnail === 'string') item.thumbnail = toAssetRelative(item.thumbnail);
+      // Strip any 'none' references from item background lists — QWC2 supplies
+      // the built-in no-background option automatically.
+      if (Array.isArray(item.backgroundLayers)) {
+        item.backgroundLayers = item.backgroundLayers.filter((b) => String(b?.name || '').trim() !== 'none');
+      }
       const bgs = Array.isArray(item.backgroundLayers) ? item.backgroundLayers : [];
       for (const bgRef of bgs) {
         const n = String(bgRef?.name || '').trim();
@@ -1990,10 +2058,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
 
     const globalNames = new Set(globals.map((g) => String(g?.name || '').trim()).filter(Boolean));
-    if (referencedBgNames.has('none') && !globalNames.has('none')) {
-      globals.push({ name: 'none', title: 'No background', type: 'empty' });
-      globalNames.add('none');
-    }
+    // NOTE: do NOT auto-inject a 'none' entry. QWC2 already shows a built-in
+    // "No background" option (translated per locale); adding our own creates a
+    // duplicate ("No background" + "Ingen bakgrund" in the same selector).
 
     if (referencedBgNames.has('mapnik') && !globalNames.has('mapnik')) {
       globals.push({
@@ -2098,6 +2165,8 @@ ${mapIcon}
     const catalogTitle = texts?.title?.trim() || 'Available webmaps';
     const catalogDescPublic = texts?.descPublic?.trim() || DEFAULT_DESC_PUBLIC;
     const catalogDescAuth = texts?.descAuth?.trim() || catalogDescPublic;
+    const catalogHeaderHtml = String(texts?.headerHtml || '').trim();
+    const catalogFooterHtml = String(texts?.footerHtml || '').trim();
     const pageSize = 15;
     const escapeHtml = (value) => String(value == null ? '' : value)
       .replace(/&/g, '&amp;')
@@ -2183,7 +2252,11 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
 .map-desc{margin:12px 0 16px;color:#475569;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.map-desc--muted{color:#94a3b8}.map-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:auto;margin-bottom:16px;font-size:.84rem;color:#64748b}
 .map-actions{display:flex;gap:10px;flex-wrap:wrap}.pager{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}.pager-status{min-width:120px;text-align:center;color:#475569;font-weight:600}.pager[hidden]{display:none}.pager-btn{border:none;border-radius:12px;padding:11px 16px;background:#0f172a;color:#fff;font-size:.95rem;font-weight:600;cursor:pointer}.pager-btn:hover{background:#1e293b}.pager-btn:disabled{cursor:default;opacity:.45}.empty{padding:28px;border-radius:24px;background:rgba(255,255,255,.92);box-shadow:0 22px 50px rgba(15,23,42,.10);color:#475569}
 @media (max-width:720px){.page{padding:24px 14px 36px}.hero{margin-bottom:18px}.catalog{align-items:stretch}.grid{width:100%}.map-card{flex:0 0 100%;width:100%;min-width:0;max-width:none}.map-body{padding:16px}}
+.qtwc-catalog-header{margin:0 0 24px;padding:16px 20px;border-radius:16px;background:rgba(255,255,255,.92);box-shadow:0 8px 24px rgba(15,23,42,.06);color:#1f2937;line-height:1.5}
+.qtwc-catalog-footer{margin:32px 0 0;padding:18px 20px;border-radius:16px;background:rgba(15,23,42,.92);color:#e2e8f0;line-height:1.5;text-align:center}
+.qtwc-catalog-footer a{color:#7dd3fc;text-decoration:underline}
     </style></head><body><main class="page">
+      ${catalogHeaderHtml ? `<header class="qtwc-catalog-header">${catalogHeaderHtml}</header>` : ''}
       <section class="hero">
         <div class="hero-copy">
           <span class="eyebrow">Qtiler2qwc</span>
@@ -2194,6 +2267,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       </section>
       ${loginPanel}
       ${cards ? `<section class="catalog"><section class="grid" id="catalogGrid">${cards}</section><nav class="pager" id="catalogPager" ${pageCount > 1 ? '' : 'hidden'}><button class="pager-btn" type="button" id="catalogPrev">Previous</button><span class="pager-status" id="catalogStatus">Page 1 of ${pageCount}</span><button class="pager-btn" type="button" id="catalogNext">Next</button></nav></section>` : '<section class="empty">No published maps are available for this session.</section>'}
+      ${catalogFooterHtml ? `<footer class="qtwc-catalog-footer">${catalogFooterHtml}</footer>` : ''}
     </main>
     <script>
       const loginForm = document.getElementById('catalogLoginForm');
@@ -2480,7 +2554,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
           const profileKey = String(profile?.profileKey || projectId || '').trim();
           if (!projectId || !profileKey) return null;
           const mainLayerNames = (Array.isArray(profile?.layers) ? profile.layers : [])
-            .filter((layer) => layer?.role === 'main')
+            .filter((layer) => layer?.role === 'main' && layer?.included !== false && layer?.external !== true)
             .map((layer) => layer?.name)
             .filter(Boolean);
           return {
@@ -2810,17 +2884,19 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
 
   app.get(`/plugins/${pluginSlug}/api/catalog-texts`, adminOnly, async (_req, res) => {
     const state = await readState();
-    res.json(state.catalogTexts || { title: '', descPublic: '', descAuth: '' });
+    res.json(state.catalogTexts || { title: '', descPublic: '', descAuth: '', headerHtml: '', footerHtml: '' });
   });
 
   app.post(`/plugins/${pluginSlug}/api/catalog-texts`, adminOnly, async (req, res) => {
-    const { title, descPublic, descAuth } = req.body || {};
+    const { title, descPublic, descAuth, headerHtml, footerHtml } = req.body || {};
     await stateStore.update((draft) => ({
       ...(draft || {}),
       catalogTexts: {
         title: String(title || '').slice(0, 200).trim(),
         descPublic: String(descPublic || '').slice(0, 1000).trim(),
-        descAuth: String(descAuth || '').slice(0, 1000).trim()
+        descAuth: String(descAuth || '').slice(0, 1000).trim(),
+        headerHtml: String(headerHtml || '').slice(0, 4000),
+        footerHtml: String(footerHtml || '').slice(0, 4000)
       }
     }));
     res.json({ ok: true });
@@ -2962,7 +3038,10 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       // Accept either an explicit `layers` array (objects with name/visible)
       // or the older `layerNames` array of strings for backward compatibility.
       const inputLayers = Array.isArray(req.body?.layers) ? req.body.layers : null;
-      const layerNames = toArray(req.body?.layerNames || (inputLayers ? inputLayers.map((l) => l.name) : []));
+      const mainInputLayers = Array.isArray(inputLayers)
+        ? inputLayers.filter((l) => l && typeof l === 'object' && l.external !== true)
+        : null;
+      const layerNames = toArray(req.body?.layerNames || (mainInputLayers ? mainInputLayers.map((l) => l.name) : []));
       if (!layerNames.length) {
         return res.status(400).json({ error: 'layer_names_required' });
       }
@@ -3004,19 +3083,23 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
         view3d: featuresInput.view3d === true
       };
 
-      // Merge per-layer visibility from provided `layers` payload when available.
-      const incomingVisibility = {};
+      // Merge per-layer visibility/inclusion from provided `layers` payload when available.
+      const incomingByName = {};
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
-          if (l && typeof l === 'object' && l.name) incomingVisibility[String(l.name)] = !!l.visible;
+          if (!l || typeof l !== 'object') continue;
+          const lname = String(l.name || '').trim();
+          if (!lname) continue;
+          // For external layers, key by srcProj+name; for main, by name only
+          const isExternal = l.external === true && l.sourceProjectId && l.sourceProjectId !== projectId;
+          const key = isExternal ? `${l.sourceProjectId}::${lname}` : lname;
+          incomingByName[key] = l;
         }
       }
 
       const layers = layerNames.map((name) => {
         const rule = layerRulesInput[name] && typeof layerRulesInput[name] === 'object' ? layerRulesInput[name] : {};
-        const sourceLayer = Array.isArray(inputLayers)
-          ? inputLayers.find((l) => l && typeof l === 'object' && String(l.name || '') === String(name))
-          : null;
+        const sourceLayer = incomingByName[name] || null;
         const fallbackSearchable = sourceLayer?.searchable === true;
         const fallbackEditable = sourceLayer?.editable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
@@ -3024,11 +3107,13 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
         const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
+        const included = sourceLayer ? (sourceLayer.included !== false) : true;
         return {
           name,
           sourceProjectId: projectId,
           role: 'main',
-          visible: (typeof incomingVisibility[name] === 'undefined') ? true : !!incomingVisibility[name],
+          included,
+          visible: included && (sourceLayer ? (typeof sourceLayer.visible === 'undefined' ? true : !!sourceLayer.visible) : true),
           searchable: (rule.searchable === true) || fallbackSearchable,
           editable: (rule.editable === true) || fallbackEditable,
           serveAsWfs: (rule.serveAsWfs === true) || fallbackServeAsWfs,
@@ -3038,6 +3123,37 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
           hintText: String(rule.hintText || '').trim() || fallbackHintText
         };
       });
+
+      // Append extra-source (cross-project) layers. They're only kept when
+      // `included !== false`. They produce QWC2 externalLayers entries at
+      // theme-build time.
+      if (Array.isArray(inputLayers)) {
+        for (const l of inputLayers) {
+          if (!l || typeof l !== 'object') continue;
+          if (l.external !== true) continue;
+          const srcProj = String(l.sourceProjectId || '').trim();
+          if (!srcProj || srcProj === projectId) continue;
+          if (!knownProjectIds.has(srcProj)) continue;
+          if (l.included === false) continue;
+          layers.push({
+            name: String(l.name || '').trim(),
+            sourceProjectId: srcProj,
+            sourceProjectCrs: String(l.sourceProjectCrs || '').trim() || null,
+            role: 'main',
+            external: true,
+            included: true,
+            visible: !!l.visible,
+            queryable: true,
+            searchable: false,
+            editable: false,
+            serveAsWfs: false,
+            searchAttribute: null,
+            idAttribute: null,
+            geometryAttribute: null,
+            hintText: null
+          });
+        }
+      }
 
       if (backgroundProjectId && backgroundLayerNames.length) {
         for (const name of backgroundLayerNames) {
