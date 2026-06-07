@@ -309,6 +309,44 @@ input {
 .portal-editor__sidebar-head {
   margin-bottom: 10px;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.portal-backup-panel {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.portal-backup-panel > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.portal-backup-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.portal-backup-grid label span {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.portal-backup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .portal-pages-list {

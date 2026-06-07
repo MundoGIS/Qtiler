@@ -185,8 +185,12 @@ const apiKeyPrefixOf = (plain) => {
 const pickUserPayload = (user) => {
   if (!user) return null;
   // Strip ALL secret-like fields by default.
-  const { passwordHash, apiKey, apiKeyHash, projects = [], ...rest } = user;
-  return { ...rest, projects: Array.isArray(projects) ? projects : [] };
+  const { passwordHash, apiKey, apiKeyHash, projects = [], permissions = [], ...rest } = user;
+  return {
+    ...rest,
+    projects: Array.isArray(projects) ? projects : [],
+    permissions: Array.isArray(permissions) ? permissions : []
+  };
 };
 
 const pickAdminUserPayload = (user) => {
@@ -282,6 +286,7 @@ const rowToUser = (row) => {
     apiKeyPrefix: row.api_key_prefix || null,
     apiKeyLastUsedAt: row.api_key_last_used_at || null,
     projects: JSON.parse(row.projects || '[]'),
+    permissions: JSON.parse(row.permissions || '[]'),
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -309,8 +314,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         const raw = JSON.parse(fs.readFileSync(usersJsonPath, 'utf8'));
         const users = Array.isArray(raw?.users) ? raw.users : [];
         const insert = db.prepare(`
-          INSERT OR IGNORE INTO users (id, username, password_hash, role, api_key, projects, status, created_at, updated_at)
-          VALUES (@id, @username, @password_hash, @role, @api_key, @projects, @status, @created_at, @updated_at)
+          INSERT OR IGNORE INTO users (id, username, password_hash, role, api_key, projects, permissions, status, created_at, updated_at)
+          VALUES (@id, @username, @password_hash, @role, @api_key, @projects, @permissions, @status, @created_at, @updated_at)
         `);
         db.transaction(() => {
           for (const u of users) {
@@ -321,6 +326,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
               role: VALID_ROLES.has(u.role) ? u.role : ROLE_AUTH,
               api_key: u.apiKey || null,
               projects: JSON.stringify(Array.isArray(u.projects) ? u.projects : []),
+              permissions: JSON.stringify(ensureArrayOfStrings(u.permissions)),
               status: u.status === 'disabled' ? 'disabled' : 'active',
               created_at: u.createdAt || nowIso(),
               updated_at: u.updatedAt || nowIso()
@@ -365,8 +371,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         const projs = raw?.projects;
         if (!projs || typeof projs !== 'object') continue;
         const upsert = db.prepare(`
-          INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles)
-          VALUES (?, ?, ?, ?)
+          INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles, edit_users, edit_roles)
+          VALUES (?, ?, ?, ?, ?, ?)
         `);
         db.transaction(() => {
           for (const [pid, entry] of Object.entries(projs)) {
@@ -374,7 +380,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
               pid,
               entry?.public ? 1 : 0,
               JSON.stringify(ensureArrayOfStrings(entry?.allowedUsers)),
-              JSON.stringify(ensureArrayOfStrings(entry?.allowedRoles))
+              JSON.stringify(ensureArrayOfStrings(entry?.allowedRoles)),
+              JSON.stringify(ensureArrayOfStrings(entry?.editUsers)),
+              JSON.stringify(ensureArrayOfStrings(entry?.editRoles))
             );
           }
         })();
@@ -398,14 +406,14 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     getUserByApiKey: db.prepare('SELECT * FROM users WHERE api_key = ?'),
     getUserByApiKeyHash: db.prepare('SELECT * FROM users WHERE api_key_hash = ?'),
     insertUser: db.prepare(`
-      INSERT INTO users (id, username, password_hash, role, api_key, api_key_hash, api_key_prefix, api_key_last_used_at, projects, status, created_at, updated_at)
-      VALUES (@id, @username, @password_hash, @role, @api_key, @api_key_hash, @api_key_prefix, @api_key_last_used_at, @projects, @status, @created_at, @updated_at)
+      INSERT INTO users (id, username, password_hash, role, api_key, api_key_hash, api_key_prefix, api_key_last_used_at, projects, permissions, status, created_at, updated_at)
+      VALUES (@id, @username, @password_hash, @role, @api_key, @api_key_hash, @api_key_prefix, @api_key_last_used_at, @projects, @permissions, @status, @created_at, @updated_at)
     `),
     updateUser: db.prepare(`
       UPDATE users SET username = @username, password_hash = @password_hash, role = @role,
         api_key = @api_key, api_key_hash = @api_key_hash, api_key_prefix = @api_key_prefix,
         api_key_last_used_at = @api_key_last_used_at,
-        projects = @projects, status = @status, updated_at = @updated_at
+        projects = @projects, permissions = @permissions, status = @status, updated_at = @updated_at
       WHERE id = @id
     `),
     touchApiKeyLastUsed: db.prepare('UPDATE users SET api_key_last_used_at = ? WHERE id = ?'),
@@ -414,8 +422,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     upsertConfig: db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)'),
     getProject: db.prepare('SELECT * FROM projects WHERE project_id = ?'),
     upsertProject: db.prepare(`
-      INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles)
-      VALUES (@project_id, @is_public, @allowed_users, @allowed_roles)
+      INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles, edit_users, edit_roles)
+      VALUES (@project_id, @is_public, @allowed_users, @allowed_roles, @edit_users, @edit_roles)
     `),
     insertLoginAttempt: db.prepare(`
       INSERT INTO login_attempts (username, ip, success, captcha_required, captcha_passed, reason, user_agent, created_at)
@@ -568,6 +576,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       api_key_prefix: prefix,
       api_key_last_used_at: user.apiKeyLastUsedAt || null,
       projects: JSON.stringify(Array.isArray(user.projects) ? user.projects : []),
+      permissions: JSON.stringify(ensureArrayOfStrings(user.permissions)),
       status: user.status || 'active',
       created_at: user.createdAt || nowIso(),
       updated_at: user.updatedAt || nowIso()
@@ -587,6 +596,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       api_key_prefix: changes.apiKeyPrefix !== undefined ? changes.apiKeyPrefix : current.api_key_prefix,
       api_key_last_used_at: changes.apiKeyLastUsedAt !== undefined ? changes.apiKeyLastUsedAt : current.api_key_last_used_at,
       projects: changes.projects !== undefined ? JSON.stringify(changes.projects) : current.projects,
+      permissions: changes.permissions !== undefined ? JSON.stringify(ensureArrayOfStrings(changes.permissions)) : current.permissions,
       status: changes.status !== undefined ? changes.status : current.status,
       updated_at: nowIso()
     };
@@ -652,18 +662,47 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return {
       public: !!row.is_public,
       allowedUsers: JSON.parse(row.allowed_users || '[]'),
-      allowedRoles: JSON.parse(row.allowed_roles || '[]')
+      allowedRoles: JSON.parse(row.allowed_roles || '[]'),
+      editUsers: JSON.parse(row.edit_users || '[]'),
+      editRoles: JSON.parse(row.edit_roles || '[]')
     };
   };
 
   const upsertProjectAccess = (projectId, entry) => {
-    const current = getProjectAccess(projectId) || { public: false, allowedUsers: [], allowedRoles: [] };
+    const current = getProjectAccess(projectId) || { public: false, allowedUsers: [], allowedRoles: [], editUsers: [], editRoles: [] };
     stmts.upsertProject.run({
       project_id: projectId,
       is_public: (entry.public !== undefined ? entry.public : current.public) ? 1 : 0,
       allowed_users: JSON.stringify(ensureArrayOfStrings(entry.allowedUsers !== undefined ? entry.allowedUsers : current.allowedUsers)),
-      allowed_roles: JSON.stringify(ensureArrayOfStrings(entry.allowedRoles !== undefined ? entry.allowedRoles : current.allowedRoles).filter((r) => VALID_ROLES.has(r)))
+      allowed_roles: JSON.stringify(ensureArrayOfStrings(entry.allowedRoles !== undefined ? entry.allowedRoles : current.allowedRoles).filter((r) => VALID_ROLES.has(r))),
+      edit_users: JSON.stringify(ensureArrayOfStrings(entry.editUsers !== undefined ? entry.editUsers : current.editUsers)),
+      edit_roles: JSON.stringify(ensureArrayOfStrings(entry.editRoles !== undefined ? entry.editRoles : current.editRoles).filter((r) => VALID_ROLES.has(r)))
     });
+  };
+
+  const userHasPermission = (user, permission) => {
+    if (!user || !permission) return false;
+    if (user.role === ROLE_ADMIN) return true;
+    const permissions = ensureArrayOfStrings(user.permissions);
+    return permissions.includes(permission) || permissions.includes('*');
+  };
+
+  const canEditProject = (user, projectId) => {
+    if (!user || !projectId) return false;
+    if (user.role === ROLE_ADMIN) return true;
+    const entry = getProjectAccess(projectId) || {};
+    const editUsers = ensureArrayOfStrings(entry.editUsers);
+    const editRoles = ensureArrayOfStrings(entry.editRoles);
+    return editUsers.includes(user.id)
+      || editRoles.includes(user.role)
+      || userHasPermission(user, `project:edit:${projectId}`);
+  };
+
+  const canEditPortal = (user, portalId = 'Qtiler2Origo') => {
+    if (!user) return false;
+    if (user.role === ROLE_ADMIN) return true;
+    return userHasPermission(user, 'portal:edit')
+      || userHasPermission(user, `portal:edit:${portalId}`);
   };
 
   /* ---------------------------------------------------------------- */
@@ -949,6 +988,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return res.status(403).json({ error: 'forbidden' });
   };
 
+  security.canEditProject = (user, projectId) => canEditProject(user, projectId);
+  security.canEditPortal = (user, portalId) => canEditPortal(user, portalId);
+  security.userHasPermission = (user, permission) => userHasPermission(user, permission);
+
   security.isEnabled = () => true;
 
   const resetSecurity = () => {
@@ -958,6 +1001,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     };
     security.ensureRoles = (_req, _res, next) => next();
     security.ensureProjectAccess = (_req, _res, next) => next();
+    security.canEditProject = () => true;
+    security.canEditPortal = () => true;
+    security.userHasPermission = () => true;
     security.isEnabled = () => false;
   };
 
@@ -1162,7 +1208,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   });
 
   adminRouter.post('/users', async (req, res) => {
-    const { username, password, role, projects = [], status = 'active' } = req.body || {};
+    const { username, password, role, projects = [], permissions = [], status = 'active' } = req.body || {};
     const cleanUsername = normalizeUsername(username);
     if (!cleanUsername) {
       return res.status(400).json({ error: 'username_required' });
@@ -1186,6 +1232,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       apiKeyHash: hashApiKey(newApiKey),
       apiKeyPrefix: apiKeyPrefixOf(newApiKey),
       projects: ensureArrayOfStrings(projects),
+      permissions: ensureArrayOfStrings(permissions),
       createdAt: now,
       updatedAt: now,
       status: status === 'disabled' ? 'disabled' : 'active'
@@ -1239,7 +1286,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
 
   adminRouter.patch('/users/:id', async (req, res) => {
     const { id } = req.params;
-    const { password, role, projects, status } = req.body || {};
+    const { password, role, projects, permissions, status } = req.body || {};
     const changes = {};
     if (role && VALID_ROLES.has(role)) {
       changes.role = role;
@@ -1247,8 +1294,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     if (status === 'disabled' || status === 'active') {
       changes.status = status;
     }
-    if (projects) {
+    if (projects !== undefined) {
       changes.projects = ensureArrayOfStrings(projects);
+    }
+    if (permissions !== undefined) {
+      changes.permissions = ensureArrayOfStrings(permissions);
     }
     if (password) {
       if (password.length < 6) {
@@ -1283,11 +1333,13 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
 
   adminRouter.patch('/projects/:id', (req, res) => {
     const { id } = req.params;
-    const { public: isPublic, allowedUsers, allowedRoles } = req.body || {};
+    const { public: isPublic, allowedUsers, allowedRoles, editUsers, editRoles } = req.body || {};
     const entry = {};
     if (typeof isPublic === 'boolean') entry.public = isPublic;
-    if (allowedUsers) entry.allowedUsers = allowedUsers;
-    if (allowedRoles) entry.allowedRoles = allowedRoles;
+    if (allowedUsers !== undefined) entry.allowedUsers = allowedUsers;
+    if (allowedRoles !== undefined) entry.allowedRoles = allowedRoles;
+    if (editUsers !== undefined) entry.editUsers = editUsers;
+    if (editRoles !== undefined) entry.editRoles = editRoles;
     upsertProjectAccess(id, entry);
     const updated = getProjectAccess(id);
     res.json({ project: updated });

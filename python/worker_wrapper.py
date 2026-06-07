@@ -2305,13 +2305,30 @@ def process_task(params):
                 
             layout = proj.layoutManager().layoutByName(str(layout_name))
             if not layout:
+                target_layout = str(layout_name).strip().lower()
+                for candidate_layout in proj.layoutManager().layouts():
+                    try:
+                        if str(candidate_layout.name()).strip().lower() == target_layout:
+                            layout = candidate_layout
+                            break
+                    except Exception:
+                        continue
+            if not layout:
                 raise ValueError('Plantilla no encontrada: ' + str(layout_name))
                 
             rect = QgsRectangle(*bbox_list)
             map_item = layout.referenceMap()
             if not map_item and map_name:
+                target_map = str(map_name).strip().lower()
                 for item in layout.items():
-                    if isinstance(item, QgsLayoutItemMap) and str(item.id() or '') == str(map_name):
+                    if not isinstance(item, QgsLayoutItemMap):
+                        continue
+                    item_names = [item.id()]
+                    try:
+                        item_names.append(item.displayName())
+                    except Exception:
+                        pass
+                    if any(str(name or '').strip().lower() == target_map for name in item_names):
                         map_item = item
                         break
             if not map_item:
@@ -2375,6 +2392,90 @@ def process_task(params):
                 return {'status': 'success', 'file': output_file}
             else:
                 raise ValueError('Fallo al exportar el PDF, error code: ' + str(res))
+
+        if action in ('export_dxf', 'dxf_export'):
+            from qgis.core import QgsDxfExport
+            from qgis.PyQt.QtCore import QFile
+
+            output_file = params.get('output_file')
+            layers_list = params.get('layers')
+            crs_raw = params.get('crs') or params.get('srs')
+            bbox_list = params.get('bbox')
+            scale = params.get('scale') or params.get('symbology_scale') or 1000
+
+            if not output_file:
+                raise ValueError('Falta output_file')
+
+            requested_layers = []
+            if isinstance(layers_list, list):
+                requested_layers = [str(v).strip() for v in layers_list if str(v).strip()]
+            elif layers_list:
+                requested_layers = [v.strip() for v in str(layers_list).split(',') if v.strip()]
+
+            selected_layers = []
+            if requested_layers:
+                by_id = proj.mapLayers()
+                for lname in requested_layers:
+                    layer = by_id.get(lname)
+                    if not layer:
+                        matches = proj.mapLayersByName(str(lname))
+                        if matches:
+                            layer = matches[0]
+                    if layer and _is_vector_layer(layer):
+                        selected_layers.append(layer)
+            else:
+                for layer in proj.mapLayers().values():
+                    if _is_vector_layer(layer):
+                        selected_layers.append(layer)
+
+            if not selected_layers:
+                raise ValueError('No hay capas vectoriales para exportar a DXF')
+
+            dxf_layers = []
+            for layer in selected_layers:
+                try:
+                    dxf_layers.append(QgsDxfExport.DxfLayer(layer))
+                except Exception:
+                    continue
+            if not dxf_layers:
+                raise ValueError('No se pudieron preparar capas DXF')
+
+            exporter = QgsDxfExport()
+            exporter.addLayers(dxf_layers)
+            try:
+                exporter.setLayerTitleAsName(True)
+            except Exception:
+                pass
+            try:
+                scale_num = float(scale)
+                if scale_num > 0:
+                    exporter.setSymbologyScale(scale_num)
+            except Exception:
+                pass
+            if crs_raw:
+                try:
+                    crs_cand = QgsCoordinateReferenceSystem(str(crs_raw).strip())
+                    if crs_cand.isValid():
+                        exporter.setDestinationCrs(crs_cand)
+                except Exception:
+                    pass
+            if bbox_list and len(bbox_list) == 4:
+                try:
+                    exporter.setExtent(QgsRectangle(*bbox_list))
+                except Exception:
+                    pass
+
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            dxf_file = QFile(output_file)
+            res = exporter.writeToFile(dxf_file, 'UTF-8')
+            success_code = 0
+            try:
+                success_code = int(QgsDxfExport.ExportResult.Success)
+            except Exception:
+                success_code = 0
+            if int(res) == success_code:
+                return {'status': 'success', 'file': output_file, 'layers': [str(layer.name()) for layer in selected_layers]}
+            raise ValueError('Fallo al exportar DXF, error code: ' + str(res))
 
         # --- Layer fields/attributes ---------------------------------------
         if action == 'layer_fields':

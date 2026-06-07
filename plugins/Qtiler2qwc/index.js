@@ -75,6 +75,14 @@ const appendApiKey = (url, apiKey) => {
   return url + (url.includes('?') ? '&' : '?') + `api_key=${encodeURIComponent(key)}`;
 };
 
+const appendQueryParams = (url, params = {}) => {
+  if (typeof url !== 'string' || !url.trim()) return url;
+  const pairs = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
+  if (!pairs.length) return url;
+  const suffix = pairs.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&');
+  return url + (url.includes('?') ? '&' : '?') + suffix;
+};
+
 const xmlAttr = (text, attrName) => {
   const re = new RegExp(`${attrName}="([^"]*)"`, 'i');
   const match = String(text || '').match(re);
@@ -458,6 +466,28 @@ const listProjectsFromDisk = async (projectsDir) => {
   return Array.from(projectsById.values()).sort((a, b) => a.id.localeCompare(b.id));
 };
 
+const resolveProjectFileFromDisk = async (projectsDir, projectId) => {
+  const id = normalizeProjectId(projectId);
+  if (!id) return null;
+  for (const ext of ['.qgz', '.qgs']) {
+    const candidate = path.join(projectsDir, id + ext);
+    try {
+      await fs.promises.access(candidate, fs.constants.R_OK);
+      return candidate;
+    } catch {}
+  }
+  for (const ext of ['.qgz', '.qgs']) {
+    const candidate = path.join(projectsDir, id, id + ext);
+    try {
+      await fs.promises.access(candidate, fs.constants.R_OK);
+      return candidate;
+    } catch {}
+  }
+  const allProjects = await listProjectsFromDisk(projectsDir);
+  const match = allProjects.find((project) => String(project.id || '').toLowerCase() === id.toLowerCase());
+  return match?.file || null;
+};
+
 export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
   const pluginSlug = (path.basename(baseDir || '') || 'Qtiler2qwc').replace(/[^a-z0-9-_]/gi, '') || 'Qtiler2qwc';
   const adminUiDir = path.join(baseDir, 'admin-ui');
@@ -618,6 +648,16 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const colorLayerReplacement = 'void 0===t[o.id].fields&&u.getFields&&u.getFields(o).then(function(e){n.updateColorLayer(o.id,{fields:e})}),function e(r){var i,a;null===(i=r.sublayers)||void 0===i||null===(a=i.forEach)||void 0===a||a.call(i,function(r){var i,a,s,c;r.wfs3dLayer&&r.extrusionHeight&&(t[r.wfs3dLayer.id]=qt(qt({},r.wfs3dLayer),{},{visibility:null===(i=r.visibility)||void 0===i||i,opacity:null!==(a=r.opacity)&&void 0!==a?a:255,extrusionHeight:r.extrusionHeight,color:null!==(s=r.color)&&void 0!==s?s:null===(c=r.wfs3dLayer)||void 0===c?void 0:c.color})),e(r)})}(o),t},{})}),an(n,"applyColorLayerUpdates"';
     const available3dAnchor = 'availableIn3D:c,cfg:K(K({},a.cfg),n.props.appConfig.pluginsDef.cfg[a.name+"Plugin"])';
     const available3dReplacement = 'availableIn3D:!!a.availableIn3D||c,cfg:K(K({},a.cfg),n.props.appConfig.pluginsDef.cfg[a.name+"Plugin"])';
+    const gdalNoDataPatches = [
+      {
+        anchor: '{tag:42113,name:"GDAL_NODATA",type:ng.ASCII}',
+        replacement: '{tag:42113,name:"GDAL_NODATA",type:ng.ASCII,eager:!0}'
+      },
+      {
+        anchor: '{tag:42113,name:"GDAL_NODATA",type:i.ASCII}',
+        replacement: '{tag:42113,name:"GDAL_NODATA",type:i.ASCII,eager:!0}'
+      }
+    ];
     const candidates = [];
 
     const walk = async (dir) => {
@@ -642,6 +682,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     let colorLayerAlreadyPatched = 0;
     let available3dPatched = 0;
     let available3dAlreadyPatched = 0;
+    let gdalNoDataPatched = 0;
+    let gdalNoDataAlreadyPatched = 0;
     for (const filePath of candidates) {
       let raw;
       try {
@@ -668,12 +710,23 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           available3dPatched++;
         }
       }
+      for (const patch of gdalNoDataPatches) {
+        if (next.includes(patch.replacement)) {
+          gdalNoDataAlreadyPatched++;
+          continue;
+        }
+        const gdalNoDataCount = next.split(patch.anchor).length - 1;
+        if (gdalNoDataCount > 0) {
+          next = next.split(patch.anchor).join(patch.replacement);
+          gdalNoDataPatched += gdalNoDataCount;
+        }
+      }
       if (next !== raw) {
         await fs.promises.writeFile(filePath, next, 'utf8');
       }
     }
-    if (colorLayerPatched || colorLayerAlreadyPatched || available3dPatched || available3dAlreadyPatched) {
-      console.log(`[${pluginSlug}] QWC2 View3D runtime patch: colorLayers patched=${colorLayerPatched}, already=${colorLayerAlreadyPatched}; availableIn3D patched=${available3dPatched}, already=${available3dAlreadyPatched}`);
+    if (colorLayerPatched || colorLayerAlreadyPatched || available3dPatched || available3dAlreadyPatched || gdalNoDataPatched || gdalNoDataAlreadyPatched) {
+      console.log(`[${pluginSlug}] QWC2 View3D runtime patch: colorLayers patched=${colorLayerPatched}, already=${colorLayerAlreadyPatched}; availableIn3D patched=${available3dPatched}, already=${available3dAlreadyPatched}; gdalNoData patched=${gdalNoDataPatched}, already=${gdalNoDataAlreadyPatched}`);
     }
 
     const translationDirs = [
@@ -879,20 +932,51 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   /**
    * Filter profiles based on QtilerAuth permissions
    */
-  const filterProfilesByAccess = (profiles, user) => {
+  const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
+
+  const collectProfileProjectIds = (profile) => {
+    const ids = new Set();
+    const add = (value) => {
+      const projectId = normalizeProjectId(value || '');
+      if (projectId) ids.add(projectId);
+    };
+
+    add(profile?.projectId);
+    for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+      add(layer?.sourceProjectId);
+    }
+    for (const bg of (Array.isArray(profile?.backgrounds) ? profile.backgrounds : [])) {
+      add(bg?.sourceProjectId || profile?.backgroundProjectId);
+    }
+
+    return [...ids];
+  };
+
+  const userCanAccessProfile = (profile, user) => {
+    if (!isAuthActive()) return true;
+    const projectIds = collectProfileProjectIds(profile);
+    if (!projectIds.length) return false;
     const snapshot = readAccessSnapshot(dataRoot);
-    return profiles.filter((p) => {
-      const projectId = normalizeProjectId(p.projectId);
-      if (!projectId) return false;
-      return userCanAccessProject(snapshot, user, projectId);
+    return projectIds.every((projectId) => userCanAccessProject(snapshot, user || null, projectId));
+  };
+
+  const filterProfilesByAccess = (profiles, user) => {
+    const list = Array.isArray(profiles) ? profiles : [];
+    if (!isAuthActive()) return list;
+    const snapshot = readAccessSnapshot(dataRoot);
+    return list.filter((profile) => {
+      const projectIds = collectProfileProjectIds(profile);
+      if (!projectIds.length) return false;
+      return projectIds.every((projectId) => userCanAccessProject(snapshot, user || null, projectId));
     });
   };
 
   const profileRequiresAuthentication = (profile) => {
-    const projectId = normalizeProjectId(profile?.projectId || '');
-    if (!projectId) return false;
+    if (!isAuthActive()) return false;
+    const projectIds = collectProfileProjectIds(profile);
+    if (!projectIds.length) return false;
     const snapshot = readAccessSnapshot(dataRoot);
-    return !userCanAccessProject(snapshot, null, projectId);
+    return projectIds.some((projectId) => !userCanAccessProject(snapshot, null, projectId));
   };
 
   const sameProfileToken = (left, right) => {
@@ -1337,13 +1421,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
     }
 
-    // Apply DXF export service URL
-    if (tc.dxfExportServiceUrl) {
+    // Apply DXF export service URL. If no external service is configured,
+    // Qtiler provides a serverless PyQGIS-backed endpoint.
+    const dxfExportServiceUrl = tc.dxfExportServiceUrl || `/plugins/${pluginSlug}/api/dxf`;
+    if (dxfExportServiceUrl) {
       for (const section of ['common', 'mobile', 'desktop']) {
         const dxf = (baseConfig.plugins?.[section] || []).find((p) => p?.name === 'DxfExport');
         if (dxf) {
           dxf.cfg = dxf.cfg || {};
-          dxf.cfg.serviceUrl = tc.dxfExportServiceUrl;
+          dxf.cfg.serviceUrl = dxfExportServiceUrl;
         }
       }
     }
@@ -1428,7 +1514,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
         if (p.name === 'Editing') p.cfg.serviceUrl = '/wfs';
         if (p.name === 'Identify') p.cfg.serviceUrl = '/wms';
-        if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
+        if (!['Authentication', 'Identify', 'Editing', 'FeatureForm', 'DxfExport'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
         if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
         if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
         if (typeof p.cfg.importedTilesBaseUrl === 'string') p.cfg.importedTilesBaseUrl = '';
@@ -1612,6 +1698,48 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const cachedLayers = cacheIndex?.layers || [];
     const projectLayerFlags = await readProjectLayerFlags(projectId);
     const qgis3dLayers = readQgis3dLayerConfig(cacheIndex?.project, cachedLayers);
+    const wfs3dMaxFeaturesRaw = Number.parseInt(process.env.QWC2_3D_WFS_MAX_FEATURES || '5000', 10);
+    const wfs3dMaxFeatures = Number.isFinite(wfs3dMaxFeaturesRaw) && wfs3dMaxFeaturesRaw > 0 ? wfs3dMaxFeaturesRaw : 5000;
+    const wfs3dUrl = appendQueryParams(wfsUrl, { COUNT: wfs3dMaxFeatures, OUTPUTFORMAT: 'application/json' });
+
+    const normalize3dTilesKey = (value) => String(safeLayerNameForWfs(value) || sanitizeFileToken(value) || value || '')
+      .trim()
+      .toLowerCase();
+    const discoverTiles3dEntries = async () => {
+      const candidateIds = [...new Set([
+        projectId,
+        String(projectId || '').replace(/-demo$/i, ''),
+        profile.backgroundProjectId,
+        ...(profile.layers || []).map((layer) => layer?.sourceProjectId)
+      ].map((id) => String(id || '').trim()).filter(Boolean))];
+      const entries = [];
+      const seenTiles3d = new Set();
+      for (const candidateId of candidateIds) {
+        const projectTiles3dDir = path.join(tiles3dRoot, candidateId);
+        let subdirs = [];
+        try { subdirs = await fs.promises.readdir(projectTiles3dDir, { withFileTypes: true }); } catch { continue; }
+        for (const ent of subdirs) {
+          if (!ent.isDirectory()) continue;
+          const setName = ent.name;
+          const tilesetPath = path.join(projectTiles3dDir, setName, 'tileset.json');
+          const key = `${candidateId}/${setName}`;
+          if (seenTiles3d.has(setName) || seenTiles3d.has(key)) continue;
+          try {
+            await fs.promises.access(tilesetPath);
+            seenTiles3d.add(setName);
+            seenTiles3d.add(key);
+            entries.push({
+              name: setName,
+              title: setName,
+              url: `${qtilerBaseUrl}/Qtiler2qwc/3dtiles/${encodeURIComponent(candidateId)}/${encodeURIComponent(setName)}/tileset.json`
+            });
+          } catch { /* no tileset.json in this subdir, skip */ }
+        }
+      }
+      return entries;
+    };
+    const tiles3dEntries = profile.features?.view3d === true ? await discoverTiles3dEntries() : [];
+    const tiles3dLayerKeys = new Set(tiles3dEntries.flatMap((entry) => [entry.name, entry.title].map(normalize3dTilesKey).filter(Boolean)));
 
     // Collect additional CRS from layers that differ from the project CRS
     const additionalCrsSet = new Set();
@@ -1707,19 +1835,21 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         sl.extrusionHeight = layer3d.extrusionHeight;
         if (layer3d.color) sl.color = layer3d.color;
         const wfsLayerName = realName;
-        const wfs3dId = `${projectId}:3d:${safeLayerNameForWfs(wfsLayerName) || sanitizeFileToken(wfsLayerName) || 'layer'}`;
-        sl.wfs3dLayer = {
-          id: wfs3dId,
-          type: 'wfs',
-          name: wfsLayerName,
-          title: `${title || name} 3D`,
-          url: wfsUrl,
-          version: '1.1.0',
-          formats: ['application/json', 'geojson', 'json'],
-          projection: cached?.layer_crs || cached?.crs || projectCrs,
-          bbox: { crs: 'EPSG:4326', bounds: cached?.extent_wgs84 || bboxWgs84 },
-          color: layer3d.color || '#b2b2b2'
-        };
+        if (!tiles3dLayerKeys.has(normalize3dTilesKey(wfsLayerName))) {
+          const wfs3dId = `${projectId}:3d:${safeLayerNameForWfs(wfsLayerName) || sanitizeFileToken(wfsLayerName) || 'layer'}`;
+          sl.wfs3dLayer = {
+            id: wfs3dId,
+            type: 'wfs',
+            name: wfsLayerName,
+            title: `${title || name} 3D`,
+            url: wfs3dUrl,
+            version: '1.1.0',
+            formats: ['application/json', 'geojson', 'json'],
+            projection: cached?.layer_crs || cached?.crs || projectCrs,
+            bbox: { crs: 'EPSG:4326', bounds: cached?.extent_wgs84 || bboxWgs84 },
+            color: layer3d.color || '#b2b2b2'
+          };
+        }
       }
       return sl;
     });
@@ -1788,19 +1918,27 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           ];
           const scoreTerrainFile = (filename) => {
             const name = String(filename || '').toLowerCase();
+            const base = path.basename(name, path.extname(name));
             let score = 0;
             if (/\.(tif|tiff)$/i.test(name)) score += 10;
-            if (/(terrain|dtm|dem|elevation|height|relief)/i.test(name)) score += 100;
-            if (/(stock|surface|ground|z)/i.test(name)) score += 15;
+            if (/^(terrain|dtm|dem|elevation|height|relief)$/i.test(base)) score += 200;
+            else if (/(terrain|dtm|dem|elevation|height|relief)/i.test(name)) score += 100;
+            if (/(surface|ground|z)/i.test(name)) score += 10;
             if (/(orto|ortho|orthophoto|aerial|satellite|imagery|rgb|topo|webb|basemap)/i.test(name)) score -= 200;
             return score;
           };
           for (const dir of candidates) {
             let entries = [];
             try { entries = await fs.promises.readdir(dir); } catch { continue; }
-            const tif = entries
+            const terrainCandidates = await Promise.all(entries
               .filter((e) => /\.(tif|tiff)$/i.test(e))
-              .sort((a, b) => scoreTerrainFile(b) - scoreTerrainFile(a) || a.localeCompare(b))[0];
+              .map(async (name) => {
+                let size = Number.MAX_SAFE_INTEGER;
+                try { size = (await fs.promises.stat(path.join(dir, name))).size; } catch { /* keep max size */ }
+                return { name, score: scoreTerrainFile(name), size };
+              }));
+            const tif = terrainCandidates
+              .sort((a, b) => b.score - a.score || a.size - b.size || a.name.localeCompare(b.name))[0]?.name;
             if (tif) {
               const terrainUrl = `${qtilerBaseUrl}/Qtiler2qwc/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
               return { url: terrainUrl, crs: projectCrs };
@@ -1818,36 +1956,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       // Convention: data/Qtiler2qwc/3dtiles/<projectId>/<setName>/tileset.json
       // Each subdirectory containing a tileset.json becomes one tiles3d entry.
       try {
-        const candidateIds = [...new Set([
-          projectId,
-          String(projectId || '').replace(/-demo$/i, ''),
-          profile.backgroundProjectId,
-          ...(profile.layers || []).map((layer) => layer?.sourceProjectId)
-        ].map((id) => String(id || '').trim()).filter(Boolean))];
-        const tiles3dEntries = [];
-        const seenTiles3d = new Set();
-        for (const candidateId of candidateIds) {
-          const projectTiles3dDir = path.join(tiles3dRoot, candidateId);
-          let subdirs = [];
-          try { subdirs = await fs.promises.readdir(projectTiles3dDir, { withFileTypes: true }); } catch { continue; }
-          for (const ent of subdirs) {
-            if (!ent.isDirectory()) continue;
-            const setName = ent.name;
-            const tilesetPath = path.join(projectTiles3dDir, setName, 'tileset.json');
-            const key = `${candidateId}/${setName}`;
-            if (seenTiles3d.has(setName) || seenTiles3d.has(key)) continue;
-            try {
-              await fs.promises.access(tilesetPath);
-              seenTiles3d.add(setName);
-              seenTiles3d.add(key);
-              tiles3dEntries.push({
-                name: setName,
-                title: setName,
-                url: `${qtilerBaseUrl}/Qtiler2qwc/3dtiles/${encodeURIComponent(candidateId)}/${encodeURIComponent(setName)}/tileset.json`
-              });
-            } catch { /* no tileset.json in this subdir, skip */ }
-          }
-        }
         if (tiles3dEntries.length > 0) {
           item.map3d.tiles3d = tiles3dEntries;
         }
@@ -2345,7 +2453,24 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
   const maybeAutoStartStandalone = async () => { /* removed */ };
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
-  app.use(`/plugins/${pluginSlug}/published`, express.static(publishedRoot, { index: false }));
+  app.get(`/plugins/${pluginSlug}/published/:fileName`, async (req, res, next) => {
+    try {
+      const fileName = String(req.params?.fileName || '').trim();
+      if (!fileName || !/\.json$/i.test(fileName)) return next();
+      const profileKey = sanitizeFileToken(fileName.replace(/\.json$/i, ''));
+      if (!profileKey) return next();
+      const profile = await readPublishedProfile(profileKey);
+      if (!profile?.projectId) return next();
+      const normalizedProfile = { ...profile, profileKey };
+      if (!userCanAccessProfile(normalizedProfile, req.user || null)) {
+        return res.status(req.user ? 403 : 401).json({ error: req.user ? 'forbidden' : 'auth_required' });
+      }
+      res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+      return res.json(normalizedProfile);
+    } catch {
+      return next();
+    }
+  });
   // Static mount for user-supplied 3D Tiles (b3dm/glb + tileset.json) per project.
   // Drop a folder under data/Qtiler2qwc/3dtiles/<projectId>/<setName>/ containing tileset.json
   // and it will be served from /Qtiler2qwc/3dtiles/<projectId>/<setName>/ and auto-injected
@@ -2414,7 +2539,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
           if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
           if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
           if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
-          if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
+          if (!['Authentication', 'Identify', 'Editing', 'FeatureForm', 'DxfExport'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
           if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
           if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
           if (typeof p.cfg.importedTilesBaseUrl === 'string') p.cfg.importedTilesBaseUrl = '';
@@ -2449,7 +2574,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
             if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
             if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
             if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
-            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
+            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm', 'DxfExport'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
             if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
             if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
             if (typeof p.cfg.importedTilesBaseUrl === 'string') p.cfg.importedTilesBaseUrl = '';
@@ -2673,7 +2798,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
             if (typeof p.cfg.catalogUrl === 'string') p.cfg.catalogUrl = '';
             if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
             if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
-            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
+            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm', 'DxfExport'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
             if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
             if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
             if (typeof p.cfg.importedTilesBaseUrl === 'string') p.cfg.importedTilesBaseUrl = '';
@@ -2722,7 +2847,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
             if (p.name === 'Editing' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wfs';
             if (p.name === 'Identify' && (typeof p.cfg.serviceUrl !== 'string' || !p.cfg.serviceUrl.trim())) p.cfg.serviceUrl = '/wms';
             // Also clear any explicit service URLs inside plugin configs
-            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
+            if (!['Authentication', 'Identify', 'Editing', 'FeatureForm', 'DxfExport'].includes(p.name) && typeof p.cfg.serviceUrl === 'string') p.cfg.serviceUrl = '';
             if (typeof p.cfg.permalinkUrl === 'string') p.cfg.permalinkUrl = '';
             if (typeof p.cfg.tileInfoServiceUrl === 'string') p.cfg.tileInfoServiceUrl = '';
             if (typeof p.cfg.importedTilesBaseUrl === 'string') p.cfg.importedTilesBaseUrl = '';
@@ -3350,6 +3475,77 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       res.status(500).json({ error: 'publish_launch_url_failed', details: String(err?.message || err) });
     }
   });
+
+  app.all(
+    `/plugins/${pluginSlug}/api/dxf`,
+    express.urlencoded({ extended: true, limit: '10mb' }),
+    express.json({ limit: '10mb' }),
+    async (req, res) => {
+      try {
+        const params = { ...(req.body || {}), ...(req.query || {}) };
+        const projectId = normalizeProjectId(params.project || params.PROJECT || params.theme || params.THEME || params.map || params.MAP || '');
+        if (!projectId) return res.status(400).json({ error: 'missing_project' });
+
+        const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+        if (authActive) {
+          const snapshot = readAccessSnapshot(dataRoot);
+          if (!userCanAccessProject(snapshot, req.user || null, projectId)) {
+            return res.status(req.user ? 403 : 401).json({ error: req.user ? 'forbidden' : 'auth_required' });
+          }
+        }
+
+        const projectFile = await resolveProjectFileFromDisk(projectsDir, projectId);
+        if (!projectFile) return res.status(404).json({ error: 'project_not_found' });
+
+        const parseList = (value) => {
+          if (Array.isArray(value)) return value.flatMap(parseList);
+          return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+        };
+        const parseBboxParam = (value) => {
+          const values = parseList(value).map((item) => Number(item));
+          return values.length === 4 && values.every(Number.isFinite) ? values : null;
+        };
+
+        const layers = parseList(params.layers || params.LAYERS || params.layer || params.LAYER);
+        const bbox = parseBboxParam(params.bbox || params.BBOX || params.extent || params.EXTENT);
+        const crs = String(params.crs || params.CRS || params.srs || params.SRS || '').trim();
+        const scaleRaw = Number(params.scale || params.SCALE || params.symbology_scale || params.SYMBOLOGY_SCALE || 1000);
+        const scale = Number.isFinite(scaleRaw) && scaleRaw > 0 ? scaleRaw : 1000;
+
+        const rendererPool = app.locals.tileRendererPool;
+        if (!rendererPool || typeof rendererPool.renderTile !== 'function') {
+          return res.status(503).json({ error: 'renderer_unavailable' });
+        }
+
+        const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-qwc-dxf-'));
+        const outFile = path.join(tmpDir, `${sanitizeFileToken(projectId) || 'project'}.dxf`);
+        const result = await rendererPool.renderTile({
+          action: 'export_dxf',
+          project_path: projectFile.replace(/\\/g, '/'),
+          output_file: outFile,
+          layers,
+          bbox,
+          crs,
+          scale
+        });
+        if (result?.status !== 'success') {
+          await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+          return res.status(500).json({ error: 'dxf_export_failed', details: result?.error || result?.message || 'unknown_error' });
+        }
+
+        res.set('Cache-Control', 'no-store');
+        return res.download(outFile, `${sanitizeFileToken(projectId) || 'project'}.dxf`, async (err) => {
+          await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+          if (err && !res.headersSent) {
+            res.status(500).json({ error: 'dxf_download_failed', details: String(err?.message || err) });
+          }
+        });
+      } catch (err) {
+        console.error(`[${pluginSlug}] DXF export failed:`, err?.message || err);
+        return res.status(500).json({ error: 'dxf_export_failed', details: String(err?.message || err) });
+      }
+    }
+  );
 
   /* ── Thumbnail proxy: generates a WMS GetMap preview for a project (cached) ── */
   app.get(`/plugins/${pluginSlug}/api/thumbnail/:projectId`, async (req, res) => {

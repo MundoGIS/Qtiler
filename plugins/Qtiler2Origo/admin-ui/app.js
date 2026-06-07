@@ -267,6 +267,16 @@ const QTWC_I18N = {
     'Qtiler2Origo.portal_home_badge': 'Home',
     'Qtiler2Origo.portal_hidden_badge': 'Hidden from nav',
     'Qtiler2Origo.portal_saved': 'Portal pages saved.',
+    'Qtiler2Origo.portal_backup_title': 'Export / import portal backup',
+    'Qtiler2Origo.portal_backup_pages': 'Portal pages to export',
+    'Qtiler2Origo.portal_backup_maps': 'Published maps to export',
+    'Qtiler2Origo.portal_backup_export': 'Export JSON',
+    'Qtiler2Origo.portal_backup_import': 'Import / restore JSON',
+    'Qtiler2Origo.portal_backup_replace_portal': 'Replace portal pages',
+    'Qtiler2Origo.portal_backup_replace_maps': 'Replace published maps with same key',
+    'Qtiler2Origo.portal_backup_help': 'The backup JSON includes selected portal content and selected published map configurations. It does not include tile caches or QGIS project files.',
+    'Qtiler2Origo.portal_backup_exported': 'Portal backup exported.',
+    'Qtiler2Origo.portal_backup_imported': 'Portal backup imported ({n} maps).',
     'Qtiler2Origo.portal_no_blocks_preview': 'Add sections to preview the page.',
     'Qtiler2Origo.portal_no_users': 'No users found',
     'Qtiler2Origo.portal_no_roles': 'No roles found',
@@ -808,6 +818,16 @@ const QTWC_I18N = {
     'Qtiler2Origo.portal_home_badge': 'Inicio',
     'Qtiler2Origo.portal_hidden_badge': 'Oculta en navegación',
     'Qtiler2Origo.portal_saved': 'Páginas del portal guardadas.',
+    'Qtiler2Origo.portal_backup_title': 'Exportar / importar copia del portal',
+    'Qtiler2Origo.portal_backup_pages': 'Páginas del portal a exportar',
+    'Qtiler2Origo.portal_backup_maps': 'Mapas publicados a exportar',
+    'Qtiler2Origo.portal_backup_export': 'Exportar JSON',
+    'Qtiler2Origo.portal_backup_import': 'Importar / restaurar JSON',
+    'Qtiler2Origo.portal_backup_replace_portal': 'Reemplazar páginas del portal',
+    'Qtiler2Origo.portal_backup_replace_maps': 'Reemplazar mapas publicados con la misma clave',
+    'Qtiler2Origo.portal_backup_help': 'El JSON incluye el contenido seleccionado del portal y las configuraciones de los mapas publicados seleccionados. No incluye caches de tiles ni archivos de proyecto QGIS.',
+    'Qtiler2Origo.portal_backup_exported': 'Copia del portal exportada.',
+    'Qtiler2Origo.portal_backup_imported': 'Copia del portal importada ({n} mapas).',
     'Qtiler2Origo.portal_no_blocks_preview': 'Añade secciones para previsualizar la página.',
     'Qtiler2Origo.portal_no_users': 'No se encontraron usuarios',
     'Qtiler2Origo.portal_no_roles': 'No se encontraron roles',
@@ -1763,6 +1783,13 @@ const portalDuplicatePageBtn = document.getElementById('portalDuplicatePageBtn')
 const portalToggleFullscreenBtn = document.getElementById('portalToggleFullscreenBtn');
 const portalSaveBtn = document.getElementById('portalSaveBtn');
 const portalOpenPageBtn = document.getElementById('portalOpenPageBtn');
+const portalBackupPagesSelect = document.getElementById('portalBackupPagesSelect');
+const portalBackupMapsSelect = document.getElementById('portalBackupMapsSelect');
+const portalExportBackupBtn = document.getElementById('portalExportBackupBtn');
+const portalImportBackupBtn = document.getElementById('portalImportBackupBtn');
+const portalImportBackupInput = document.getElementById('portalImportBackupInput');
+const portalImportReplacePortal = document.getElementById('portalImportReplacePortal');
+const portalImportReplaceMaps = document.getElementById('portalImportReplaceMaps');
 const portalGdprEnabled = document.getElementById('portalGdprEnabled');
 const portalSiteTitle = document.getElementById('portalSiteTitle');
 const portalSiteSubtitle = document.getElementById('portalSiteSubtitle');
@@ -3538,6 +3565,39 @@ function getPortalSocialPlatformOptionsHtml(selected) {
   return PORTAL_SOCIAL_PLATFORMS.map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
 }
 
+function renderPortalBackupOptions() {
+  if (portalBackupPagesSelect) {
+    const current = new Set(getPortalSelectedOptions(portalBackupPagesSelect));
+    portalBackupPagesSelect.innerHTML = getPortalPages().map((page) => {
+      const value = String(page.id || page.slug || '').trim();
+      if (!value) return '';
+      const label = `${page.title || page.navLabel || page.slug || value} /${page.slug || ''}`;
+      return `<option value="${escapeHtml(value)}" ${!current.size || current.has(value) ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+  }
+  if (portalBackupMapsSelect) {
+    const current = new Set(getPortalSelectedOptions(portalBackupMapsSelect));
+    portalBackupMapsSelect.innerHTML = (publishedItems || []).map((item) => {
+      const value = String(item.profileKey || item.name || item.projectId || '').trim();
+      if (!value) return '';
+      const label = `${item.name || value}${item.projectId ? ` (${item.projectId})` : ''}`;
+      return `<option value="${escapeHtml(value)}" ${!current.size || current.has(value) ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+  }
+}
+
+function downloadJsonFile(payload, fileName) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function getPortalSocialPlatformKey(value) {
   const key = String(value || '').trim().toLowerCase();
   if (key === 'twitter') return 'x';
@@ -3885,6 +3945,7 @@ function renderPortalSocialItems(block) {
 
 function renderPortalBlocksList() {
   if (!portalBlocksList) return;
+  quillInstances = {};
   const page = getSelectedPortalPage();
   if (!page) {
     portalBlocksList.innerHTML = '';
@@ -4040,7 +4101,12 @@ function initRichTextEditors() {
       }
     });
 
-    quill.root.innerHTML = textarea.value;
+    const initialHtml = textarea.value || '';
+    if (initialHtml) {
+      quill.clipboard.dangerouslyPasteHTML(0, initialHtml, 'silent');
+    } else {
+      quill.setText('', 'silent');
+    }
 
     quill.on('text-change', () => {
       textarea.value = quill.root.innerHTML;
@@ -4130,6 +4196,7 @@ function renderPortalPreview() {
 
 function renderPortalEditor() {
   renderPortalPageList();
+  renderPortalBackupOptions();
   
   const site = portalPagesState?.site || {};
   const setIfNotActive = (input, value) => { if (input && document.activeElement !== input) input.value = value; };
@@ -4215,6 +4282,7 @@ function updatePortalPageField(field, rawValue) {
   renderPortalPageList();
   renderPortalPreview();
   updatePortalPublicLink();
+  queuePortalPersist();
 }
 
 function loadPortalPagesState(payload) {
@@ -4234,10 +4302,23 @@ async function loadPortalPages() {
   loadPortalPagesState(payload);
 }
 
-async function savePortalPages() {
+function syncPortalRichEditorsToState() {
+  const richFields = portalBlocksList?.querySelectorAll('textarea[data-portal-block-field]');
+  if (!richFields) return;
+  richFields.forEach((textarea) => {
+    const blockId = textarea.getAttribute('data-portal-block-id');
+    const field = textarea.getAttribute('data-portal-block-field');
+    const { block } = getPortalBlockById(blockId);
+    if (!block || !field) return;
+    setPortalFieldValue(block, field, textarea.value, textarea.getAttribute('data-value-kind') || 'text');
+  });
+}
+
+async function savePortalPages(options = {}) {
+  syncPortalRichEditorsToState();
   const payload = await api('/plugins/Qtiler2Origo/api/portal-pages', { method: 'POST', body: portalPagesState });
-  loadPortalPagesState(payload);
-  addLog(t('Qtiler2Origo.portal_saved'), 'ok');
+  if (options.refresh !== false) loadPortalPagesState(payload);
+  if (!options.silent) addLog(t('Qtiler2Origo.portal_saved'), 'ok');
 }
 
 function updatePortalSiteField(field, rawValue) {
@@ -4260,11 +4341,11 @@ function queuePortalPersist() {
   portalPersistTimer = window.setTimeout(async () => {
     portalPersistTimer = null;
     try {
-      await savePortalPages();
+      await savePortalPages({ refresh: false, silent: true });
     } catch (err) {
       addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
     }
-  }, 150);
+  }, 350);
 }
 
 function getFixedBackgroundOptions() {
@@ -4471,6 +4552,7 @@ async function loadPublishedProfiles() {
   publishedItems = payload?.items || (Array.isArray(payload) ? payload : []);
   syncUI();
   renderPortalEditor();
+  renderPortalBackupOptions();
 }
 
 async function initDetachedEditorWindow() {
@@ -4560,10 +4642,12 @@ function updatePortalBlockField(blockId, field, rawValue, kind = 'text') {
     replacement.visibility = block.visibility || replacement.visibility;
     page.blocks[blockIndex] = replacement;
     renderPortalEditor();
+    queuePortalPersist();
     return;
   }
   setPortalFieldValue(block, field, rawValue, kind);
   renderPortalPreview();
+  queuePortalPersist();
 }
 
 function addPortalItem(blockId) {
@@ -4595,6 +4679,7 @@ function updatePortalItemField(blockId, itemIndex, field, rawValue) {
     block.items[itemIndex].title = getPortalSocialPlatformLabel(rawValue);
   }
   renderPortalPreview();
+  queuePortalPersist();
 }
 
 function addPortalBlock() {
@@ -6011,6 +6096,55 @@ portalSaveBtn?.addEventListener('click', async () => {
   }
 });
 
+portalExportBackupBtn?.addEventListener('click', async () => {
+  portalExportBackupBtn.disabled = true;
+  try {
+    await savePortalPages({ refresh: false, silent: true });
+    const pageIds = getPortalSelectedOptions(portalBackupPagesSelect);
+    const mapKeys = getPortalSelectedOptions(portalBackupMapsSelect);
+    const backup = await api('/plugins/Qtiler2Origo/api/portal-backup/export', {
+      method: 'POST',
+      body: { pageIds, mapKeys }
+    });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    downloadJsonFile(backup, `qtiler2origo-portal-backup-${stamp}.json`);
+    addLog(t('Qtiler2Origo.portal_backup_exported'), 'ok');
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  } finally {
+    portalExportBackupBtn.disabled = false;
+  }
+});
+
+portalImportBackupBtn?.addEventListener('click', () => {
+  portalImportBackupInput?.click();
+});
+
+portalImportBackupInput?.addEventListener('change', async () => {
+  const file = portalImportBackupInput.files?.[0];
+  portalImportBackupInput.value = '';
+  if (!file) return;
+  portalImportBackupBtn.disabled = true;
+  try {
+    const backup = JSON.parse(await file.text());
+    const result = await api('/plugins/Qtiler2Origo/api/portal-backup/import', {
+      method: 'POST',
+      body: {
+        backup,
+        replacePortal: portalImportReplacePortal?.checked !== false,
+        replaceMaps: portalImportReplaceMaps?.checked !== false
+      }
+    });
+    await loadPortalPages();
+    await loadPublishedProfiles();
+    addLog(t('Qtiler2Origo.portal_backup_imported', { n: result?.maps?.length || 0 }), 'ok');
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  } finally {
+    portalImportBackupBtn.disabled = false;
+  }
+});
+
 [portalPageTitle, portalPageSlug, portalPageNavLabel, portalPageSummary, portalPageHeaderLogoUrl, portalPageHeaderHeight, portalPageUsers, portalPageRoles]
   .filter(Boolean)
   .forEach((input) => {
@@ -6050,6 +6184,7 @@ portalPageIsHome?.addEventListener('change', () => {
   else if (portalPagesState.homePageSlug === page.slug) portalPagesState.homePageSlug = getPortalPages()[0]?.slug || '';
   renderPortalPageList();
   updatePortalPublicLink();
+  queuePortalPersist();
 });
 
 portalAddBlockBtn?.addEventListener('click', addPortalBlock);

@@ -114,6 +114,34 @@ const normalizeTypeName = (value) => {
   return idx >= 0 ? first.slice(idx + 1).trim() : first;
 };
 
+const toArray = (value) => {
+  if (Array.isArray(value)) return value.map((v) => String(v || '').trim()).filter(Boolean);
+  if (value == null) return [];
+  return String(value).split(',').map((v) => v.trim()).filter(Boolean);
+};
+
+const extractTransactionLayerNames = (xmlText) => {
+  const xml = String(xmlText || '');
+  const names = new Set();
+  const attrRe = /<\s*(?:\w+:)?(?:Update|Delete)\b[^>]*\btypeName\s*=\s*['"]([^'"]+)['"]/gi;
+  let match;
+  while ((match = attrRe.exec(xml))) {
+    const name = normalizeTypeName(match[1]);
+    if (name) names.add(name);
+  }
+  const insertRe = /<\s*(?:\w+:)?Insert\b[^>]*>([\s\S]*?)<\s*\/\s*(?:\w+:)?Insert\s*>/gi;
+  let insertMatch;
+  while ((insertMatch = insertRe.exec(xml))) {
+    const body = insertMatch[1] || '';
+    const child = body.match(/<\s*([A-Za-z_][\w:.-]*)\b[^>]*>/);
+    if (child && child[1]) {
+      const name = normalizeTypeName(child[1]);
+      if (name) names.add(name);
+    }
+  }
+  return Array.from(names);
+};
+
 const safeXmlName = (value) => {
   const raw = String(value ?? '').trim();
   if (!raw) return '_';
@@ -244,6 +272,7 @@ export const registerWfsRoutes = ({
   tileRendererPool,
   ensureProjectAccessFromQuery,
   requireAdmin,
+  security,
   findProjectById,
   readProjectConfig,
   logProjectEvent
@@ -503,11 +532,12 @@ export const registerWfsRoutes = ({
 
     const txRequireAdmin = String(process.env.WFS_TX_REQUIRE_ADMIN || 'false').toLowerCase() === 'true';
     const userRole = String(req.user?.role || '').toLowerCase();
-    if (!req.user) {
+    const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+    if (authActive && !req.user) {
       res.status(401).type('application/xml').send(wfsExceptionXml('Access Denied: Authentication required for transactions', { code: 'SecurityError' }));
       return;
     }
-    if (txRequireAdmin && userRole !== 'admin') {
+    if (authActive && txRequireAdmin && userRole !== 'admin') {
       res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: You must be admin to perform transactions', { code: 'SecurityError' }));
       return;
     }
@@ -519,6 +549,29 @@ export const registerWfsRoutes = ({
     const config = typeof readProjectConfig === 'function'
       ? (readProjectConfig(projectId, { useCache: false }) || {})
       : {};
+    if (authActive && userRole !== 'admin') {
+      const projectAllowed = typeof security?.canEditProject === 'function'
+        ? security.canEditProject(req.user, projectId)
+        : false;
+      const layers = extractTransactionLayerNames(xmlText);
+      const layerConfigs = config?.layers && typeof config.layers === 'object' ? config.layers : {};
+      const allLayerChecksPass = layers.every((layerName) => {
+        const cfg = layerConfigs[layerName] || {};
+        const layerUsers = toArray(cfg.wfsEditUsers || cfg.editUsers);
+        const layerRoles = toArray(cfg.wfsEditRoles || cfg.editRoles);
+        if (!layerUsers.length && !layerRoles.length) return projectAllowed;
+        return !!(req.user?.id && layerUsers.includes(req.user.id))
+          || !!(req.user?.role && layerRoles.includes(req.user.role));
+      });
+      if (!projectAllowed && !layers.length) {
+        res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: You do not have edit permission for this project', { code: 'SecurityError' }));
+        return;
+      }
+      if (!allLayerChecksPass) {
+        res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: You do not have edit permission for one or more transaction layers', { code: 'SecurityError' }));
+        return;
+      }
+    }
     let tmpDir;
     try {
       tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-tx-'));

@@ -788,6 +788,117 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   const adminOnly = ensureAdmin(security);
   const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
+  const portalEditorOnly = (req, res, next) => {
+    if (!isAuthActive()) return next();
+    if (!req.user) return res.status(401).json({ error: 'auth_required' });
+    const canEdit = typeof security?.canEditPortal === 'function'
+      ? security.canEditPortal(req.user, pluginSlug)
+      : req.user.role === 'admin';
+    if (canEdit) return next();
+    return res.status(403).json({ error: 'forbidden' });
+  };
+  const lmvDb = getAuthDb(dataRoot);
+  lmvDb.exec(`
+    CREATE TABLE IF NOT EXISTS qtiler2origo_lmv_products (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      url_template TEXT,
+      base_url TEXT,
+      collections TEXT NOT NULL DEFAULT '[]',
+      auth_scheme TEXT NOT NULL DEFAULT 'Bearer',
+      api_key TEXT,
+      username TEXT,
+      password TEXT,
+      oauth_client_id TEXT,
+      oauth_client_secret TEXT,
+      oauth_token_url TEXT,
+      oauth_scope TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  const lmvStatements = {
+    list: lmvDb.prepare('SELECT * FROM qtiler2origo_lmv_products ORDER BY id'),
+    get: lmvDb.prepare('SELECT * FROM qtiler2origo_lmv_products WHERE id = ?'),
+    upsert: lmvDb.prepare(`
+      INSERT INTO qtiler2origo_lmv_products (
+        id, label, url_template, base_url, collections, auth_scheme, api_key,
+        username, password, oauth_client_id, oauth_client_secret, oauth_token_url,
+        oauth_scope, enabled, created_at, updated_at
+      ) VALUES (
+        @id, @label, @url_template, @base_url, @collections, @auth_scheme, @api_key,
+        @username, @password, @oauth_client_id, @oauth_client_secret, @oauth_token_url,
+        @oauth_scope, @enabled, @created_at, @updated_at
+      ) ON CONFLICT(id) DO UPDATE SET
+        label = excluded.label,
+        url_template = excluded.url_template,
+        base_url = excluded.base_url,
+        collections = excluded.collections,
+        auth_scheme = excluded.auth_scheme,
+        api_key = excluded.api_key,
+        username = excluded.username,
+        password = excluded.password,
+        oauth_client_id = excluded.oauth_client_id,
+        oauth_client_secret = excluded.oauth_client_secret,
+        oauth_token_url = excluded.oauth_token_url,
+        oauth_scope = excluded.oauth_scope,
+        enabled = excluded.enabled,
+        updated_at = excluded.updated_at
+    `),
+    delete: lmvDb.prepare('DELETE FROM qtiler2origo_lmv_products WHERE id = ?')
+  };
+  const sanitizeLmvProductId = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '').slice(0, 80);
+  const parseLmvCollections = (value) => {
+    if (Array.isArray(value)) return value.map((v) => String(v || '').trim()).filter(Boolean);
+    if (typeof value !== 'string' || !value.trim()) return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v || '').trim()).filter(Boolean);
+    } catch {}
+    return value.split(',').map((v) => v.trim()).filter(Boolean);
+  };
+  const lmvRowToProduct = (row) => {
+    if (!row) return null;
+    return {
+      id: row.id,
+      label: row.label || row.id,
+      urlTemplate: row.url_template || null,
+      baseUrl: row.base_url || null,
+      collections: parseLmvCollections(row.collections),
+      authScheme: row.auth_scheme || 'Bearer',
+      apiKey: row.api_key || '',
+      basicAuth: { username: row.username || '', password: row.password || '' },
+      oauth: {
+        clientId: row.oauth_client_id || '',
+        clientSecret: row.oauth_client_secret || '',
+        tokenUrl: row.oauth_token_url || '',
+        scope: row.oauth_scope || ''
+      },
+      enabled: row.enabled !== 0,
+      source: 'sqlite',
+      updatedAt: row.updated_at || null
+    };
+  };
+  const productHasLmvCredentials = (product) => !!(
+    product?.apiKey
+    || product?.basicAuth?.username
+    || product?.basicAuth?.password
+    || (product?.oauth?.clientId && product?.oauth?.clientSecret)
+    || (product?.envKey && (process.env[product.envKey] || process.env.LANTMATERI_API_KEY))
+  );
+  const publicLmvProduct = (id, product) => ({
+    id,
+    label: product?.label || id,
+    enabled: product?.enabled !== false,
+    configured: productHasLmvCredentials(product),
+    source: product?.source || 'builtin',
+    hasApiKey: !!(product?.apiKey || (product?.envKey && (process.env[product.envKey] || process.env.LANTMATERI_API_KEY))),
+    hasBasicAuth: !!(product?.basicAuth?.username || product?.basicAuth?.password),
+    hasOAuth: !!(product?.oauth?.clientId && product?.oauth?.clientSecret),
+    collections: Array.isArray(product?.collections) ? product.collections : []
+  });
+  const readLmvStoredProducts = () => lmvStatements.list.all().map(lmvRowToProduct).filter(Boolean);
 
   // Public alias: rewrite `/Qtiler2Origo/maps/...` to the internal Origo mount
   // `/plugins/Qtiler2Origo/origo/...` so the viewer can be reached at the same
@@ -1456,19 +1567,49 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   /**
    * Filter profiles based on QtilerAuth permissions
    */
+  const collectProfileProjectIds = (profile) => {
+    const ids = new Set();
+    const add = (value) => {
+      const projectId = normalizeProjectId(value || '');
+      if (projectId) ids.add(projectId);
+    };
+
+    add(profile?.projectId);
+    for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+      add(layer?.sourceProjectId);
+    }
+    for (const bg of (Array.isArray(profile?.backgrounds) ? profile.backgrounds : [])) {
+      add(bg?.sourceProjectId || profile?.backgroundProjectId);
+    }
+
+    return [...ids];
+  };
+
   const filterProfilesByAccess = (profiles, user) => {
     const list = Array.isArray(profiles) ? profiles : [];
     if (!isAuthActive()) return list;
     const snapshot = readAccessSnapshot(dataRoot);
-    return list.filter((profile) => userCanAccessProject(snapshot, user || null, profile?.projectId));
+    return list.filter((profile) => {
+      const projectIds = collectProfileProjectIds(profile);
+      if (!projectIds.length) return false;
+      return projectIds.every((projectId) => userCanAccessProject(snapshot, user || null, projectId));
+    });
+  };
+
+  const userCanAccessProfile = (profile, user) => {
+    if (!isAuthActive()) return true;
+    const projectIds = collectProfileProjectIds(profile);
+    if (!projectIds.length) return false;
+    const snapshot = readAccessSnapshot(dataRoot);
+    return projectIds.every((projectId) => userCanAccessProject(snapshot, user || null, projectId));
   };
 
   const profileRequiresAuthentication = (profile) => {
     if (!isAuthActive()) return false;
-    const projectId = normalizeProjectId(profile?.projectId || '');
-    if (!projectId) return false;
+    const projectIds = collectProfileProjectIds(profile);
+    if (!projectIds.length) return false;
     const snapshot = readAccessSnapshot(dataRoot);
-    return !userCanAccessProject(snapshot, null, projectId);
+    return projectIds.some((projectId) => !userCanAccessProject(snapshot, null, projectId));
   };
 
   const sameProfileToken = (left, right) => {
@@ -1487,20 +1628,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const sourceProjectIds = new Set();
 
     for (const profile of (Array.isArray(profiles) ? profiles : [])) {
-      const mainProjectId = normalizeProjectId(profile?.projectId || '');
-      if (mainProjectId) sourceProjectIds.add(mainProjectId);
-
-      const profileLayers = Array.isArray(profile?.layers) ? profile.layers : [];
-      for (const layer of profileLayers) {
-        const pid = normalizeProjectId(layer?.sourceProjectId || '');
-        if (pid) sourceProjectIds.add(pid);
-      }
-
-      const profileBackgrounds = Array.isArray(profile?.backgrounds) ? profile.backgrounds : [];
-      for (const bg of profileBackgrounds) {
-        const pid = normalizeProjectId(bg?.sourceProjectId || '');
-        if (pid) sourceProjectIds.add(pid);
-      }
+      for (const projectId of collectProfileProjectIds(profile)) sourceProjectIds.add(projectId);
     }
 
     for (const projectId of sourceProjectIds) {
@@ -1528,12 +1656,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const safeName = sanitizeFileToken(projectId);
     if (!safeName) return null;
     const indexPath = resolveRepoPath('cache', safeName, 'index.json');
-    try {
-      const raw = await fs.promises.readFile(indexPath, 'utf8');
-      return JSON.parse(raw || '{}');
-    } catch {
-      return null;
+    for (const candidate of [indexPath, `${indexPath}.bak`]) {
+      try {
+        const raw = await fs.promises.readFile(candidate, 'utf8');
+        return JSON.parse(raw || '{}');
+      } catch {
+        // try backup below
+      }
     }
+    return null;
   };
 
   /**
@@ -2860,11 +2991,15 @@ ${mapIcon}
       const profileKey = sanitizeFileToken(fileName.replace(/\.jpg$/i, ''));
       if (!profileKey) return next();
 
-      const existing = await readPublishedThumbnailMeta(profileKey);
-      if (existing?.filePath) return res.sendFile(existing.filePath);
-
       const record = await resolvePublishedProfileRecord(profileKey);
       if (!record?.profile || !record?.profileKey) return next();
+
+      if (!userCanAccessProfile(record.profile, req.user || null)) {
+        return res.status(req.user ? 403 : 401).json({ error: req.user ? 'forbidden' : 'auth_required' });
+      }
+
+      const existing = await readPublishedThumbnailMeta(profileKey);
+      if (existing?.filePath) return res.sendFile(existing.filePath);
 
       const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
       const regenerated = await regeneratePublishedThumbnail({
@@ -2883,7 +3018,23 @@ ${mapIcon}
       return next();
     }
   });
-  app.use(`/plugins/${pluginSlug}/published`, express.static(publishedRoot, { index: false }));
+  app.get(`/plugins/${pluginSlug}/published/:fileName`, async (req, res, next) => {
+    try {
+      const fileName = String(req.params?.fileName || '').trim();
+      if (!fileName || !/\.json$/i.test(fileName)) return next();
+      const profileKey = sanitizeFileToken(fileName.replace(/\.json$/i, ''));
+      if (!profileKey) return next();
+      const record = await resolvePublishedProfileRecord(profileKey);
+      if (!record?.profile || !record?.profileKey) return next();
+      if (!userCanAccessProfile(record.profile, req.user || null)) {
+        return res.status(req.user ? 403 : 401).json({ error: req.user ? 'forbidden' : 'auth_required' });
+      }
+      res.set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+      return res.json(record.profile);
+    } catch {
+      return next();
+    }
+  });
   // Serve dynamic, sanitized config/themes for the plugin-local QWC2 path so
   // the admin UI and local links always receive runtime-built configs.
   app.get(`/plugins/${pluginSlug}/origo/config.json`, async (req, res) => {
@@ -3248,6 +3399,52 @@ ${mapIcon}
   // ── Load tile grid data for a given project (used to build WMTS source) ──
   const loadTileGridForProject = async (projectId) => {
     try {
+      const normalizePreset = (preset, fallbackId = '') => {
+        if (!preset || typeof preset !== 'object') return null;
+        const matrices = Array.isArray(preset.matrices) ? preset.matrices : [];
+        if (!matrices.length) return null;
+        const sorted = [...matrices].sort((a, b) => Number(a.z ?? a.id ?? 0) - Number(b.z ?? b.id ?? 0));
+        const resolutions = sorted.map((m) => Number(m.resolution)).filter(Number.isFinite);
+        if (!resolutions.length) return null;
+        const matrixIds = sorted.map((m) => String(m.identifier ?? m.id ?? m.z));
+        const topLeft = Array.isArray(preset.topLeftCorner) ? preset.topLeftCorner
+          : Array.isArray(preset.top_left_corner) ? preset.top_left_corner : null;
+        const tileSize = Number(preset.tile_width || preset.tile_size || 256);
+        const matrixSetId = String(preset.id || preset.identifier || fallbackId || '').replace(/\.json$/i, '');
+        const crs = (Array.isArray(preset.supported_crs) ? preset.supported_crs[0] : null) || preset.coordinateReferenceSystem || null;
+        // Compute the projectionExtent that matches the WMTS pyramid, derived
+        // from the FIRST matrix's matrix_width x matrix_height. This must be
+        // exactly what Origo/OL expects so backgrounds align with overlays.
+        let projectionExtent = null;
+        if (Array.isArray(topLeft) && sorted.length > 0) {
+          const m0 = sorted[0];
+          const mw = Number(m0?.matrix_width || m0?.matrixWidth || 1);
+          const mh = Number(m0?.matrix_height || m0?.matrixHeight || 1);
+          const r0 = Number(m0?.resolution);
+          if (Number.isFinite(r0)) {
+            const tw = Number(m0?.tileWidth || tileSize);
+            const th = Number(m0?.tileHeight || tileSize);
+            projectionExtent = [
+              topLeft[0],
+              topLeft[1] - mh * th * r0,
+              topLeft[0] + mw * tw * r0,
+              topLeft[1]
+            ];
+          }
+        }
+        return { matrixSetId, resolutions, matrixIds, topLeft, tileSize, crs, projectionExtent };
+      };
+
+      const cacheIndex = await readCacheIndex(projectId);
+      const cachedLayers = Array.isArray(cacheIndex?.layers) ? cacheIndex.layers : [];
+      const cachedGridLayer = cachedLayers.find((layer) => {
+        const preset = layer?.tile_matrix_set || layer?.tileMatrixSet || null;
+        return preset && typeof preset === 'object' && Array.isArray(preset.matrices) && preset.matrices.length > 0;
+      });
+      const cachedPreset = cachedGridLayer?.tile_matrix_set || cachedGridLayer?.tileMatrixSet || null;
+      const fromCache = normalizePreset(cachedPreset, cachedGridLayer?.tile_matrix_preset || cachedGridLayer?.tileMatrixPreset || '');
+      if (fromCache) return fromCache;
+
       const tileGridDirCandidates = [
         resolveRepoPath('config', 'tile-grids'),
         path.resolve(process.cwd(), 'config', 'tile-grids')
@@ -3274,36 +3471,7 @@ ${mapIcon}
       if (!match) return null;
       const raw = await fs.promises.readFile(path.join(tileGridDir, match), 'utf8');
       const preset = JSON.parse(raw);
-      const matrices = Array.isArray(preset.matrices) ? preset.matrices : [];
-      const sorted = [...matrices].sort((a, b) => Number(a.z ?? a.id ?? 0) - Number(b.z ?? b.id ?? 0));
-      const resolutions = sorted.map((m) => Number(m.resolution));
-      const matrixIds = sorted.map((m) => String(m.identifier ?? m.id ?? m.z));
-      const topLeft = Array.isArray(preset.topLeftCorner) ? preset.topLeftCorner
-        : Array.isArray(preset.top_left_corner) ? preset.top_left_corner : null;
-      const tileSize = Number(preset.tile_width || preset.tile_size || 256);
-      const matrixSetId = String(preset.id || match.replace(/\.json$/i, ''));
-      const crs = (Array.isArray(preset.supported_crs) ? preset.supported_crs[0] : null) || preset.coordinateReferenceSystem || null;
-      // Compute the projectionExtent that matches the WMTS pyramid, derived
-      // from the FIRST matrix's matrix_width × matrix_height. This must be
-      // exactly what Origo/OL expects so backgrounds align with overlays.
-      let projectionExtent = null;
-      if (Array.isArray(topLeft) && sorted.length > 0) {
-        const m0 = sorted[0];
-        const mw = Number(m0?.matrix_width || m0?.matrixWidth || 1);
-        const mh = Number(m0?.matrix_height || m0?.matrixHeight || 1);
-        const r0 = Number(m0?.resolution);
-        if (Number.isFinite(r0)) {
-          const tw = Number(m0?.tileWidth || tileSize);
-          const th = Number(m0?.tileHeight || tileSize);
-          projectionExtent = [
-            topLeft[0],
-            topLeft[1] - mh * th * r0,
-            topLeft[0] + mw * tw * r0,
-            topLeft[1]
-          ];
-        }
-      }
-      return { matrixSetId, resolutions, matrixIds, topLeft, tileSize, crs, projectionExtent };
+      return normalizePreset(preset, match);
     } catch (err) {
       console.warn(`[Qtiler2Origo] Failed to load tile grid for project "${projectId}":`, err?.message || err);
       return null;
@@ -5005,7 +5173,7 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/status`, adminOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/status`, portalEditorOnly, async (_req, res) => {
     const state = await readState();
     const installed = await hasQwc2Install();
     const branding = await getBrandingStatus();
@@ -5027,12 +5195,12 @@ ${mapIcon}
     });
   });
 
-  app.get(`/plugins/${pluginSlug}/api/branding/logo`, adminOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {
     const branding = await getBrandingStatus();
     res.json(branding);
   });
 
-  app.post(`/plugins/${pluginSlug}/api/branding/logo`, adminOnly, (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, (req, res) => {
     logoUpload.single('logo')(req, res, async (err) => {
       if (err) {
         const msg = String(err?.message || err || 'logo_upload_failed');
@@ -5090,7 +5258,7 @@ ${mapIcon}
     maxAge: '30d'
   }));
 
-  app.post(`/plugins/${pluginSlug}/api/portal-assets/image`, adminOnly, (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/portal-assets/image`, portalEditorOnly, (req, res) => {
     portalImageUpload.single('image')(req, res, async (err) => {
       if (err) {
         const msg = String(err?.message || err || 'portal_image_upload_failed');
@@ -5127,7 +5295,7 @@ ${mapIcon}
     });
   });
 
-  app.delete(`/plugins/${pluginSlug}/api/branding/logo`, adminOnly, async (_req, res) => {
+  app.delete(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {
     try {
       const state = await readState();
       if (state.logoFile) {
@@ -5586,7 +5754,7 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/publish/list`, adminOnly, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/publish/list`, portalEditorOnly, async (req, res) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
       const items = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
@@ -5714,9 +5882,82 @@ ${mapIcon}
     }
   });
 
+  const collectGeoJsonCoordinates = (value, out = []) => {
+    if (!Array.isArray(value)) return out;
+    if (value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]))) {
+      out.push([Number(value[0]), Number(value[1])]);
+      return out;
+    }
+    for (const child of value) collectGeoJsonCoordinates(child, out);
+    return out;
+  };
+  const summarizeAreaGeometry = (geometry) => {
+    if (!geometry || !['Polygon', 'MultiPolygon'].includes(geometry.type)) {
+      throw new Error('Only Polygon and MultiPolygon geometries are supported');
+    }
+    const coords = collectGeoJsonCoordinates(geometry.coordinates);
+    if (coords.length < 4) throw new Error('Area geometry has too few coordinates');
+    if (coords.length > 1000) throw new Error('Area geometry is too complex');
+    const bbox = coords.reduce((acc, coord) => ([
+      Math.min(acc[0], coord[0]),
+      Math.min(acc[1], coord[1]),
+      Math.max(acc[2], coord[0]),
+      Math.max(acc[3], coord[1])
+    ]), [Infinity, Infinity, -Infinity, -Infinity]);
+    if (bbox.some((v) => !Number.isFinite(v)) || bbox[0] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[3] > 90) {
+      throw new Error('Area geometry coordinates must be WGS84 longitude/latitude');
+    }
+    const centroid = [
+      coords.reduce((sum, coord) => sum + coord[0], 0) / coords.length,
+      coords.reduce((sum, coord) => sum + coord[1], 0) / coords.length
+    ];
+    const widthMeters = Math.abs(bbox[2] - bbox[0]) * 111320 * Math.cos((centroid[1] * Math.PI) / 180);
+    const heightMeters = Math.abs(bbox[3] - bbox[1]) * 110540;
+    const bboxAreaSqm = Math.max(0, Math.round(widthMeters * heightMeters));
+    return { bbox, centroid, coordinateCount: coords.length, bboxAreaSqm };
+  };
+
+  app.post(`/plugins/${pluginSlug}/api/lantmateri-area-report`, express.json({ limit: '2mb' }), async (req, res) => {
+    try {
+      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+      if (authActive && !req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const geometry = req.body?.geometry;
+      const selectedTypes = Array.isArray(req.body?.include)
+        ? req.body.include.map((type) => String(type || '').trim()).filter(Boolean).slice(0, 20)
+        : ['fastighet', 'taxering'];
+      if (!geometry) return res.status(400).json({ error: 'Missing geometry' });
+
+      const area = summarizeAreaGeometry(geometry);
+      if (area.bboxAreaSqm > 100000000) {
+        return res.status(413).json({ error: 'Area too large', maxBboxAreaSqm: 100000000 });
+      }
+
+      const results = {};
+      for (const type of selectedTypes) {
+        results[type] = { results: await fetchLantmateriInfo(type, area.centroid[0], area.centroid[1]) };
+      }
+
+      res.json({
+        mode: 'area',
+        area,
+        nativeSrid: String(req.body?.nativeSrid || ''),
+        note: 'Area geometry is preserved for LMV spatial lookup. Current legacy LMV report providers are queried at the area centroid until a configured LMV fastighet area/intersects endpoint is connected.',
+        results
+      });
+    } catch (err) {
+      const message = String(err?.message || err);
+      const status = /too complex|too few|coordinates|supported|Missing/.test(message) ? 400 : 500;
+      console.error('[Qtiler2Origo] Lantmäteri area report error:', err);
+      res.status(status).json({ error: 'Area report failed', details: message });
+    }
+  });
+
   // Lantmäteriet point-info products (Markhöjd, Marktäcke, ...)
   // Unified registry: adding a new product = one entry here.
-  const LMV_POINT_PRODUCTS = {
+  const LMV_BUILTIN_POINT_PRODUCTS = {
     markhojd: {
       label: 'Markhöjd Direkt',
       // Override with LANTMATERI_MARKHOJD_URL_TEMPLATE in .env if your account uses a different path.
@@ -5793,6 +6034,116 @@ ${mapIcon}
     }
   };
 
+  const getLmvPointProducts = () => {
+    const products = {};
+    for (const [id, product] of Object.entries(LMV_BUILTIN_POINT_PRODUCTS)) {
+      products[id] = { ...product, id, enabled: true, source: 'builtin' };
+    }
+    for (const stored of readLmvStoredProducts()) {
+      const id = sanitizeLmvProductId(stored.id);
+      if (!id) continue;
+      const base = products[id] || {};
+      products[id] = {
+        ...base,
+        ...stored,
+        id,
+        label: stored.label || base.label || id,
+        urlTemplate: stored.urlTemplate || base.urlTemplate || null,
+        baseUrl: stored.baseUrl || base.baseUrl || null,
+        collections: stored.collections.length ? stored.collections : (base.collections || []),
+        authScheme: stored.authScheme || base.authScheme || 'Bearer',
+        apiKey: stored.apiKey || base.apiKey || '',
+        basicAuth: {
+          ...(base.basicAuth || {}),
+          ...(stored.basicAuth || {})
+        },
+        oauth: {
+          ...(base.oauth || {}),
+          ...(stored.oauth || {})
+        },
+        mock: base.mock || ((lon, lat) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { source: 'mock' } }))
+      };
+    }
+    return products;
+  };
+
+  app.get(`/plugins/${pluginSlug}/api/lantmateri-products`, async (_req, res) => {
+    try {
+      const products = getLmvPointProducts();
+      const items = Object.entries(products)
+        .map(([id, product]) => publicLmvProduct(id, product))
+        .filter((item) => item.enabled && item.configured);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'lmv_products_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/admin/lantmateri-products`, adminOnly, async (_req, res) => {
+    try {
+      const products = getLmvPointProducts();
+      const items = Object.entries(products).map(([id, product]) => ({
+        ...publicLmvProduct(id, product),
+        urlTemplate: product.urlTemplate || '',
+        baseUrl: product.baseUrl || '',
+        authScheme: product.authScheme || 'Bearer',
+        oauthTokenUrl: product.oauth?.tokenUrl || '',
+        oauthScope: product.oauth?.scope || '',
+        updatedAt: product.updatedAt || null
+      }));
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'lmv_admin_products_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.put(`/plugins/${pluginSlug}/api/admin/lantmateri-products/:id`, adminOnly, express.json({ limit: '1mb' }), async (req, res) => {
+    try {
+      const id = sanitizeLmvProductId(req.params?.id);
+      if (!id) return res.status(400).json({ error: 'invalid_product_id' });
+      const current = lmvRowToProduct(lmvStatements.get.get(id));
+      const body = req.body || {};
+      const now = nowIso();
+      const keepSecret = (next, previous) => next === undefined ? previous : String(next || '').trim();
+      const row = {
+        id,
+        label: String(body.label || current?.label || LMV_BUILTIN_POINT_PRODUCTS[id]?.label || id).trim(),
+        url_template: String(body.urlTemplate ?? current?.urlTemplate ?? LMV_BUILTIN_POINT_PRODUCTS[id]?.urlTemplate ?? '').trim() || null,
+        base_url: String(body.baseUrl ?? current?.baseUrl ?? LMV_BUILTIN_POINT_PRODUCTS[id]?.baseUrl ?? '').trim() || null,
+        collections: JSON.stringify(parseLmvCollections(body.collections !== undefined ? body.collections : (current?.collections || LMV_BUILTIN_POINT_PRODUCTS[id]?.collections || []))),
+        auth_scheme: String(body.authScheme || current?.authScheme || LMV_BUILTIN_POINT_PRODUCTS[id]?.authScheme || 'Bearer').trim() || 'Bearer',
+        api_key: keepSecret(body.apiKey, current?.apiKey || ''),
+        username: keepSecret(body.username, current?.basicAuth?.username || ''),
+        password: keepSecret(body.password, current?.basicAuth?.password || ''),
+        oauth_client_id: keepSecret(body.oauthClientId, current?.oauth?.clientId || ''),
+        oauth_client_secret: keepSecret(body.oauthClientSecret, current?.oauth?.clientSecret || ''),
+        oauth_token_url: String(body.oauthTokenUrl ?? current?.oauth?.tokenUrl ?? LMV_BUILTIN_POINT_PRODUCTS[id]?.oauth?.tokenUrl ?? '').trim() || null,
+        oauth_scope: String(body.oauthScope ?? current?.oauth?.scope ?? LMV_BUILTIN_POINT_PRODUCTS[id]?.oauth?.scope ?? '').trim() || null,
+        enabled: body.enabled === false ? 0 : 1,
+        created_at: current?.createdAt || now,
+        updated_at: now
+      };
+      lmvStatements.upsert.run(row);
+      const product = getLmvPointProducts()[id];
+      res.json({ item: publicLmvProduct(id, product) });
+    } catch (err) {
+      res.status(500).json({ error: 'lmv_product_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/admin/lantmateri-products/:id`, adminOnly, async (req, res) => {
+    try {
+      const id = sanitizeLmvProductId(req.params?.id);
+      if (!id) return res.status(400).json({ error: 'invalid_product_id' });
+      lmvStatements.delete.run(id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: 'lmv_product_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
   function _expandLmvUrl(tpl, lon, lat, n, e, srid) {
     const N = (n != null ? n : lat);
     const E = (e != null ? e : lon);
@@ -5857,8 +6208,8 @@ ${mapIcon}
   app.get(`/plugins/${pluginSlug}/api/lantmateri-proxy/:product`, async (req, res) => {
     try {
       const productId = String(req.params?.product || '').trim().toLowerCase();
-      const product = LMV_POINT_PRODUCTS[productId];
-      if (!product) {
+      const product = getLmvPointProducts()[productId];
+      if (!product || product.enabled === false) {
         return res.status(404).json({ error: 'unknown_product', product: productId });
       }
       const lon = parseFloat(req.query?.lon);
@@ -5875,7 +6226,7 @@ ${mapIcon}
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const apiKey = process.env[product.envKey] || process.env.LANTMATERI_API_KEY || '';
+      const apiKey = product.apiKey || process.env[product.envKey] || process.env.LANTMATERI_API_KEY || '';
       // Auth priority: 1) Geotorget Basic (user/pass)  2) OAuth2 client_credentials  3) static API key
       let authHeader = null;
       if (product.basicAuth && product.basicAuth.username && product.basicAuth.password) {
@@ -5963,7 +6314,7 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/portal-pages`, portalEditorOnly, async (_req, res) => {
     try {
       const state = await readPortalPagesState();
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -5974,13 +6325,123 @@ ${mapIcon}
     }
   });
 
-  app.post(`/plugins/${pluginSlug}/api/portal-pages`, adminOnly, express.json({ limit: '50mb' }), async (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/portal-pages`, portalEditorOnly, express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const saved = await writePortalPagesState(req.body || {});
       res.json({ status: 'saved', ...saved });
     } catch (err) {
       console.error('XERR portal-pages save', err);
       res.status(500).json({ error: 'portal_pages_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/portal-backup/export`, portalEditorOnly, express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+      const state = await readPortalPagesState();
+      const requestedPageIds = new Set((Array.isArray(req.body?.pageIds) ? req.body.pageIds : []).map((v) => String(v || '').trim()).filter(Boolean));
+      const requestedPageSlugs = new Set((Array.isArray(req.body?.pageSlugs) ? req.body.pageSlugs : []).map((v) => slugifyPortalToken(v)).filter(Boolean));
+      const requestedMapKeys = new Set((Array.isArray(req.body?.mapKeys) ? req.body.mapKeys : []).map((v) => sanitizeFileToken(v)).filter(Boolean));
+
+      const pages = state.pages.filter((page) => {
+        if (!requestedPageIds.size && !requestedPageSlugs.size) return true;
+        return requestedPageIds.has(String(page.id || '')) || requestedPageSlugs.has(String(page.slug || ''));
+      });
+      const homePageSlug = pages.some((page) => page.slug === state.homePageSlug)
+        ? state.homePageSlug
+        : (pages[0]?.slug || '');
+
+      const allProfiles = await readAllPublishedProfiles();
+      const maps = allProfiles
+        .filter((profile) => !requestedMapKeys.size || requestedMapKeys.has(sanitizeFileToken(profile.profileKey || profile.name || profile.projectId)))
+        .map((profile) => {
+          const profileKey = sanitizeFileToken(profile.profileKey || profile.name || profile.projectId);
+          const { profileKey: _profileKey, ...config } = profile;
+          return { profileKey, config };
+        })
+        .filter((entry) => entry.profileKey && entry.config?.projectId);
+
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({
+        schema: 'qtiler2origo.portal-backup.v1',
+        plugin: pluginSlug,
+        exportedAt: nowIso(),
+        portal: {
+          homePageSlug,
+          gdpr: state.gdpr || defaultPortalGdprSettings(),
+          site: state.site || {},
+          pages
+        },
+        maps
+      });
+    } catch (err) {
+      console.error('XERR portal-backup export', err);
+      res.status(500).json({ error: 'portal_backup_export_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/portal-backup/import`, portalEditorOnly, express.json({ limit: '100mb' }), async (req, res) => {
+    try {
+      const backup = req.body?.backup && typeof req.body.backup === 'object' ? req.body.backup : req.body;
+      if (!backup || backup.schema !== 'qtiler2origo.portal-backup.v1') {
+        return res.status(400).json({ error: 'invalid_portal_backup' });
+      }
+      const replacePortal = req.body?.replacePortal !== false;
+      const replaceMaps = req.body?.replaceMaps !== false;
+      const result = { portal: null, maps: [] };
+      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
+
+      if (backup.portal && typeof backup.portal === 'object') {
+        const importedPortal = normalizePortalPagesState(backup.portal);
+        if (replacePortal) {
+          result.portal = await writePortalPagesState(importedPortal);
+        } else {
+          const current = await readPortalPagesState();
+          const mergedBySlug = new Map(current.pages.map((page) => [page.slug, page]));
+          for (const page of importedPortal.pages) mergedBySlug.set(page.slug, page);
+          result.portal = await writePortalPagesState({
+            ...current,
+            gdpr: importedPortal.gdpr || current.gdpr,
+            site: { ...(current.site || {}), ...(importedPortal.site || {}) },
+            homePageSlug: importedPortal.homePageSlug || current.homePageSlug,
+            pages: Array.from(mergedBySlug.values())
+          });
+        }
+      }
+
+      const maps = Array.isArray(backup.maps) ? backup.maps : [];
+      await fs.promises.mkdir(publishedRoot, { recursive: true });
+      for (const entry of maps) {
+        const profile = entry?.config && typeof entry.config === 'object' ? entry.config : null;
+        const profileKey = sanitizeFileToken(entry?.profileKey || profile?.name || profile?.projectId);
+        if (!profileKey || !profile?.projectId) continue;
+        const targetPath = path.join(publishedRoot, `${profileKey}.json`);
+        if (!replaceMaps) {
+          try {
+            await fs.promises.access(targetPath, fs.constants.F_OK);
+            result.maps.push({ profileKey, status: 'skipped_exists' });
+            continue;
+          } catch { /* missing: import below */ }
+        }
+        const payload = { ...profile, importedAt: nowIso(), plugin: pluginSlug };
+        await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
+        result.maps.push({ profileKey, status: 'imported' });
+        void syncRuntimeFilesForProfile(payload, baseUrl).catch((syncErr) => {
+          console.warn('[Qtiler2Origo] portal backup import sync warning:', syncErr?.message || syncErr);
+        });
+        void regeneratePublishedThumbnail({
+          profileKey,
+          profile: payload,
+          baseUrl,
+          cookieHeader: req.headers.cookie,
+          apiKey: getRequestApiKey(req),
+          authorization: req.get?.('authorization') || ''
+        }).catch(() => null);
+      }
+
+      res.json({ status: 'imported', ...result });
+    } catch (err) {
+      console.error('XERR portal-backup import', err);
+      res.status(500).json({ error: 'portal_backup_import_failed', details: String(err?.message || err) });
     }
   });
 

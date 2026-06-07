@@ -6044,6 +6044,7 @@ registerWfsRoutes({
   tileRendererPool,
   ensureProjectAccessFromQuery,
   requireAdmin,
+  security,
   findProjectById,
   readProjectConfig,
   logProjectEvent
@@ -9139,8 +9140,6 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
   const { project, layer, z, x, y } = req.params;
   const sid = normalizeViewerSessionId(req.query && req.query.sid);
   
-  try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
-  
   const file = path.join(cacheDir, project, layer, z, x, `${y}.png`);
 
   // 1. Si existe, enviar inmediatamente
@@ -9149,6 +9148,7 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
       logProjectEvent(project, `Tile invalid (deleted): ${file}`);
     } else {
       logProjectEvent(project, `Tile hit: ${file}`);
+      setWmtsTileCacheHeaders(res);
       return res.sendFile(file);
     }
   }
@@ -9162,6 +9162,7 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
       if (!res.headersSent) return res.status(500).send('Tile generation failed');
     } else {
       logProjectEvent(project, `Tile render success: ${outFile}`);
+      setWmtsTileCacheHeaders(res);
       if (!res.headersSent) return res.sendFile(outFile, () => {
         if (meta?.transient) {
           try { fs.unlinkSync(outFile); } catch {}

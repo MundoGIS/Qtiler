@@ -107,6 +107,69 @@ set "QTILER_PORT_INVALID="
 echo Selected Qtiler HTTP port: %QTILER_PORT%
 echo.
 
+REM ----------------------------------------------------------------------
+REM  Step 1c: Ask for installation profile and public IIS/HTTPS settings
+REM ----------------------------------------------------------------------
+echo Installation profile:
+echo   T = Test / prueba installation
+echo   P = Production / produccion installation
+choice /C TP /N /M "Choose installation profile [T/P]: "
+if errorlevel 2 (
+    set "QTILER_INSTALL_MODE=production"
+) else (
+    set "QTILER_INSTALL_MODE=test"
+)
+
+set "QTILER_BEHIND_IIS=0"
+set "QTILER_HTTPS=0"
+set "QTILER_PUBLIC_URL="
+set "QTILER_TRUST_PROXY_VALUE=loopback"
+set "QTILER_ENABLE_HSTS_VALUE=0"
+set "QTILER_CORS_ALLOWED_ORIGINS_VALUE="
+set "QTILER_CORS_ALLOW_CREDENTIALS_VALUE=0"
+
+if /i "%QTILER_INSTALL_MODE%"=="production" (
+    echo.
+    echo Production profile selected.
+    choice /C YN /N /M "Will this production install be published through IIS with HTTPS? [Y/N]: "
+    if errorlevel 2 (
+        set "QTILER_PUBLIC_URL=http://localhost:%QTILER_PORT%"
+    ) else (
+        set "QTILER_BEHIND_IIS=1"
+        set "QTILER_HTTPS=1"
+        set "QTILER_TRUST_PROXY_VALUE=loopback"
+        set "QTILER_ENABLE_HSTS_VALUE=1"
+        goto ask_public_url
+    )
+) else (
+    set "QTILER_PUBLIC_URL=http://localhost:%QTILER_PORT%"
+)
+goto install_profile_ok
+
+:ask_public_url
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Enter the public HTTPS URL that IIS will expose for Qtiler.' + [Environment]::NewLine + [Environment]::NewLine + 'Example: https://qtiler.example.com' + [Environment]::NewLine + [Environment]::NewLine + 'This will be written to PUBLIC_BASE_URL in .env.', 'Qtiler Installer - Public HTTPS URL', 'https://qtiler.example.com')"`) do set "QTILER_PUBLIC_URL=%%I"
+if not defined QTILER_PUBLIC_URL (
+    echo Installation cancelled by user.
+    pause
+    exit /b 1
+)
+set "QTILER_PUBLIC_URL=%QTILER_PUBLIC_URL: =%"
+set "QTILER_PUBLIC_URL=%QTILER_PUBLIC_URL:"=%"
+if /i not "%QTILER_PUBLIC_URL:~0,8%"=="https://" (
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Production behind IIS with HTTPS requires a public URL starting with https://.' + [Environment]::NewLine + [Environment]::NewLine + 'Please enter the public HTTPS URL, for example https://qtiler.example.com.', 'Qtiler Installer - Invalid Public URL', 'OK', 'Error')" >nul
+    goto ask_public_url
+)
+set "QTILER_CORS_ALLOWED_ORIGINS_VALUE=%QTILER_PUBLIC_URL%"
+set "QTILER_CORS_ALLOW_CREDENTIALS_VALUE=1"
+
+:install_profile_ok
+echo.
+echo Selected installation profile: %QTILER_INSTALL_MODE%
+echo Public base URL: %QTILER_PUBLIC_URL%
+if "%QTILER_BEHIND_IIS%"=="1" echo IIS reverse proxy: yes, HTTPS enabled
+if not "%QTILER_BEHIND_IIS%"=="1" echo IIS reverse proxy: no automatic IIS/HTTPS settings
+echo.
+
 REM Resolve Qt plugin path (qt5 preferred, qt6 fallback)
 set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins"
 if exist "%QGIS_ROOT%\apps\qt5\plugins" set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins;%QGIS_ROOT%\apps\qt5\plugins"
@@ -122,7 +185,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$envFile = Join-Path '%QTILER_ROOT%' '.env';" ^
   "$qtilerRoot = '%QTILER_ROOT%';" ^
   "$nodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $nodeExe) { $nodeExe = 'C:\Program Files\nodejs\node.exe' };" ^
-    "$updates = [ordered]@{ PORT = '%QTILER_PORT%'; PYTHON_EXE = '%QGIS_ROOT%\bin\python.exe'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ('%QGIS_ROOT%\bin\python.exe ' + (Join-Path $qtilerRoot 'tools\mesh_build.py')); QUANTIZED_MESH_ENGINE_CMD = ($nodeExe + ' ' + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs')); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
+        "$updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; PYTHON_EXE = '%QGIS_ROOT%\bin\python.exe'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ('%QGIS_ROOT%\bin\python.exe ' + (Join-Path $qtilerRoot 'tools\mesh_build.py')); QUANTIZED_MESH_ENGINE_CMD = ($nodeExe + ' ' + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs')); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
   "if (Test-Path $envFile) { $ts = Get-Date -Format 'yyyyMMdd_HHmmss'; Copy-Item $envFile ($envFile + '.bak.' + $ts) -Force; $lines = Get-Content -LiteralPath $envFile } elseif (Test-Path (Join-Path $qtilerRoot '.env.example')) { $lines = Get-Content -LiteralPath (Join-Path $qtilerRoot '.env.example') } else { $lines = @('# Qtiler environment configuration - generated by install.bat') };" ^
   "$out = New-Object System.Collections.Generic.List[string]; $seen = @{};" ^
   "foreach ($line in $lines) { $m = [regex]::Match($line, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*='); if ($m.Success -and $updates.Contains($m.Groups[1].Value)) { $k = $m.Groups[1].Value; $out.Add($k + '=' + $updates[$k]); $seen[$k] = $true } else { $patched = $line -ireplace [regex]::Escape('C:\Qtiler'), $qtilerRoot; $out.Add($patched) } };" ^
@@ -134,6 +197,18 @@ if errorlevel 1 (
     exit /b 1
 )
 echo .env updated. Existing tuning and secrets preserved.
+echo.
+echo Configured in .env:
+echo   QTILER_INSTALL_MODE=%QTILER_INSTALL_MODE%
+echo   PORT=%QTILER_PORT%
+echo   PUBLIC_BASE_URL=%QTILER_PUBLIC_URL%
+echo   QTILER_BEHIND_IIS=%QTILER_BEHIND_IIS%
+echo   QTILER_PUBLIC_HTTPS=%QTILER_HTTPS%
+echo   QTILER_TRUST_PROXY=%QTILER_TRUST_PROXY_VALUE%
+echo   QTILER_ENABLE_HSTS=%QTILER_ENABLE_HSTS_VALUE%
+echo   QTILER_CORS_ALLOWED_ORIGINS=%QTILER_CORS_ALLOWED_ORIGINS_VALUE%
+echo.
+echo You can change these values later in %QTILER_ROOT%\.env and restart the QTiler service.
 echo.
 
 REM ----------------------------------------------------------------------
@@ -266,14 +341,25 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
-powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Congratulations! You have successfully installed Qtiler.' + [Environment]::NewLine + [Environment]::NewLine + 'If you have any questions or need technical assistance, please contact MundoGIS at support@mundogis.se and we will reply within 24 hours.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler has been installed successfully.' + [Environment]::NewLine + [Environment]::NewLine + 'Configured profile: %QTILER_INSTALL_MODE%' + [Environment]::NewLine + 'Public URL: %QTILER_PUBLIC_URL%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + 'IIS / HTTPS: %QTILER_BEHIND_IIS% / %QTILER_HTTPS%' + [Environment]::NewLine + [Environment]::NewLine + 'These settings are stored in .env and can be changed after installation. Restart the QTiler service after editing .env.' + [Environment]::NewLine + [Environment]::NewLine + 'QtilerAuth is enabled with a 3-month trial. For license contract questions about the authentication plugin, please contact support@mundogis.se.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
 
 echo ================================================================
-echo  Congratulations! You have successfully installed Qtiler.
+echo  Qtiler has been installed successfully.
 echo.
-echo  If you have any questions or need technical assistance,
-echo  please contact MundoGIS at support@mundogis.se
-echo  and we will reply within 24 hours.
+echo  Configuration written to .env:
+echo    Profile:        %QTILER_INSTALL_MODE%
+echo    Public URL:     %QTILER_PUBLIC_URL%
+echo    Port:           %QTILER_PORT%
+echo    IIS:            %QTILER_BEHIND_IIS%
+echo    HTTPS:          %QTILER_HTTPS%
+echo.
+echo  You can change these settings later in:
+echo    %QTILER_ROOT%\.env
+echo  Restart the QTiler service after editing .env.
+echo.
+echo  QtilerAuth is enabled with a 3-month trial.
+echo  For questions about license contracts for this authentication
+echo  plugin, please contact support@mundogis.se.
 echo ================================================================
 echo.
 pause

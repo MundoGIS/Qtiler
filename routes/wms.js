@@ -11,18 +11,23 @@ import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 import express from "express";
 
 const getQueryCI = (req, key) => {
-  if (!req || !req.query) return null;
+  if (!req) return null;
   const target = String(key || "").toLowerCase();
   if (!target) return null;
-  const direct = req.query[key];
-  if (direct != null) return Array.isArray(direct) ? direct[0] : direct;
-  for (const [k, v] of Object.entries(req.query)) {
-    if (String(k).toLowerCase() === target) {
-      return Array.isArray(v) ? v[0] : v;
+  for (const source of [req.query, req.body]) {
+    if (!source || typeof source !== 'object') continue;
+    const direct = source[key];
+    if (direct != null) return Array.isArray(direct) ? direct[0] : direct;
+    for (const [k, v] of Object.entries(source)) {
+      if (String(k).toLowerCase() === target) {
+        return Array.isArray(v) ? v[0] : v;
+      }
     }
   }
   return null;
 };
+
+const getRequestParams = (req) => ({ ...(req?.body || {}), ...(req?.query || {}) });
 
 // Return an HTTP status code appropriate for a renderTile error.
 const renderErrStatus = (err) => err?.code === 'QUEUE_FULL' ? 503 : 500;
@@ -72,7 +77,7 @@ const escapeXml = (value) => String(value ?? "")
 
 const findPrintMapField = (req, suffix) => {
   const targetSuffix = `:${String(suffix || "").toLowerCase()}`;
-  for (const [key, value] of Object.entries(req?.query || {})) {
+  for (const [key, value] of Object.entries(getRequestParams(req))) {
     if (String(key).toLowerCase().endsWith(targetSuffix)) {
       return { key, value: Array.isArray(value) ? value[0] : value };
     }
@@ -96,7 +101,7 @@ const parsePrintRequestParams = (req) => {
   ]);
 
   const labels = {};
-  for (const [key, value] of Object.entries(req?.query || {})) {
+  for (const [key, value] of Object.entries(getRequestParams(req))) {
     const upper = String(key).toUpperCase();
     if (reservedKeys.has(upper)) continue;
     if (String(key).includes(":")) continue;

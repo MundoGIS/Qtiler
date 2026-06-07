@@ -432,6 +432,15 @@ export const registerPluginRoutes = ({
       }
     }
   };
+  if (pluginManager && typeof pluginManager.setLicenseGuard === 'function') {
+    pluginManager.setLicenseGuard((pluginName) => {
+      if (!pricing[pluginName]) return true;
+      const store = loadLicenseStore();
+      ensureInstanceId(store);
+      const status = getLicenseStatus(store, pluginName);
+      return status.status !== 'expired';
+    });
+  }
   const requestClusterRestart = () => {
     try {
       if (typeof process.send === 'function') {

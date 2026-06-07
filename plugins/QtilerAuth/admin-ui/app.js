@@ -40,6 +40,7 @@ const passwordToggleBtn = document.getElementById('password-toggle');
 const passwordGenerateBtn = document.getElementById('password-generate');
 const roleInput = document.getElementById('role');
 const statusInput = document.getElementById('status');
+const portalEditPermissionInput = document.getElementById('portal-edit-permission');
 const projectsInput = document.getElementById('projects');
 const userFormSubmit = document.getElementById('user-form-submit');
 const userFormReset = document.getElementById('user-form-reset');
@@ -435,6 +436,7 @@ function resetUserForm() {
     suggestPassword();
   }
   if (projectsInput) projectsInput.value = '';
+  if (portalEditPermissionInput) portalEditPermissionInput.checked = false;
 }
 
 function populateUserForm(user) {
@@ -445,6 +447,10 @@ function populateUserForm(user) {
   roleInput.value = user.role;
   statusInput.value = user.status || 'active';
   if (projectsInput) projectsInput.value = Array.isArray(user.projects) ? user.projects.join(', ') : '';
+  if (portalEditPermissionInput) {
+    const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+    portalEditPermissionInput.checked = permissions.includes('portal:edit') || permissions.includes('portal:edit:Qtiler2Origo');
+  }
   passwordInput.value = '';
   passwordInput.placeholder = 'Leave blank to keep';
   setPasswordVisibility(false);
@@ -844,6 +850,8 @@ function renderProjects() {
       const userProjects = new Set(Array.isArray(user.projects) ? user.projects : []);
       
       projectList.forEach((project) => {
+        const projectAccess = state.permissions[project.id] || {};
+        const editUsers = Array.isArray(projectAccess.editUsers) ? projectAccess.editUsers : [];
         const label = document.createElement('label');
         label.className = 'project-checkbox-label';
         const checkbox = document.createElement('input');
@@ -852,7 +860,18 @@ function renderProjects() {
         checkbox.checked = userProjects.has(project.id);
         checkbox.dataset.userId = user.id;
         checkbox.dataset.projectId = project.id;
-        label.append(checkbox, document.createTextNode(` ${project.name || project.id}`));
+        const editCheckbox = document.createElement('input');
+        editCheckbox.type = 'checkbox';
+        editCheckbox.value = project.id;
+        editCheckbox.checked = editUsers.includes(user.id);
+        editCheckbox.dataset.editProjectId = project.id;
+        editCheckbox.title = 'Allow WFS-T/project editing';
+        label.append(
+          checkbox,
+          document.createTextNode(` View ${project.name || project.id} `),
+          editCheckbox,
+          document.createTextNode(' Edit')
+        );
         projectsCell.appendChild(label);
       });
     }
@@ -863,18 +882,34 @@ function renderProjects() {
     saveBtn.type = 'button';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
-      const checkboxes = projectsCell.querySelectorAll('input[type="checkbox"]');
+      const checkboxes = projectsCell.querySelectorAll('input[type="checkbox"][data-project-id]');
       const selectedProjects = Array.from(checkboxes)
         .filter(cb => cb.checked)
         .map(cb => cb.value);
+      const editCheckboxes = projectsCell.querySelectorAll('input[type="checkbox"][data-edit-project-id]');
+      const selectedEditProjects = new Set(Array.from(editCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value));
       
       try {
         await api(`/auth-admin/users/${user.id}`, {
           method: 'PATCH',
           body: { projects: selectedProjects }
         });
+        await Promise.all(projectList.map(async (project) => {
+          const projectId = project.id;
+          const access = state.permissions[projectId] || {};
+          const currentEditUsers = new Set(Array.isArray(access.editUsers) ? access.editUsers : []);
+          if (selectedEditProjects.has(projectId)) currentEditUsers.add(user.id);
+          else currentEditUsers.delete(user.id);
+          await api(`/auth-admin/projects/${projectId}`, {
+            method: 'PATCH',
+            body: { editUsers: Array.from(currentEditUsers) }
+          });
+        }));
         showMessage('success', `Projects updated for ${user.username}.`);
         await loadUsers(false);
+        await loadProjects(false);
       } catch (err) {
         showMessage('error', parseError(err, 'Unable to update user projects.'));
       }
@@ -929,6 +964,12 @@ userForm.addEventListener('submit', async (event) => {
   if (projectsInput) {
     payload.projects = projectsInput.value.split(',').map((p) => p.trim()).filter(Boolean);
   }
+  const existingUser = state.users.find((u) => String(u.id || '') === id);
+  const permissions = new Set(Array.isArray(existingUser?.permissions) ? existingUser.permissions : []);
+  permissions.delete('portal:edit');
+  permissions.delete('portal:edit:Qtiler2Origo');
+  if (portalEditPermissionInput?.checked) permissions.add('portal:edit:Qtiler2Origo');
+  payload.permissions = Array.from(permissions);
   const password = passwordInput.value;
   if (!id && (!password || password.length < 6)) {
     showMessage('error', 'Password must be at least 6 characters.');

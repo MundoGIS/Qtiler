@@ -23,7 +23,7 @@
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
-    <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css" />
+    <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css?v=portal-backup-20260605" />
     <style>
       .hiw-actions { margin-top: 0.75rem; }
       .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
@@ -453,9 +453,30 @@
             <button id="portalAddPageBtn" class="button primary" type="button" data-i18n="Qtiler2Origo.portal_add_page">New page</button>
             <button id="portalDuplicatePageBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_duplicate_page">Duplicate page</button>
             <button id="portalToggleFullscreenBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_fullscreen">Fullscreen editor</button>
-            <button id="portalSaveBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_save">Save portal</button>
             <a id="portalOpenPageBtn" class="button ghost is-disabled" href="/Qtiler2Origo/maps" target="_blank" rel="noreferrer" data-i18n="Qtiler2Origo.portal_open_page">Open page</a>
           </div>
+
+          <details class="portal-backup-panel">
+            <summary data-i18n="Qtiler2Origo.portal_backup_title">Export / import portal backup</summary>
+            <div class="portal-backup-grid">
+              <label>
+                <span data-i18n="Qtiler2Origo.portal_backup_pages">Portal pages to export</span>
+                <select id="portalBackupPagesSelect" class="input portal-multiselect" multiple size="5"></select>
+              </label>
+              <label>
+                <span data-i18n="Qtiler2Origo.portal_backup_maps">Published maps to export</span>
+                <select id="portalBackupMapsSelect" class="input portal-multiselect" multiple size="5"></select>
+              </label>
+              <div class="portal-backup-actions">
+                <button id="portalExportBackupBtn" class="button info" type="button" data-i18n="Qtiler2Origo.portal_backup_export">Export JSON</button>
+                <button id="portalImportBackupBtn" class="button" type="button" data-i18n="Qtiler2Origo.portal_backup_import">Import / restore JSON</button>
+                <input id="portalImportBackupInput" type="file" accept="application/json,.json" hidden />
+                <label class="checkbox"><input id="portalImportReplacePortal" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_backup_replace_portal">Replace portal pages</span></label>
+                <label class="checkbox"><input id="portalImportReplaceMaps" type="checkbox" checked /> <span data-i18n="Qtiler2Origo.portal_backup_replace_maps">Replace published maps with same key</span></label>
+              </div>
+            </div>
+            <p class="help" data-i18n="Qtiler2Origo.portal_backup_help">The backup JSON includes selected portal content and selected published map configurations. It does not include tile caches or QGIS project files.</p>
+          </details>
 
           
           <!-- Global Portal Navigation -->
@@ -473,6 +494,7 @@
               <aside class="portal-editor__sidebar">
                 <div class="portal-editor__sidebar-head">
                   <strong data-i18n="Qtiler2Origo.portal_pages_list">Your Pages</strong>
+                  <button id="portalSaveBtn" class="button small" type="button" data-i18n="Qtiler2Origo.portal_save">Save portal</button>
                 </div>
                 <div id="portalPagesList" class="portal-pages-list"></div>
               </aside>
@@ -1100,7 +1122,7 @@
     </div>
 
     <script src="/lang-support.js"></script>
-    <script src="/plugins/Qtiler2Origo/admin-ui/app.js"></script>
+    <script src="/plugins/Qtiler2Origo/admin-ui/app.js?v=portal-backup-20260605"></script>
 </body>
 </html>
 

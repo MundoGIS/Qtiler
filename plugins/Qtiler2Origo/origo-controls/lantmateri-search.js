@@ -43,6 +43,11 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
   let modal;
   let overlay;
   let pendingQuery = null;
+  let queryMode = 'point';
+  let modePanel = null;
+  let areaSource = null;
+  let areaLayer = null;
+  let drawInteraction = null;
 
   const infoTypeLabels = {
     fastighet: 'Fastighet',
@@ -124,6 +129,159 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
       }
     }
   };
+  let enabledPointProducts = [];
+
+  function getProductsUrl() {
+    return String(proxyUrl || '/plugins/Qtiler2Origo/api/lantmateri-proxy')
+      .replace(/\/api\/lantmateri-proxy.*$/, '/api/lantmateri-products');
+  }
+
+  function genericProductFormatter(data) {
+    if (!data || data.error) return 'Ingen data tillgänglig';
+    try {
+      return '<pre style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:0;">'
+        + JSON.stringify(data, null, 2).replace(/[&<>]/g, function(ch) {
+          return ch === '&' ? '&amp;' : (ch === '<' ? '&lt;' : '&gt;');
+        })
+        + '</pre>';
+    } catch (_) {
+      return String(data);
+    }
+  }
+
+  async function refreshAvailablePointProducts() {
+    try {
+      var response = await fetch(getProductsUrl(), { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var data = await response.json();
+      var items = Array.isArray(data.items) ? data.items : [];
+      enabledPointProducts = items
+        .filter(function(item) { return item && item.id && item.configured !== false && item.enabled !== false; })
+        .map(function(item) {
+          if (!LMV_POINT_PRODUCTS[item.id]) {
+            LMV_POINT_PRODUCTS[item.id] = {
+              label: item.label || item.id,
+              desc: 'LMV Direkt',
+              icon: 'ℹ',
+              format: genericProductFormatter
+            };
+          } else if (item.label) {
+            LMV_POINT_PRODUCTS[item.id].label = item.label;
+          }
+          return item.id;
+        });
+    } catch (err) {
+      console.warn('[LantmateriSearch] LMV product availability failed:', err && err.message ? err.message : err);
+      enabledPointProducts = [];
+    }
+  }
+  refreshAvailablePointProducts();
+
+  function getAreaReportUrl() {
+    return String(proxyUrl || '/plugins/Qtiler2Origo/api/lantmateri-proxy')
+      .replace(/\/api\/lantmateri-proxy.*$/, '/api/lantmateri-area-report');
+  }
+
+  function getOl() {
+    return window.ol || (window.Origo && window.Origo.ol);
+  }
+
+  function ensureAreaLayer() {
+    if (!map || areaLayer) return;
+    var ol = getOl();
+    if (!ol || !ol.source || !ol.layer) return;
+    areaSource = new ol.source.Vector();
+    var style = null;
+    if (ol.style && ol.style.Style) {
+      style = new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: 'rgba(74,144,226,0.95)', width: 3 }),
+        fill: new ol.style.Fill({ color: 'rgba(74,144,226,0.18)' })
+      });
+    }
+    areaLayer = new ol.layer.Vector({ source: areaSource, style: style });
+    map.addLayer(areaLayer);
+  }
+
+  function stopAreaDraw() {
+    if (map && drawInteraction) {
+      map.removeInteraction(drawInteraction);
+    }
+    drawInteraction = null;
+  }
+
+  function setQueryMode(mode) {
+    queryMode = mode === 'area' ? 'area' : 'point';
+    if (modePanel) {
+      modePanel.querySelectorAll('[data-lmv-mode]').forEach(function(btn) {
+        var active = btn.getAttribute('data-lmv-mode') === queryMode;
+        btn.style.background = active ? '#4a90e2' : '#fff';
+        btn.style.color = active ? '#fff' : '#333';
+      });
+    }
+    stopAreaDraw();
+    if (clickListener) {
+      map.un('singleclick', clickListener);
+      clickListener = null;
+    }
+    if (queryMode === 'area') {
+      startAreaDraw();
+    } else if (map) {
+      clickListener = map.on('singleclick', handleMapClick);
+      map.getViewport().style.cursor = 'crosshair';
+    }
+  }
+
+  function showModePanel() {
+    if (modePanel || !map) return;
+    modePanel = document.createElement('div');
+    modePanel.className = 'lantmateri-mode-panel';
+    modePanel.style.cssText = 'position:absolute;top:72px;left:12px;z-index:1000;background:#fff;border:1px solid #ccd4dd;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.18);padding:6px;display:flex;gap:6px;font-family:Arial,sans-serif;';
+    modePanel.innerHTML = '<button type="button" data-lmv-mode="point" style="border:1px solid #ccd4dd;border-radius:4px;padding:7px 10px;cursor:pointer;">Punkt</button>'
+      + '<button type="button" data-lmv-mode="area" style="border:1px solid #ccd4dd;border-radius:4px;padding:7px 10px;cursor:pointer;">Area</button>';
+    modePanel.querySelectorAll('[data-lmv-mode]').forEach(function(btn) {
+      btn.addEventListener('click', function() { setQueryMode(btn.getAttribute('data-lmv-mode')); });
+    });
+    map.getTargetElement().appendChild(modePanel);
+    setQueryMode(queryMode);
+  }
+
+  function hideModePanel() {
+    if (modePanel && modePanel.parentNode) modePanel.parentNode.removeChild(modePanel);
+    modePanel = null;
+  }
+
+  function startAreaDraw() {
+    if (!map) return;
+    var ol = getOl();
+    if (!ol || !ol.interaction || !ol.interaction.Draw || !ol.format || !ol.format.GeoJSON) {
+      showToast('Area-ritning stöds inte i denna Origo/OpenLayers-version.', 'error');
+      return;
+    }
+    ensureAreaLayer();
+    if (!areaSource) return;
+    areaSource.clear();
+    map.getViewport().style.cursor = 'crosshair';
+    drawInteraction = new ol.interaction.Draw({ source: areaSource, type: 'Polygon' });
+    drawInteraction.on('drawend', function(event) {
+      var srcProj = map.getView().getProjection();
+      var nativeSrid = (srcProj && srcProj.getCode && srcProj.getCode()) || '';
+      var format = new ol.format.GeoJSON();
+      var geometry = event.feature.getGeometry();
+      var wgs84Geometry = format.writeGeometryObject(geometry, { featureProjection: srcProj, dataProjection: 'EPSG:4326' });
+      var nativeGeometry = format.writeGeometryObject(geometry, { featureProjection: srcProj, dataProjection: srcProj });
+      pendingQuery = {
+        type: 'area',
+        geometry: wgs84Geometry,
+        nativeGeometry: nativeGeometry,
+        nativeSrid: nativeSrid
+      };
+      setTimeout(function() {
+        stopAreaDraw();
+        openInfoModal();
+      }, 0);
+    });
+    map.addInteraction(drawInteraction);
+  }
 
   /**
    * Handle map click when tool is active
@@ -149,6 +307,7 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     }
 
     pendingQuery = {
+      type: 'point',
       coords: coords,            // native projection (e.g. SWEREF99 TM easting/northing)
       lonLat: lonLat,            // WGS84 [lon, lat]
       nativeSrid: nativeSrid,    // e.g. 'EPSG:3006'
@@ -245,7 +404,9 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
       padding: 0;
     `;
 
-    const [lon, lat] = pendingQuery.lonLat;
+    const isAreaQuery = pendingQuery.type === 'area';
+    const lonLat = pendingQuery.lonLat || [0, 0];
+    const [lon, lat] = lonLat;
 
     // Build GDPR notice HTML (built outside template literal to avoid nested backticks)
     const gdprText = (window.LANTMATERI_CONFIG && window.LANTMATERI_CONFIG.gdprNotice)
@@ -264,7 +425,8 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
       : '';
 
     // Build tab data: one tab for the PDF report + one tab per point-info product
-    const pointTabs = (pointInfoTypes || [])
+    const pointTabs = isAreaQuery ? [] : (enabledPointProducts.length ? enabledPointProducts : [])
+      .filter(function(id) { return (pointInfoTypes || []).indexOf(id) >= 0 || !pointInfoTypes || !pointInfoTypes.length; })
       .filter(function(id) { return LMV_POINT_PRODUCTS[id]; })
       .map(function(id) {
         var p = LMV_POINT_PRODUCTS[id];
@@ -286,7 +448,7 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     const reportPanelHtml = `
       <div class="lantmateri-tab-panel" data-panel="__report__" style="display:block;">
         <p style="margin: 0 0 16px 0; font-size: 14px; color: #555;">
-          Välj vilken information du vill inkludera i rapporten:
+          ${isAreaQuery ? 'Välj vilken information du vill inkludera för det ritade området:' : 'Välj vilken information du vill inkludera i rapporten:'}
         </p>
         <div class="lantmateri-info-options" style="display: grid; gap: 10px;">
           ${infoTypes.map(type => `
@@ -321,7 +483,7 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
       <div class="lantmateri-modal-header" style="padding: 20px 20px 0 20px; border-bottom: 1px solid #e0e0e0; position: sticky; top: 0; background: white; z-index: 1;">
         <h3 style="margin: 0; font-size: 18px; color: #333;">Lantmäteriet Information</h3>
         <p style="margin: 8px 0 12px 0; font-size: 13px; color: #666;">
-          Koordinater: ${lat.toFixed(6)}, ${lon.toFixed(6)}
+          ${isAreaQuery ? 'Urval: ritat område' : ('Koordinater: ' + lat.toFixed(6) + ', ' + lon.toFixed(6))}
         </p>
         <div class="lantmateri-tabs-bar" style="display:flex; gap:0; overflow-x:auto; margin:0 -20px; padding:0 20px; border-bottom:1px solid #e0e0e0;">
           ${tabsBarHtml}
@@ -531,15 +693,19 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     actionsEl.style.opacity = '0.5';
 
     try {
-      // Fetch data for all selected types
-      const dataPromises = selectedTypes.map(type => fetchLantmateriData(type, pendingQuery.lonLat));
-      const results = await Promise.all(dataPromises);
-
-      // Combine results
-      const reportData = {};
-      selectedTypes.forEach((type, index) => {
-        reportData[type] = results[index];
-      });
+      let reportData = {};
+      if (pendingQuery && pendingQuery.type === 'area') {
+        const areaReport = await fetchAreaReport(selectedTypes);
+        reportData = areaReport.results || {};
+        pendingQuery.areaSummary = areaReport.area || null;
+        pendingQuery.areaNote = areaReport.note || '';
+      } else {
+        const dataPromises = selectedTypes.map(type => fetchLantmateriData(type, pendingQuery.lonLat));
+        const results = await Promise.all(dataPromises);
+        selectedTypes.forEach((type, index) => {
+          reportData[type] = results[index];
+        });
+      }
 
       // Generate PDF
       await createPDF(reportData, selectedTypes);
@@ -585,6 +751,23 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     }
   }
 
+  async function fetchAreaReport(selectedTypes) {
+    if (!pendingQuery || !pendingQuery.geometry) throw new Error('Missing area geometry');
+    const response = await fetch(getAreaReportUrl(), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        geometry: pendingQuery.geometry,
+        nativeGeometry: pendingQuery.nativeGeometry,
+        nativeSrid: pendingQuery.nativeSrid,
+        include: selectedTypes
+      })
+    });
+    if (!response.ok) throw new Error('API error: ' + response.status);
+    return response.json();
+  }
+
   /**
    * Create PDF report using jsPDF
    */
@@ -604,13 +787,20 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     doc.setFontSize(12);
     const now = new Date().toLocaleString('sv-SE');
     doc.text(`Genererat: ${now}`, 105, 40, { align: 'center' });
+    let yPos = 65;
 
-    if (pendingQuery) {
+    if (pendingQuery && pendingQuery.type === 'area') {
+      const area = pendingQuery.areaSummary;
+      doc.text('Urval: ritat område', 105, 48, { align: 'center' });
+      if (area && area.bbox) {
+        doc.setFontSize(9);
+        doc.text(`BBOX: ${area.bbox.map(v => Number(v).toFixed(6)).join(', ')}`, 105, 56, { align: 'center' });
+        yPos = 72;
+      }
+    } else if (pendingQuery) {
       const [lon, lat] = pendingQuery.lonLat;
       doc.text(`Koordinater: ${lat.toFixed(6)}, ${lon.toFixed(6)}`, 105, 48, { align: 'center' });
     }
-
-    let yPos = 65;
 
     // Add each section
     for (const type of selectedTypes) {
@@ -730,9 +920,8 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     
     toolButton.classList.add('active');
     map.getViewport().style.cursor = 'crosshair';
-    
-    // Add click listener to map
-    clickListener = map.on('singleclick', handleMapClick);
+    showModePanel();
+    setQueryMode(queryMode);
   }
 
   /**
@@ -743,6 +932,8 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
     
     toolButton.classList.remove('active');
     map.getViewport().style.cursor = '';
+    hideModePanel();
+    stopAreaDraw();
     
     if (clickListener) {
       map.un('singleclick', clickListener);
