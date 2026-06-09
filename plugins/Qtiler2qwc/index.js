@@ -19,6 +19,55 @@ import multer from 'multer';
 import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { readProjectAccessFromDb } from '../../lib/authDb.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
+import { makeQgisEnv } from '../../lib/PythonPool.js';
+import { execFile } from 'child_process';
+
+const generateCogTerrain = async (sourcePath, targetPath) => {
+  return new Promise((resolve, reject) => {
+    const qgisEnv = makeQgisEnv ? makeQgisEnv() : process.env;
+    const binPath = path.join(qgisEnv.QGIS_PREFIX || '', '..', '..', 'bin');
+    const gdalExe = process.platform === 'win32'
+        ? (fs.existsSync(path.join(binPath, 'gdal_translate.exe')) ? path.join(binPath, 'gdal_translate.exe') : 'gdal_translate.exe')
+        : 'gdal_translate';
+    const args = ['-of', 'COG', '-co', 'COMPRESS=DEFLATE', '-co', 'BLOCKSIZE=256', '-co', 'BIGTIFF=YES', sourcePath, targetPath];
+    execFile(gdalExe, args, { env: qgisEnv }, (err) => {
+      if (err) return reject(err);
+      resolve(targetPath);
+    });
+  });
+};
+
+const getTerrainStats = async (filePath) => {
+  return new Promise((resolve, reject) => {
+    const qgisEnv = makeQgisEnv ? makeQgisEnv() : process.env;
+    const binPath = path.join(qgisEnv.QGIS_PREFIX || '', '..', '..', 'bin');
+    const infoExe = process.platform === 'win32'
+        ? (fs.existsSync(path.join(binPath, 'gdalinfo.exe')) ? path.join(binPath, 'gdalinfo.exe') : 'gdalinfo.exe')
+        : 'gdalinfo';
+    execFile(infoExe, ['-json', filePath], { env: qgisEnv, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return reject(err);
+      try {
+        const info = JSON.parse(stdout);
+        const band = info.bands?.[0];
+        if (band && band.minimum !== undefined && band.maximum !== undefined) {
+           return resolve({ min: band.minimum, max: band.maximum });
+        } else if (band && band.metadata && band.metadata[''] && band.metadata[''].STATISTICS_MINIMUM) {
+           return resolve({ 
+             min: parseFloat(band.metadata[''].STATISTICS_MINIMUM), 
+             max: parseFloat(band.metadata[''].STATISTICS_MAXIMUM) 
+           });
+        }
+        const minMax = band?.computedMinMax || band?.minMax;
+        if (minMax) {
+          resolve({ min: minMax[0], max: minMax[1] });
+        } else {
+          resolve(null);
+        }
+      } catch(e) { reject(e); }
+    });
+  });
+};
+
 
 const DEFAULT_REPO = process.env.QTWC_QWC2_REPO || 'qgis/qwc2';
 const DEFAULT_VERSION = process.env.QTWC_QWC2_VERSION || 'v2026.0.12-lts';
@@ -721,6 +770,20 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           gdalNoDataPatched += gdalNoDataCount;
         }
       }
+
+      // V3D/Giro3D patches: 
+      // 1) QWC2's ElevationLayer creates minmax as { demMin, demMax } but Giro3D expects { min, max }
+      const demMinMatch = next.match(/{demMin:([a-zA-Z0-9_$]+),demMax:([a-zA-Z0-9_$]+)}/);
+      if (demMinMatch) {
+         next = next.replace(demMinMatch[0], `{min:${demMinMatch[1]},max:${demMinMatch[2]}}`);
+      }
+
+      // 2) Protect against WMS layers with extrusionHeight crashing ColorLayer3D (skip extrusion creation if the provider doesn't support features)
+      const extrudeMatch = next.match(/c=n\.props\.sceneContext\.getSceneObject\(a\);if\(!c\|\|i\)\{/);
+      if (extrudeMatch && !next.includes('typeof e.createFeatureSource === "function"')) {
+         next = next.replace(extrudeMatch[0], 'c=n.props.sceneContext.getSceneObject(a);if((!c||i) && typeof e.createFeatureSource === "function"){');
+      }
+
       if (next !== raw) {
         await fs.promises.writeFile(filePath, next, 'utf8');
       }
@@ -1941,7 +2004,27 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               .sort((a, b) => b.score - a.score || a.size - b.size || a.name.localeCompare(b.name))[0]?.name;
             if (tif) {
               const terrainUrl = `${qtilerBaseUrl}/Qtiler2qwc/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
-              return { url: terrainUrl, crs: projectCrs };
+              const dtmConfig = { url: terrainUrl, crs: projectCrs };
+              try {
+                const tifPath = path.join(dir, tif);
+                const statsCache = path.join(process.cwd(), 'cache', projectId, '_terrain', `${path.parse(tif).name}_cog.tif.stats.json`);
+                let s = null;
+                if (fs.existsSync(statsCache)) {
+                  s = JSON.parse(await fs.promises.readFile(statsCache, 'utf8'));
+                } else {
+                  // Fallback: fast extraction of stats synchronously-ish for theme generation
+                  s = await getTerrainStats(tifPath);
+                  if (s) {
+                    await fs.promises.mkdir(path.dirname(statsCache), { recursive: true });
+                    await fs.promises.writeFile(statsCache, JSON.stringify(s));
+                  }
+                }
+                if (s && s.min !== undefined && s.max !== undefined) {
+                  dtmConfig.min = s.min;
+                  dtmConfig.max = s.max;
+                }
+              } catch(e) { }
+              return dtmConfig;
             }
           }
         } catch { /* ignore */ }
@@ -3607,8 +3690,11 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
     }
   });
 
+  // Internal utilities
+
+
   // Serve GeoTIFF terrain files for the QWC2 3D viewer (map3d.dtm.url).
-  // Files are read from the project's folder inside qgisprojects/.
+  // Dynamically creates a COG in cache for faster 3D rendering the first time.
   app.get('/Qtiler2qwc/terrain/:projectId/:filename', async (req, res) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
@@ -3616,7 +3702,7 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       if (!projectId || !filename || !/\.(tif|tiff)$/i.test(filename)) {
         return res.status(400).json({ error: 'invalid_request' });
       }
-      // Resolve the file from the known project directories.
+      
       const candidates = [
         path.join(projectsDir, projectId, filename),
         path.join(projectsDir, projectId, projectId, filename)
@@ -3626,9 +3712,40 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
         try { await fs.promises.access(c, fs.constants.R_OK); filePath = c; break; } catch { /* not found */ }
       }
       if (!filePath) return res.status(404).json({ error: 'not_found' });
+      
+      // Serving raw TIFF directly (as user requested: "It worked perfectly the first time we just pushed the raw original TIFF"),
+      // but keeping stats cache active so we don't crash Giro3D by missing min/max bounds.
+      const terrainCacheDir = path.join(process.cwd(), 'cache', projectId, '_terrain');
+      const servePath = filePath;
+
+      try {
+        await fs.promises.mkdir(terrainCacheDir, { recursive: true });
+        
+        // Add headers for min/max to help the frontend if it checks
+        const statsPath = path.join(terrainCacheDir, `${path.parse(filename).name}.stats.json`);
+        try {
+           let stats = null;
+           if (fs.existsSync(statsPath)) {
+             stats = JSON.parse(await fs.promises.readFile(statsPath, 'utf8'));
+           } else {
+             stats = await getTerrainStats(servePath);
+             if (stats) {
+               await fs.promises.writeFile(statsPath, JSON.stringify(stats));
+             }
+           }
+           if (stats) {
+             res.set('X-Terrain-Min', stats.min);
+             res.set('X-Terrain-Max', stats.max);
+           }
+        } catch(e) {}
+
+      } catch (err) {
+        console.warn(`[Qtiler2qwc] Could not generate COG for terrain ${filename}, serving original:`, err?.message);
+      }
+
       res.set('Content-Type', 'image/tiff');
       res.set('Cache-Control', 'public, max-age=3600');
-      return res.sendFile(filePath);
+      return res.sendFile(servePath);
     } catch (err) {
       console.error('[Qtiler2qwc] terrain serve error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });

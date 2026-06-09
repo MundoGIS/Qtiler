@@ -1,0 +1,78 @@
+{
+  "name": "Qtiler2Hajk",
+  "version": "0.1.0",
+  "displayName": "Qtiler2Hajk",
+  "description": "Install and serve Origo from Qtiler with project visibility synced from QtilerAuth.",
+  "docs": {
+    "en": {
+      "description": "Bridge plugin that embeds the Origo web map viewer inside Qtiler. Install Hajk from a pinned GitHub release, publish background-tagged QGIS projects as Origo maps from the admin console, and let QtilerAuth enforce per-user project visibility.",
+      "readme": [
+        "Install or upgrade Origo from any release tag in the official GitHub repository — Qtiler downloads and serves the build at /plugins/Qtiler2Hajk/Origo.",
+        "Publish maps from the Maps tab: pick a project tagged as background, configure CRS, zoom and centre, and save. The Origo configuration file is generated automatically and hot-reloaded.",
+        "Project visibility is synced live from QtilerAuth (public / authenticated / private), so users only see maps they have access to.",
+        "Customise per map: upload a logo, choose the base map and enable the controls you need (search, measure, draw, print…).",
+        "Bridge integrations can consume the projects catalog endpoint to discover published maps programmatically.",
+        "Open source under MPL-2.0. Network calls are limited to GitHub during install and to QtilerAuth for ACLs; no runtime telemetry."
+      ]
+    },
+    "es": {
+      "description": "Plugin puente que integra el visor de mapas web Origo dentro de Qtiler. Instala Origo desde una versión publicada en GitHub, publica proyectos QGIS marcados como background como mapas Origo desde la consola de administración y deja que QtilerAuth aplique la visibilidad por usuario.",
+      "readme": [
+        "Instala o actualiza Origo desde cualquier release del repositorio oficial de GitHub — Qtiler descarga el build y lo sirve en /plugins/Qtiler2Hajk/Origo.",
+        "Publica mapas desde la pestaña Mapas: elige un proyecto etiquetado como background, configura CRS, zoom y centro y guarda. El archivo de configuración Origo se genera automáticamente y se recarga en caliente.",
+        "La visibilidad de proyectos se sincroniza en vivo con QtilerAuth (public / authenticated / private), de modo que cada usuario solo ve los mapas a los que tiene acceso.",
+        "Personaliza por mapa: sube un logotipo, elige el mapa base y activa los controles que necesites (búsqueda, medición, dibujo, impresión…).",
+        "Las integraciones tipo bridge pueden consumir el endpoint del catálogo de proyectos para descubrir mapas publicados de forma programática.",
+        "Software libre bajo MPL-2.0. Las llamadas de red se limitan a GitHub durante la instalación y a QtilerAuth para los permisos; sin telemetría en tiempo de ejecución."
+      ]
+    },
+    "sv": {
+      "description": "Brygg-plugin som bäddar in webbkartvyn Origo i Qtiler. Installera Hajk från en GitHub-release, publicera QGIS-projekt märkta som bakgrund som Origo-kartor från administrationskonsolen och låt QtilerAuth hantera projektsynlighet per användare.",
+      "readme": [
+        "Installera eller uppgradera Origo från valfri releasetagg i det officiella GitHub-arkivet — Qtiler laddar ner bygget och serverar det på /plugins/Qtiler2Hajk/Origo.",
+        "Publicera kartor från fliken Kartor: välj ett projekt märkt som bakgrund, ange CRS, zoom och centrum och spara. Hajk-konfigurationsfilen genereras automatiskt och laddas om i farten.",
+        "Projektsynlighet synkas live från QtilerAuth (public / authenticated / private), så användare ser bara de kartor de har behörighet till.",
+        "Anpassa per karta: ladda upp en logotyp, välj bakgrundskarta och aktivera de kontroller du behöver (sök, mät, rita, skriv ut…).",
+        "Brygg-integrationer kan konsumera projektkatalog-endpointen för att hitta publicerade kartor programmatiskt.",
+        "Öppen källkod under MPL-2.0. Nätverksanrop sker endast mot GitHub vid installation och mot QtilerAuth för behörigheter; ingen körtidstelemetri."
+      ]
+    },
+    "no": {
+      "description": "Bridge-plugin som bygger inn Origo webkartviseren i Qtiler. Installer Origo fra en GitHub-release, publiser QGIS-prosjekter som Origo-kart fra administrasjonskonsollen, og la QtilerAuth håndheve prosjekttilgang per bruker.",
+      "readme": [
+        "Installer eller oppgrader Origo fra en release-tagg i det offisielle GitHub-repositoriet — Qtiler laster ned bygget og serverer det på /plugins/Qtiler2Hajk/Origo.",
+        "Publiser kart fra Kart-fanen: velg et prosjekt, angi CRS, zoom og sentrum, og lagre. Origo-konfigurasjonen genereres automatisk og lastes om uten serverrestart.",
+        "Prosjektsynlighet synkroniseres live fra QtilerAuth (public / authenticated / private), slik at brukere bare ser kart de har tilgang til.",
+        "Tilpass per kart: last opp logo, velg bakgrunnskart og aktiver kontrollene du trenger (søk, måling, tegning, utskrift ...).",
+        "Bridge-integrasjoner kan bruke endepunktet for prosjektkatalogen til å oppdage publiserte kart programmatisk.",
+        "Åpen kildekode under MPL-2.0. Nettverkskall er begrenset til GitHub under installasjon og til QtilerAuth for ACL-er; ingen telemetri ved kjøring."
+      ]
+    },
+    "da": {
+      "description": "Bridge-plugin, der indlejrer Origo-webkortviseren i Qtiler. Installer Origo fra en GitHub-release, publicér QGIS-projekter som Origo-kort fra administrationskonsollen, og lad QtilerAuth håndhæve projektadgang pr. bruger.",
+      "readme": [
+        "Installer eller opgrader Origo fra et release-tag i det officielle GitHub-repository — Qtiler henter bygget og serverer det på /plugins/Qtiler2Hajk/Origo.",
+        "Publicér kort fra fanen Kort: vælg et projekt, angiv CRS, zoom og centrum, og gem. Hajk-konfigurationen genereres automatisk og genindlæses uden servergenstart.",
+        "Projektsynlighed synkroniseres live fra QtilerAuth (public / authenticated / private), så brugere kun ser kort, de har adgang til.",
+        "Tilpas hvert kort: upload et logo, vælg baggrundskort, og aktivér de kontroller, du har brug for (søgning, måling, tegning, udskrivning ...).",
+        "Bridge-integrationer kan bruge projektkatalogets endepunkt til at finde publicerede kort programmatisk.",
+        "Open source under MPL-2.0. Netværkskald er begrænset til GitHub under installation og til QtilerAuth for ACL'er; ingen runtime-telemetri."
+      ]
+    },
+    "fi": {
+      "description": "Bridge-lisäosa, joka upottaa Origo-verkkokarttakatselimen Qtileriin. Asenna Origo GitHub-julkaisusta, julkaise QGIS-projektit Origo-karttoina hallintakonsolista ja anna QtilerAuthin hallita käyttäjäkohtaisia käyttöoikeuksia.",
+      "readme": [
+        "Asenna tai päivitä Origo virallisen GitHub-repositorion julkaisusta — Qtiler lataa koonnin ja tarjoilee sen osoitteessa /plugins/Qtiler2Hajk/Origo.",
+        "Julkaise karttoja Kartat-välilehdeltä: valitse projekti, määritä CRS, zoomaus ja keskipiste ja tallenna. Origo-määritys luodaan automaattisesti ja latautuu uudelleen ilman palvelimen uudelleenkäynnistystä.",
+        "Projektien näkyvyys synkronoidaan QtilerAuthista (public / authenticated / private), joten käyttäjät näkevät vain kartat, joihin heillä on oikeus.",
+        "Mukauta karttakohtaisesti: lataa logo, valitse taustakartta ja ota käyttöön tarvittavat työkalut (haku, mittaus, piirtäminen, tulostus ...).",
+        "Bridge-integraatiot voivat käyttää projektikatalogin rajapintaa julkaistujen karttojen ohjelmalliseen löytämiseen.",
+        "Avoin lähdekoodi MPL-2.0-lisenssillä. Verkkokutsut rajoittuvat asennuksen aikana GitHubiin ja käyttöoikeuksissa QtilerAuthiin; ei runtime-telemetriaa."
+      ]
+    }
+  },
+  "autoEnable": false,
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "supportContact": "support@mundogis.se"
+}

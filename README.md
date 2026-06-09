@@ -30,6 +30,7 @@ Qtiler ships with an optional plugin ecosystem. Most plugins are now open source
 | Qrigo | `0.1.0` | MPL-2.0 | Origo Map integration helpers |
 | Qtiler2qwc | `0.1.0` | MPL-2.0 | QWC2 webmap bridge |
 | Qtiler2Origo | `0.1.0` | MPL-2.0 | Origo webmap bridge |
+| Qtiler2Hajk | `0.1.0` | MPL-2.0 | Hajk webmap bridge and CMS portal |
 | VectorTiles | `0.2.0` | MPL-2.0 | MBTiles + TileJSON/Style endpoints |
 | ProjectSearch | `0.1.0` | MPL-2.0 | Cross-project attribute search |
 | QuantizedMesh | `0.1.0` | MPL-2.0 | Quantized-mesh terrain endpoints |
@@ -148,6 +149,34 @@ The QWC2 toolbar items are defined in `data/Qtiler2qwc/qwc2/current/config.json`
 ]
 ```
 Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc.).
+
+## Qtiler2Hajk — Hajk WebMap Integration & Public Portal
+
+**Qtiler2Hajk** is an open-source (MPL-2.0) bridge plugin that embeds the [Hajk](https://github.com/hajkmap/Hajk) web map viewer inside Qtiler. It also provides a visual Content Management System (CMS) to build a public Maps Portal (`/Qtiler2Hajk/maps`).
+
+### What it provides
+
+- **Hosted Hajk viewer** — Hajk is downloaded from a pinned GitHub release and served dynamically without needing a separate React/Node deployment.
+- **Project publishing workflow** — Publish layered maps directly from QGIS projects using the graphical admin UI.
+- **Dynamic configurations** — Automatic translation of Qtiler layers into Hajk `simpleMapAndLayersConfig.json` equivalents, preserving WMS outputs and WFS/vector properties alongside OGC editing tools.
+- **CMS / Portal Editor** — A visual page builder to construct the landing page of the maps portal, using hero banners, rich text, side-by-side cards, and map galleries.
+- **Thumbnail generation** — Automatically generates layer thumbnails to power Hajk legends and portal gallery views.
+
+### Routes exposed by Qtiler2Hajk
+
+| Route | Description |
+|---|---|
+| `GET /plugins/Qtiler2Hajk/hajk/` | The interactive Hajk map viewer (requires `?qtiler_profile=<mapped-profile>`) |
+| `GET /Qtiler2Hajk/maps` | The public Maps Portal landing page |
+| `GET /plugins/Qtiler2Hajk/admin-ui/` | Admin UI for publishing Hajk maps and editing the portal |
+
+### Publishing a project as a Hajk map
+
+1. Open the Qtiler dashboard and go to **Plugins → Qtiler2Hajk**.
+2. Go to the **Maps** tab to create a new profile or edit an existing one.
+3. Select a main QGIS project, activate the desired layers (base maps and overlays), and decide which layers should act as WFS tools.
+4. Pick which Hajk visual tools you want exposed (e.g. Draw, Print, Search, Bookmarks).
+5. Click **Publish** — the map becomes available to the viewer and portal instantly.
 
 ## Qtiler2Origo — Origo WebMap Integration
 

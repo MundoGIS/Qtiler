@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qtiler2Hajk Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/Thirdparty/bulmaswatch-spacelab.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/eclipse.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.css" />
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldcode.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/brace-fold.js"></script>
+
+    <!-- Quill Editor for Rich Text -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+    <link rel="stylesheet" href="/plugins/Qtiler2Hajk/admin-ui/style.css?v=portal-backup-20260605" />
+    <style>
+      .hiw-actions { margin-top: 0.75rem; }
+      .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .hiw-btn:hover { background: #f4f6fb; }
+      .hiw-modal[hidden] { display: none; }
+      .hiw-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+      .hiw-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+      .hiw-card { position: relative; background: #fff; max-width: 760px; width: 100%; max-height: 88vh; overflow: hidden; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,0.35); display: flex; flex-direction: column; }
+      .hiw-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #e3e8f0; }
+      .hiw-head h2 { margin: 0; font-size: 1.15rem; color: #1f2a44; }
+      .hiw-close { background: transparent; border: 0; font-size: 1.4rem; line-height: 1; cursor: pointer; color: #64748b; }
+      .hiw-close:hover { color: #1f2a44; }
+      .hiw-body { padding: 1rem 1.25rem; overflow: auto; color: #334155; line-height: 1.5; }
+      .hiw-body h3 { margin: 1.1rem 0 0.4rem; font-size: 1rem; color: #1f2a44; }
+      .hiw-body h3:first-child { margin-top: 0; }
+      .hiw-body ul { margin: 0.25rem 0 0.75rem 1.1rem; padding: 0; }
+      .hiw-body li { margin: 0.2rem 0; }
+      .hiw-lead { font-size: 0.95rem; color: #1f2a44; margin-bottom: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">Qtiler2Hajk</p>
+        <h1 data-i18n="Qtiler2Hajk.title">Hajk Bridge for Qtiler</h1>
+        <p class="subtitle" data-i18n="Qtiler2Hajk.subtitle">Install Hajk from GitHub and sync project visibility from QtilerAuth.</p>
+        <div class="hiw-actions">
+          <button type="button" id="q2o-open-hiw" class="hiw-btn" data-i18n="Qtiler2Hajk.hiw.button">How it works &amp; Security</button>
+        </div>
+      </header>
+
+      <!-- ═══════════ Tab bar ═══════════ -->
+      <nav class="tab-bar">
+        <button class="tab-btn tab-btn--active" data-tab="maps">
+          <span data-i18n="Qtiler2Hajk.tab_maps">Maps</span>
+          <span id="tabMapsBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="portal">
+          <span data-i18n="Qtiler2Hajk.tab_portal">Portal</span>
+          <span id="tabPortalBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="log">
+          <span data-i18n="Qtiler2Hajk.tab_log">Log</span>
+        </button>
+        <button class="tab-btn" data-tab="setup">
+          <span data-i18n="Qtiler2Hajk.tab_setup">Setup</span>
+        </button>
+      </nav>
+
+      <div class="tab-panel" data-panel="setup">
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.how_title">How Qtiler2Hajk works</h2>
+          </div>
+          <p data-i18n="Qtiler2Hajk.how_intro"></p>
+          <ol class="how-list">
+            <li data-i18n="Qtiler2Hajk.how_step_install"></li>
+            <li data-i18n="Qtiler2Hajk.how_step_publish"></li>
+            <li data-i18n="Qtiler2Hajk.how_step_share"></li>
+            <li data-i18n="Qtiler2Hajk.how_step_brand"></li>
+          </ol>
+          <p class="muted" data-i18n="Qtiler2Hajk.how_outro"></p>
+        </section>
+
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.installation">Installation</h2>
+            <span id="installBadge" class="badge badge--muted" data-i18n="Qtiler2Hajk.checking">Checking...</span>
+          </div>
+          <div id="installInfo" class="info-box info-box--muted">
+            <span data-i18n="Qtiler2Hajk.loading">Loading...</span>
+          </div>
+          <div class="grid">
+            <label>
+              <span data-i18n="Qtiler2Hajk.github_repo">GitHub repo</span>
+              <input id="repo" type="text" placeholder="hajkmap/hajk" />
+            </label>
+            <label>
+              <span data-i18n="Qtiler2Hajk.version_tag">Version</span>
+              <div style="display:flex;gap:.35rem;align-items:center">
+                <select id="version" style="flex:1"></select>
+                <button id="refreshReleasesBtn" class="button small" title="Refresh" style="white-space:nowrap" data-i18n="Qtiler2Hajk.refresh">Refresh</button>
+              </div>
+              <label style="font-size:.82rem;margin-top:.25rem;display:flex;align-items:center;gap:.35rem;cursor:pointer">
+                <input id="includePrerelease" type="checkbox" /> <span data-i18n="Qtiler2Hajk.include_prerelease">Include pre-releases</span>
+              </label>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="installBtn" class="button primary" data-i18n="Qtiler2Hajk.install_Hajk">Install Hajk</button>
+            <button id="uninstallBtn" class="button danger" disabled data-i18n="Qtiler2Hajk.uninstall_Hajk">Uninstall Hajk</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.webmap_link">Open webmap</h2>
+          </div>
+          <div class="actions">
+            <a id="openWebmapBtn" class="button primary" href="/plugins/Qtiler2Hajk/Hajk/" target="_blank" rel="noreferrer">Open webmap</a>
+            <button id="removeDemoBtn" class="button">Remove demo theme</button>
+          </div>
+        </section>
+
+        <section id="logoSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.logo_section">Webmap logo</h2>
+            <span id="logoBadge" class="badge badge--muted" data-i18n="Qtiler2Hajk.no_logo">No logo</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Hajk.logo_desc">Upload a logo for the Hajk top bar. Allowed formats: PNG, JPG, SVG, WEBP.</p>
+          <div class="grid grid--logo">
+            <label>
+              <span data-i18n="Qtiler2Hajk.logo_file">Logo file</span>
+              <input id="logoFileInput" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" />
+            </label>
+            <div class="logo-preview-box">
+              <img id="logoPreview" alt="" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="uploadLogoBtn" class="button primary" data-i18n="Qtiler2Hajk.upload_logo">Upload logo</button>
+            <button id="removeLogoBtn" class="button" disabled data-i18n="Qtiler2Hajk.remove_logo">Remove logo</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="tab-panel tab-panel--active" data-panel="maps">
+        <section id="publishSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.profiles_section">Published profiles</h2>
+            <span id="profilesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Hajk.profiles_desc">Manage generated profiles and launch links for Hajk.</p>
+          <div class="actions">
+            <button id="openPublishModalBtn" class="button primary" data-i18n="Qtiler2Hajk.publish_new">New profile</button>
+            <a id="catalogLink" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer" data-i18n="Qtiler2Hajk.open_viewer">Open viewer</a>
+          </div>
+          <div id="publishedProfilesList" class="published-list"></div>
+        </section>
+
+        <section id="publishModal" class="card publish-editor" hidden>
+          <header class="publish-editor__header">
+            <div>
+              <p id="modalTitle" class="publish-editor__title" data-i18n="Qtiler2Hajk.modal_title">Publish project in Hajk</p>
+              <p class="help" style="margin:4px 0 0" data-i18n="Qtiler2Hajk.publish_editor_fixed_help">Editor fijo para crear y editar mapas sin desplazar la pagina.</p>
+            </div>
+            <div class="publish-editor__header-actions">
+              <button id="publishModalToggleFullscreen" class="button ghost small" type="button" data-i18n="Qtiler2Hajk.fullscreen">Full screen</button>
+              <button id="closePublishModalTop" class="button ghost small" type="button" data-i18n="Qtiler2Hajk.cancel">Cancel</button>
+            </div>
+          </header>
+
+          <nav class="publish-editor__tabs" aria-label="Map editor sections">
+            <button type="button" class="publish-editor__tab-btn publish-editor__tab-btn--active" data-publish-tab="layers" aria-selected="true">1. Layers</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="backgrounds" aria-selected="false" data-i18n="Qtiler2Hajk.step_backgrounds">2. Backgrounds</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="tools" aria-selected="false" data-i18n="Qtiler2Hajk.step_controls_search">3. Controls &amp; search</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false" data-i18n="Qtiler2Hajk.step_origo_config">4. Hajk Configuration</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="jsoneditor" aria-selected="false" data-i18n="Qtiler2Hajk.step_json_editor">5. JSON Editor</button>
+          </nav>
+
+          <section class="modal-card-body publish-editor__body">
+            <section class="publish-editor__tab-panel publish-editor__tab-panel--active" data-publish-panel="layers">
+              <div class="Qtiler2Hajk-modal-header-fields">
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.map_name">Map name</label>
+                  <div class="control">
+                    <input id="publishName" class="input" type="text" maxlength="120" placeholder="" data-i18n-placeholder="Qtiler2Hajk.map_name_placeholder" />
+                  </div>
+                  <p id="publishNameError" class="help is-danger" style="display:none"></p>
+                </div>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.map_description">Description</label>
+                  <div class="control">
+                    <textarea id="publishDescription" class="textarea" rows="2" maxlength="500" placeholder="" data-i18n-placeholder="Qtiler2Hajk.map_desc_placeholder"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_layers">1. Layers</legend>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.main_project">Main project</label>
+                  <div class="control"><div class="select is-fullwidth"><select id="publishProjectSelect"></select></div></div>
+                </div>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.project_layers">Project layers</label>
+                  <p class="help" data-i18n="Qtiler2Hajk.project_layers_help" style="margin-bottom:0.5rem"></p>
+                  <div id="projectLayersList" class="Qtiler2Hajk-checklist"></div>
+                </div>
+              </fieldset>
+
+              <div id="publishLayersDynamicSlot"></div>
+            </section>
+
+            <section class="publish-editor__tab-panel" data-publish-panel="backgrounds">
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend">Background project</legend>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.bg_project">Background project (optional)</label>
+                  <div class="control"><div class="select is-fullwidth"><select id="backgroundProjectSelect"></select></div></div>
+                </div>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2Hajk.bg_layers">Background layers</label>
+                  <div id="backgroundLayersList" class="Qtiler2Hajk-checklist"></div>
+                </div>
+              </fieldset>
+
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_backgrounds">2. Background maps</legend>
+                <p class="help" style="margin-bottom:.6rem" data-i18n="Qtiler2Hajk.default_bg_help">OSM and No background are always available. Choose one as default.</p>
+                <div id="defaultBackgroundList" class="Qtiler2Hajk-bg-list"></div>
+              </fieldset>
+            </section>
+
+            <section class="publish-editor__tab-panel" data-publish-panel="tools">
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_controls">3. Map controls</legend>
+                <p class="help" style="margin-bottom:0.6rem" data-i18n="Qtiler2Hajk.step_controls_help">Select the tools to show in the viewer. Click the gear icon next to a control to configure its options.</p>
+                <div class="Qtiler2Hajk-controls-grid">
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-mapmenu" checked /> <span data-ctrl-label>Layer switcher</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-legend" checked /> <span data-ctrl-label>Info click</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-search" /> <span data-ctrl-label>Qtiler WFS search</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-editor" /> <span data-ctrl-label>Qtiler WFS-T editor</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-position" checked /> <span data-ctrl-label>Coordinates</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-measure" checked /> <span data-ctrl-label>Measurer</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-print" /> <span data-ctrl-label>Print</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-draw" checked /> <span data-ctrl-label>Sketch</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-bookmarks" /> <span data-ctrl-label>Bookmarks</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-propertychecker" /> <span data-ctrl-label>Property checker</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-routing" /> <span data-ctrl-label>Routing</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-anchor" /> <span data-ctrl-label>Share link / QR</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-location" /> <span data-ctrl-label>User location</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-streetview" /> <span data-ctrl-label>Street View</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-layercomparer" /> <span data-ctrl-label>Layer comparer</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-buffer" /> <span data-ctrl-label>Buffer</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-documenthandler" /> <span data-ctrl-label>Document handler</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-informative" /> <span data-ctrl-label>Informative</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-template" /> <span data-ctrl-label>Template</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-export" /> <span data-ctrl-label>Advanced export</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-timeslider" /> <span data-ctrl-label>Time slider</span></label>
+                </div>
+              </fieldset>
+
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend">Service endpoints</legend>
+                <div class="grid">
+                  <label data-config-for="featureShare">
+                    <span>Share service URL</span>
+                    <input id="cfgShareUrl" type="text" placeholder="https://example.com/share" />
+                  </label>
+                  <label data-config-for="featureRouting">
+                    <span>Routing service URL</span>
+                    <input id="cfgRoutingUrl" type="text" placeholder="https://router.example.com/route" />
+                  </label>
+                  <label data-config-for="featureHeightProfile">
+                    <span>Elevation service URL</span>
+                    <input id="cfgElevationUrl" type="text" placeholder="https://elevation.example.com" />
+                  </label>
+                  <label data-config-for="featureDxfExport">
+                    <span>DXF export service URL</span>
+                    <input id="cfgDxfUrl" type="text" placeholder="https://example.com/dxf" />
+                  </label>
+                </div>
+              </fieldset>
+
+              <div style="display:none">
+                <input type="checkbox" id="featureSearch" />
+                <input type="checkbox" id="featureSearchGlobal" />
+                <input type="checkbox" id="featureView3D" />
+                <input type="checkbox" id="featureEditing" />
+                <input type="checkbox" id="featureIdentify" />
+                <input type="checkbox" id="featureLayerTree" />
+                <input type="checkbox" id="featureLegend" />
+                <input type="checkbox" id="featureMeasurement" />
+                <input type="checkbox" id="featurePrint" />
+                <input type="checkbox" id="featureMapTip" />
+                <input type="checkbox" id="featureShare" />
+                <input type="checkbox" id="featureRedlining" />
+                <input type="checkbox" id="featureBookmark" />
+                <input type="checkbox" id="featureHeightProfile" />
+                <input type="checkbox" id="featureDxfExport" />
+                <input type="checkbox" id="featureAttributeTable" />
+                <input type="checkbox" id="featureRouting" />
+              </div>
+
+              <div id="publishToolsDynamicSlot"></div>
+            </section>
+
+            <section class="publish-editor__tab-panel" data-publish-panel="config">
+              <fieldset class="modal-step publish-editor__config-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_origo_config">4. Hajk Configuration</legend>
+                <div class="publish-editor__config-grid">
+                  <div class="publish-editor__config-main">
+                    <h4 class="title is-6" style="margin-bottom: 0.5rem;" data-i18n="Qtiler2Hajk.interactive_map">Interactive Map</h4>
+                    <div id="hajk-preview-container" class="publish-editor__preview-frame">
+                      <iframe id="hajk-preview-iframe" src="" style="width:100%; height:100%; border:none;"></iframe>
+                      <div id="hajk-preview-overlay" class="publish-editor__preview-overlay">
+                        <div class="publish-editor__preview-overlay-content">
+                          <strong id="hajk-preview-overlay-title" data-i18n="Qtiler2Hajk.interactive_map">Interactive Map</strong>
+                          <p id="hajk-preview-overlay-message" class="has-text-grey" data-i18n="Qtiler2Hajk.interactive_map_idle">Pulsa Load Preview para cargar el mapa</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="buttons is-centered publish-editor__preview-toolbar">
+                      <button type="button" class="button is-small is-info" id="btn-load-map-preview" data-i18n="Qtiler2Hajk.load_preview">Load Preview</button>
+                      <button type="button" class="button is-small" id="btn-open-map-preview-tab" data-i18n="Qtiler2Hajk.open_in_new_tab">Open in new tab</button>
+                      <button type="button" class="button is-small is-primary" id="btn-fetch-map-extent" data-i18n="Qtiler2Hajk.capture_view">Capture view (Center &amp; Zoom)</button>
+                    </div>
+
+                    <div class="grid">
+                      <label>
+                        <span>Zoom</span>
+                        <input class="input is-small" type="number" step="0.1" id="hajk-cfg-zoom" />
+                      </label>
+                      <label>
+                        <span>Center</span>
+                        <input class="input is-small" type="text" id="hajk-cfg-center" placeholder="[x, y]" />
+                      </label>
+                    </div>
+                    <div class="field" style="margin-top:12px">
+                      <label class="label is-small">Extent</label>
+                      <input class="input is-small" type="text" id="hajk-cfg-extent" placeholder="[minx, miny, maxx, maxy]" />
+                    </div>
+                    <div class="grid" style="margin-top:12px">
+                      <label>
+                        <span>Min Zoom</span>
+                        <div class="field has-addons" style="margin:0">
+                          <div class="control is-expanded">
+                            <input class="input is-small" type="number" step="1" min="0" max="28" id="hajk-cfg-min-zoom" placeholder="0" />
+                          </div>
+                          <div class="control">
+                            <button type="button" class="button is-small is-primary" id="btn-capture-min-zoom">Capturar</button>
+                          </div>
+                        </div>
+                      </label>
+                      <label>
+                        <span>Max Zoom</span>
+                        <div class="field has-addons" style="margin:0">
+                          <div class="control is-expanded">
+                            <input class="input is-small" type="number" step="1" min="0" max="28" id="hajk-cfg-max-zoom" placeholder="28" />
+                          </div>
+                          <div class="control">
+                            <button type="button" class="button is-small is-primary" id="btn-capture-max-zoom">Capturar</button>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="publish-editor__config-side">
+                    <div id="origo-config-summary" class="publish-editor__summary"></div>
+                    <div class="field" style="margin-bottom: 0.75rem;">
+                      <label class="label is-small">
+                        Controls Array (JSON)
+                        <button type="button" id="btn-load-advanced-controls" class="button is-small is-pulled-right">Plantilla Completa</button>
+                      </label>
+                      <div class="control">
+                        <textarea id="hajk-cfg-controls" class="textarea is-small" rows="14" style="font-family: monospace;"></textarea>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label class="label is-small">Extra JSON (pageSettings, etc)</label>
+                      <div class="control">
+                        <textarea id="hajk-cfg-extra" class="textarea is-small" rows="8" style="font-family: monospace;"></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
+            </section>
+
+            <section class="publish-editor__tab-panel" data-publish-panel="jsoneditor">
+              <fieldset class="modal-step">
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_json_editor">5. JSON Editor</legend>
+                <p class="help" style="margin-bottom:1rem" data-i18n="Qtiler2Hajk.json_editor_help">Edit the complete map configuration JSON. Changes are validated in real-time.</p>
+                
+                <div class="field">
+                  <div class="buttons" style="margin-bottom: 0.75rem; position: sticky; top: 0; background: white; z-index: 10; padding: 0.5rem 0; border-bottom: 1px solid #dbdbdb;">
+                    <button type="button" id="btn-json-load" class="button is-small is-info" data-i18n="Qtiler2Hajk.json_load">Load current config</button>
+                    <button type="button" id="btn-json-format" class="button is-small" data-i18n="Qtiler2Hajk.json_format">Format JSON</button>
+                    <button type="button" id="btn-json-validate" class="button is-small" data-i18n="Qtiler2Hajk.json_validate">Validate</button>
+                    <button type="button" id="btn-json-apply" class="button is-small is-primary" data-i18n="Qtiler2Hajk.json_apply">Apply changes</button>
+                    <button type="button" id="btn-json-clear-log" class="button is-small is-light" data-i18n="Qtiler2Hajk.json_clear_log">Clear log</button>
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 400px; gap: 1rem; align-items: start;">
+                  <div class="field" style="margin: 0;">
+                    <label class="label is-small" data-i18n="Qtiler2Hajk.json_editor_label">Map Configuration JSON</label>
+                    <div id="json-editor-container" style="border: 1px solid #dbdbdb; min-height: 600px;"></div>
+                  </div>
+
+                  <div class="field" style="margin: 0;">
+                    <label class="label is-small" data-i18n="Qtiler2Hajk.json_log_label">Validation & Error Log</label>
+                    <div id="json-log-container" style="background: #f5f5f5; border: 1px solid #dbdbdb; padding: 0.75rem; min-height: 600px; max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 0.875rem; white-space: pre-wrap;"></div>
+                  </div>
+                </div>
+              </fieldset>
+            </section>
+          </section>
+
+          <footer class="publish-editor__footer modal-card-foot">
+            <p id="publishStatusError" class="help is-danger" style="display:none; margin:0; flex:1 1 auto;"></p>
+            <button id="saveDraftBtn" class="button is-light" type="button" data-i18n="Qtiler2Hajk.save_draft">Save draft</button>
+            <button id="previewFooterBtn" class="button is-info is-light" type="button" data-i18n="Qtiler2Hajk.preview_btn">Preview</button>
+            <button id="publishNowBtn" class="button is-primary" data-i18n="Qtiler2Hajk.publish_now">Publish</button>
+            <button id="closePublishModalBottom" class="button" type="button" data-i18n="Qtiler2Hajk.cancel">Cancel</button>
+          </footer>
+        </section>
+      </div>
+
+      <div class="tab-panel" data-panel="portal">
+        <section id="portalSection" class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.portal_section">Portal pages</h2>
+            <span id="portalPagesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Hajk.portal_desc">Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.</p>
+          <div class="actions">
+            <button id="portalAddPageBtn" class="button primary" type="button" data-i18n="Qtiler2Hajk.portal_add_page">New page</button>
+            <button id="portalDuplicatePageBtn" class="button" type="button" data-i18n="Qtiler2Hajk.portal_duplicate_page">Duplicate page</button>
+            <button id="portalToggleFullscreenBtn" class="button" type="button" data-i18n="Qtiler2Hajk.portal_fullscreen">Fullscreen editor</button>
+            <a id="portalOpenPageBtn" class="button ghost is-disabled" href="/Qtiler2Hajk/maps" target="_blank" rel="noreferrer" data-i18n="Qtiler2Hajk.portal_open_page">Open page</a>
+          </div>
+
+          <details class="portal-backup-panel">
+            <summary data-i18n="Qtiler2Hajk.portal_backup_title">Export / import portal backup</summary>
+            <div class="portal-backup-grid">
+              <label>
+                <span data-i18n="Qtiler2Hajk.portal_backup_pages">Portal pages to export</span>
+                <select id="portalBackupPagesSelect" class="input portal-multiselect" multiple size="5"></select>
+              </label>
+              <label>
+                <span data-i18n="Qtiler2Hajk.portal_backup_maps">Published maps to export</span>
+                <select id="portalBackupMapsSelect" class="input portal-multiselect" multiple size="5"></select>
+              </label>
+              <div class="portal-backup-actions">
+                <button id="portalExportBackupBtn" class="button info" type="button" data-i18n="Qtiler2Hajk.portal_backup_export">Export JSON</button>
+                <button id="portalImportBackupBtn" class="button" type="button" data-i18n="Qtiler2Hajk.portal_backup_import">Import / restore JSON</button>
+                <input id="portalImportBackupInput" type="file" accept="application/json,.json" hidden />
+                <label class="checkbox"><input id="portalImportReplacePortal" type="checkbox" checked /> <span data-i18n="Qtiler2Hajk.portal_backup_replace_portal">Replace portal pages</span></label>
+                <label class="checkbox"><input id="portalImportReplaceMaps" type="checkbox" checked /> <span data-i18n="Qtiler2Hajk.portal_backup_replace_maps">Replace published maps with same key</span></label>
+              </div>
+            </div>
+            <p class="help" data-i18n="Qtiler2Hajk.portal_backup_help">The backup JSON includes selected portal content and selected published map configurations. It does not include tile caches or QGIS project files.</p>
+          </details>
+
+          
+          <!-- Global Portal Navigation -->
+          <div class="tabs is-boxed is-small" style="margin-bottom: 0; background: var(--surface);">
+            <ul>
+              <li class="is-active" id="gTabPages"><a><span class="icon"><i class="fas fa-file-alt"></i></span><span>Pages (Editor)</span></a></li>
+              <li id="gTabIdentity"><a><span class="icon"><i class="fas fa-paint-brush"></i></span><span>Site Identity</span></a></li>
+              <li id="gTabGdpr"><a><span class="icon"><i class="fas fa-shield-alt"></i></span><span>GDPR & Privacy</span></a></li>
+            </ul>
+          </div>
+
+          <!-- GLOBAL TAB 1: Pages Editor (The Main Workspace) -->
+          <div id="gPanelPages" class="global-portal-panel" style="padding: 1rem 0;">
+            <div class="portal-editor">
+              <aside class="portal-editor__sidebar">
+                <div class="portal-editor__sidebar-head">
+                  <strong data-i18n="Qtiler2Hajk.portal_pages_list">Your Pages</strong>
+                  <button id="portalSaveBtn" class="button small" type="button" data-i18n="Qtiler2Hajk.portal_save">Save portal</button>
+                </div>
+                <div id="portalPagesList" class="portal-pages-list"></div>
+              </aside>
+
+              <section class="portal-editor__workspace">
+                <div id="portalPageEmpty" class="portal-editor__empty" data-i18n="Qtiler2Hajk.portal_empty">
+                  Create the first page to turn the maps portal into an editorial landing page.
+                </div>
+
+                <div id="portalPageEditor" hidden>
+                  <div class="portal-template-bar" style="margin-bottom:1rem;">
+                    <div>
+                      <strong data-i18n="Qtiler2Hajk.portal_templates">Page Templates</strong>
+                      <p class="help" data-i18n="Qtiler2Hajk.portal_templates_help">Start from a polished layout and adapt.</p>
+                    </div>
+                    <div class="portal-template-bar__controls">
+                      <div class="select is-small">
+                        <select id="portalTemplateSelect">
+                          <option value="story">Story landing</option>
+                          <option value="newsroom">Newsroom</option>
+                          <option value="campaign">Campaign / product</option>
+                        </select>
+                      </div>
+                      <button id="portalApplyTemplateBtn" class="button small primary" type="button" data-i18n="Qtiler2Hajk.portal_apply_template">Apply template</button>
+                    </div>
+                  </div>
+
+                  <!-- Inner Page Tabs -->
+                  <div class="tabs is-toggle is-small is-fullwidth" style="margin-bottom:1rem;">
+                    <ul>
+                      <li class="is-active" id="pTabContent"><a><span>Content & Blocks</span></a></li>
+                      <li id="pTabSettings"><a><span>Page Settings</span></a></li>
+                      <li id="pTabSecurity"><a><span>Access & Security</span></a></li>
+                      <li id="pTabPreview"><a><span>Preview</span></a></li>
+                    </ul>
+                  </div>
+
+                  <!-- PAGE TAB 1: Content & Blocks -->
+                  <div id="pPanelContent" class="page-portal-panel">
+                    <div class="portal-blocks-head">
+                      <div>
+                        <h3 data-i18n="Qtiler2Hajk.portal_blocks">Story Sections</h3>
+                        <p class="help" data-i18n="Qtiler2Hajk.portal_blocks_help">Combine hero, text, maps and news sections.</p>
+                      </div>
+                      <div class="portal-blocks-actions">
+                        <button id="portalAddBlockBtn" class="button small info" type="button" data-i18n="Qtiler2Hajk.portal_add_block">Add Section</button>
+                      </div>
+                    </div>
+                    <div id="portalBlocksList" class="portal-blocks-list" style="margin-bottom: 2rem;"></div>
+                  </div>
+
+                  <!-- PAGE TAB 2: Settings -->
+                  <div id="pPanelSettings" class="page-portal-panel" style="display:none;">
+                    <div class="portal-meta-grid card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px; margin-bottom:1rem;">
+                      <div class="field">
+                        <label class="label" for="portalPageTitle" data-i18n="Qtiler2Hajk.portal_page_title">Page title</label>
+                        <div class="control"><input id="portalPageTitle" class="input" type="text" maxlength="120" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageSlug" data-i18n="Qtiler2Hajk.portal_page_slug">Slug (URL path)</label>
+                        <div class="control"><input id="portalPageSlug" class="input" type="text" maxlength="120" placeholder="about-us" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageNavLabel" data-i18n="Qtiler2Hajk.portal_page_nav">Navigation label</label>
+                        <div class="control"><input id="portalPageNavLabel" class="input" type="text" maxlength="80" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageSummary" data-i18n="Qtiler2Hajk.portal_page_summary">Short summary</label>
+                        <div class="control"><input id="portalPageSummary" class="input" type="text" maxlength="180" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageHeaderLogoUrl" data-i18n="Qtiler2Hajk.portal_header_logo">Header logo URL</label>
+                        <div class="control"><input id="portalPageHeaderLogoUrl" class="input" type="text" maxlength="400" placeholder="/plugins/Qtiler2Hajk/api/branding/logo-file" /></div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageHeaderHeight" data-i18n="Qtiler2Hajk.portal_header_height">Header height (px)</label>
+                        <div class="control"><input id="portalPageHeaderHeight" class="input" type="number" min="0" max="320" step="4" /></div>
+                      </div>
+                    </div>
+                    
+                    <div class="field portal-meta-grid__checks card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageShowInNav" type="checkbox" checked /> <span data-i18n="Qtiler2Hajk.portal_show_in_nav">Show in navigation menu</span></label>
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageIsHome" type="checkbox" /> <span data-i18n="Qtiler2Hajk.portal_set_home">Use as default portal homepage</span></label>
+                      <label class="checkbox" style="display:block;"><input id="portalPageShowHeader" type="checkbox" checked /> <span data-i18n="Qtiler2Hajk.portal_show_header">Show navigation header</span></label>
+                    </div>
+                  </div>
+
+                  <!-- PAGE TAB 3: Security -->
+                  <div id="pPanelSecurity" class="page-portal-panel" style="display:none;">
+                    <div class="portal-meta-grid portal-meta-grid--audience card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+                      <div class="field">
+                        <label class="label" for="portalPageVisibility" data-i18n="Qtiler2Hajk.portal_visibility">Page visibility</label>
+                        <div class="control">
+                          <div class="select is-fullwidth">
+                            <select id="portalPageVisibility">
+                              <option value="public" data-i18n="Qtiler2Hajk.portal_vis_public">Public</option>
+                              <option value="authenticated" data-i18n="Qtiler2Hajk.portal_vis_authenticated">Authenticated users</option>
+                              <option value="restricted" data-i18n="Qtiler2Hajk.portal_vis_restricted">Specific users / roles</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageUsers" data-i18n="Qtiler2Hajk.portal_users">Allowed users</label>
+                        <div class="control"><input id="portalPageUsers" class="input" type="text" placeholder="anna, diego" /></div>
+                        <div class="control">
+                          <select id="portalPageUsersCatalog" class="input portal-multiselect" multiple size="6"></select>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label class="label" for="portalPageRoles" data-i18n="Qtiler2Hajk.portal_roles">Allowed roles</label>
+                        <div class="control"><input id="portalPageRoles" class="input" type="text" placeholder="editor, customer" /></div>
+                        <div class="control">
+                          <select id="portalPageRolesCatalog" class="input portal-multiselect" multiple size="4"></select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- PAGE TAB 4: Preview -->
+                  <div id="pPanelPreview" class="page-portal-panel" style="display:none;">
+                  <div class="portal-preview-card">
+                    <div class="card-header-row">
+                      <h3 data-i18n="Qtiler2Hajk.portal_preview">Live Preview</h3>
+                      <div class="portal-preview-toolbar">
+                        <span class="badge badge--muted" data-i18n="Qtiler2Hajk.portal_preview_note">Desktop view</span>
+                        <div class="portal-preview-devices">
+                          <button type="button" class="button small is-active" data-portal-preview-device="desktop" data-i18n="Qtiler2Hajk.portal_device_desktop">Desktop</button>
+                          <button type="button" class="button small" data-portal-preview-device="tablet" data-i18n="Qtiler2Hajk.portal_device_tablet">Tablet</button>
+                          <button type="button" class="button small" data-portal-preview-device="mobile" data-i18n="Qtiler2Hajk.portal_device_mobile">Mobile</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="portalPreviewHost" class="portal-preview-host"></div>
+                  </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- GLOBAL TAB 2: Site Identity -->
+          <div id="gPanelIdentity" class="global-portal-panel" style="display:none; padding:1.5rem;">
+            <h3 style="margin-bottom:1rem;">Global Site Identity</h3>
+            <p class="help" style="margin-bottom:1rem;">These fields change the public header next to the login button on the maps portal.</p>
+            <div class="portal-meta-grid">
+              <div class="field">
+                <label class="label">Header title</label>
+                <div class="control"><input id="portalSiteTitle" class="input" type="text" maxlength="80" placeholder="Kartportal" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Header subtitle</label>
+                <div class="control"><input id="portalSiteSubtitle" class="input" type="text" maxlength="200" placeholder="Interaktiva kartor publicerade via Hajk Bridge" /></div>
+              </div>
+              <div class="field">
+                <label class="label">Portal logo URL</label>
+                <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="/plugins/Qtiler2Hajk/api/branding/logo-file" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_height">Header height</label>
+                <div class="control"><input id="portalSiteHeaderHeight" class="input" type="number" min="72" max="360" step="4" placeholder="120" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_font">Header font</label>
+                <div class="control">
+                  <div class="select is-fullwidth">
+                    <select id="portalSiteHeaderFont">
+                      <option value="fraunces">Fraunces</option>
+                      <option value="manrope">Manrope</option>
+                      <option value="serif">Georgia serif</option>
+                      <option value="sans">Segoe UI sans</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_color1">Header color 1</label>
+                <div class="control"><input id="portalSiteHeaderColor1" class="input" type="color" value="#0f766e" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_color2">Header color 2</label>
+                <div class="control"><input id="portalSiteHeaderColor2" class="input" type="color" value="#2563eb" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_text_color">Header text color</label>
+                <div class="control"><input id="portalSiteHeaderTextColor" class="input" type="color" value="#ffffff" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_header_background_url">Header background image URL</label>
+                <div class="control"><input id="portalSiteHeaderBackgroundUrl" class="input" type="text" maxlength="500" placeholder="https://... or /plugins/Qtiler2Hajk/..." /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_text">Footer text</label>
+                <div class="control"><input id="portalSiteFooterText" class="input" type="text" maxlength="200" placeholder="© {year} Qtiler · MundoGIS" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_link_label">Footer link label</label>
+                <div class="control"><input id="portalSiteFooterLinkLabel" class="input" type="text" maxlength="80" placeholder="Qtiler" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_link_url">Footer link URL</label>
+                <div class="control"><input id="portalSiteFooterLink" class="input" type="text" maxlength="500" placeholder="https://mundogis.se" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_background_color">Footer background color</label>
+                <div class="control"><input id="portalSiteFooterBackgroundColor" class="input" type="color" value="#1f2933" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_text_color">Footer text color</label>
+                <div class="control"><input id="portalSiteFooterTextColor" class="input" type="color" value="#cbd5e1" /></div>
+              </div>
+              <div class="field">
+                <label class="label" data-i18n="Qtiler2Hajk.portal_site_footer_link_color">Footer link color</label>
+                <div class="control"><input id="portalSiteFooterLinkColor" class="input" type="color" value="#93c5fd" /></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GLOBAL TAB 3: GDPR & Privacy -->
+          <div id="gPanelGdpr" class="global-portal-panel" style="display:none; padding:1.5rem;">
+            <h3 style="margin-bottom:1rem;">Privacy & GDPR Compliance</h3>
+            <div class="field portal-meta-grid__checks" style="margin-bottom:1.5rem;">
+              <label class="checkbox is-large"><input id="portalGdprEnabled" type="checkbox" /> <strong>Enable GDPR / cookie consent banner</strong></label>
+            </div>
+            
+            <div class="portal-meta-grid card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
+              <div class="field">
+                <label class="label" for="portalGdprCompany">Company / Brand Name</label>
+                <div class="control"><input id="portalGdprCompany" class="input" type="text" maxlength="120" placeholder="Qtiler" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprTitle">Banner Title</label>
+                <div class="control"><input id="portalGdprTitle" class="input" type="text" maxlength="160" placeholder="Privacy and cookies" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprPrivacyUrl">Privacy Policy URL</label>
+                <div class="control"><input id="portalGdprPrivacyUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprCookieUrl">Cookie Policy URL</label>
+                <div class="control"><input id="portalGdprCookieUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/cookies" /></div>
+              </div>
+              <div class="field">
+                <label class="label" for="portalGdprContactUrl">GDPR Contact URL</label>
+                <div class="control"><input id="portalGdprContactUrl" class="input" type="text" maxlength="400" placeholder="https://example.com/privacy-contact" /></div>
+              </div>
+              <div class="field" style="grid-column: 1 / -1;">
+                <label class="label" for="portalGdprText">Banner Text</label>
+                <div class="control"><textarea id="portalGdprText" class="textarea" rows="3" placeholder="Explain essential cookies, embedded maps and consent."></textarea></div>
+              </div>
+            </div>
+          </div>
+          
+          <script>
+            // Inline tab logic for the Portal editor
+            document.addEventListener("DOMContentLoaded", () => {
+              // Global tabs
+              ['gTabPages', 'gTabIdentity', 'gTabGdpr'].forEach((tabId, idx) => {
+                const el = document.getElementById(tabId);
+                const panels = ['gPanelPages', 'gPanelIdentity', 'gPanelGdpr'];
+                if(el) el.addEventListener('click', () => {
+                  ['gTabPages', 'gTabIdentity', 'gTabGdpr'].forEach(t => document.getElementById(t)?.classList.remove('is-active'));
+                  el.classList.add('is-active');
+                  panels.forEach(p => { const pEl = document.getElementById(p); if(pEl) pEl.style.display = 'none'; });
+                  document.getElementById(panels[idx]).style.display = 'block';
+                });
+              });
+
+              // Page tabs
+              ['pTabContent', 'pTabSettings', 'pTabSecurity', 'pTabPreview'].forEach((tabId, idx) => {
+                const el = document.getElementById(tabId);
+                const panels = ['pPanelContent', 'pPanelSettings', 'pPanelSecurity', 'pPanelPreview'];
+                if(el) el.addEventListener('click', () => {
+                  ['pTabContent', 'pTabSettings', 'pTabSecurity', 'pTabPreview'].forEach(t => document.getElementById(t)?.classList.remove('is-active'));
+                  el.classList.add('is-active');
+                  panels.forEach(p => { const pEl = document.getElementById(p); if(pEl) pEl.style.display = 'none'; });
+                  document.getElementById(panels[idx]).style.display = 'block';
+                });
+              });
+            });
+          </script>
+
+        </section>
+      </div>
+
+      <!-- ════════════════════════════════════
+           TAB: Log
+           ════════════════════════════════════ -->
+      <div class="tab-panel" data-panel="log">
+
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.activity_log">Activity log</h2>
+            <button id="clearLogBtn" class="button ghost small" data-i18n="Qtiler2Hajk.clear">Clear</button>
+          </div>
+          <div id="logContainer" class="log-container">
+            <p class="log-empty" data-i18n="Qtiler2Hajk.no_activity">No activity yet.</p>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- ═══════════ How it works modal ═══════════ -->
+    <div id="q2o-hiw-modal" class="hiw-modal" role="dialog" aria-modal="true" aria-labelledby="q2o-hiw-title" aria-hidden="true" hidden>
+      <div class="hiw-backdrop" data-hiw-close></div>
+      <div class="hiw-card">
+        <div class="hiw-head">
+          <h2 id="q2o-hiw-title" data-i18n="Qtiler2Hajk.hiw.title">How Qtiler2Hajk works &amp; security</h2>
+          <button type="button" class="hiw-close" data-hiw-close aria-label="Close">×</button>
+        </div>
+        <div class="hiw-body">
+          <p class="hiw-lead" data-i18n="Qtiler2Hajk.hiw.lead"></p>
+          <h3 data-i18n="Qtiler2Hajk.hiw.vs.title">Qrigo vs Qtiler2Hajk</h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.vs.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.vs.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.arch.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.arch.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.arch.2"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.arch.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.flow.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.flow.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.flow.2"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.flow.3"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.flow.4"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.maps.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.maps.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.maps.2"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.maps.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.wfs.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.wfs.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.wfs.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.auth.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.auth.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.auth.2"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.auth.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2Hajk.hiw.security.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2Hajk.hiw.security.1"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.security.2"></li>
+            <li data-i18n="Qtiler2Hajk.hiw.security.3"></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="wfs-style-modal" class="modal">
+      <div class="modal-background"></div>
+      <div class="modal-card Qtiler2Hajk-style-modal-card">
+        <header class="modal-card-head">
+          <div>
+            <p class="modal-card-title" data-i18n="Qtiler2Hajk.wfs_modal_title">Editor de estilo vectorial</p>
+            <p class="Qtiler2Hajk-style-subtitle"><span data-i18n="Qtiler2Hajk.wfs_layer">Capa</span>: <strong id="wfs-style-layer-title"></strong></p>
+          </div>
+          <div class="Qtiler2Hajk-style-head-actions">
+            <span id="wfs-style-geometry-badge" class="badge badge--muted">Vector</span>
+            <button type="button" class="button small" id="wfs-style-fullscreen" data-i18n="Qtiler2Hajk.fullscreen">Full screen</button>
+            <button class="delete" aria-label="close" onclick="closeStyleEditor()"></button>
+          </div>
+        </header>
+        <section class="modal-card-body">
+          <div class="Qtiler2Hajk-style-layout">
+            <div class="Qtiler2Hajk-style-sidebar">
+              <div class="Qtiler2Hajk-style-toolbar">
+                <div class="Qtiler2Hajk-style-tabs">
+                  <button type="button" class="button small is-active" data-style-tab="rules" data-i18n="Qtiler2Hajk.wfs_tab_rules">Diseño avanzado</button>
+                  <button type="button" class="button small" data-style-tab="designer" data-i18n="Qtiler2Hajk.wfs_tab_designer">Diseño básico</button>
+                  <button type="button" class="button small" data-style-tab="json" data-i18n="Qtiler2Hajk.wfs_tab_json">Editar JSON avanzado</button>
+                  <button type="button" class="button small is-info is-light" data-style-tab="attributes" data-i18n="Qtiler2Hajk.wfs_tab_attributes">Atributos (Infoclick)</button>
+                </div>
+                <button type="button" class="button small is-warning is-light" id="wfs-style-reset" title="Limpia todo el estilo y vuelve al estilo básico por defecto" data-i18n="Qtiler2Hajk.wfs_reset">↺ Restablecer estilo básico</button>
+              </div>
+
+              <section class="Qtiler2Hajk-style-panel" data-style-panel="rules">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap">
+                  <div style="font-weight:600" data-i18n="Qtiler2Hajk.wfs_rules_header">Reglas y filtros</div>
+                  <div style="display:flex;gap:0.4rem">
+                    <select id="wfs-rules-copy-select" class="select small">
+                      <option value="" data-i18n="Qtiler2Hajk.wfs_copy_rules">-- Copiar reglas de capa --</option>
+                    </select>
+                    <button type="button" class="button small is-primary" id="wfs-rules-add" data-i18n="Qtiler2Hajk.wfs_add_rule">+ Añadir regla</button>
+                  </div>
+                </div>
+                <div id="wfs-rules-container" style="display:flex;flex-direction:column;gap:0.6rem;max-height:520px;overflow:auto"></div>
+                <p class="help" data-i18n="Qtiler2Hajk.wfs_rules_help">Cada regla se evalúa por orden. Si quieres una "por defecto", deja el filtro vacío en la última.</p>
+              </section>
+
+              <section class="Qtiler2Hajk-style-panel" data-style-panel="designer" hidden>
+                <div class="Qtiler2Hajk-style-designer-shell">
+                  <div class="Qtiler2Hajk-style-control-box">
+                    <div class="Qtiler2Hajk-style-control-box__head">
+                      <h3 data-i18n="Qtiler2Hajk.wfs_designer_header">Ajuste visual rápido</h3>
+                      <p class="help" data-i18n="Qtiler2Hajk.wfs_designer_help">A la derecha ves el resultado. A la izquierda ajustas color, relleno, patrón y línea.</p>
+                      <div id="wfs-style-rule-mode-note" class="notification is-info is-light" hidden></div>
+                    </div>
+                    <div class="Qtiler2Hajk-style-control-groups">
+                      <section class="Qtiler2Hajk-style-control-group">
+                        <h4 data-i18n="Qtiler2Hajk.wfs_group_geometry">Geometría</h4>
+                        <div class="Qtiler2Hajk-style-grid">
+                          <label id="wfsStyleShapeWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_symbol">Símbolo</span>
+                            <select id="wfsStyleShape">
+                              <option value="circle" data-i18n="Qtiler2Hajk.wfs_circle">Círculo</option>
+                              <option value="square" data-i18n="Qtiler2Hajk.wfs_square">Cuadrado</option>
+                              <option value="triangle" data-i18n="Qtiler2Hajk.wfs_triangle">Triángulo</option>
+                              <option value="star" data-i18n="Qtiler2Hajk.wfs_star">Estrella</option>
+                            </select>
+                          </label>
+                          <label id="wfsStyleRadiusWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_radius_size">Radio / tamaño</span>
+                            <input id="wfsStyleRadius" type="range" min="2" max="24" step="1" value="6" />
+                          </label>
+                        </div>
+                      </section>
+
+                      <section class="Qtiler2Hajk-style-control-group">
+                        <h4 data-i18n="Qtiler2Hajk.wfs_group_fill">Relleno</h4>
+                        <div class="Qtiler2Hajk-style-grid">
+                          <label id="wfsStyleFillColorWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_color">Color de relleno</span>
+                            <input id="wfsStyleFillColor" type="color" value="#3b82f6" />
+                          </label>
+                          <label id="wfsStyleFillOpacityWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_opacity">Opacidad relleno</span>
+                            <input id="wfsStyleFillOpacity" type="range" min="0" max="1" step="0.05" value="0.25" />
+                          </label>
+                          <label id="wfsStyleFillPatternWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_pattern">Fill pattern</span>
+                            <select id="wfsStyleFillPattern">
+                              <option value="solid" data-i18n="Qtiler2Hajk.wfs_fill_pattern_solid">Solid</option>
+                              <option value="slash" data-i18n="Qtiler2Hajk.wfs_fill_pattern_slash">Slash</option>
+                              <option value="backslash" data-i18n="Qtiler2Hajk.wfs_fill_pattern_backslash">Backslash</option>
+                              <option value="horizontal" data-i18n="Qtiler2Hajk.wfs_fill_pattern_horizontal">Horizontal lines</option>
+                              <option value="vertical" data-i18n="Qtiler2Hajk.wfs_fill_pattern_vertical">Vertical lines</option>
+                              <option value="cross">Cross hatch</option>
+                              <option value="dots" data-i18n="Qtiler2Hajk.wfs_fill_pattern_dots">Dots</option>
+                              <option value="outline" data-i18n="Qtiler2Hajk.wfs_fill_pattern_outline">Outline only</option>
+                            </select>
+                          </label>
+                        </div>
+                      </section>
+
+                      <section class="Qtiler2Hajk-style-control-group">
+                        <h4 data-i18n="Qtiler2Hajk.wfs_group_pattern">Patrón</h4>
+                        <div class="Qtiler2Hajk-style-grid">
+                          <label id="wfsStylePatternTransparentWrap" style="align-content:end">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_pattern_transparent">Transparent background</span>
+                            <span style="display:inline-flex;align-items:center;gap:8px;font-weight:500">
+                              <input id="wfsStylePatternTransparent" type="checkbox" />
+                              <span data-i18n="Qtiler2Hajk.wfs_fill_pattern_transparent_help">Show only the lines or dots so layers below remain visible.</span>
+                            </span>
+                          </label>
+                          <label id="wfsStylePatternAngleWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_pattern_angle">Pattern angle</span>
+                            <input id="wfsStylePatternAngle" type="range" min="0" max="180" step="5" value="45" />
+                          </label>
+                          <label id="wfsStylePatternSpacingWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_pattern_spacing">Pattern spacing</span>
+                            <input id="wfsStylePatternSpacing" type="range" min="4" max="32" step="1" value="10" />
+                          </label>
+                          <label id="wfsStylePatternSizeWrap">
+                            <span data-i18n="Qtiler2Hajk.wfs_fill_pattern_size">Dot size</span>
+                            <input id="wfsStylePatternSize" type="range" min="1" max="12" step="0.5" value="2.5" />
+                          </label>
+                        </div>
+                      </section>
+
+                      <section class="Qtiler2Hajk-style-control-group">
+                        <h4 data-i18n="Qtiler2Hajk.wfs_group_stroke">Borde y línea</h4>
+                        <div class="Qtiler2Hajk-style-grid">
+                          <label>
+                            <span data-i18n="Qtiler2Hajk.wfs_stroke_color">Color del borde</span>
+                            <input id="wfsStyleStrokeColor" type="color" value="#2563eb" />
+                          </label>
+                          <label>
+                            <span data-i18n="Qtiler2Hajk.wfs_stroke_opacity">Opacidad borde</span>
+                            <input id="wfsStyleStrokeOpacity" type="range" min="0" max="1" step="0.05" value="1" />
+                          </label>
+                          <label>
+                            <span data-i18n="Qtiler2Hajk.wfs_stroke_width">Grosor borde</span>
+                            <input id="wfsStyleStrokeWidth" type="range" min="0" max="12" step="0.5" value="2" />
+                          </label>
+                          <label>
+                            <span data-i18n="Qtiler2Hajk.wfs_dash">Patrón de línea</span>
+                            <select id="wfsStyleDash">
+                              <option value="solid" data-i18n="Qtiler2Hajk.wfs_solid">Sólida</option>
+                              <option value="dashed" data-i18n="Qtiler2Hajk.wfs_dashed">Discontinua</option>
+                              <option value="dotted" data-i18n="Qtiler2Hajk.wfs_dotted">Punteada</option>
+                              <option value="dashdot" data-i18n="Qtiler2Hajk.wfs_dashdot">Punto y raya</option>
+                            </select>
+                          </label>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="Qtiler2Hajk-style-panel" data-style-panel="attributes" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;gap:0.5rem;flex-wrap:wrap">
+                  <div style="font-weight:600" data-i18n="Qtiler2Hajk.wfs_attrs_header">Atributos del Popup (Infoclick)</div>
+                  <div style="display:flex;gap:0.4rem">
+                    <select id="wfs-attributes-copy-select" class="select small">
+                      <option value="" data-i18n="Qtiler2Hajk.wfs_copy_attrs">-- Copiar atributos de capa --</option>
+                    </select>
+                    <button type="button" class="button small is-primary" id="wfs-attributes-add" data-i18n="Qtiler2Hajk.wfs_add_attr">+ Añadir atributo</button>
+                  </div>
+                </div>
+                <div id="wfs-attributes-container" style="display:flex;flex-direction:column;gap:0.6rem;max-height:520px;overflow:auto"></div>
+                <p class="help" data-i18n="Qtiler2Hajk.wfs_attrs_help">Define los atributos a mostrar. Si no llenas nada, se muestran todos.</p>
+              </section>
+
+              <section class="Qtiler2Hajk-style-panel" data-style-panel="json" hidden>
+                <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.5rem;gap:0.5rem;flex-wrap:wrap">
+                  <div>
+                    <label class="Qtiler2Hajk-style-json-label" for="wfs-style-json-editor" data-i18n="Qtiler2Hajk.wfs_json_label">JSON completo de la capa (configuración + estilo)</label>
+                    <p class="help" style="margin:0" data-i18n="Qtiler2Hajk.wfs_json_help">Edita aquí el objeto completo: name, geometryType, wfsStyle, searchable, etc.</p>
+                  </div>
+                  <div style="display:flex;gap:0.4rem;align-items:flex-end">
+                    <div class="select is-small">
+                      <select id="wfs-style-copy-select">
+                        <option value="" data-i18n="Qtiler2Hajk.wfs_copy_layer">-- Copiar de capa --</option>
+                      </select>
+                    </div>
+                    <button type="button" class="button is-small" id="wfs-style-format-json" title="Format JSON" data-i18n="Qtiler2Hajk.wfs_format_json">Formatear JSON</button>
+                  </div>
+                </div>
+                <div id="wfs-style-json-host" style="border:1px solid #d0d7de;border-radius:4px;min-height:380px;max-height:520px;overflow:auto;background:#fff"></div>
+                <textarea id="wfs-style-json-editor" class="textarea is-family-code" rows="18" style="display:none"></textarea>
+                <div class="Qtiler2Hajk-style-json-actions" style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                  <button type="button" class="button is-small is-info" id="wfs-style-export-json" data-i18n="Qtiler2Hajk.wfs_export_json">Exportar JSON</button>
+                  <button type="button" class="button is-small is-info" id="wfs-style-import-json" data-i18n="Qtiler2Hajk.wfs_import_json">Importar JSON</button>
+                  <button type="button" class="button is-small is-primary" id="wfs-style-apply-json" data-i18n="Qtiler2Hajk.wfs_apply_json">Aplicar JSON</button>
+                  <span id="wfs-style-json-status" class="help" style="margin-left:0.5rem"></span>
+                </div>
+                <input id="wfs-style-import-file" type="file" accept="application/json,.json" hidden />
+              </section>
+            </div>
+
+            <aside class="Qtiler2Hajk-style-preview-card">
+              <section id="wfs-style-presets-section" class="Qtiler2Hajk-style-presets-section" hidden>
+                <details class="Qtiler2Hajk-style-presets-disclosure">
+                  <summary class="Qtiler2Hajk-style-presets-head">
+                    <span>
+                      <strong>Presets</strong>
+                      <small class="help">QGIS detectado + estilos base para líneas y polígonos.</small>
+                    </span>
+                  </summary>
+                  <div class="Qtiler2Hajk-style-presets-dropdown">
+                    <div class="select" style="width:100%">
+                      <select id="wfs-style-presets-select" style="width:100%">
+                        <option value="">Selecciona un preset…</option>
+                      </select>
+                    </div>
+                    <button type="button" class="button small is-primary is-light" id="wfs-style-presets-apply">Aplicar preset</button>
+                    <div id="wfs-style-presets" class="Qtiler2Hajk-style-presets"></div>
+                  </div>
+                </details>
+              </section>
+              <h3 data-i18n="Qtiler2Hajk.wfs_preview">Vista previa</h3>
+              <div id="wfs-style-preview" class="Qtiler2Hajk-style-preview"></div>
+              <p class="help" data-i18n="Qtiler2Hajk.wfs_preview_help">La vista previa se actualiza en vivo mientras cambias color, grosor, opacidad y símbolo.</p>
+            </aside>
+          </div>
+          <div class="notification is-warning is-light is-hidden" id="wfs-style-error"></div>
+        </section>
+        <footer class="modal-card-foot" style="justify-content: flex-end;">
+          <button class="button" onclick="closeStyleEditor()" data-i18n="Qtiler2Hajk.wfs_cancel">Cancelar</button>
+          <button class="button is-success" onclick="saveStyleEditor()" data-i18n="Qtiler2Hajk.wfs_save">Guardar estilo</button>
+        </footer>
+      </div>
+    </div>
+
+    <div id="wfs-rule-editor-modal" class="modal">
+      <div class="modal-background" onclick="closeRuleStyleEditor()"></div>
+      <div class="modal-card Qtiler2Hajk-rule-editor-modal-card">
+        <header class="modal-card-head">
+          <div>
+            <p class="modal-card-title" data-i18n="Qtiler2Hajk.wfs_rule_editor_title">Editar regla</p>
+            <p class="Qtiler2Hajk-style-subtitle"><span data-i18n="Qtiler2Hajk.wfs_rule">Regla</span>: <strong id="wfs-rule-editor-title"></strong></p>
+          </div>
+          <div class="Qtiler2Hajk-style-head-actions">
+            <button type="button" class="button small" id="wfs-rule-editor-fullscreen" data-i18n="Qtiler2Hajk.fullscreen">Full screen</button>
+            <button class="delete" aria-label="close" onclick="closeRuleStyleEditor()"></button>
+          </div>
+        </header>
+        <section class="modal-card-body">
+          <div id="wfs-rule-editor-host"></div>
+        </section>
+        <footer class="modal-card-foot" style="justify-content:flex-end">
+          <button class="button is-success" type="button" onclick="closeRuleStyleEditor()" data-i18n="Qtiler2Hajk.wfs_rule_editor_done">Listo</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- SVG Icon Picker Modal -->
+    <div class="modal" id="svg-picker-modal">
+      <div class="modal-background" onclick="closeSvgPicker()"></div>
+      <div class="modal-card" style="max-width:900px;width:90%">
+        <header class="modal-card-head">
+          <p class="modal-card-title" data-i18n="Qtiler2Hajk.svg_picker_title">Seleccionar icono SVG (QGIS)</p>
+          <div class="Qtiler2Hajk-style-head-actions">
+            <button type="button" class="button small" id="svg-picker-fullscreen" data-i18n="Qtiler2Hajk.fullscreen">Full screen</button>
+            <button class="delete" aria-label="close" onclick="closeSvgPicker()"></button>
+          </div>
+        </header>
+        <section class="modal-card-body" style="max-height:70vh;overflow:auto">
+          <input type="text" id="svg-picker-search" class="input" placeholder="Buscar..." style="margin-bottom:0.6rem" />
+          <div id="svg-picker-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px"></div>
+        </section>
+      </div>
+    </div>
+
+    <script src="/lang-support.js"></script>
+    <script src="/plugins/Qtiler2Hajk/admin-ui/app.js?v=hajk-20260608-hajk-layers-tools"></script>
+</body>
+</html>
+
+
