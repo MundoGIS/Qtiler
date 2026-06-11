@@ -88,12 +88,13 @@
     const tileTemplate = isWfsMode
       ? tileTemplateBase
       : appendSidToUrl(tileTemplateBase);
+    const wmsLayerParam = viewerState.theme ? `theme:${viewerState.theme}` : (viewerState.layer || '');
     const tileTemplateLabel = isExternalSource
-      ? `${window.location.origin}${tileTemplateBase}${isWmsMode ? `&LAYERS=${encodeURIComponent(viewerState.layer || '')}` : ''}`
+      ? `${window.location.origin}${tileTemplateBase}${isWmsMode ? `&LAYERS=${encodeURIComponent(wmsLayerParam)}` : ''}`
       : (isWfsMode
       ? `${window.location.origin}${tileTemplateBase}&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${encodeURIComponent(viewerState.layer || '')}&outputFormat=application/json`
       : (isWmsMode
-        ? `${window.location.origin}${tileTemplateBase}&LAYERS=${encodeURIComponent(viewerState.layer || '')}`
+        ? `${window.location.origin}${tileTemplateBase}&LAYERS=${encodeURIComponent(wmsLayerParam)}`
         : tileTemplate.replace('{z}', '{z}')));
     const modeLabelKey = isWfsMode ? 'viewer.mode.wfs' : (isWmsMode ? 'viewer.mode.wms' : 'viewer.mode.cache');
 
@@ -460,13 +461,6 @@
     const missingLayerOrTheme = !viewerData.layer && !viewerData.theme;
     const missingProject = !viewerData.project && !isExternalSource;
 
-    if (isWmsMode && viewerData.theme) {
-      viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
-      viewerData.loading = false;
-      applyTranslations();
-      return;
-    }
-
     if (isWfsMode && viewerData.theme) {
       viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
       viewerData.loading = false;
@@ -586,12 +580,13 @@
         const newTpl = isWfsMode ? base : appendSid(base);
         viewerData.tileTemplate = newTpl;
 
+        const wmsLayerParam = viewerData.theme ? `theme:${viewerData.theme}` : (viewerData.layer || '');
         const newLabel = isExternalSource
-          ? `${window.location.origin}${base}${isWmsMode ? `&LAYERS=${encodeURIComponent(viewerData.layer || '')}` : ''}`
+          ? `${window.location.origin}${base}${isWmsMode ? `&LAYERS=${encodeURIComponent(wmsLayerParam)}` : ''}`
           : (isWfsMode
             ? `${window.location.origin}${base}&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=${encodeURIComponent(viewerData.layer || '')}&outputFormat=application/json`
             : (isWmsMode
-              ? `${window.location.origin}${base}&LAYERS=${encodeURIComponent(viewerData.layer || '')}`
+              ? `${window.location.origin}${base}&LAYERS=${encodeURIComponent(wmsLayerParam)}`
               : newTpl.replace('{z}', '{z}')));
 
         viewerData.tileTemplateLabel = newLabel;
@@ -1389,7 +1384,7 @@
     // --- Create tile layer ---
     if (isWmsMode) {
       const wmsBaseUrl = viewerData.tileTemplate;
-      const wmsLayers = viewerData.layer ? String(viewerData.layer) : '';
+      const wmsLayers = viewerData.theme ? `theme:${viewerData.theme}` : (viewerData.layer ? String(viewerData.layer) : '');
       if (!wmsBaseUrl || !wmsLayers) {
         viewerData.messages.push({ type: 'error', key: 'viewer.error.missingLayerOrTheme' });
         renderInfo();

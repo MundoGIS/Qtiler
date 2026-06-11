@@ -402,10 +402,11 @@ const ORIGO_PREVIEW_HTML = `<!DOCTYPE html>
 
     if (includeWms) {
       const srcName = 'Qtiler_' + pKey + '_WMS';
+      const wmsLayerName = isThemeMode ? ('theme:' + layerName) : layerName;
       config.source[srcName] = {
         url: origin + '/wms?project=' + encodeURIComponent(projectId),
         type: 'WMS',
-        params: { LAYERS: layerName }
+        params: { LAYERS: wmsLayerName }
       };
       config.layers.push({
         name: layerName,
@@ -413,7 +414,7 @@ const ORIGO_PREVIEW_HTML = `<!DOCTYPE html>
         group,
         source: srcName,
         type: 'WMS',
-        sourceParams: { LAYERS: layerName },
+        sourceParams: { LAYERS: wmsLayerName },
         visible: true,
         maxZoom: MAX_ORIGO_ZOOM
       });

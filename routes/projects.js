@@ -89,7 +89,8 @@ export const registerProjectRoutes = ({
   tileRendererPool,
   logProjectEvent,
   buildPublicProjectsListing,
-  resolvePublicProject
+  resolvePublicProject,
+  filterPublicProjectLayersForRequest = (_req, _projectId, layers) => layers
 }) => {
 
   const parseBool = (value, fallback = false) => {
@@ -1716,6 +1717,9 @@ export const registerProjectRoutes = ({
                   });
                   existingLayerNames.add(syntheticName);
                 }
+              }
+              if (parsed && typeof parsed === 'object' && Array.isArray(parsed.layers)) {
+                parsed.layers = filterPublicProjectLayersForRequest(req, req.params.id, parsed.layers);
               }
               return res.status(200).json(stripProjectPathsAndSecrets(parsed));
             }

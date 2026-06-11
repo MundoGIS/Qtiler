@@ -417,7 +417,8 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
           bboxNode = `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`;
         }
       }
-      return `<Layer queryable="1"><Name>${name}</Name><Title>${title}</Title>${crsNodes}${bboxNode}</Layer>`;
+      const queryable = l.queryable === false ? "0" : "1";
+      return `<Layer queryable="${queryable}"><Name>${name}</Name><Title>${title}</Title>${crsNodes}${bboxNode}</Layer>`;
     })
     .join("");
 
@@ -486,7 +487,7 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
     const raw = fs.readFileSync(idxPath, "utf8");
     const parsed = JSON.parse(raw);
     const entries = Array.isArray(parsed?.layers) ? parsed.layers : [];
-    return entries
+    const normalLayers = entries
       .filter((e) => e && (e.kind || "layer") === "layer")
       .map((e) => {
         const name = String(e.name || e.layer || "").trim();
@@ -496,9 +497,50 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
         const layerCrs = normalizeCrs(e.layer_crs) || null;
         const supported = Array.from(new Set([tileCrs, layerCrs, "EPSG:4326", "EPSG:3857"].filter(Boolean)));
         const bbox = Array.isArray(e.extent_wgs84) && e.extent_wgs84.length === 4 ? e.extent_wgs84 : null;
-        return { name, title, crs: supported, bbox };
+        return { name, title, crs: supported, bbox, queryable: true };
       })
       .filter(Boolean);
+    const projectCrs = Array.from(new Set([
+      normalizeCrs(parsed?.tile_crs || parsed?.crs),
+      normalizeCrs(parsed?.project_crs),
+      "EPSG:4326",
+      "EPSG:3857"
+    ].filter(Boolean)));
+    const projectBbox = Array.isArray(parsed?.extent_wgs84) && parsed.extent_wgs84.length === 4
+      ? parsed.extent_wgs84
+      : (normalLayers.find((layer) => Array.isArray(layer.bbox) && layer.bbox.length === 4)?.bbox || null);
+    const existingNames = new Set(normalLayers.map((layer) => String(layer.name || '')).filter(Boolean));
+    const themeEntries = [
+      ...(Array.isArray(parsed?.themes) ? parsed.themes : []),
+      ...entries.filter((e) => e && (e.kind || '').toLowerCase() === 'theme')
+    ];
+    const themeLayers = themeEntries
+      .map((theme) => {
+        const themeName = String(theme?.theme || theme?.name || theme?.id || theme).trim();
+        if (!themeName) return null;
+        const name = `theme:${themeName}`;
+        if (existingNames.has(name)) return null;
+        existingNames.add(name);
+        const title = String(theme?.title || themeName);
+        const themeCrs = Array.from(new Set([
+          normalizeCrs(theme?.tile_crs || theme?.crs),
+          normalizeCrs(theme?.project_crs),
+          ...projectCrs
+        ].filter(Boolean)));
+        return {
+          name,
+          title,
+          crs: themeCrs,
+          bbox: Array.isArray(theme?.extent_wgs84) && theme.extent_wgs84.length === 4
+            ? theme.extent_wgs84
+            : (Array.isArray(theme?.project_extent_wgs84) && theme.project_extent_wgs84.length === 4 ? theme.project_extent_wgs84 : projectBbox),
+          queryable: false,
+          isTheme: true,
+          themeName
+        };
+      })
+      .filter(Boolean);
+    return [...normalLayers, ...themeLayers];
   } catch {
     return [];
   }
@@ -519,7 +561,8 @@ export const registerWmsRoutes = ({
   tileGridDir,
   tileRendererPool,
   ensureProjectAccessFromQuery,
-  findProjectById
+  findProjectById,
+  isPublicLayerExcludedForRequest = () => false
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
 
@@ -564,7 +607,8 @@ export const registerWmsRoutes = ({
 
       const requestUpper = request.toUpperCase();
       if (requestUpper === "GETCAPABILITIES") {
-        const layers = readProjectIndexLayers({ cacheDir, projectId });
+        const layers = readProjectIndexLayers({ cacheDir, projectId })
+          .filter((layer) => !isPublicLayerExcludedForRequest(req, projectId, layer?.name, [layer?.themeName, layer?.title]));
         const supportedCrs = readSupportedCrsFromTileGrids({ tileGridDir });
         const mergedLayers = layers.map((layer) => {
           const localCrs = Array.isArray(layer.crs) ? layer.crs : [];
@@ -572,12 +616,20 @@ export const registerWmsRoutes = ({
         });
 
         // Optional: return capabilities for a single layer only.
+        const requestedTheme = String(getQueryCI(req, 'MAP_THEME') || getQueryCI(req, 'THEME') || '').trim();
         const requestedLayer = String(getQueryCI(req, 'layer') || getQueryCI(req, 'LAYER') || '').trim();
-        const requestedLayer2 = requestedLayer || String(getQueryCI(req, 'LAYERS') || '').split(',')[0].trim();
+        const requestedLayer2 = requestedTheme
+          ? `theme:${requestedTheme.replace(/^theme:/i, '').trim()}`
+          : (requestedLayer || String(getQueryCI(req, 'LAYERS') || '').split(',')[0].trim());
         let outLayers = mergedLayers;
         if (requestedLayer2) {
           const exact = mergedLayers.filter((l) => String(l?.name ?? '') === requestedLayer2);
-          if (exact.length) outLayers = exact;
+          if (exact.length) {
+            outLayers = exact;
+          } else if (!/^theme:/i.test(requestedLayer2)) {
+            const themeExact = mergedLayers.filter((l) => String(l?.name ?? '') === `theme:${requestedLayer2}`);
+            if (themeExact.length) outLayers = themeExact;
+          }
         }
 
         // Include the required `project` parameter in the advertised endpoint so clients that
@@ -607,6 +659,10 @@ export const registerWmsRoutes = ({
         const layerName = String(getQueryCI(req, "LAYER") || "").trim();
         if (!layerName) {
           res.status(400).type("application/xml").send(wmsExceptionXml("LAYER is required"));
+          return;
+        }
+        if (isPublicLayerExcludedForRequest(req, projectId, layerName)) {
+          res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
 
@@ -681,6 +737,10 @@ export const registerWmsRoutes = ({
         const queryLayers = parseCsv(getQueryCI(req, "QUERY_LAYERS") || getQueryCI(req, "LAYERS"));
         if (!queryLayers.length) {
           res.status(400).type("application/xml").send(wmsExceptionXml("QUERY_LAYERS is required"));
+          return;
+        }
+        if (queryLayers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+          res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
 
@@ -794,6 +854,10 @@ export const registerWmsRoutes = ({
         }
 
         const queryLayers = parseCsv(getQueryCI(req, "LAYERS"));
+        if (queryLayers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+          res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
+          return;
+        }
 
         let tmpDir;
         try {
@@ -880,6 +944,14 @@ export const registerWmsRoutes = ({
         mapTheme = String(layers[0]).slice('theme:'.length).trim();
         layers = [];
       }
+      if (mapTheme && isPublicLayerExcludedForRequest(req, projectId, `theme:${mapTheme}`, [mapTheme])) {
+        res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
+        return;
+      }
+      if (layers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+        res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
+        return;
+      }
       if (!layers.length && !mapTheme) {
         // QWC2 MapFilter sends a GetMap with empty LAYERS as a "validation" probe
         // when no filters are active. Return a transparent 1×1 PNG so it succeeds.
@@ -926,6 +998,10 @@ export const registerWmsRoutes = ({
         }
       } catch {
         // ignore mapping failures and continue with original layers
+      }
+      if (layers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+        res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
+        return;
       }
       const presets = isTileSized ? loadTileMatrixPresetsForCrs({ tileGridDir, crs }) : [];
       let cacheTarget = null;

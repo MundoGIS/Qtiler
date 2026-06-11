@@ -759,6 +759,7 @@ app.get('/searchable-layers', (req, res) => {
       if (config && config.layers) {
         for (const layerName in config.layers) {
           const layerConfig = config.layers[layerName];
+          if (layerConfig.publicExcluded === true || layerConfig.excluded === true) continue;
           if (layerConfig.wfsSearchable === true) {
             const searchableConfig = searchableLayersMap.get(layerName);
             if (searchableConfig) {
@@ -2632,6 +2633,7 @@ const buildProjectConfigPatch = (input = {}) => {
       // WFS: allow admins to toggle editability per vector layer.
       if (typeof info.wfsEditable === "boolean") layerPatch.wfsEditable = info.wfsEditable;
       if (typeof info.wfsSearchable === "boolean") layerPatch.wfsSearchable = info.wfsSearchable;
+      if (typeof info.publicExcluded === "boolean") layerPatch.publicExcluded = info.publicExcluded;
       
       if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
         if (info.schedule === null) {
@@ -5597,6 +5599,62 @@ const deriveProjectAccess = (snapshot, user, projectId) => {
   };
 };
 
+const normalizeLayerAccessToken = (value) => String(value || '').trim().toLowerCase();
+
+const getPublicExcludedLayerTokens = (projectId) => {
+  const config = readProjectConfig(projectId, { useCache: false }) || {};
+  const layerConfig = config.layers && typeof config.layers === 'object' ? config.layers : {};
+  const tokens = new Set();
+  for (const [name, entry] of Object.entries(layerConfig)) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (entry.publicExcluded !== true && entry.excluded !== true) continue;
+    const raw = String(name || '').trim();
+    if (!raw) continue;
+    tokens.add(normalizeLayerAccessToken(raw));
+  }
+  return tokens;
+};
+
+const isProjectLayerPublicExcluded = (projectId, layerName, aliases = []) => {
+  const tokens = getPublicExcludedLayerTokens(projectId);
+  if (!tokens.size) return false;
+  const primary = String(layerName || '').trim();
+  const themeLookup = /^theme:/i.test(primary);
+  const candidates = [primary, ...(themeLookup ? [] : (Array.isArray(aliases) ? aliases : []))]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return candidates.some((value) => tokens.has(normalizeLayerAccessToken(value)));
+};
+
+const shouldApplyPublicLayerExclusionsForRequest = (req, projectId) => {
+  const authEnabled = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
+  if (!authEnabled || req?.user) return false;
+  const accessInfo = deriveProjectAccess(readProjectAccessSnapshot(), null, projectId);
+  return accessInfo?.public === true && accessInfo?.allowed === true;
+};
+
+const shouldApplyPublicLayerExclusionsForAccess = (accessInfo) => {
+  if (!accessInfo || accessInfo.public !== true) return false;
+  return accessInfo.admin !== true
+    && accessInfo.viaAssignment !== true
+    && accessInfo.viaRole !== true
+    && accessInfo.viaUser !== true;
+};
+
+const isPublicLayerExcludedForRequest = (req, projectId, layerName, aliases = []) => {
+  return shouldApplyPublicLayerExclusionsForRequest(req, projectId)
+    && isProjectLayerPublicExcluded(projectId, layerName, aliases);
+};
+
+const filterPublicProjectLayersForRequest = (req, projectId, layers) => {
+  if (!Array.isArray(layers) || !shouldApplyPublicLayerExclusionsForRequest(req, projectId)) return layers;
+  return layers.filter((layer) => {
+    const name = String(layer?.name || layer?.id || layer?.layer || '').trim();
+    const aliases = [layer?.themeName, layer?.theme, layer?.title, layer?.id, layer?.layer].filter(Boolean);
+    return !isProjectLayerPublicExcluded(projectId, name, aliases);
+  });
+};
+
 const cloneIndexEntry = (entry) => {
   if (!entry || typeof entry !== "object") return null;
   try {
@@ -5609,6 +5667,8 @@ const cloneIndexEntry = (entry) => {
 const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   if (!project) return null;
   const projectId = project.id;
+  const accessInfo = access && typeof access === "object" ? access : { public: true, allowed: true };
+  const hidePublicExcludedLayers = shouldApplyPublicLayerExclusionsForAccess(accessInfo);
   const indexData = loadProjectIndexData(projectId);
   const rawLayers = Array.isArray(indexData.layers) ? indexData.layers : [];
   const layers = [];
@@ -5617,6 +5677,12 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
     if (!entry || !entry.name) continue;
     const rawKindToken = typeof entry.kind === "string" ? entry.kind.toLowerCase() : (entry.theme ? "theme" : "layer");
     const kindToken = rawKindToken === "theme" || /^theme:/i.test(String(entry.name || '').trim()) ? "theme" : rawKindToken;
+    if (hidePublicExcludedLayers) {
+      const lookupName = kindToken === "theme"
+        ? `theme:${normalizeThemeName(entry.theme || String(entry.name || '').replace(/^theme:/i, ''))}`
+        : entry.name;
+      if (isProjectLayerPublicExcluded(projectId, lookupName, [entry.layer, entry.title, entry.id])) continue;
+    }
     const clone = cloneIndexEntry(entry) || {};
     clone.kind = kindToken;
     clone.projectId = projectId;
@@ -5637,7 +5703,6 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   const wmsUrl = `/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
   const wfsUrl = `/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(projectId)}`;
   const cacheUpdatedAt = indexData.updated || indexData.modified || indexData.generatedAt || indexData.created || null;
-  const accessInfo = access && typeof access === "object" ? access : { public: true, allowed: true };
 
   for (const entry of [...layers, ...themes]) {
     if (!entry || typeof entry !== "object") continue;
@@ -6129,7 +6194,8 @@ registerProjectRoutes({
   runRecacheForProject,
   logProjectEvent,
   buildPublicProjectsListing,
-  resolvePublicProject
+  resolvePublicProject,
+  filterPublicProjectLayersForRequest
 });
 
 registerWmsRoutes({
@@ -6138,7 +6204,8 @@ registerWmsRoutes({
   tileGridDir,
   tileRendererPool,
   ensureProjectAccessFromQuery,
-  findProjectById
+  findProjectById,
+  isPublicLayerExcludedForRequest
 });
 
 registerWfsRoutes({
@@ -6149,7 +6216,8 @@ registerWfsRoutes({
   security,
   findProjectById,
   readProjectConfig,
-  logProjectEvent
+  logProjectEvent,
+  isPublicLayerExcludedForRequest
 });
 
 // generate-cache -> spawn para proceso largo (pasar args)
@@ -7141,6 +7209,7 @@ const buildWmtsInventory = (options = {}) => {
   const filterLayerRaw = options.filterLayerName != null ? String(options.filterLayerName).trim() : "";
   const filterLayerNorm = filterLayerRaw ? normalizeIdentifier(filterLayerRaw, "layer") : "";
   const projectAccessFilter = options.projectAccessFilter instanceof Set ? options.projectAccessFilter : null;
+  const excludeLayerFilter = typeof options.excludeLayerFilter === 'function' ? options.excludeLayerFilter : null;
   const projects = fs.existsSync(cacheDir)
     ? fs.readdirSync(cacheDir).filter((dir) => fs.statSync(path.join(cacheDir, dir)).isDirectory())
     : [];
@@ -7214,6 +7283,8 @@ const buildWmtsInventory = (options = {}) => {
       const layerName = isTheme ? normalizeThemeName(rawLayerName) : rawLayerName;
       const rawStorageName = layerEntry.layer || layerEntry.theme || layerEntry.name || layerName;
       const storageName = isTheme ? normalizeThemeName(rawStorageName) : rawStorageName;
+
+      if (excludeLayerFilter && excludeLayerFilter({ projectId: project, layerEntry, layerName, storageName, isTheme })) continue;
 
       if (filterLayerRaw) {
         const candidateRaw = String(layerName ?? '').trim();
@@ -8065,7 +8136,15 @@ app.get("/cache/:project/index.json", ensureProjectAccess((req) => req.params.pr
           const layers = Array.isArray(data.layers) ? data.layers : [];
           // Compute a cheap/accurate "has_tiles" boolean for UI.
           // This avoids relying on tile_count, which may be absent for on-demand caches.
-          data.layers = layers.map((entry) => {
+          data.layers = layers.filter((entry) => {
+            if (!entry || typeof entry !== 'object') return true;
+            const rawKindToken = typeof entry.kind === 'string' ? entry.kind.toLowerCase() : (entry.theme ? 'theme' : 'layer');
+            const isThemeEntry = rawKindToken === 'theme' || /^theme:/i.test(String(entry.name || '').trim());
+            const lookupName = isThemeEntry
+              ? `theme:${normalizeThemeName(entry.theme || String(entry.name || '').replace(/^theme:/i, ''))}`
+              : String(entry.name || entry.layer || '').trim();
+            return !isPublicLayerExcludedForRequest(req, p, lookupName, [entry.layer, entry.title, entry.id]);
+          }).map((entry) => {
             if (!entry || typeof entry !== 'object') return entry;
             const out = { ...entry };
 
@@ -9206,6 +9285,9 @@ function processRenderQueue() {
 app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, theme, z, x, y } = req.params;
   const sid = normalizeViewerSessionId(req.query && req.query.sid);
+  if (isPublicLayerExcludedForRequest(req, project, `theme:${theme}`, [theme])) {
+    return res.status(403).send('Layer is not publicly available');
+  }
   
   // Evitar caché agresiva del navegador para tiles dinámicas
   try { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } catch (e) {}
@@ -9240,6 +9322,9 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
 
   // Si no hay temas y existe la capa, usar fallback forzado
   if (!hasThemes && hasLayerWithName) {
+    if (isPublicLayerExcludedForRequest(req, project, theme)) {
+      return res.status(403).send('Layer is not publicly available');
+    }
     const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
     logProjectEvent(project, `Theme '${theme}' not defined; forced fallback to layer '${theme}' -> ${fallbackFile}`);
     
@@ -9336,6 +9421,9 @@ app.post('/api/print', requireAdmin, async (req, res) => {
 
 app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, layer } = req.params;
+  if (isPublicLayerExcludedForRequest(req, project, layer)) {
+    return res.status(403).send('Layer is not publicly available');
+  }
   const findQ = (name) => {
     const low = String(name).toLowerCase();
     for (const key of Object.keys(req.query || {})) {
@@ -9466,7 +9554,11 @@ app.get("/wmts", (req, res, next) => {
         const inventory = buildWmtsInventory({
           ...(filterProjectId ? { filterProjectId } : {}),
           ...(filterLayer ? { filterLayerName: filterLayer } : {}),
-          ...(projectAccessFilter ? { projectAccessFilter } : {})
+          ...(projectAccessFilter ? { projectAccessFilter } : {}),
+          excludeLayerFilter: ({ projectId, layerEntry, layerName, storageName, isTheme }) => {
+            const publicName = isTheme ? `theme:${layerName}` : layerName;
+            return isPublicLayerExcludedForRequest(req, projectId, publicName, [storageName, layerEntry?.name, layerEntry?.layer, layerEntry?.theme, layerEntry?.title]);
+          }
         });
         const { layers, tileMatrixSets } = inventory;
 
@@ -9732,6 +9824,9 @@ app.get("/wmts", (req, res, next) => {
     const projectId = String(layerEntry.projectId); // Forzar string para path.join
     const targetName = layerEntry.storage ? layerEntry.storage.name : layerEntry.layerName;
     const isTheme = layerEntry.storage ? layerEntry.storage.type === 'theme' : false;
+    if (isPublicLayerExcludedForRequest(req, projectId, isTheme ? `theme:${layerEntry.layerName}` : layerEntry.layerName, [targetName, layerEntry.identifier])) {
+      return res.status(403).send('Layer is not publicly available');
+    }
 
     // Verificar acceso al proyecto
     // Normalizar TileMatrix: aceptar formatos como 'EPSG:3006:5' o '3006:5' y tomar la última parte

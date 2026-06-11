@@ -151,6 +151,22 @@ const safeXmlName = (value) => {
   return out;
 };
 
+const wfsTypeMatches = (featureType, requestedType) => {
+  const requested = normalizeTypeName(requestedType);
+  if (!featureType || !requested) return false;
+  const reqSafe = safeXmlName(requested);
+  const reqNorm = requested.toLowerCase();
+  const reqSafeNorm = reqSafe.toLowerCase();
+  const candidates = [featureType.name, featureType.rawName, featureType.title, featureType.layer, featureType.id]
+    .map((value) => normalizeTypeName(value))
+    .filter(Boolean);
+  return candidates.some((candidate) => {
+    const candidateNorm = candidate.toLowerCase();
+    const candidateSafeNorm = safeXmlName(candidate).toLowerCase();
+    return candidateNorm === reqNorm || candidateSafeNorm === reqSafeNorm;
+  });
+};
+
 const normalizeSrsName = (value) => {
   if (value == null) return null;
   const raw = String(Array.isArray(value) ? value[0] : value).trim();
@@ -275,7 +291,8 @@ export const registerWfsRoutes = ({
   security,
   findProjectById,
   readProjectConfig,
-  logProjectEvent
+  logProjectEvent,
+  isPublicLayerExcludedForRequest = () => false
 }) => {
   const pickBestWfsVersion = (version, acceptVersions) => {
     const v = String(version || '').trim();
@@ -756,6 +773,7 @@ export const registerWfsRoutes = ({
           project_path: project.file
         });
         let featureTypes = Array.isArray(list?.featureTypes) ? list.featureTypes : [];
+        featureTypes = featureTypes.filter((ft) => !isPublicLayerExcludedForRequest(req, projectId, ft?.rawName || ft?.title || ft?.name, [ft?.name, ft?.rawName, ft?.title]));
 
         // Optional: allow filtering capabilities to a single typename.
         const requestedType = normalizeTypeName(
@@ -766,14 +784,7 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'LAYER')
         );
         if (requestedType) {
-          const reqSafe = safeXmlName(requestedType);
-          const filtered = featureTypes.filter((ft) => {
-            if (!ft) return false;
-            const byName = safeXmlName(ft.name) === reqSafe;
-            const byRaw = safeXmlName(ft.rawName || ft.title) === reqSafe;
-            return byName || byRaw;
-          });
-          if (filtered.length) featureTypes = filtered;
+          featureTypes = featureTypes.filter((ft) => wfsTypeMatches(ft, requestedType));
         }
 
         const version = pickBestWfsVersion(
@@ -787,7 +798,12 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'API_KEY') ||
           ''
         ).trim();
-        let serviceUrl = `${getRequestBaseUrl(req)}/wfs?project=${encodeURIComponent(projectId)}`;
+        let serviceUrl = req.qtilerWfsScopedBaseUrl
+          ? `${req.qtilerWfsScopedBaseUrl}?SERVICE=WFS`
+          : `${getRequestBaseUrl(req)}/wfs?SERVICE=WFS&project=${encodeURIComponent(projectId)}`;
+        if (requestedType) {
+          serviceUrl += `&TYPENAME=${encodeURIComponent(requestedType)}`;
+        }
         // If capabilities were requested with api_key, propagate it in the
         // advertised OnlineResource URLs (GetFeature/Describe/Transaction).
         // QGIS WFS editing uses the Transaction POST endpoint from capabilities;
@@ -818,6 +834,10 @@ export const registerWfsRoutes = ({
       const typeName = normalizeTypeName(getQueryCI(req, 'TYPENAME') || getQueryCI(req, 'TYPENAMES'));
       if (!typeName) {
         res.status(400).type('application/xml').send(wfsExceptionXml('TYPENAME is required', { code: 'MissingParameterValue' }));
+        return;
+      }
+      if (isPublicLayerExcludedForRequest(req, projectId, typeName)) {
+        res.status(403).type('application/xml').send(wfsExceptionXml('Layer is not publicly available', { code: 'SecurityError' }));
         return;
       }
       let tmpDir;
@@ -858,6 +878,10 @@ export const registerWfsRoutes = ({
       const typeName = normalizeTypeName(getQueryCI(req, 'TYPENAME') || getQueryCI(req, 'TYPENAMES'));
       if (!typeName) {
         res.status(400).type('application/xml').send(wfsExceptionXml('TYPENAME is required', { code: 'MissingParameterValue' }));
+        return;
+      }
+      if (isPublicLayerExcludedForRequest(req, projectId, typeName)) {
+        res.status(403).type('application/xml').send(wfsExceptionXml('Layer is not publicly available', { code: 'SecurityError' }));
         return;
       }
 
@@ -1127,6 +1151,19 @@ export const registerWfsRoutes = ({
     return out;
   };
 
+  const buildLayerScopedWfsQuery = (req, projectId, layerName, requestFallback = 'GetCapabilities') => {
+    const project = String(projectId || '').trim();
+    const layer = String(layerName || '').trim();
+    if (!project || !layer) return null;
+    return {
+      ...(req.query || {}),
+      SERVICE: 'WFS',
+      REQUEST: String(req.query?.REQUEST || req.query?.request || requestFallback),
+      project,
+      TYPENAME: layer
+    };
+  };
+
   const inferGeoJsonTypeFromCoordinates = (coordinates) => {
     if (!Array.isArray(coordinates)) return null;
     const c0 = coordinates[0];
@@ -1171,6 +1208,15 @@ export const registerWfsRoutes = ({
     console.log('[DEBUG-GET-WFS-ID]', req.originalUrl);
     const resolved = resolveDatasetRef(req.params.dataset);
     const featureId = String(req.params.featureId || '').trim();
+    const requestUpper = String(req.query?.REQUEST || req.query?.request || '').trim().toUpperCase();
+    if (resolved?.projectId && !resolved.layerName && featureId && (!requestUpper || ['GETCAPABILITIES', 'DESCRIBEFEATURETYPE', 'GETFEATURE'].includes(requestUpper))) {
+      const mergedReq = {
+        ...req,
+        qtilerWfsScopedBaseUrl: `${getRequestBaseUrl(req)}/wfs/${encodeURIComponent(resolved.projectId)}/${encodeURIComponent(featureId)}`,
+        query: buildLayerScopedWfsQuery(req, resolved.projectId, featureId)
+      };
+      return handleWfsKvp(mergedReq, res);
+    }
     if (!resolved || !resolved.projectId || !resolved.layerName) {
       res.status(400).type('application/xml').send(wfsExceptionXml('Invalid dataset reference', { code: 'InvalidParameterValue' }));
       return;

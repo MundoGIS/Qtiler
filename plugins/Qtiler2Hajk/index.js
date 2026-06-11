@@ -127,6 +127,11 @@ const normalizeThemeName = (value) => {
   return name;
 };
 
+const buildThemeWmtsUrl = (baseUrl, projectId, themeName, tileMatrix = false) => {
+  const prefix = `${String(baseUrl || '').replace(/\/+$/, '')}/wmts/${encodeURIComponent(String(projectId || ''))}/themes/${encodeURIComponent(String(themeName || ''))}`;
+  return tileMatrix ? `${prefix}/{TileMatrix}/{TileCol}/{TileRow}.png` : `${prefix}/{z}/{x}/{y}.png`;
+};
+
 const sanitizeFileToken = (value) => String(value || '').replace(/[^a-zA-Z0-9._-]/g, '_');
 
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -2767,7 +2772,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         if (presetId && hasPresetMatrices) {
           const safeName = `wmts:${bg.sourceProjectId}/${isThemeBackground ? `theme:${bgThemeName}` : bgName}`;
           const wmtsUrl = isThemeBackground
-            ? `${qtilerBaseUrl}/wmts/${encodeURIComponent(bg.sourceProjectId)}/themes/${encodeURIComponent(bgThemeName)}/{TileMatrix}/{TileCol}/{TileRow}.png`
+            ? buildThemeWmtsUrl(qtilerBaseUrl, bg.sourceProjectId, bgThemeName, true)
             : `${qtilerBaseUrl}/wmts/${encodeURIComponent(bg.sourceProjectId)}/${encodeURIComponent(wmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`;
           const resolutions = preset.matrices
             .map((m) => Number(m?.resolution))
@@ -3185,6 +3190,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const globals = Array.isArray(themes.backgroundLayers) ? themes.backgroundLayers : [];
     for (const bg of globals) {
       if (!bg || typeof bg !== 'object') continue;
+      const bgName = String(bg.name || '').trim();
+      const themeMatch = bgName.match(/^wmts:([^/]+)\/theme:(.+)$/i);
+      if (themeMatch && typeof bg.url === 'string') {
+        const originMatch = bg.url.match(/^(https?:\/\/[^/]+)/i);
+        if (originMatch) {
+          try {
+            bg.url = buildThemeWmtsUrl(originMatch[1], decodeURIComponent(themeMatch[1]), normalizeThemeName(decodeURIComponent(themeMatch[2])), true);
+          } catch {
+            bg.url = buildThemeWmtsUrl(originMatch[1], themeMatch[1], normalizeThemeName(themeMatch[2]), true);
+          }
+        }
+      }
       if (typeof bg.thumbnail === 'string') bg.thumbnail = toAssetRelative(bg.thumbnail);
     }
 
@@ -4521,7 +4538,7 @@ ${mapIcon}
           const srcKey = `wmts_bg_${layerNameSafe}`;
           source[srcKey] = {
             url: isThemeBackground
-              ? `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/themes/${encodeURIComponent(bgThemeName)}/{z}/{x}/{y}.png`
+              ? buildThemeWmtsUrl(baseUrl, srcProjId, bgThemeName)
               : `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(wmtsLayerName)}/{z}/{x}/{y}.png`,
             type: 'XYZ',
             projection: bgTileGrid.crs || projCode
@@ -5656,7 +5673,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     if (wmtsBgLayerName) {
       sourceMap[wmtsBgLayerName] = {
         url: isThemeBgLayer
-          ? `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/themes/${encodeURIComponent(bgThemeName)}/{z}/{x}/{y}.png`
+          ? buildThemeWmtsUrl(baseUrl, bgProject, bgThemeName)
           : `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(previewWmtsLayerName)}/{z}/{x}/{y}.png`,
         type: 'XYZ',
         projection: (bgTileGrid && bgTileGrid.crs) || projCode

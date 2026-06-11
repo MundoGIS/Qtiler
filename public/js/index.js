@@ -6428,7 +6428,7 @@
           });
 
           const isVectorLayer = isVectorLayerLike(l);
-          const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&TYPENAME=${encodeURIComponent(safeXmlName(l.name))}`, project);
+          const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs/${encodeURIComponent(project.id)}/${encodeURIComponent(l.name)}?SERVICE=WFS&REQUEST=GetCapabilities`, project);
           const copyWfsBtn = makeIconButton(tr('Copy WFS URL'), 'wfs', () => {
             navigator.clipboard.writeText(wfsCapabilitiesUrl).then(() => {
               showStatus(tr('WFS URL copied to clipboard'));
@@ -6820,7 +6820,7 @@
               });
             });
 
-            const themeWmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`, project);
+            const themeWmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&THEME=${encodeURIComponent(theme.name)}`, project);
             const copyThemeWmsBtn = makeIconButton(tr('Copy WMS URL'), 'wms', () => {
               navigator.clipboard.writeText(themeWmsCapabilitiesUrl).then(() => {
                 showStatus(tr('WMS URL copied to clipboard'));

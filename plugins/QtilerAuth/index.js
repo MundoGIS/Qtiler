@@ -739,6 +739,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         name,
         wfsEditable: row.wfsEditable === true,
         wfsSearchable: row.wfsSearchable === true,
+        publicExcluded: row.publicExcluded === true || row.excluded === true,
         search: searchEntry
       };
     });
@@ -756,7 +757,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       nextLayers[name] = {
         ...previous,
         wfsEditable: row.wfsEditable === true,
-        wfsSearchable: row.wfsSearchable === true
+        wfsSearchable: row.wfsSearchable === true,
+        publicExcluded: row.publicExcluded === true || row.excluded === true
       };
       if (row.wfsSearchable === true && row.search && typeof row.search === 'object') {
         searchableRows.push({ ...row.search, name });

@@ -491,8 +491,9 @@ const renderLayerGroup = (titleKey, items, isPublic) => {
 
     const layerParam = item.kind === 'theme' ? 'theme' : 'layer';
     const wmtsCapabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`, isPublic);
-    const wmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&layer=${encodeURIComponent(item.name)}`, isPublic);
-    const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}`, isPublic);
+    const wmsLayerParam = item.kind === 'theme' ? 'THEME' : 'layer';
+    const wmsCapabilitiesUrl = withApiKey(`${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${encodeURIComponent(item.projectId)}&${wmsLayerParam}=${encodeURIComponent(item.name)}`, isPublic);
+    const wfsCapabilitiesUrl = withApiKey(`${window.location.origin}/wfs/${projectIdEnc}/${nameEnc}?SERVICE=WFS&REQUEST=GetCapabilities`, isPublic);
 
     const viewerBase = withApiKey(`/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}`, isPublic);
     const viewerWms = withApiKey(`/viewer.html?project=${encodeURIComponent(item.projectId)}&${layerParam}=${encodeURIComponent(item.name)}&service=wms`, isPublic);

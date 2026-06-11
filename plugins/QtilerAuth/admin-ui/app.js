@@ -257,7 +257,11 @@ async function loadSearchableCatalog() {
         api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`)
       ]);
       const allLayers = Array.isArray(layersResponse?.layers) ? layersResponse.layers : [];
-      const vectorLayers = allLayers.filter((l) => l.type === 'WFS' || l.kind === 'vector' || !!l.geometry_type);
+      const vectorLayers = allLayers.filter((l) => {
+        const isThemeLayer = l?.isTheme === true || l?.kind === 'theme' || l?.type === 'THEME' || String(l?.name || '').startsWith('theme:');
+        return !isThemeLayer && (l?.type === 'WFS' || l?.kind === 'vector' || !!l?.geometry_type);
+      });
+      const projectLayers = allLayers.filter((l) => l && l.name);
       const layerPermissions = Array.isArray(searchableResponse?.layers) ? searchableResponse.layers : [];
       const permissionByName = new Map(layerPermissions.map((entry) => [String(entry?.name || ''), entry]));
       const attributeEntries = await Promise.all(vectorLayers.map(async (layer) => {
@@ -266,7 +270,7 @@ async function loadSearchableCatalog() {
       }));
       return {
         projectId,
-        layers: vectorLayers,
+        layers: projectLayers,
         searchable: layerPermissions.map((entry) => entry?.search).filter(Boolean),
         layerPermissions,
         permissionByName,
@@ -871,7 +875,7 @@ function renderLayerPermissions() {
     heading.textContent = project.name || projectId;
     const meta = document.createElement('p');
     meta.className = 'help';
-    meta.textContent = `${projectLayers.length} vector layer${projectLayers.length === 1 ? '' : 's'}`;
+    meta.textContent = `${projectLayers.length} layer${projectLayers.length === 1 ? '' : 's'}`;
     titleWrap.append(heading, meta);
 
     const saveBtn = document.createElement('button');
@@ -887,18 +891,21 @@ function renderLayerPermissions() {
     if (!projectLayers.length) {
       const empty = document.createElement('p');
       empty.className = 'help';
-      empty.textContent = 'No vector layers found.';
+      empty.textContent = 'No layers found.';
       list.appendChild(empty);
     } else {
       projectLayers.forEach((layer) => {
         const permission = layerPermissions.get(String(layer.name || '')) || layer || {};
         const config = permission.search || {};
+        const isThemeLayer = layer.isTheme === true || layer.kind === 'theme' || layer.type === 'THEME' || String(layer.name || '').startsWith('theme:');
+        const isVectorLayer = !isThemeLayer && (layer.type === 'WFS' || layer.kind === 'vector' || !!layer.geometry_type);
         const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
         const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
           ? layerMeta.nonGeometry
           : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
         const searchableEnabled = permission.wfsSearchable === true;
         const editableEnabled = permission.wfsEditable === true;
+        const publicExcludedEnabled = permission.publicExcluded === true || permission.excluded === true;
         const selectedSearch = pickPreferredAttribute(
           [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
           availableColumns
@@ -914,6 +921,7 @@ function renderLayerPermissions() {
         row.className = 'layer-permission-row';
         row.dataset.layerName = layer.name;
         row.dataset.geometryAttribute = selectedGeom;
+        row.dataset.vectorLayer = isVectorLayer ? '1' : '0';
 
         const layerName = document.createElement('div');
         const strong = document.createElement('strong');
@@ -922,12 +930,21 @@ function renderLayerPermissions() {
         small.textContent = layer.name;
         layerName.append(strong, small);
 
+        const excludeToggle = document.createElement('label');
+        excludeToggle.className = 'permission-chip';
+        const excludeInput = document.createElement('input');
+        excludeInput.type = 'checkbox';
+        excludeInput.className = 'exclude-check';
+        excludeInput.checked = publicExcludedEnabled;
+        excludeToggle.append(excludeInput, document.createTextNode('Exclude public'));
+
         const editToggle = document.createElement('label');
         editToggle.className = 'permission-chip';
         const editInput = document.createElement('input');
         editInput.type = 'checkbox';
         editInput.className = 'edit-check';
-        editInput.checked = editableEnabled;
+        editInput.checked = isVectorLayer && editableEnabled;
+        editInput.disabled = !isVectorLayer;
         editToggle.append(editInput, document.createTextNode('Edit'));
 
         const searchToggle = document.createElement('label');
@@ -935,11 +952,12 @@ function renderLayerPermissions() {
         const searchInput = document.createElement('input');
         searchInput.type = 'checkbox';
         searchInput.className = 'search-check';
-        searchInput.checked = searchableEnabled;
+        searchInput.checked = isVectorLayer && searchableEnabled;
+        searchInput.disabled = !isVectorLayer;
         searchToggle.append(searchInput, document.createTextNode('Search'));
 
         const searchControls = document.createElement('div');
-        searchControls.className = `search-config-row${searchableEnabled ? '' : ' is-hidden'}`;
+        searchControls.className = `search-config-row${isVectorLayer && searchableEnabled ? '' : ' is-hidden'}`;
 
         const columnOptions = availableColumns.length ? availableColumns : [''];
         const searchField = document.createElement('label');
@@ -981,7 +999,7 @@ function renderLayerPermissions() {
         });
 
         searchControls.append(searchField, idField, hintField);
-        row.append(layerName, editToggle, searchToggle, searchControls);
+        row.append(layerName, excludeToggle, editToggle, searchToggle, searchControls);
         list.appendChild(row);
       });
     }
@@ -990,14 +1008,17 @@ function renderLayerPermissions() {
       const rows = Array.from(list.querySelectorAll('.layer-permission-row'));
       const payload = rows.map((row) => {
         const layerName = String(row.dataset.layerName || '').trim();
-        const wfsEditable = !!row.querySelector('.edit-check')?.checked;
-        const wfsSearchable = !!row.querySelector('.search-check')?.checked;
+        const isVectorLayer = row.dataset.vectorLayer === '1';
+        const publicExcluded = !!row.querySelector('.exclude-check')?.checked;
+        const wfsEditable = isVectorLayer && !!row.querySelector('.edit-check')?.checked;
+        const wfsSearchable = isVectorLayer && !!row.querySelector('.search-check')?.checked;
         const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
         const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
         const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
         const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
         return {
           name: layerName,
+          publicExcluded,
           wfsEditable,
           wfsSearchable,
           search: wfsSearchable && searchAttribute && idAttribute
