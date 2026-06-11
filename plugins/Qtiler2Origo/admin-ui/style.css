@@ -1579,6 +1579,26 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   border-bottom: 1px solid #e5e7eb;
 }
 .Qtiler2Origo-layer-row:last-child { border-bottom: 0; }
+.Qtiler2Origo-layer-row.is-excluded .Qtiler2Origo-layer-row__main {
+  opacity: 0.55;
+}
+
+.Qtiler2Origo-layer-row__actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.Qtiler2Origo-layer-row__actions .button:has(input:disabled),
+.Qtiler2Origo-layer-row__actions .button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.Qtiler2Origo-layer-bulk-actions {
+  margin: 0 0 0.5rem;
+}
 
 .Qtiler2Origo-layer-row__check {
   flex: 0 0 18px;

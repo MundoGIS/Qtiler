@@ -690,6 +690,27 @@ a:focus {
   background: rgba(37, 99, 235, 0.12);
 }
 
+.layer-badge-vector,
+.layer-badge-vector-local {
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.layer-badge-raster,
+.layer-badge-raster-local {
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.35);
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.layer-badge-wms,
+.layer-badge-wmts {
+  color: #0f766e;
+  border-color: rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.12);
+}
+
 .layer-title-icon {
   display: inline-flex;
   align-items: center;
@@ -707,8 +728,26 @@ a:focus {
   border-color: rgba(37, 99, 235, 0.35);
 }
 
+.layer-title-icon.vector {
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.layer-title-icon.raster {
+  color: #7c3aed;
+  border-color: rgba(124, 58, 237, 0.35);
+  background: rgba(124, 58, 237, 0.12);
+}
+
 .layer-title-icon.wmts {
   color: var(--primary-600);
+}
+
+.layer-title-icon.wms {
+  color: #0f766e;
+  border-color: rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.12);
 }
 
 .layer-title-icon svg {

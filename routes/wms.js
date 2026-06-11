@@ -875,7 +875,12 @@ export const registerWmsRoutes = ({
       const transparent = toBool(getQueryCI(req, "TRANSPARENT"), true);
 
       let layers = parseCsv(getQueryCI(req, "LAYERS"));
-      if (!layers.length) {
+      let mapTheme = String(getQueryCI(req, "MAP_THEME") || getQueryCI(req, "THEME") || "").trim();
+      if (!mapTheme && layers.length === 1 && String(layers[0] || '').startsWith('theme:')) {
+        mapTheme = String(layers[0]).slice('theme:'.length).trim();
+        layers = [];
+      }
+      if (!layers.length && !mapTheme) {
         // QWC2 MapFilter sends a GetMap with empty LAYERS as a "validation" probe
         // when no filters are active. Return a transparent 1×1 PNG so it succeeds.
         const emptyPng = Buffer.from(
@@ -929,7 +934,7 @@ export const registerWmsRoutes = ({
           const tile = findAlignedTileForBbox({ preset, bbox, width, height });
           if (!tile) continue;
 
-          const layerKey = layers.join(',');
+          const layerKey = mapTheme ? `theme:${mapTheme}` : layers.join(',');
           const ext = format === 'image/png' ? 'png' : 'jpg';
           const crsSeg = safePathSegment(String(crs).toUpperCase());
           const projSeg = safePathSegment(projectId);
@@ -969,6 +974,7 @@ export const registerWmsRoutes = ({
             height,
             crs,
             layers,
+            theme: mapTheme || undefined,
             transparent,
             format
           });
@@ -1002,6 +1008,7 @@ export const registerWmsRoutes = ({
           height,
           crs,
           layers,
+          theme: mapTheme || undefined,
           transparent,
           format
         };

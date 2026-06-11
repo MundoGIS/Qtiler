@@ -787,18 +787,24 @@ def _resolve_layers(project, layer_name, theme_name):
         try:
             collection = project.mapThemeCollection()
             if collection and collection.hasMapTheme(theme_name):
-                # Obtener capas visibles del tema (lógica simplificada)
-                style = collection.mapThemeStyle(theme_name)
-                # Recuperar capas visibles es complejo en API PyQGIS pura sin GUI,
-                # a menudo se usa mapThemeVisibleLayers() si existe o se itera.
-                # Para simplificar, asumimos que si pasas theme, 
-                # QGIS Server/Desktop logic aplica.
-                # En standalone scripts, a veces es mejor renderizar por 'layers'.
-                # Si tienes una función robusta _resolve_theme_layers en tu script original, úsala aquí.
-                # Por brevedad, intentamos resolver nombres de capa.
-                pass
-        except: pass
-        # Si el soporte de temas es complejo, por ahora fallback a layer name
+                visible_layers = []
+                if hasattr(collection, 'mapThemeVisibleLayers'):
+                    visible_layers = collection.mapThemeVisibleLayers(theme_name) or []
+                if visible_layers:
+                    visible_ids = set()
+                    for layer in visible_layers:
+                        try:
+                            visible_ids.add(layer.id())
+                        except Exception:
+                            pass
+                    ordered = []
+                    try:
+                        ordered = [layer for layer in project.layerTreeRoot().layerOrder() if layer and layer.id() in visible_ids]
+                    except Exception:
+                        ordered = []
+                    return ordered or list(visible_layers)
+        except Exception:
+            pass
         
     if layer_name:
         layers = project.mapLayersByName(layer_name)
@@ -1687,14 +1693,12 @@ def process_task(params):
             def is_layer_editable(layer_name):
                 try:
                     cfg = _get_layer_cfg(layer_name)
-                    # Default to editable unless explicitly disabled.
-                    # DB permissions still apply at the provider level.
-                    if cfg and isinstance(cfg, dict) and cfg.get('wfsEditable') is False:
-                        return False
-                    return True
+                    if cfg and isinstance(cfg, dict):
+                        return cfg.get('wfsEditable') is True
+                    return False
                 except Exception:
                     pass
-                return True
+                return False
 
             # Iterate Transaction children: Insert/Update/Delete.
             for op in list(root):
@@ -3036,10 +3040,9 @@ def process_task(params):
         
         # Resolver capas
         layers_to_render = []
-        if params.get('theme'):
-            # TODO: soporte explícito de map themes (requiere resolver layer order + overrides por tema).
-            # Fallback: renderizar el orden de capas del proyecto.
-            layers_to_render = []
+        theme_name = str(params.get('theme') or params.get('map_theme') or '').strip()
+        if theme_name:
+            layers_to_render = _resolve_layers(proj, None, theme_name)
         else:
             req_layers = params.get('layers')
             if isinstance(req_layers, list) and req_layers:
@@ -3062,19 +3065,11 @@ def process_task(params):
                     if found:
                         layers_to_render = [found]
 
-        if not layers_to_render and not params.get('theme'):
+        if not layers_to_render:
             raise ValueError("Capa/Tema no encontrado")
 
         # Configurar MapSettings
         settings = QgsMapSettings()
-        
-        # Si es tema, intentar usarlo
-        if params.get('theme'):
-             # En QGIS 3.x settings.setLayerStyleOverrides no es suficiente para temas completos
-             # Lo ideal es resolver la lista de capas y estilos del tema.
-             # Si tu _resolve_theme_layers funciona, úsala aquí.
-             # Fallback: renderizar layers especificas
-             pass
         
         if layers_to_render:
             settings.setLayers(layers_to_render)

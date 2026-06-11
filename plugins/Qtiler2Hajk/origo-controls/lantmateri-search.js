@@ -1,5 +1,4 @@
 // First log - absolutely first line
-console.log('[FIRST-LOG] lantmateri-search.js file is being parsed');
 
 /**
  * Lantmäteriet Info Control for Origo
@@ -19,10 +18,8 @@ console.log('[FIRST-LOG] lantmateri-search.js file is being parsed');
 (function(window) {
   'use strict';
   
-  console.log('[DEBUG] lantmateri-search.js script started loading');
 
 const LantmateriSearch = function LantmateriSearch(options = {}) {
-  console.log('[LantmateriSearch] Constructor called with options:', options);
   
   const {
     proxyUrl = '/plugins/Qtiler2Hajk/api/lantmateri-proxy',
@@ -314,7 +311,6 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
       pixel: event.pixel
     };
 
-    console.log('[LantmateriSearch] Click coords:', coords, 'srid:', nativeSrid, 'wgs84:', lonLat);
 
     // TEST MODE: Open modal directly for complete flow test
     openInfoModal();
@@ -946,7 +942,6 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
      * Called when control is added to the map
      */
     onAdd: function(viewerInstance) {
-      console.log('[LantmateriSearch] onAdd called with viewer:', viewerInstance);
       viewer = viewerInstance;
       
       // Try different ways to get the map
@@ -967,11 +962,9 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
         target = 'map';
       }
       
-      console.log('[LantmateriSearch] map:', map, 'target:', target);
       
       // Create button first
       toolButton = createButton();
-      console.log('[LantmateriSearch] Button created:', toolButton);
       
       // Return element immediately - Origo will add it to toolbar
       return toolButton;
@@ -981,16 +974,13 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
      * Dispatch method required by Origo
      */
     dispatch: function(evt) {
-      console.log('[LantmateriSearch] dispatch() called with event:', evt);
       
       // Origo v2 calls dispatch('add') instead of onAdd()
       if (evt === 'add') {
-        console.log('[LantmateriSearch] Handling add event in dispatch');
         
         // Create button if not exists
         if (!toolButton) {
           toolButton = createButton();
-          console.log('[LantmateriSearch] Button created:', toolButton);
         }
         
         // Wait for Origo's UI to be fully rendered
@@ -1003,28 +993,16 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
           ];
           
           let foundEl = null;
-          let foundSelector = null;
           for (const sel of candidates) {
             const el = document.querySelector(sel);
             if (el) {
               foundEl = el;
-              foundSelector = sel;
               break;
             }
           }
           
-          // Also log all elements with 'tool' in class name for debugging
-          if (attempt === 0) {
-            const allElements = document.querySelectorAll('[class*="tool"], [id*="tool"]');
-            console.log('[LantmateriSearch] All tool-related elements:', allElements);
-            allElements.forEach((el, i) => {
-              if (i < 10) console.log(`  [${i}] ${el.tagName}.${el.className} #${el.id}`);
-            });
-          }
-          
           if (foundEl) {
             foundEl.appendChild(toolButton);
-            console.log(`[LantmateriSearch] Button appended to ${foundSelector}:`, foundEl);
             
             // Get viewer from global
             if (window.origoApp) {
@@ -1033,17 +1011,12 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
               // Origo v2: api is the viewer
               if (app.api) {
                 viewer = typeof app.api === 'function' ? app.api() : app.api;
-                console.log('[LantmateriSearch] viewer from api:', viewer);
-                if (viewer) {
-                  console.log('[LantmateriSearch] viewer methods:', Object.keys(viewer).slice(0, 50));
-                }
               }
               
               try {
                 if (viewer && typeof viewer.getMap === 'function') {
                   map = viewer.getMap();
                   target = viewer.getTarget ? viewer.getTarget() : (viewer.getId ? viewer.getId() : 'o-map');
-                  console.log('[LantmateriSearch] ✓ map obtained:', map, 'target:', target);
                 } else {
                   console.warn('[LantmateriSearch] viewer.getMap not a function. viewer:', viewer);
                 }
@@ -1069,9 +1042,7 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
      * Render method - returns the control element
      */
     render: function() {
-      console.log('[LantmateriSearch] render() called');
       if (!toolButton) {
-        console.log('[LantmateriSearch] render() creating button');
         toolButton = createButton();
       }
       return toolButton;
@@ -1081,6 +1052,5 @@ const LantmateriSearch = function LantmateriSearch(options = {}) {
 
 // Make available globally for Origo to find
 window.LantmateriSearch = LantmateriSearch;
-console.log('[Qtiler2Hajk] LantmateriSearch control loaded and registered to window');
 
 })(window);

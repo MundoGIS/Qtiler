@@ -9,6 +9,7 @@ import os from "os";
 import path from "path";
 import yauzl from "yauzl";
 import AdmZip from "adm-zip";
+import archiver from "archiver";
 import { pipeline } from "stream/promises";
 import { spawnSync } from "child_process";
 
@@ -1602,18 +1603,39 @@ export const registerProjectRoutes = ({
     };
 
     try {
-      const zip = new AdmZip();
-      if (bundleSource.kind === "directory") {
-        zip.addLocalFolder(sourcePath, bundleSource.zipRoot || path.basename(sourcePath));
-      } else {
-        zip.addLocalFile(sourcePath, "", path.basename(sourcePath));
-      }
-
       await new Promise((resolve, reject) => {
-        zip.writeZip(tempZipPath, (err) => {
+        const output = fs.createWriteStream(tempZipPath);
+        const archive = archiver("zip", {
+          forceZip64: true,
+          zlib: { level: 6 }
+        });
+
+        let settled = false;
+        const finish = (err) => {
+          if (settled) return;
+          settled = true;
           if (err) return reject(err);
           return resolve();
+        };
+
+        output.on("close", () => finish());
+        output.on("error", finish);
+        archive.on("error", finish);
+        archive.on("warning", (err) => {
+          if (err && err.code === "ENOENT") {
+            console.warn("Project zip warning", { projectId, warning: redactSecrets(String(err?.message || err)) });
+            return;
+          }
+          finish(err);
         });
+
+        archive.pipe(output);
+        if (bundleSource.kind === "directory") {
+          archive.directory(sourcePath, bundleSource.zipRoot || path.basename(sourcePath));
+        } else {
+          archive.file(sourcePath, { name: path.basename(sourcePath) });
+        }
+        archive.finalize().catch(finish);
       });
 
       res.setHeader("Content-Type", "application/zip");
@@ -1675,6 +1697,26 @@ export const registerProjectRoutes = ({
           try {
             const parsed = JSON.parse(candidate);
             if (code === 0) {
+              if (parsed && typeof parsed === 'object' && Array.isArray(parsed.layers) && Array.isArray(parsed.themes)) {
+                const existingLayerNames = new Set(parsed.layers.map((layer) => String(layer?.name || layer?.id || '').trim()).filter(Boolean));
+                for (const theme of parsed.themes) {
+                  const themeName = String(theme?.name || theme?.id || '').trim();
+                  if (!themeName) continue;
+                  const syntheticName = `theme:${themeName}`;
+                  if (existingLayerNames.has(syntheticName)) continue;
+                  parsed.layers.push({
+                    id: syntheticName,
+                    name: syntheticName,
+                    title: themeName,
+                    kind: 'theme',
+                    type: 'THEME',
+                    geometry_type: 'theme',
+                    isTheme: true,
+                    themeName
+                  });
+                  existingLayerNames.add(syntheticName);
+                }
+              }
               return res.status(200).json(stripProjectPathsAndSecrets(parsed));
             }
             // Never echo raw stderr/stdout back to clients on failure.

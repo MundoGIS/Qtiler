@@ -115,6 +115,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'AttributeTable',
     'Qtiler2Origo.feat_routing': 'Routing',
     'Qtiler2Origo.publish_now': 'Publish',
+    'Qtiler2Origo.preflight_btn': 'Check map',
+    'Qtiler2Origo.preflight_checking': 'Checking...',
+    'Qtiler2Origo.preflight_ok': 'Map check passed. Projects, layers and backgrounds are available.',
     'Qtiler2Origo.save_draft': 'Save draft',
     'Qtiler2Origo.draft_saved': '✓ Draft saved',
     'Qtiler2Origo.preview_btn': 'Preview',
@@ -143,6 +146,13 @@ const QTWC_I18N = {
     'Qtiler2Origo.load_preview': 'Load Preview',
     'Qtiler2Origo.open_in_new_tab': 'Open in new tab',
     'Qtiler2Origo.capture_view': 'Capture view (Center & Zoom)',
+    'Qtiler2Origo.clear_extent': 'Clear extent',
+    'Qtiler2Origo.center_default_bg': 'Center on default background',
+    'Qtiler2Origo.layer_select_all': 'Select all',
+    'Qtiler2Origo.layer_select_none': 'Select none',
+    'Qtiler2Origo.map_extent_cleared': 'Extent cleared.',
+    'Qtiler2Origo.default_bg_centered': 'Map centered on the default background.',
+    'Qtiler2Origo.default_bg_center_failed': 'Could not center on the default background: {msg}',
     'Qtiler2Origo.fullscreen': 'Full screen',
     'Qtiler2Origo.windowed': 'Windowed',
     'Qtiler2Origo.interactive_map': 'Interactive Map',
@@ -321,6 +331,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_dxf_export_desc': 'Download layers as AutoCAD DXF',
     'Qtiler2Origo.feat_attribute_table_desc': 'Tabular view of feature attributes',
     'Qtiler2Origo.feat_routing_desc': 'Calculate routes between points',
+    'Qtiler2Origo.wfs_helper_title': 'WFS search and editing',
+    'Qtiler2Origo.wfs_search_helper': 'Search uses Qtiler searchable layers. Mark layers as searchable in QtilerAuth, then add local or cross-project sources here; results follow project access.',
+    'Qtiler2Origo.wfs_edit_helper': 'Editing requires QtilerAuth active, the layer allowed as editable in QtilerAuth, user edit access, and the layer published as WFS.',
+    'Qtiler2Origo.wfs_generated_helper': 'Origo receives the full Qtiler WFS metadata: attributes, geometry field, namespace and styles.',
     'Qtiler2Origo.tool_config': 'Configuration',
     'Qtiler2Origo.cfg_share_url': 'Share service URL',
     'Qtiler2Origo.cfg_share_url_ph': 'https://example.com/share',
@@ -526,6 +540,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_group_name_ph': 'technical name',
     'Qtiler2Origo.pub_group_title_ph': 'visible title',
     'Qtiler2Origo.pub_assign_help': 'Check layers in step 1 to assign them.',
+    'Qtiler2Origo.extra_layers_legend': 'Additional project layers',
+    'Qtiler2Origo.extra_layers_help': 'Add WMS or WFS layers from other published QGIS projects.',
+    'Qtiler2Origo.extra_layers_add': 'Add layers',
+    'Qtiler2Origo.extra_layers_empty': 'No external layers added.',
+    'Qtiler2Origo.extra_layers_remove': 'Remove',
+    'Qtiler2Origo.extra_layers_modal_title': 'Add layers from another project',
+    'Qtiler2Origo.extra_layers_project': 'Project',
+    'Qtiler2Origo.extra_layers_cancel': 'Cancel',
+    'Qtiler2Origo.extra_layers_apply': 'Add selected layers',
+    'Qtiler2Origo.extra_layers_pick_project': 'Select a project',
+    'Qtiler2Origo.extra_layers_current_project': 'The main project is already listed above. Pick a different project here.',
+    'Qtiler2Origo.extra_layers_no_layers': 'No layers available for this project.',
+    'Qtiler2Origo.layer_generic': 'Layer',
     'Qtiler2Origo.pub_search_legend': 'Search options',
     'Qtiler2Origo.pub_search_hint_label': 'Suggested text',
     'Qtiler2Origo.pub_search_min_label': 'Minimum characters',
@@ -540,6 +567,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_search_source_no_layers': 'No searchable layers configured for this project.',
     'Qtiler2Origo.pub_search_source_remove': 'Remove',
     'Qtiler2Origo.pub_search_source_current': 'Current project',
+    'Qtiler2Origo.pub_search_no_projects': 'No projects are available. Check the server connection or add publishable projects.',
     'Qtiler2Origo.pub_edit_profile_title': 'Edit name, layers, backgrounds, groups and tools',
     'Qtiler2Origo.hiw.button': 'How it works & Security',
     'Qtiler2Origo.hiw.title': 'How Qtiler2Origo works & security',
@@ -666,6 +694,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'Tabla de atributos',
     'Qtiler2Origo.feat_routing': 'Rutas',
     'Qtiler2Origo.publish_now': 'Publicar',
+    'Qtiler2Origo.preflight_btn': 'Comprobar mapa',
+    'Qtiler2Origo.preflight_checking': 'Comprobando...',
+    'Qtiler2Origo.preflight_ok': 'La comprobación pasó. Los proyectos, capas y fondos están disponibles.',
     'Qtiler2Origo.save_draft': 'Guardar borrador',
     'Qtiler2Origo.draft_saved': '✓ Borrador guardado',
     'Qtiler2Origo.preview_btn': 'Vista previa',
@@ -694,6 +725,13 @@ const QTWC_I18N = {
     'Qtiler2Origo.load_preview': 'Cargar vista previa',
     'Qtiler2Origo.open_in_new_tab': 'Abrir en pestaña nueva',
     'Qtiler2Origo.capture_view': 'Capturar vista (Centro y Zoom)',
+    'Qtiler2Origo.clear_extent': 'Limpiar extent',
+    'Qtiler2Origo.center_default_bg': 'Centrar en fondo predeterminado',
+    'Qtiler2Origo.layer_select_all': 'Seleccionar todas',
+    'Qtiler2Origo.layer_select_none': 'Seleccionar ninguna',
+    'Qtiler2Origo.map_extent_cleared': 'Extent limpiado.',
+    'Qtiler2Origo.default_bg_centered': 'Mapa centrado en el fondo predeterminado.',
+    'Qtiler2Origo.default_bg_center_failed': 'No se pudo centrar en el fondo predeterminado: {msg}',
     'Qtiler2Origo.fullscreen': 'Pantalla completa',
     'Qtiler2Origo.windowed': 'Ventana',
     'Qtiler2Origo.interactive_map': 'Mapa interactivo',
@@ -872,6 +910,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_dxf_export_desc': 'Descargar capas como AutoCAD DXF',
     'Qtiler2Origo.feat_attribute_table_desc': 'Vista tabular de atributos de elementos',
     'Qtiler2Origo.feat_routing_desc': 'Calcular rutas entre puntos',
+    'Qtiler2Origo.wfs_helper_title': 'Búsqueda y edición WFS',
+    'Qtiler2Origo.wfs_search_helper': 'La búsqueda usa las capas buscables de Qtiler. Márcalas como buscables en QtilerAuth y añade aquí fuentes locales o de otros proyectos; los resultados respetan el acceso del proyecto.',
+    'Qtiler2Origo.wfs_edit_helper': 'La edición requiere QtilerAuth activo, la capa permitida como editable en QtilerAuth, acceso de edición para el usuario y la capa publicada como WFS.',
+    'Qtiler2Origo.wfs_generated_helper': 'Origo recibe los metadatos WFS completos de Qtiler: atributos, campo geométrico, namespace y estilos.',
     'Qtiler2Origo.tool_config': 'Configuración',
     'Qtiler2Origo.cfg_share_url': 'URL del servicio de compartir',
     'Qtiler2Origo.cfg_share_url_ph': 'https://ejemplo.com/share',
@@ -1077,6 +1119,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_group_name_ph': 'nombre técnico',
     'Qtiler2Origo.pub_group_title_ph': 'título visible',
     'Qtiler2Origo.pub_assign_help': 'Marca capas en el paso 1 para asignarlas.',
+    'Qtiler2Origo.extra_layers_legend': 'Capas adicionales de proyectos',
+    'Qtiler2Origo.extra_layers_help': 'Añade capas WMS o WFS desde otros proyectos QGIS publicados.',
+    'Qtiler2Origo.extra_layers_add': 'Añadir capas',
+    'Qtiler2Origo.extra_layers_empty': 'No se han añadido capas externas.',
+    'Qtiler2Origo.extra_layers_remove': 'Quitar',
+    'Qtiler2Origo.extra_layers_modal_title': 'Añadir capas desde otro proyecto',
+    'Qtiler2Origo.extra_layers_project': 'Proyecto',
+    'Qtiler2Origo.extra_layers_cancel': 'Cancelar',
+    'Qtiler2Origo.extra_layers_apply': 'Añadir capas seleccionadas',
+    'Qtiler2Origo.extra_layers_pick_project': 'Selecciona un proyecto',
+    'Qtiler2Origo.extra_layers_current_project': 'El proyecto principal ya aparece arriba. Elige aquí otro proyecto.',
+    'Qtiler2Origo.extra_layers_no_layers': 'No hay capas disponibles para este proyecto.',
+    'Qtiler2Origo.layer_generic': 'Capa',
     'Qtiler2Origo.pub_search_legend': 'Opciones de Búsqueda',
     'Qtiler2Origo.pub_search_hint_label': 'Texto sugerido',
     'Qtiler2Origo.pub_search_min_label': 'Caracteres mínimos',
@@ -1091,6 +1146,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_search_source_no_layers': 'No hay capas buscables configuradas para este proyecto.',
     'Qtiler2Origo.pub_search_source_remove': 'Quitar',
     'Qtiler2Origo.pub_search_source_current': 'Proyecto actual',
+    'Qtiler2Origo.pub_search_no_projects': 'No hay proyectos disponibles. Verifica la conexión con el servidor o añade proyectos publicables.',
     'Qtiler2Origo.pub_edit_profile_title': 'Editar nombre, capas, fondos, grupos y herramientas',
     'Qtiler2Origo.hiw.button': 'Cómo funciona y seguridad',
     'Qtiler2Origo.hiw.title': 'Cómo funciona Qtiler2Origo y por qué es seguro',
@@ -1217,6 +1273,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_attribute_table': 'Attributtabell',
     'Qtiler2Origo.feat_routing': 'Ruttplanering',
     'Qtiler2Origo.publish_now': 'Publicera',
+    'Qtiler2Origo.preflight_btn': 'Kontrollera karta',
+    'Qtiler2Origo.preflight_checking': 'Kontrollerar...',
+    'Qtiler2Origo.preflight_ok': 'Kartkontrollen gick igenom. Projekt, lager och bakgrunder är tillgängliga.',
     'Qtiler2Origo.save_draft': 'Spara utkast',
     'Qtiler2Origo.draft_saved': '✓ Utkast sparat',
     'Qtiler2Origo.preview_btn': 'Förhandsgranska',
@@ -1245,6 +1304,13 @@ const QTWC_I18N = {
     'Qtiler2Origo.load_preview': 'Ladda förhandsvisning',
     'Qtiler2Origo.open_in_new_tab': 'Öppna i ny flik',
     'Qtiler2Origo.capture_view': 'Fånga vy (Centrum och zoom)',
+    'Qtiler2Origo.clear_extent': 'Rensa extent',
+    'Qtiler2Origo.center_default_bg': 'Centrera på standardbakgrund',
+    'Qtiler2Origo.layer_select_all': 'Välj alla',
+    'Qtiler2Origo.layer_select_none': 'Välj inga',
+    'Qtiler2Origo.map_extent_cleared': 'Extent rensad.',
+    'Qtiler2Origo.default_bg_centered': 'Kartan centrerades på standardbakgrunden.',
+    'Qtiler2Origo.default_bg_center_failed': 'Kunde inte centrera på standardbakgrunden: {msg}',
     'Qtiler2Origo.fullscreen': 'Helskärm',
     'Qtiler2Origo.windowed': 'Fönsterläge',
     'Qtiler2Origo.interactive_map': 'Interaktiv karta',
@@ -1413,6 +1479,10 @@ const QTWC_I18N = {
     'Qtiler2Origo.feat_dxf_export_desc': 'Ladda ner lager som AutoCAD DXF',
     'Qtiler2Origo.feat_attribute_table_desc': 'Tabellvy av objektattribut',
     'Qtiler2Origo.feat_routing_desc': 'Beräkna rutter mellan punkter',
+    'Qtiler2Origo.wfs_helper_title': 'WFS-sökning och redigering',
+    'Qtiler2Origo.wfs_search_helper': 'Sökning använder Qtilers sökbara lager. Markera lager som sökbara i QtilerAuth och lägg sedan till lokala källor eller källor från andra projekt här; resultat följer projektåtkomst.',
+    'Qtiler2Origo.wfs_edit_helper': 'Redigering kräver aktivt QtilerAuth, att lagret är tillåtet som redigerbart i QtilerAuth, redigeringsåtkomst för användaren och att lagret publiceras som WFS.',
+    'Qtiler2Origo.wfs_generated_helper': 'Origo får fullständig Qtiler WFS-metadata: attribut, geometrijfält, namespace och stilar.',
     'Qtiler2Origo.tool_config': 'Konfiguration',
     'Qtiler2Origo.cfg_share_url': 'Delningstjänst-URL',
     'Qtiler2Origo.cfg_share_url_ph': 'https://example.com/share',
@@ -1618,6 +1688,19 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_group_name_ph': 'tekniskt namn',
     'Qtiler2Origo.pub_group_title_ph': 'synlig titel',
     'Qtiler2Origo.pub_assign_help': 'Kryssa lager i steg 1 för att tilldela dem.',
+    'Qtiler2Origo.extra_layers_legend': 'Ytterligare projektlager',
+    'Qtiler2Origo.extra_layers_help': 'Lägg till WMS- eller WFS-lager från andra publicerade QGIS-projekt.',
+    'Qtiler2Origo.extra_layers_add': 'Lägg till lager',
+    'Qtiler2Origo.extra_layers_empty': 'Inga externa lager tillagda.',
+    'Qtiler2Origo.extra_layers_remove': 'Ta bort',
+    'Qtiler2Origo.extra_layers_modal_title': 'Lägg till lager från ett annat projekt',
+    'Qtiler2Origo.extra_layers_project': 'Projekt',
+    'Qtiler2Origo.extra_layers_cancel': 'Avbryt',
+    'Qtiler2Origo.extra_layers_apply': 'Lägg till valda lager',
+    'Qtiler2Origo.extra_layers_pick_project': 'Välj ett projekt',
+    'Qtiler2Origo.extra_layers_current_project': 'Huvudprojektet finns redan ovan. Välj ett annat projekt här.',
+    'Qtiler2Origo.extra_layers_no_layers': 'Inga lager tillgängliga för detta projekt.',
+    'Qtiler2Origo.layer_generic': 'Lager',
     'Qtiler2Origo.pub_search_legend': 'Sökalternativ',
     'Qtiler2Origo.pub_search_hint_label': 'Föreslagen text',
     'Qtiler2Origo.pub_search_min_label': 'Minsta antal tecken',
@@ -1632,6 +1715,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_search_source_no_layers': 'Inga sökbara lager konfigurerade för detta projekt.',
     'Qtiler2Origo.pub_search_source_remove': 'Ta bort',
     'Qtiler2Origo.pub_search_source_current': 'Aktuellt projekt',
+    'Qtiler2Origo.pub_search_no_projects': 'Inga projekt är tillgängliga. Kontrollera serveranslutningen eller lägg till publicerbara projekt.',
     'Qtiler2Origo.pub_edit_profile_title': 'Redigera namn, lager, bakgrunder, grupper och verktyg',
     'Qtiler2Origo.hiw.button': 'Så fungerar det & säkerhet',
     'Qtiler2Origo.hiw.title': 'Så fungerar Qtiler2Origo och varför det är säkert',
@@ -1680,6 +1764,10 @@ QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.no_profiles': 'Ingen publiserte profiler ennå. Klikk "Ny profil" for å opprette en.',
   'Qtiler2Origo.project_layers': 'Prosjektlag',
   'Qtiler2Origo.project_layers_help': 'Aktiver lag for å inkludere dem i det publiserte kartet. Bryteren \'Synlig ved start\' styrer om et inkludert lag vises når kartet åpnes. Vektorlag kan valgfritt publiseres som WFS for å aktivere attributtabell og redigering — lag uten WFS serveres som WMS og vises med et miniatyrbilde av laget.',
+  'Qtiler2Origo.wfs_helper_title': 'WFS-søk og redigering',
+  'Qtiler2Origo.wfs_search_helper': 'Søk bruker Qtilers søkbare lag. Marker lag som søkbare i QtilerAuth, og legg deretter til lokale kilder eller kilder fra andre prosjekter her; resultater følger prosjekttilgang.',
+  'Qtiler2Origo.wfs_edit_helper': 'Redigering krever aktiv QtilerAuth, at laget er tillatt som redigerbart i QtilerAuth, redigeringstilgang for brukeren og at laget publiseres som WFS.',
+  'Qtiler2Origo.wfs_generated_helper': 'Origo får fullstendige Qtiler WFS-metadata: attributter, geometrifelt, namespace og stiler.',
   'Qtiler2Origo.portal_site_header_height': 'Headerhøyde',
   'Qtiler2Origo.portal_site_header_font': 'Header-skrifttype',
   'Qtiler2Origo.portal_site_header_color1': 'Headerfarge 1',
@@ -1710,6 +1798,10 @@ QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.no_profiles': 'Ingen publicerede profiler endnu. Klik på "Ny profil" for at oprette en.',
   'Qtiler2Origo.project_layers': 'Projektlag',
   'Qtiler2Origo.project_layers_help': 'Aktivér lag for at inkludere dem i det offentliggjorte kort. Knappen \'Synlig ved start\' styrer, om et inkluderet lag vises, når kortet åbnes. Vektorlag kan valgfrit publiceres som WFS for at aktivere attributtabel og redigering — lag uden WFS serveres som WMS og vises med et miniaturebillede af laget.',
+  'Qtiler2Origo.wfs_helper_title': 'WFS-søgning og redigering',
+  'Qtiler2Origo.wfs_search_helper': 'Søgning bruger Qtilers søgbare lag. Markér lag som søgbare i QtilerAuth, og tilføj derefter lokale kilder eller kilder fra andre projekter her; resultater følger projektadgang.',
+  'Qtiler2Origo.wfs_edit_helper': 'Redigering kræver aktiv QtilerAuth, at laget er tilladt som redigerbart i QtilerAuth, redigeringsadgang for brugeren og at laget publiceres som WFS.',
+  'Qtiler2Origo.wfs_generated_helper': 'Origo får fulde Qtiler WFS-metadata: attributter, geometrifelt, namespace og stile.',
   'Qtiler2Origo.portal_site_header_height': 'Headerhøjde',
   'Qtiler2Origo.portal_site_header_font': 'Header-skrifttype',
   'Qtiler2Origo.portal_site_header_color1': 'Headerfarve 1',
@@ -1738,6 +1830,10 @@ QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
   'Qtiler2Origo.no_profiles': 'Julkaistuja profiileja ei vielä ole. Luo sellainen napsauttamalla "Uusi profiili".',
   'Qtiler2Origo.project_layers': 'Projektin tasot',
   'Qtiler2Origo.project_layers_help': 'Aktivoi tasot sisällyttääksesi ne julkaistuun karttaan. \'Näkyvissä alussa\' -kytkin ohjaa, näytetäänkö sisällytetty taso, kun kartta avataan. Vektoritasot voidaan valinnaisesti julkaista WFS:nä, jotta ominaisuustaulukko ja muokkaus voidaan ottaa käyttöön — tasot ilman WFS:ää tarjotaan WMS:nä ja näytetään tason pikkukuvalla.',
+  'Qtiler2Origo.wfs_helper_title': 'WFS-haku ja muokkaus',
+  'Qtiler2Origo.wfs_search_helper': 'Haku käyttää Qtilerin haettavia tasoja. Merkitse tasot haettaviksi QtilerAuthissa ja lisää sitten tähän paikallisia tai muiden projektien lähteitä; tulokset noudattavat projektin käyttöoikeuksia.',
+  'Qtiler2Origo.wfs_edit_helper': 'Muokkaus edellyttää aktiivista QtilerAuthia, että taso on sallittu muokattavaksi QtilerAuthissa, käyttäjällä on muokkausoikeus ja taso julkaistaan WFS:nä.',
+  'Qtiler2Origo.wfs_generated_helper': 'Origo saa täydet Qtiler WFS -metatiedot: attribuutit, geometriakentän, namespacen ja tyylit.',
   'Qtiler2Origo.portal_site_header_height': 'Ylätunnisteen korkeus',
   'Qtiler2Origo.portal_site_header_font': 'Ylätunnisteen fontti',
   'Qtiler2Origo.portal_site_header_color1': 'Ylätunnisteen väri 1',
@@ -1938,6 +2034,7 @@ const publishModalPanels = Array.from(document.querySelectorAll('[data-publish-p
 const publishNowBtn = document.getElementById('publishNowBtn');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
 const previewFooterBtn = document.getElementById('previewFooterBtn');
+const preflightPublishBtn = document.getElementById('preflightPublishBtn');
 const removeDemoBtn = document.getElementById('removeDemoBtn');
 const publishName = document.getElementById('publishName');
 const publishDescription = document.getElementById('publishDescription');
@@ -1948,6 +2045,8 @@ const backgroundProjectSelect = document.getElementById('backgroundProjectSelect
 const projectLayersList = document.getElementById('projectLayersList');
 const backgroundLayersList = document.getElementById('backgroundLayersList');
 const defaultBackgroundList = document.getElementById('defaultBackgroundList');
+const selectAllProjectLayersBtn = document.getElementById('btn-select-all-project-layers');
+const selectNoneProjectLayersBtn = document.getElementById('btn-select-none-project-layers');
 const publishLayersDynamicSlot = document.getElementById('publishLayersDynamicSlot');
 const publishToolsDynamicSlot = document.getElementById('publishToolsDynamicSlot');
 const featureSearch = document.getElementById('featureSearch');
@@ -2090,7 +2189,7 @@ const ORIGO_CTRL_DEFS = [
   // Qtiler2Origo custom controls
   { id: 'ctrl-lantmaterisearch', name: 'lantmaterisearch', options: {
     proxyUrl: '/plugins/Qtiler2Origo/api/lantmateri-proxy',
-    searchTypes: ['fastighet', 'adress', 'ort'],
+    searchTypes: ['fastighet', 'taxering', 'adress', 'ort'],
     zoomLevel: 14,
     gdprNotice: 'Information från Lantmäteriet kan innehålla personuppgifter (t.ex. ägare, befolkning). Använd endast i tjänsteutövning enligt gällande regler.',
     gdprLinks: [
@@ -3455,8 +3554,12 @@ async function api(url, options = {}) {
   }
 
   if (!res.ok) {
-    const detail = (isJson && (payload?.error || payload?.details)) || payload || res.statusText;
-    throw new Error(String(detail));
+    const issues = Array.isArray(payload?.issues)
+      ? payload.issues.map((issue) => issue?.message || issue?.details || issue?.error || issue).filter(Boolean)
+      : [];
+    const detail = (isJson && (payload?.details || payload?.message || payload?.error)) || payload || res.statusText;
+    const message = issues.length ? `${detail}: ${issues.join('; ')}` : detail;
+    throw new Error(String(message));
   }
   return payload;
 }
@@ -4741,11 +4844,17 @@ function normalizeLayersPayload(payload, options = {}) {
       const name = String(row.name || row.id || '').trim();
       if (!name) return null;
       const key = makeLayerKey(sourceProjectId, name);
+      const kind = String(row.kind || row.type || '').trim().toLowerCase();
+      const isTheme = row.isTheme === true || kind === 'theme' || name.startsWith('theme:');
       return {
         key,
         name,
+        title: String(row.title || row.name || row.id || '').trim() || name,
         sourceProjectId,
-        geometry: String(row.geometry_type || row.geometry || row.kind || '').trim()
+        geometry: isTheme ? 'theme' : String(row.geometry_type || row.geometry || row.kind || '').trim(),
+        kind: isTheme ? 'theme' : kind,
+        isTheme,
+        themeName: isTheme ? String(row.themeName || name.replace(/^theme:/, '')).trim() : ''
       };
     })
     .filter(Boolean);
@@ -4814,18 +4923,38 @@ function renderLayerChecklist(container, layers, rules = {}) {
       : '';
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
-      <div class="Qtiler2Origo-layer-row">
+      <div class="Qtiler2Origo-layer-row" data-layer-row="${escapeHtml(layerKey)}">
         ${!isMainLayerList ? includeControl : ''}
         ${bgThumb}
         <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Origo-layer-row__main">
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
       </div>
     `;
   }).join('');
+  syncProjectLayerOptionState();
   try { renderPublishConfigSummary(); } catch {}
+}
+
+function syncProjectLayerOptionState() {
+  if (!projectLayersList) return;
+  projectLayersList.querySelectorAll('.Qtiler2Origo-layer-row[data-layer-row]').forEach((row) => {
+    const includeInput = row.querySelector('input[type="checkbox"][data-layer-include]');
+    if (!includeInput) return;
+    const included = includeInput.checked === true;
+    row.classList.toggle('is-excluded', !included);
+    row.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      if (input === includeInput) return;
+      input.disabled = !included;
+      input.closest('.button')?.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-style-layer]').forEach((button) => {
+      button.disabled = !included;
+      button.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+  });
 }
 
 function getCheckedLayerNames(container) {
@@ -4847,7 +4976,16 @@ function setCheckedLayerNames(container, names) {
   container.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => {
     el.checked = set.has(el.getAttribute('data-layer-include'));
   });
+  if (container === projectLayersList) syncProjectLayerOptionState();
   try { renderPublishConfigSummary(); } catch {}
+}
+
+function setAllProjectLayersIncluded(included) {
+  if (!projectLayersList) return;
+  const names = included ? getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean) : [];
+  setCheckedLayerNames(projectLayersList, names);
+  renderLayerAssignments();
+  schedulePreviewRefresh();
 }
 
 function getInitialVisibleLayerNames() {
@@ -4865,6 +5003,8 @@ function buildBackgroundOptions() {
     type: 'layer',
     sourceProjectId: backgroundProjectId,
     name: layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
     title: backgroundProjectId ? `${backgroundProjectId} / ${layer.name}` : layer.name,
     required: false
   }));
@@ -5008,10 +5148,10 @@ function ensureExtraSections() {
     extraLayersSection.id = 'Qtiler2OrigoExtraLayersSection';
     extraLayersSection.className = 'modal-step';
     extraLayersSection.innerHTML = `
-      <legend class="modal-step__legend">Additional project layers</legend>
+      <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Origo.extra_layers_legend'))}</legend>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
-        <p class="help" style="margin:0">Add WMS or WFS layers from other published QGIS projects.</p>
-        <button type="button" id="Qtiler2OrigoOpenExternalLayers" class="button is-small">+ Add layers</button>
+        <p class="help" style="margin:0">${escapeHtml(t('Qtiler2Origo.extra_layers_help'))}</p>
+        <button type="button" id="Qtiler2OrigoOpenExternalLayers" class="button is-small">+ ${escapeHtml(t('Qtiler2Origo.extra_layers_add'))}</button>
       </div>
       <div id="Qtiler2OrigoExtraLayersList"></div>`;
     layersSlot.appendChild(extraLayersSection);
@@ -5024,6 +5164,11 @@ function ensureExtraSections() {
     searchSection.className = 'modal-step';
     searchSection.innerHTML = `
       <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Origo.pub_search_legend'))}</legend>
+      <div class="notification is-info is-light" style="margin-bottom:12px;padding:0.7rem 0.85rem">
+        <strong>${escapeHtml(t('Qtiler2Origo.wfs_helper_title'))}</strong>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Origo.wfs_search_helper'))}</p>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Origo.wfs_edit_helper'))}</p>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
         <label class="field"><span class="label">${escapeHtml(t('Qtiler2Origo.pub_search_hint_label'))}</span>
           <input id="Qtiler2OrigoSearchHint" class="input is-small" type="text" placeholder="${escapeHtml(t('Qtiler2Origo.pub_search_placeholder'))}" /></label>
@@ -5104,7 +5249,7 @@ function renderExternalLayersSummary() {
   if (!host) return;
   const rows = Array.isArray(publishState.extraLayers) ? publishState.extraLayers : [];
   if (!rows.length) {
-    host.innerHTML = `<p class="help">No external layers added.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_empty'))}</p>`;
     return;
   }
   host.innerHTML = rows.map((layer) => {
@@ -5116,7 +5261,7 @@ function renderExternalLayersSummary() {
         <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
       </div>
       <span class="tag is-light">${rule.serveAsWfs ? 'WFS' : 'WMS'}</span>
-      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">Remove</button>
+      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">${escapeHtml(t('Qtiler2Origo.extra_layers_remove'))}</button>
     </div>`;
   }).join('');
 }
@@ -5131,19 +5276,19 @@ function ensureExternalLayerModal() {
     <div class="modal-background" data-close-external-layer-modal></div>
     <div class="modal-card" style="width:min(920px, calc(100vw - 32px))">
       <header class="modal-card-head">
-        <p class="modal-card-title">Add layers from another project</p>
-        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal>Quitar</button>
+        <p class="modal-card-title">${escapeHtml(t('Qtiler2Origo.extra_layers_modal_title'))}</p>
+        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal></button>
       </header>
       <section class="modal-card-body">
         <label class="field">
-          <span class="label">Project</span>
+          <span class="label">${escapeHtml(t('Qtiler2Origo.extra_layers_project'))}</span>
           <select id="Qtiler2OrigoExternalProjectSelect" class="input"></select>
         </label>
         <div id="Qtiler2OrigoExternalProjectLayers" style="display:grid;gap:8px;max-height:55vh;overflow:auto"></div>
       </section>
       <footer class="modal-card-foot" style="justify-content:space-between">
-        <button type="button" class="button" data-close-external-layer-modal>Cancel</button>
-        <button type="button" class="button is-primary" id="Qtiler2OrigoExternalLayerApply">Add selected layers</button>
+        <button type="button" class="button" data-close-external-layer-modal>${escapeHtml(t('Qtiler2Origo.extra_layers_cancel'))}</button>
+        <button type="button" class="button is-primary" id="Qtiler2OrigoExternalLayerApply">${escapeHtml(t('Qtiler2Origo.extra_layers_apply'))}</button>
       </footer>
     </div>`;
   document.body.appendChild(modal);
@@ -5155,17 +5300,17 @@ async function renderExternalLayerModalList(projectId) {
   if (!host) return;
   const pid = String(projectId || '').trim();
   if (!pid) {
-    host.innerHTML = `<p class="help">Select a project.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_pick_project'))}</p>`;
     return;
   }
   const currentProjectId = String(publishProjectSelect?.value || '').trim();
   if (pid === currentProjectId) {
-    host.innerHTML = `<p class="help">The main project is already listed above. Pick a different project here.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_current_project'))}</p>`;
     return;
   }
   const layers = await getProjectLayersCatalog(pid);
   if (!layers.length) {
-    host.innerHTML = `<p class="help">No layers available for this project.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_no_layers'))}</p>`;
     return;
   }
   host.innerHTML = layers.map((layer) => {
@@ -5178,7 +5323,7 @@ async function renderExternalLayerModalList(projectId) {
       <input type="checkbox" data-external-layer-check="${escapeHtml(key)}" ${checked} />
       <div>
         <div><strong>${escapeHtml(layer.name)}</strong></div>
-        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || 'Layer')}</div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || t('Qtiler2Origo.layer_generic'))}</div>
       </div>
       <select class="input is-small" style="width:92px" data-external-layer-mode="${escapeHtml(key)}" ${isVector ? '' : 'disabled'}>
         <option value="WMS" ${mode === 'WMS' ? 'selected' : ''}>WMS</option>
@@ -5200,7 +5345,7 @@ function bindExternalLayerPickerEvents() {
         .filter((project) => project.id && project.id !== currentProjectId)
         .map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>`)
         .join('');
-      select.innerHTML = `<option value="">Select a project</option>${options}`;
+      select.innerHTML = `<option value="">${escapeHtml(t('Qtiler2Origo.extra_layers_pick_project'))}</option>${options}`;
       modal.classList.add('is-active');
       await renderExternalLayerModalList(String(select.value || '').trim());
     });
@@ -5505,7 +5650,7 @@ async function loadProjectLayers(projectId, target = 'main') {
     // that would override the saved profile's per-layer `serveAsWfs` flag and
     // make every layer appear as WFS until the user toggles one (which then
     // re-renders all the others as unchecked, looking like a mass-deselect).
-    projectLayersList.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => { el.checked = true; });
+    setCheckedLayerNames(projectLayersList, normalized.map((layer) => getLayerKey(layer)).filter(Boolean));
     refreshExtraSections();
     return;
   }
@@ -5559,7 +5704,7 @@ async function renderSearchSources() {
   // otherwise render with just the placeholder option and the user would
   // be unable to pick anything.
   if (!Array.isArray(publishState.projects) || publishState.projects.length === 0) {
-    host.innerHTML = `<p class="help" style="margin:0;color:#a00">${escapeHtml('No hay proyectos disponibles. Verifica la conexión con el servidor o que existan proyectos publicables.')}</p>`;
+    host.innerHTML = `<p class="help" style="margin:0;color:#a00">${escapeHtml(t('Qtiler2Origo.pub_search_no_projects'))}</p>`;
     return;
   }
 
@@ -6392,6 +6537,7 @@ openPublishModalBtn?.addEventListener('click', async () => {
 
 publishProjectSelect?.addEventListener('change', async () => {
   const projectId = String(publishProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
   if (!projectId) {
     projectLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_project_selected'))}</p>`;
     schedulePreviewRefresh();
@@ -6402,6 +6548,7 @@ publishProjectSelect?.addEventListener('change', async () => {
 
 backgroundProjectSelect?.addEventListener('change', async () => {
   const projectId = String(backgroundProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
   if (!projectId) {
     backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_bg_selected'))}</p>`;
     refreshBackgroundOptions();
@@ -6412,6 +6559,7 @@ backgroundProjectSelect?.addEventListener('change', async () => {
 });
 
 backgroundLayersList?.addEventListener('change', () => {
+  clearMapViewOverrides({ refresh: false });
   refreshBackgroundOptions();
   schedulePreviewRefresh();
 });
@@ -6446,8 +6594,17 @@ projectLayersList?.addEventListener('change', (event) => {
   }
 
   if (!target.hasAttribute('data-layer-include')) return;
+  syncProjectLayerOptionState();
   renderLayerAssignments();
   schedulePreviewRefresh();
+});
+
+selectAllProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(true);
+});
+
+selectNoneProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(false);
 });
 
 projectLayersList?.addEventListener('click', (event) => {
@@ -6466,6 +6623,7 @@ defaultBackgroundList?.addEventListener('change', (event) => {
   const key = String(target.getAttribute('data-default-bg-key') || '').trim();
   if (key) {
     publishState.defaultBackgroundKey = key;
+    clearMapViewOverrides({ refresh: false });
     // Update "Default" tags in-place
     defaultBackgroundList.querySelectorAll('.Qtiler2Origo-bg-item').forEach((row) => {
       const radio = row.querySelector('input[type="radio"]');
@@ -6513,6 +6671,139 @@ previewFooterBtn?.addEventListener('click', () => {
   setPublishModalTab('config');
 });
 
+function buildPublishApiBody() {
+  const mapName = String(publishName?.value || '').trim();
+  if (!mapName) {
+    const err = new Error(t('Qtiler2Origo.name_required'));
+    err.field = 'name';
+    throw err;
+  }
+  const mapDescription = String(publishDescription?.value || '').trim();
+  const projectId = String(publishProjectSelect.value || '').trim();
+  if (!projectId) {
+    const err = new Error('Select a main project before publishing.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) {
+    const err = new Error('No project layers are available. Check project access or reload the modal.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  if (!selectedLayers.length) {
+    const err = new Error('Select at least one main layer to publish.');
+    err.tab = 'layers';
+    throw err;
+  }
+
+  const layersPayload = selectedLayers.map((layer) => {
+    const key = getLayerKey(layer);
+    return {
+      name: layer.name,
+      title: layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
+      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      visible: publishState.initialVisibility[key] !== false,
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+    };
+  });
+  const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
+  const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+    .map((layer) => String(layer?.name || '').trim())
+    .filter(Boolean);
+  refreshBackgroundOptions();
+  const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+    key: item.key, type: item.type, title: item.title,
+    sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+    name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
+    isDefault: item.key === publishState.defaultBackgroundKey
+  }));
+  const layerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+  return {
+    mapName,
+    body: {
+      name: mapName,
+      description: mapDescription,
+      editingProfileId: publishState.editingProfileId || null,
+      projectId,
+      layers: layersPayload,
+      backgroundProjectId: backgroundProjectId || null,
+      backgroundLayerNames, backgrounds,
+      defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+      layerRules,
+      controls: (function(){ try { return JSON.parse(controlsJsonInput?.value || '[]'); } catch(e){ return []; } })(),
+      pageSettings: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').pageSettings; } catch(e){ return undefined; } })(),
+      featureinfoOptions: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').featureinfoOptions; } catch(e){ return undefined; } })(),
+      extent: (function(){ try { const v = JSON.parse(extentInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      center: (function(){ try { const v = JSON.parse(centerInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      centerCrs: (function(){ const c = String(centerInput?.dataset?.crs || '').trim(); return c || undefined; })(),
+      zoom: (function(){ try { const z = parseFloat(zoomInput?.value); return isNaN(z) ? undefined : z; } catch(e){ return undefined; } })(),
+      minZoom: (function(){ const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      maxZoom: (function(){ const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      toolConfig: {
+        shareServiceUrl: String(cfgShareUrl?.value || '').trim(),
+        routingServiceUrl: String(cfgRoutingUrl?.value || '').trim(),
+        elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
+        dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
+      },
+      groups: (publishState.groups || [])
+        .map((g) => ({
+          name: String(g?.name || '').trim(),
+          title: String(g?.title || g?.name || '').trim(),
+          parent: String(g?.parent || '').trim(),
+          expanded: g?.expanded !== false
+        }))
+        .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+      features: {
+        searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+          .map((src) => ({
+            projectId: String(src?.projectId || '').trim(),
+            layers: Array.isArray(src?.layers)
+              ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+              : []
+          }))
+          .filter((s) => s.projectId)
+      }
+    }
+  };
+}
+
+preflightPublishBtn?.addEventListener('click', async () => {
+  if (currentEditingWfsLayer) {
+    try { saveStyleEditor(); } catch (err) { showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers'); return; }
+  }
+  clearPublishStatusError();
+  if (publishNameError) publishNameError.style.display = 'none';
+  const originalText = preflightPublishBtn.textContent;
+  preflightPublishBtn.disabled = true;
+  preflightPublishBtn.textContent = t('Qtiler2Origo.preflight_checking');
+  try {
+    const { body } = buildPublishApiBody();
+    await api('/plugins/Qtiler2Origo/api/publish', { method: 'POST', body: { ...body, dryRun: true } });
+    addLog(t('Qtiler2Origo.preflight_ok'), 'ok');
+  } catch (err) {
+    if (err?.field === 'name') {
+      if (publishNameError) { publishNameError.textContent = err.message; publishNameError.style.display = ''; }
+      publishName?.focus();
+    } else {
+      showPublishStatusError(String(err?.message || 'Map check failed.'), err?.tab || 'layers');
+    }
+  } finally {
+    preflightPublishBtn.disabled = false;
+    preflightPublishBtn.textContent = originalText;
+  }
+});
+
 publishNowBtn?.addEventListener('click', async () => {
   if (currentEditingWfsLayer) {
     try {
@@ -6556,6 +6847,9 @@ publishNowBtn?.addEventListener('click', async () => {
     const key = getLayerKey(layer);
     return {
       name: layer.name,
+      title: layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
       visible: publishState.initialVisibility[key] !== false,
       group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
@@ -6571,6 +6865,8 @@ publishNowBtn?.addEventListener('click', async () => {
     key: item.key, type: item.type, title: item.title,
     sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
     name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
     isDefault: item.key === publishState.defaultBackgroundKey
   }));
   const layerRules = {};
@@ -6839,6 +7135,9 @@ function buildMapPreviewPayload() {
   const selectedLayers = getSelectedPublishLayers();
   const previewLayerSpecs = selectedLayers.map((layer) => ({
     name: layer.name,
+    title: layer.title || layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
     sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
     visible: publishState.initialVisibility[getLayerKey(layer)] !== false,
     group: String(publishState.layerGroups?.[getLayerKey(layer)] || 'root').trim() || 'root'
@@ -7146,30 +7445,76 @@ function getPreviewView() {
   } catch { return null; }
 }
 
+function readPreviewMapAndView() {
+  try {
+    const win = previewIframe?.contentWindow;
+    const origoApp = win?.origoApp;
+    if (!origoApp) return null;
+    const viewer = typeof origoApp.api === 'function' ? origoApp.api() : null;
+    const map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
+    const view = map && typeof map.getView === 'function' ? map.getView() : null;
+    return map && view ? { map, view } : null;
+  } catch { return null; }
+}
+
+function capturePreviewViewToInputs({ includeExtent = true } = {}) {
+  const current = readPreviewMapAndView();
+  if (!current) return false;
+  const { map, view } = current;
+  const center = typeof view.getCenter === 'function' ? view.getCenter() : null;
+  const zoom = typeof view.getZoom === 'function' ? view.getZoom() : null;
+  const size = typeof map.getSize === 'function' ? map.getSize() : null;
+  const extent = includeExtent && size && typeof view.calculateExtent === 'function' ? view.calculateExtent(size) : null;
+  const projCode = (() => {
+    try { return view.getProjection()?.getCode?.() || ''; } catch { return ''; }
+  })();
+  if (centerInput && Array.isArray(center)) {
+    centerInput.value = JSON.stringify(center.map((v) => Math.round(v)));
+    if (projCode) centerInput.dataset.crs = projCode;
+  }
+  if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom.toFixed(2);
+  if (includeExtent && extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent.map((v) => Math.round(v)));
+  renderPublishConfigSummary();
+  return true;
+}
+
+function clearMapExtentInput({ refresh = true } = {}) {
+  if (extentInput) extentInput.value = '';
+  renderPublishConfigSummary();
+  if (refresh) schedulePreviewRefresh();
+}
+
+function clearMapViewOverrides({ refresh = true } = {}) {
+  if (centerInput) { centerInput.value = ''; delete centerInput.dataset.crs; }
+  if (zoomInput) zoomInput.value = '';
+  if (extentInput) extentInput.value = '';
+  renderPublishConfigSummary();
+  if (refresh) schedulePreviewRefresh();
+}
+
+async function centerPreviewOnDefaultBackground() {
+  clearMapViewOverrides({ refresh: false });
+  await loadMapPreview({ silent: true });
+  addLog(t('Qtiler2Origo.default_bg_centered'), 'ok');
+}
+
 document.getElementById('btn-fetch-map-extent')?.addEventListener('click', () => {
   try {
-    const view = getPreviewView();
-    if (!view) { addLog('Carga el mapa preview primero.', 'error'); return; }
-    const map = previewIframe.contentWindow.origoApp.api().getMap();
-    const center = view.getCenter();
-    const zoom = view.getZoom();
-    const size = map.getSize();
-    const extent = size ? view.calculateExtent(size) : null;
-    // Stamp the CRS the captured coordinates are in, so a future Load Preview
-    // can detect a CRS change and discard stale overrides instead of placing
-    // the camera in the wrong hemisphere.
-    const projCode = (() => {
-      try { return view.getProjection()?.getCode?.() || ''; } catch { return ''; }
-    })();
-    if (centerInput && Array.isArray(center)) {
-      centerInput.value = JSON.stringify(center.map((v) => Math.round(v)));
-      if (projCode) centerInput.dataset.crs = projCode;
-    }
-    if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom.toFixed(2);
-    if (extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent.map((v) => Math.round(v)));
+    if (!capturePreviewViewToInputs({ includeExtent: true })) { addLog('Carga el mapa preview primero.', 'error'); return; }
   } catch (e) {
     addLog(t('Qtiler2Origo.map_state_read_failed', { msg: e.message }), 'error');
   }
+});
+
+document.getElementById('btn-clear-map-extent')?.addEventListener('click', () => {
+  clearMapExtentInput();
+  addLog(t('Qtiler2Origo.map_extent_cleared'), 'ok');
+});
+
+document.getElementById('btn-center-default-background')?.addEventListener('click', () => {
+  centerPreviewOnDefaultBackground().catch((err) => {
+    addLog(t('Qtiler2Origo.default_bg_center_failed', { msg: err?.message || err }), 'error');
+  });
 });
 
 // Capture min/max zoom from the current preview zoom level. Workflow:
@@ -8267,13 +8612,14 @@ function rulesToOrigoStyle(rules) {
         };
       }
     }
-    const gMin = normScale(r.maxScale); // user input "Visible desde 1:N" → larger denominator hidden
-    const gMax = normScale(r.minScale);
-    // In Origo: maxScale = larger denom (zoomed-out limit), minScale = smaller denom (zoomed-in limit)
-    // We expose: "Visible desde escala 1:X" (less detail) → maxScale=X
-    //            "Visible hasta escala 1:Y" (more detail) → minScale=Y
-    if (gMin != null) geomEntry.maxScale = gMin;
-    if (gMax != null) geomEntry.minScale = gMax;
+    const visibleFrom = normScale(r.maxScale);
+    const visibleTo = normScale(r.minScale);
+    // Origo's runtime checks maxScale as "scale > maxScale" and minScale as
+    // "scale < minScale". The editor exposes the user-facing wording used in
+    // Hajk: visible from 1:X means visible at 1:X and when zooming in.
+    if (visibleFrom != null) geomEntry.minScale = visibleFrom;
+    if (visibleTo != null) geomEntry.maxScale = visibleTo;
+    if (visibleFrom != null || visibleTo != null) geomEntry.qtilerScaleSemantics = 'from-to-v2';
     entries.push(geomEntry);
 
     if (r.label && r.label.enabled && r.label.text) {
@@ -8295,10 +8641,11 @@ function rulesToOrigoStyle(rules) {
         // offsetY along a line is interpreted relative to the line; small
         // negative values put it slightly above the line in OL.
       }
-      const lMin = normScale(r.label.maxScale);
-      const lMax = normScale(r.label.minScale);
-      if (lMin != null) textEntry.maxScale = lMin;
-      if (lMax != null) textEntry.minScale = lMax;
+      const labelFrom = normScale(r.label.maxScale);
+      const labelTo = normScale(r.label.minScale);
+      if (labelFrom != null) textEntry.minScale = labelFrom;
+      if (labelTo != null) textEntry.maxScale = labelTo;
+      if (labelFrom != null || labelTo != null) textEntry.qtilerScaleSemantics = 'from-to-v2';
       entries.push(textEntry);
     }
     return entries;
@@ -8325,8 +8672,13 @@ function origoStyleToRules(styleDef) {
       r.legendLabel = String(def.legendLabel != null ? def.legendLabel : def.label).trim();
     }
     if (def) {
-      if (def.maxScale != null) r.maxScale = def.maxScale;
-      if (def.minScale != null) r.minScale = def.minScale;
+      if (def.qtilerScaleSemantics === 'from-to-v2') {
+        if (def.minScale != null) r.maxScale = def.minScale;
+        if (def.maxScale != null) r.minScale = def.maxScale;
+      } else {
+        if (def.maxScale != null) r.maxScale = def.maxScale;
+        if (def.minScale != null) r.minScale = def.minScale;
+      }
     }
     if (textEntry) {
       r.label.enabled = true;
@@ -8337,8 +8689,13 @@ function origoStyleToRules(styleDef) {
       if (textEntry.text.offsetX != null) r.label.offsetX = textEntry.text.offsetX;
       if (textEntry.text.offsetY != null) r.label.offsetY = textEntry.text.offsetY;
       if (textEntry.text.placement === 'line') r.label.placement = 'line';
-      if (textEntry.maxScale != null) r.label.maxScale = textEntry.maxScale;
-      if (textEntry.minScale != null) r.label.minScale = textEntry.minScale;
+      if (textEntry.qtilerScaleSemantics === 'from-to-v2') {
+        if (textEntry.minScale != null) r.label.maxScale = textEntry.minScale;
+        if (textEntry.maxScale != null) r.label.minScale = textEntry.maxScale;
+      } else {
+        if (textEntry.maxScale != null) r.label.maxScale = textEntry.maxScale;
+        if (textEntry.minScale != null) r.label.minScale = textEntry.minScale;
+      }
     }
     if (def && currentLayerGeomFamily === 'point') {
       if (def.icon && def.icon.src) {
@@ -8887,12 +9244,14 @@ function rulePreviewSampleSvg(rule, geomFamily) {
     if (!rule.point) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="6" fill="#3b82f6" stroke="#2563eb" stroke-width="1"/></svg>`;
     if (rule.point.mode === 'icon' && rule.point.icon && rule.point.icon.src) {
       let src = rule.point.icon.src;
-      // If a color is set on a /qgis-svg/ icon, route through the server-side
+      // If a color is set on a served SVG icon, route through the server-side
       // colorizer so the preview reflects the chosen color.
       const color = rule.point.icon.color;
-      if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && src.startsWith('/qgis-svg/')) {
+      if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && (src.startsWith('/qgis-svg/') || src.startsWith('/qtiler-symbology-svg/'))) {
         const hex = String(color).trim().replace(/^#?/, '#');
-        src = src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
+        src = src.startsWith('/qtiler-symbology-svg/')
+          ? src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/') + `?color=${encodeURIComponent(hex)}`
+          : src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
       }
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><image href="${src}" x="${W/2-16}" y="${H/2-16}" width="32" height="32" preserveAspectRatio="xMidYMid meet"/></svg>`;
     }
@@ -9266,6 +9625,8 @@ function generateMapConfigJson() {
       title: item.title,
       sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
       name: item.type === 'layer' ? item.name : null,
+      isTheme: item.type === 'layer' ? item.isTheme === true : false,
+      themeName: item.type === 'layer' ? item.themeName || null : null,
       isDefault: item.key === publishState.defaultBackgroundKey
     }));
 

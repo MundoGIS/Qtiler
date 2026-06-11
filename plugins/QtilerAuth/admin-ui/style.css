@@ -96,10 +96,53 @@ main {
   gap: 28px;
 }
 
+.admin-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow-x: auto;
+}
+
+.tab-button {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: none;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  color: var(--primary);
+  background: var(--card);
+  box-shadow: none;
+  transform: none;
+}
+
+.tab-button.active {
+  color: var(--primary);
+  background: var(--card);
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 24px;
   box-shadow: var(--shadow);
 }
@@ -181,6 +224,38 @@ main {
   display: none;
 }
 
+.form-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  background: color-mix(in srgb, var(--card) 94%, var(--primary) 6%);
+}
+
+#user-form-inner {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 22px;
+  align-items: end;
+}
+
+#user-form-inner.collapsed {
+  display: none;
+}
+
+#user-form-inner > input[type="hidden"] {
+  display: none;
+}
+
+#user-form-inner .form-field-wide,
+#user-form-inner .form-actions {
+  grid-column: 1 / -1;
+}
+
+.form-field {
+  display: grid;
+  gap: 8px;
+}
+
 .section-head h2 {
   margin: 0;
   font-size: 1.25rem;
@@ -232,7 +307,7 @@ button:disabled {
 
 .form-panel form {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 label {
@@ -251,6 +326,91 @@ label {
 .inline-check input[type="checkbox"] {
   width: auto;
   margin: 0;
+}
+
+.permission-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.permission-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--card) 92%, var(--primary) 8%);
+}
+
+.permission-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 12px;
+}
+
+.permission-card h3 {
+  margin: 0;
+}
+
+.layer-permission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.layer-permission-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.layer-permission-row strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.layer-permission-row small {
+  color: var(--muted);
+}
+
+.search-config-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.search-config-row.is-hidden {
+  display: none;
+}
+
+.plugin-access-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.permission-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--card);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.permission-chip input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
 }
 
 input[type="text"],
@@ -273,7 +433,14 @@ select[multiple] {
 
 .form-actions {
   display: flex;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-top: 8px;
+  margin-top: 6px;
+}
+
+.form-actions button {
+  min-width: 110px;
 }
 
 table {
@@ -358,7 +525,7 @@ tbody tr:hover {
 .password-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
@@ -375,7 +542,7 @@ tbody tr:hover {
 }
 
 .secondary-button {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 10px;
   font-size: 0.85rem;
   background: #fff;
@@ -432,6 +599,56 @@ tbody tr:hover {
 #users-table td.col-created,
 #users-table td.col-updated {
   font-size: 0.82rem;
+}
+
+.plugin-map-cell {
+  min-width: 420px;
+}
+
+.plugin-map-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 96%, var(--primary) 4%);
+}
+
+.plugin-map-group + .plugin-map-group {
+  margin-top: 10px;
+}
+
+.plugin-map-group h4 {
+  margin: 0 0 2px;
+  font-size: 0.9rem;
+}
+
+.map-access-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+}
+
+.map-access-row input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.map-access-row strong,
+.map-access-row small {
+  display: block;
+}
+
+.map-access-row small {
+  color: var(--muted);
+  margin-top: 2px;
 }
 
 .tag {

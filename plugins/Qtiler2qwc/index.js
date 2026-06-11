@@ -390,7 +390,10 @@ const ensureAdmin = (security) => (req, res, next) => {
   const enabled = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
   if (!enabled) return next();
   if (!req.user) return res.status(401).json({ error: 'auth_required' });
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+  const canEdit = typeof security?.canEditPortal === 'function'
+    ? security.canEditPortal(req.user, 'Qtiler2qwc')
+    : req.user.role === 'admin';
+  if (!canEdit) return res.status(403).json({ error: 'forbidden' });
   return next();
 };
 
@@ -3308,6 +3311,8 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       const layers = layerNames.map((name) => {
         const rule = layerRulesInput[name] && typeof layerRulesInput[name] === 'object' ? layerRulesInput[name] : {};
         const sourceLayer = incomingByName[name] || null;
+        const themeName = String(sourceLayer?.themeName || (String(name || '').startsWith('theme:') ? String(name).slice('theme:'.length) : '')).trim();
+        const isTheme = sourceLayer?.isTheme === true || !!themeName;
         const fallbackSearchable = sourceLayer?.searchable === true;
         const fallbackEditable = sourceLayer?.editable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
@@ -3318,13 +3323,16 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
         const included = sourceLayer ? (sourceLayer.included !== false) : true;
         return {
           name,
+          title: String(sourceLayer?.title || (isTheme ? themeName : name)).trim() || name,
           sourceProjectId: projectId,
           role: 'main',
           included,
           visible: included && (sourceLayer ? (typeof sourceLayer.visible === 'undefined' ? true : !!sourceLayer.visible) : true),
-          searchable: (rule.searchable === true) || fallbackSearchable,
-          editable: (rule.editable === true) || fallbackEditable,
-          serveAsWfs: (rule.serveAsWfs === true) || fallbackServeAsWfs,
+          isTheme,
+          themeName: themeName || null,
+          searchable: isTheme ? false : ((rule.searchable === true) || fallbackSearchable),
+          editable: isTheme ? false : ((rule.editable === true) || fallbackEditable),
+          serveAsWfs: isTheme ? false : ((rule.serveAsWfs === true) || fallbackServeAsWfs),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,

@@ -533,11 +533,15 @@ export const registerWfsRoutes = ({
     const txRequireAdmin = String(process.env.WFS_TX_REQUIRE_ADMIN || 'false').toLowerCase() === 'true';
     const userRole = String(req.user?.role || '').toLowerCase();
     const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
-    if (authActive && !req.user) {
+    if (!authActive) {
+      res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: QtilerAuth must be installed and active for WFS-T transactions', { code: 'SecurityError' }));
+      return;
+    }
+    if (!req.user) {
       res.status(401).type('application/xml').send(wfsExceptionXml('Access Denied: Authentication required for transactions', { code: 'SecurityError' }));
       return;
     }
-    if (authActive && txRequireAdmin && userRole !== 'admin') {
+    if (txRequireAdmin && userRole !== 'admin') {
       res.status(403).type('application/xml').send(wfsExceptionXml('Access Denied: You must be admin to perform transactions', { code: 'SecurityError' }));
       return;
     }
@@ -549,7 +553,7 @@ export const registerWfsRoutes = ({
     const config = typeof readProjectConfig === 'function'
       ? (readProjectConfig(projectId, { useCache: false }) || {})
       : {};
-    if (authActive && userRole !== 'admin') {
+    if (userRole !== 'admin') {
       const projectAllowed = typeof security?.canEditProject === 'function'
         ? security.canEditProject(req.user, projectId)
         : false;

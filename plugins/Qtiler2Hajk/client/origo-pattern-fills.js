@@ -16,6 +16,12 @@
     return window.Origo && window.Origo.ol && window.Origo.ol.style ? window.Origo : null;
   }
 
+  function getOlStyleApi() {
+    const origo = getOrigoApi();
+    if (origo) return origo.ol.style;
+    return window.ol && window.ol.style ? window.ol.style : null;
+  }
+
   function makePatternKey(meta) {
     return JSON.stringify({
       pattern: meta.pattern,
@@ -119,15 +125,15 @@
   }
 
   function buildPatternStyleFunction(styleName, meta) {
-    const origo = getOrigoApi();
-    if (!origo) return null;
+    const styleApi = getOlStyleApi();
+    if (!styleApi) return null;
     const normalized = normalizePatternMeta(meta);
     const cacheKey = `${styleName}::${makePatternKey(normalized)}`;
     if (styleCache.has(cacheKey)) return styleCache.get(cacheKey);
 
-    const Style = origo.ol.style.Style;
-    const Fill = origo.ol.style.Fill;
-    const Stroke = origo.ol.style.Stroke;
+    const Style = styleApi.Style;
+    const Fill = styleApi.Fill;
+    const Stroke = styleApi.Stroke;
     const fillPattern = createCanvasPattern(normalized);
     const style = new Style({
       fill: new Fill({ color: fillPattern }),
@@ -241,6 +247,124 @@
     return exact || candidates[0] || null;
   }
 
+  function extractPolygonStyleRulesFromStyleDef(styleDef) {
+    if (!Array.isArray(styleDef)) return [];
+    const out = [];
+    styleDef.forEach(function (ruleArr, index) {
+      const entries = Array.isArray(ruleArr) ? ruleArr : [ruleArr];
+      const geomEntry = entries.find(function (entry) {
+        return entry && typeof entry === 'object' && (entry.fill || entry.stroke) && !entry.text;
+      });
+      if (!geomEntry) return;
+      const patternMeta = geomEntry.qtilerPatternStyle && typeof geomEntry.qtilerPatternStyle === 'object'
+        ? geomEntry.qtilerPatternStyle
+        : null;
+      const rawPattern = String(patternMeta && patternMeta.fillPattern || '').trim().toLowerCase();
+      const hasPattern = ['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(rawPattern);
+      out.push({
+        index: index,
+        filter: String(geomEntry.filter || '').trim(),
+        hasFill: !!geomEntry.fill,
+        hasStroke: !!geomEntry.stroke,
+        fillColor: geomEntry.fill && geomEntry.fill.color ? geomEntry.fill.color : null,
+        strokeColor: geomEntry.stroke && geomEntry.stroke.color ? geomEntry.stroke.color : null,
+        strokeWidth: Number(geomEntry.stroke && geomEntry.stroke.width),
+        lineDash: Array.isArray(geomEntry.stroke && geomEntry.stroke.lineDash) ? geomEntry.stroke.lineDash.map(Number).filter(Number.isFinite) : [],
+        meta: hasPattern ? normalizePatternMeta({
+          pattern: rawPattern,
+          angle: patternMeta.fillPatternAngle,
+          spacing: patternMeta.fillPatternSpacing,
+          size: patternMeta.fillPatternSize,
+          transparentBackground: patternMeta.fillPatternTransparent === true,
+          fillColor: geomEntry.fill && geomEntry.fill.color,
+          strokeColor: geomEntry.stroke && geomEntry.stroke.color,
+          strokeWidth: geomEntry.stroke && geomEntry.stroke.width,
+          lineDash: geomEntry.stroke && geomEntry.stroke.lineDash
+        }) : null
+      });
+    });
+    return out;
+  }
+
+  function selectStyleRule(styleRules, feature, geomStyle) {
+    if (!Array.isArray(styleRules) || !styleRules.length) return null;
+    if (styleRules.length === 1) return styleRules[0];
+    const stroke = geomStyle && typeof geomStyle.getStroke === 'function' ? geomStyle.getStroke() : null;
+    const fill = geomStyle && typeof geomStyle.getFill === 'function' ? geomStyle.getFill() : null;
+    const styleFill = normalizeColorSignature(fill && typeof fill.getColor === 'function' ? fill.getColor() : '');
+    const styleStroke = normalizeColorSignature(stroke && typeof stroke.getColor === 'function' ? stroke.getColor() : '');
+    const styleWidth = Number(stroke && typeof stroke.getWidth === 'function' ? stroke.getWidth() : NaN);
+    const styleDash = normalizeDashSignature(stroke && typeof stroke.getLineDash === 'function' ? stroke.getLineDash() : []);
+    const filtered = styleRules.filter(function (entry) {
+      return evaluateFilterExpression(entry.filter, feature);
+    });
+    const candidates = filtered.length ? filtered : styleRules;
+    const exact = candidates.find(function (entry) {
+      return (!entry.fillColor || normalizeColorSignature(entry.fillColor) === styleFill)
+        && (!entry.strokeColor || normalizeColorSignature(entry.strokeColor) === styleStroke)
+        && (!Number.isFinite(entry.strokeWidth) || entry.strokeWidth === styleWidth)
+        && (!entry.lineDash || normalizeDashSignature(entry.lineDash) === styleDash);
+    });
+    return exact || candidates[0] || null;
+  }
+
+  function createPolygonStyle(rule, origo) {
+    if (!rule || !origo) return null;
+    const Style = origo.ol.style.Style;
+    const Fill = origo.ol.style.Fill;
+    const Stroke = origo.ol.style.Stroke;
+    const fillColor = rule.hasFill ? (rule.meta ? createCanvasPattern(rule.meta) : (rule.fillColor || 'rgba(0,0,0,0)')) : 'rgba(0,0,0,0)';
+    const strokeColor = rule.hasStroke ? (rule.strokeColor || 'rgba(37, 99, 235, 1)') : 'rgba(0,0,0,0)';
+    const strokeWidth = Number.isFinite(Number(rule.strokeWidth)) ? Number(rule.strokeWidth) : 1;
+    return new Style({
+      fill: new Fill({ color: fillColor }),
+      stroke: new Stroke({
+        color: strokeColor,
+        width: strokeWidth,
+        lineDash: Array.isArray(rule.lineDash) && rule.lineDash.length ? rule.lineDash.map(Number) : undefined
+      })
+    });
+  }
+
+  function buildPolygonWrappingStyleFunction(styleName, originalStyle, styleRules, origo) {
+    if (!origo || !Array.isArray(styleRules) || !styleRules.length) return null;
+    const Fill = origo.ol.style.Fill;
+    const Stroke = origo.ol.style.Stroke;
+    const cacheKey = styleName + '::polygon-wrapper::' + JSON.stringify(styleRules.map(function (entry) {
+      return { index: entry.index, filter: entry.filter, hasFill: entry.hasFill, hasStroke: entry.hasStroke, fillColor: entry.fillColor, strokeColor: entry.strokeColor, strokeWidth: entry.strokeWidth, lineDash: entry.lineDash, meta: entry.meta };
+    }));
+    if (styleCache.has(cacheKey)) return styleCache.get(cacheKey);
+    const fn = function polygonWrappingStyle(feature, resolution) {
+      const sourceStyles = getStyleArray(originalStyle, feature, resolution);
+      const styleArray = Array.isArray(sourceStyles) ? sourceStyles : (sourceStyles ? [sourceStyles] : []);
+      const geomIndex = styleArray.findIndex(function (style) {
+        return style
+          && typeof style.getFill === 'function'
+          && !(style.getImage && style.getImage())
+          && !(style.getText && style.getText());
+      });
+      const geomStyle = geomIndex >= 0 ? styleArray[geomIndex] : null;
+      const selected = selectStyleRule(styleRules, feature, geomStyle);
+      if (!selected) return sourceStyles;
+      if (!styleArray.length || geomIndex < 0) return [createPolygonStyle(selected, origo)].filter(Boolean);
+      const cloned = styleArray.map(function (style, index) {
+        if (index !== geomIndex || !style || typeof style.clone !== 'function') return style;
+        const copy = style.clone();
+        const fillColor = selected.hasFill ? (selected.meta ? createCanvasPattern(selected.meta) : (selected.fillColor || 'rgba(0,0,0,0)')) : 'rgba(0,0,0,0)';
+        copy.setFill(new Fill({ color: fillColor }));
+        copy.setStroke(new Stroke({
+          color: selected.hasStroke ? (selected.strokeColor || 'rgba(37, 99, 235, 1)') : 'rgba(0,0,0,0)',
+          width: Number.isFinite(Number(selected.strokeWidth)) ? Number(selected.strokeWidth) : 1,
+          lineDash: Array.isArray(selected.lineDash) && selected.lineDash.length ? selected.lineDash.map(Number) : undefined
+        }));
+        return copy;
+      });
+      return Array.isArray(sourceStyles) ? cloned : cloned[0];
+    };
+    styleCache.set(cacheKey, fn);
+    return fn;
+  }
+
   function buildPatternWrappingStyleFunction(styleName, originalStyle, patternRules, origo) {
     const Style = origo.ol.style.Style;
     const Fill = origo.ol.style.Fill;
@@ -286,6 +410,7 @@
   }
 
   function applyRuntimePatternStyles(origoApp, cfg) {
+    cfg = cfg || window.__QTILER2HAJK_CONFIG || null;
     const patternStyles = cfg && cfg.qtilerPatternStyles && typeof cfg.qtilerPatternStyles === 'object'
       ? cfg.qtilerPatternStyles
       : null;
@@ -294,24 +419,62 @@
     const hasEmbeddedPatterns = !!(styleDefs && Object.keys(styleDefs).some(function (styleName) {
       return extractPatternRulesFromStyleDef(styleDefs[styleName]).length > 0;
     }));
-    if (!hasLegacyPatterns && !hasEmbeddedPatterns) return;
+    const hasEmbeddedPolygonStyles = !!(styleDefs && Object.keys(styleDefs).some(function (styleName) {
+      return extractPolygonStyleRulesFromStyleDef(styleDefs[styleName]).length > 0;
+    }));
+    if (!hasLegacyPatterns && !hasEmbeddedPatterns && !hasEmbeddedPolygonStyles) return;
 
     const viewer = origoApp && typeof origoApp.api === 'function' ? origoApp.api() : null;
-    const map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
+    const publicApi = window.hajkPublicApi || null;
+    const publicMap = publicApi && (publicApi.olMap || (typeof publicApi.getMap === 'function' ? publicApi.getMap() : null));
+    const legacyApp = window.hajkApp || window.origoApp || origoApp || null;
+    const legacyViewer = legacyApp && typeof legacyApp.api === 'function' ? legacyApp.api() : null;
+    const map = publicMap
+      || (viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null)
+      || (legacyViewer && typeof legacyViewer.getMap === 'function' ? legacyViewer.getMap() : null);
     const origo = getOrigoApi();
     if (!map || typeof map.getLayers !== 'function') return;
-    if (!origo) return;
+
+    const vectorStyleByLayerKey = new Map();
+    const vectorLayers = cfg && cfg.layersConfig && Array.isArray(cfg.layersConfig.vectorlayers)
+      ? cfg.layersConfig.vectorlayers
+      : [];
+    vectorLayers.forEach(function (layerDef) {
+      const styleName = String(layerDef && layerDef.style || '').trim();
+      if (!styleName) return;
+      ['id', 'caption', 'layer', 'name'].forEach(function (key) {
+        const value = String(layerDef && layerDef[key] || '').trim();
+        if (value) vectorStyleByLayerKey.set(value, styleName);
+      });
+    });
+
+    function getLayerStyleName(layer) {
+      const props = layer && typeof layer.getProperties === 'function' ? layer.getProperties() : {};
+      const candidates = [
+        layer.get('styleName'), layer.get('style'), layer.get('id'), layer.get('name'), layer.get('title'), layer.get('caption'),
+        props && props.styleName, props && props.style, props && props.id, props && props.name, props && props.title, props && props.caption, props && props.layer
+      ].map(function (value) { return String(value || '').trim(); }).filter(Boolean);
+      for (const candidate of candidates) {
+        if ((styleDefs && styleDefs[candidate]) || (patternStyles && patternStyles[candidate])) return candidate;
+        if (vectorStyleByLayerKey.has(candidate)) return vectorStyleByLayerKey.get(candidate);
+      }
+      if (vectorLayers.length === 1) return String(vectorLayers[0].style || '').trim();
+      return '';
+    }
 
     eachLayer(map.getLayers(), function (layer) {
       if (!layer || typeof layer.get !== 'function' || typeof layer.setStyle !== 'function') return;
-      const styleName = String(layer.get('styleName') || '').trim();
+      const styleName = getLayerStyleName(layer);
       if (!styleName) return;
       const embeddedRules = styleDefs ? extractPatternRulesFromStyleDef(styleDefs[styleName]) : [];
+      const polygonRules = styleDefs ? extractPolygonStyleRulesFromStyleDef(styleDefs[styleName]) : [];
       const legacyMeta = patternStyles && patternStyles[styleName] && !Array.isArray(patternStyles[styleName])
         ? patternStyles[styleName]
         : null;
-      const styleFn = embeddedRules.length
-        ? buildPatternWrappingStyleFunction(styleName, layer.getStyle(), embeddedRules, origo)
+      const styleFn = polygonRules.length && origo
+        ? buildPolygonWrappingStyleFunction(styleName, layer.getStyle(), polygonRules, origo)
+        : embeddedRules.length
+        ? (origo ? buildPatternWrappingStyleFunction(styleName, layer.getStyle(), embeddedRules, origo) : buildPatternStyleFunction(styleName, embeddedRules[0].meta))
         : (legacyMeta ? buildPatternStyleFunction(styleName, legacyMeta) : null);
       if (!styleFn) return;
       try {
@@ -320,6 +483,18 @@
         console.warn('[Qtiler2Hajk] Failed to apply runtime pattern style for', styleName, err);
       }
     });
+  }
+
+  function scheduleAutoApply() {
+    let attempts = 0;
+    const tick = function () {
+      attempts += 1;
+      try {
+        applyRuntimePatternStyles(window.hajkApp || window.origoApp || null, window.__QTILER2HAJK_CONFIG || null);
+      } catch (err) {}
+      if (attempts < 80) window.setTimeout(tick, 250);
+    };
+    tick();
   }
 
   function bootOrigo(configOrUrl) {
@@ -424,4 +599,6 @@
     bootOrigo: bootOrigo,
     applyRuntimePatternStyles: applyRuntimePatternStyles
   };
+  window.addEventListener('qtiler2hajk-config-loaded', scheduleAutoApply);
+  window.addEventListener('load', scheduleAutoApply);
 })();

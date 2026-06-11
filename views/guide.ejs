@@ -54,6 +54,14 @@
                   <li data-i18n-html="guide.setupServer.step3">Optional: install the Windows Service via <code>node service\\install-service.js</code>.</li>
                 </ul>
               </div>
+              <div class="card-mini">
+                <h3 data-i18n="guide.installApps">Install apps and plugins</h3>
+                <ul>
+                  <li data-i18n-html="guide.installApps.step1">Open <strong>Admin console</strong> and use the <strong>Install Admin Dashboard</strong> to install or update Qtiler plugin ZIP packages.</li>
+                  <li data-i18n-html="guide.installApps.step2">The installer reads each plugin manifest, shows license/docs, enables admin consoles, and keeps runtime data under <code>data/&lt;plugin&gt;/</code>.</li>
+                  <li data-i18n-html="guide.installApps.step3">Qtiler2Hajk installs the Hajk viewer from a selected GitHub release inside its own admin app, so no separate Hajk server is required.</li>
+                </ul>
+              </div>
             </div>
             <div class="tip" data-i18n-html="guide.tip1">Already copied projects into <code>qgisprojects/</code>? Just click <strong>Reload layers</strong> to rebuild the list.</div>
           </section>
@@ -284,6 +292,7 @@
                     <li data-i18n="guide.oss.item.search">ProjectSearch (v0.1.0): searchable endpoints and UI helpers for attribute-based search.</li>
                     <li data-i18n="guide.oss.item.qrigo">Qrigo (v0.1.0): Origo Map integration helpers for users who already run a standard Origo-map installation on their own server &mdash; it generates ready-to-paste JSON snippets to add Qtiler WMS/WMTS/WFS layers to your existing Origo <code>index.json</code>.</li>
                     <li data-i18n="guide.oss.item.qtiler2origo">Qtiler2Origo (v0.1.0): the plugin that installs Origo on top of Qtiler itself. It lets you create and configure each map graphically using the QGIS library, and reuses Qtiler's cache and the WMS/WFS layers from projects published in Qtiler.</li>
+                    <li data-i18n-html="guide.oss.item.qtiler2hajk">Qtiler2Hajk (v0.1.0): installs and serves the Hajk web map app from Qtiler, publishes QGIS projects as Hajk maps, builds the public maps portal at <code>/Qtiler2Hajk/maps</code>, and maps Qtiler WMS/WFS/search/edit settings into Hajk-native configuration.</li>
                     <li data-i18n="guide.oss.item.vectortiles">VectorTiles (v0.2.0): MBTiles generation plus TileJSON/Style/MVT endpoints for vector delivery. Copy Style-URL and Source-URL from the dashboard.</li>
                     <li data-i18n-html="guide.oss.item.qtiler2qwc">Qtiler2qwc (v0.1.0): embeds a full QWC2 (QGIS Web Client 2) webmap viewer inside Qtiler. Publish QGIS projects as interactive web maps with dynamic themes, attribute search, and optional 3D terrain. Access the viewer at <code>/Qtiler2qwc/webmap</code> and the admin panel at <code>/Qtiler2qwc/admin</code>.</li>
                     <li data-i18n="guide.oss.item.quantizedmesh">QuantizedMesh (v0.1.0): quantized-mesh terrain endpoints for 3D viewers (Cesium, QWC2 3D).</li>

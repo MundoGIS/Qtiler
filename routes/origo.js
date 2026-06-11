@@ -35,6 +35,9 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
       if (!projectId || !layerName) {
         return res.status(400).json({ error: 'invalid_query', message: 'project and layer are required' });
       }
+      if (layerName.startsWith('theme:')) {
+        return res.json({ ok: true, attributes: [] });
+      }
       if (!tileRendererPool || typeof tileRendererPool.renderTile !== 'function' || typeof findProjectById !== 'function') {
         return res.status(503).json({ error: 'worker_unavailable' });
       }
@@ -48,6 +51,10 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
         type_name: layerName
       });
       if (!result || result.status !== 'success') {
+        const code = String(result?.code || result?.error || '').toLowerCase();
+        if (code === 'notfound' || code === 'layer_not_found') {
+          return res.json({ ok: true, attributes: [] });
+        }
         return res.status(500).json({ error: 'attributes_failed', details: result?.message || result?.error || 'unknown' });
       }
       return res.json({ ok: true, attributes: Array.isArray(result.attributes) ? result.attributes : [] });

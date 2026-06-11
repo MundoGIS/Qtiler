@@ -705,6 +705,130 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       || userHasPermission(user, `portal:edit:${portalId}`);
   };
 
+  const sanitizeProjectId = (value) => String(value || '').trim().replace(/[^A-Za-z0-9_.-]/g, '');
+  const getProjectConfigPath = (projectId) => path.join(process.cwd(), 'cache', projectId, 'project-config.json');
+  const readJsonSafe = (filePath, fallback) => {
+    try {
+      if (!fs.existsSync(filePath)) return fallback;
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      return parsed == null ? fallback : parsed;
+    } catch {
+      return fallback;
+    }
+  };
+  const writeJsonSafe = (filePath, value) => {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
+  };
+  const readProjectConfig = (projectId) => readJsonSafe(getProjectConfigPath(projectId), {});
+  const writeProjectConfig = (projectId, config) => writeJsonSafe(getProjectConfigPath(projectId), config && typeof config === 'object' ? config : {});
+  const searchablePathFor = (projectId) => path.join(process.cwd(), 'data', 'searchable-layers', `${projectId}.json`);
+  const readSearchableLayers = (projectId) => {
+    const rows = readJsonSafe(searchablePathFor(projectId), []);
+    return Array.isArray(rows) ? rows : [];
+  };
+  const writeSearchableLayers = (projectId, rows) => writeJsonSafe(searchablePathFor(projectId), Array.isArray(rows) ? rows : []);
+  const readProjectLayerPermissions = (projectId) => {
+    const cfg = readProjectConfig(projectId);
+    const layerCfg = cfg && typeof cfg.layers === 'object' && cfg.layers ? cfg.layers : {};
+    const searchable = new Map(readSearchableLayers(projectId).map((entry) => [String(entry?.name || ''), entry]).filter(([name]) => name));
+    return Object.entries(layerCfg).map(([name, entry]) => {
+      const row = entry && typeof entry === 'object' ? entry : {};
+      const searchEntry = searchable.get(name) || null;
+      return {
+        name,
+        wfsEditable: row.wfsEditable === true,
+        wfsSearchable: row.wfsSearchable === true,
+        search: searchEntry
+      };
+    });
+  };
+  const saveProjectLayerPermissions = (projectId, rows) => {
+    const cfg = readProjectConfig(projectId);
+    const nextCfg = cfg && typeof cfg === 'object' ? { ...cfg } : {};
+    const currentLayers = nextCfg.layers && typeof nextCfg.layers === 'object' ? nextCfg.layers : {};
+    const nextLayers = { ...currentLayers };
+    const searchableRows = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const name = String(row?.name || '').trim();
+      if (!name) continue;
+      const previous = nextLayers[name] && typeof nextLayers[name] === 'object' ? nextLayers[name] : {};
+      nextLayers[name] = {
+        ...previous,
+        wfsEditable: row.wfsEditable === true,
+        wfsSearchable: row.wfsSearchable === true
+      };
+      if (row.wfsSearchable === true && row.search && typeof row.search === 'object') {
+        searchableRows.push({ ...row.search, name });
+      }
+    }
+    nextCfg.layers = nextLayers;
+    nextCfg.updatedAt = nowIso();
+    writeProjectConfig(projectId, nextCfg);
+    writeSearchableLayers(projectId, searchableRows);
+    return readProjectLayerPermissions(projectId);
+  };
+
+  const pluginMapSources = [
+    { id: 'Qtiler2qwc', label: 'QWC maps', runtime: path.join(dataRoot, 'Qtiler2qwc', 'qwc2'), publicBase: '/plugins/Qtiler2qwc/published' },
+    { id: 'Qtiler2Origo', label: 'Origo maps', runtime: path.join(dataRoot, 'Qtiler2Origo', 'origo'), publicBase: '/plugins/Qtiler2Origo/published' },
+    { id: 'Qtiler2Hajk', label: 'Hajk maps', runtime: path.join(dataRoot, 'Qtiler2Hajk', 'hajk'), publicBase: '/plugins/Qtiler2Hajk/published' }
+  ];
+
+  const collectPublishedProfileProjectIds = (profile) => {
+    const ids = new Set();
+    const add = (value) => {
+      const id = sanitizeProjectId(value);
+      if (id) ids.add(id);
+    };
+    add(profile?.projectId);
+    for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+      add(layer?.sourceProjectId || profile?.projectId);
+    }
+    for (const bg of (Array.isArray(profile?.backgrounds) ? profile.backgrounds : [])) {
+      add(bg?.sourceProjectId || profile?.backgroundProjectId || profile?.projectId);
+    }
+    return Array.from(ids);
+  };
+
+  const readPublishedPluginMaps = () => pluginMapSources.map((source) => {
+    const publishedDir = path.join(source.runtime, 'published');
+    let entries = [];
+    try {
+      entries = fs.readdirSync(publishedDir, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
+    const maps = entries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+      .map((entry) => {
+        const filePath = path.join(publishedDir, entry.name);
+        try {
+          const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const profileKey = String(profile?.profileKey || path.basename(entry.name, '.json')).trim();
+          const projectId = sanitizeProjectId(profile?.projectId || profileKey);
+          const projectIds = collectPublishedProfileProjectIds(profile);
+          return {
+            id: `${source.id}:${profileKey}`,
+            pluginId: source.id,
+            pluginLabel: source.label,
+            profileKey,
+            projectId,
+            projectIds,
+            title: String(profile?.name || profile?.title || projectId || profileKey).trim() || profileKey,
+            description: String(profile?.description || '').trim(),
+            updatedAt: profile?.generatedAt || profile?.updatedAt || null,
+            url: `${source.publicBase}/${encodeURIComponent(entry.name)}`
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((left, right) => String(left.title || left.profileKey).localeCompare(String(right.title || right.profileKey)));
+    return { id: source.id, label: source.label, maps };
+  });
+
   /* ---------------------------------------------------------------- */
   /*  Startup initialization                                           */
   /* ---------------------------------------------------------------- */
@@ -1284,7 +1408,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({ ok: true, revokedBefore: cutoff });
   });
 
-  adminRouter.patch('/users/:id', async (req, res) => {
+  const updateAdminUserHandler = async (req, res) => {
     const { id } = req.params;
     const { password, role, projects, permissions, status } = req.body || {};
     const changes = {};
@@ -1311,7 +1435,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       return res.status(404).json({ error: 'user_not_found' });
     }
     res.json({ user: pickUserPayload(updated) });
-  });
+  };
+
+  adminRouter.patch('/users/:id', updateAdminUserHandler);
+  adminRouter.post('/users/:id', updateAdminUserHandler);
 
   adminRouter.delete('/users/:id', (req, res) => {
     const { id } = req.params;
@@ -1331,7 +1458,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({ projects: data.projects });
   });
 
-  adminRouter.patch('/projects/:id', (req, res) => {
+  adminRouter.get('/plugin-maps', (_req, res) => {
+    res.json({ plugins: readPublishedPluginMaps() });
+  });
+
+  const updateProjectAccessHandler = (req, res) => {
     const { id } = req.params;
     const { public: isPublic, allowedUsers, allowedRoles, editUsers, editRoles } = req.body || {};
     const entry = {};
@@ -1343,6 +1474,23 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     upsertProjectAccess(id, entry);
     const updated = getProjectAccess(id);
     res.json({ project: updated });
+  };
+
+  adminRouter.patch('/projects/:id', updateProjectAccessHandler);
+  adminRouter.post('/projects/:id', updateProjectAccessHandler);
+
+  adminRouter.get('/projects/:id/layers', (req, res) => {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) return res.status(400).json({ error: 'invalid_project' });
+    res.json({ projectId, layers: readProjectLayerPermissions(projectId) });
+  });
+
+  adminRouter.post('/projects/:id/layers', (req, res) => {
+    const projectId = sanitizeProjectId(req.params.id);
+    if (!projectId) return res.status(400).json({ error: 'invalid_project' });
+    const rows = Array.isArray(req.body?.layers) ? req.body.layers : (Array.isArray(req.body) ? req.body : []);
+    const layers = saveProjectLayerPermissions(projectId, rows);
+    res.json({ projectId, layers });
   });
 
   // Avoid collisions with Qtiler core admin UI under /admin.

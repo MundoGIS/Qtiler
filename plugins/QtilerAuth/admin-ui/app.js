@@ -8,6 +8,8 @@ const state = {
   projects: [],
   permissions: {},
   searchableByProject: {},
+  layerPermissionsByProject: {},
+  pluginMaps: [],
   layersByProject: {},
   layerAttributesByProject: {},
   // userId -> plaintext API key revealed only once (regenerate/create response)
@@ -28,6 +30,13 @@ const formatRelativeTime = (iso) => {
   return new Date(ts).toLocaleString();
 };
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
 const messagesEl = document.getElementById('messages');
 const usersTableBody = document.querySelector('#users-table tbody');
 
@@ -46,6 +55,27 @@ const userFormSubmit = document.getElementById('user-form-submit');
 const userFormReset = document.getElementById('user-form-reset');
 
 const goDashboardButton = document.getElementById('go-dashboard');
+
+const PORTAL_PERMISSIONS = [
+  { id: 'Qtiler2qwc', label: 'QWC admin', permission: 'portal:edit:Qtiler2qwc' },
+  { id: 'Qtiler2Origo', label: 'Origo admin', permission: 'portal:edit:Qtiler2Origo' },
+  { id: 'Qtiler2Hajk', label: 'Hajk admin', permission: 'portal:edit:Qtiler2Hajk' }
+];
+
+const isAdminUser = (user) => user?.role === 'admin';
+const ADMIN_ALL_PROJECTS_LABEL = 'All projects (view + edit)';
+
+const initTabs = () => {
+  const buttons = Array.from(document.querySelectorAll('.tab-button[data-tab]'));
+  const panels = Array.from(document.querySelectorAll('.tab-panel[data-tab-panel]'));
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach((btn) => btn.classList.toggle('active', btn === button));
+      panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.tabPanel === target));
+    });
+  });
+};
 
 /* ── Collapsible sections ── */
 const initCollapsible = () => {
@@ -89,19 +119,7 @@ const expandFormPanel = () => {
 };
 
 initCollapsible();
-
-/* Start Projects and License sections collapsed */
-['projects-body', 'license-body'].forEach((id) => {
-  const el = document.getElementById(id);
-  if (el) {
-    el.classList.add('collapsed');
-    const header = document.querySelector(`[data-collapse="${id}"]`);
-    if (header) {
-      const btn = header.querySelector('.collapse-toggle');
-      if (btn) btn.classList.add('collapsed');
-    }
-  }
-});
+initTabs();
 
 const DEFAULT_ADMIN_PASSWORD_PLACEHOLDER = 'MundoGIS-2026';
 const urlParams = new URLSearchParams(window.location.search);
@@ -236,10 +254,12 @@ async function loadSearchableCatalog() {
     try {
       const [layersResponse, searchableResponse] = await Promise.all([
         api(`/projects/${encodeURIComponent(projectId)}/layers`),
-        api(`/projects/${encodeURIComponent(projectId)}/searchable`)
+        api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`)
       ]);
       const allLayers = Array.isArray(layersResponse?.layers) ? layersResponse.layers : [];
       const vectorLayers = allLayers.filter((l) => l.type === 'WFS' || l.kind === 'vector' || !!l.geometry_type);
+      const layerPermissions = Array.isArray(searchableResponse?.layers) ? searchableResponse.layers : [];
+      const permissionByName = new Map(layerPermissions.map((entry) => [String(entry?.name || ''), entry]));
       const attributeEntries = await Promise.all(vectorLayers.map(async (layer) => {
         const metadata = await fetchLayerAttributes(projectId, layer.name);
         return [layer.name, metadata];
@@ -247,7 +267,9 @@ async function loadSearchableCatalog() {
       return {
         projectId,
         layers: vectorLayers,
-        searchable: Array.isArray(searchableResponse) ? searchableResponse : [],
+        searchable: layerPermissions.map((entry) => entry?.search).filter(Boolean),
+        layerPermissions,
+        permissionByName,
         attributes: Object.fromEntries(attributeEntries)
       };
     } catch (_err) {
@@ -255,20 +277,28 @@ async function loadSearchableCatalog() {
         projectId,
         layers: [],
         searchable: [],
+        layerPermissions: [],
+        permissionByName: new Map(),
         attributes: {}
       };
     }
   }));
 
   const searchableByProject = {};
+  const layerPermissionsByProject = {};
   const layersByProject = {};
   const layerAttributesByProject = {};
   results.filter(Boolean).forEach((entry) => {
     searchableByProject[entry.projectId] = entry.searchable;
-    layersByProject[entry.projectId] = entry.layers;
+    layerPermissionsByProject[entry.projectId] = entry.permissionByName || new Map();
+    layersByProject[entry.projectId] = entry.layers.map((layer) => ({
+      ...layer,
+      ...(entry.permissionByName?.get(String(layer.name || '')) || {})
+    }));
     layerAttributesByProject[entry.projectId] = entry.attributes;
   });
   state.searchableByProject = searchableByProject;
+  state.layerPermissionsByProject = layerPermissionsByProject;
   state.layersByProject = layersByProject;
   state.layerAttributesByProject = layerAttributesByProject;
 }
@@ -402,10 +432,18 @@ async function api(url, options = {}) {
   if (Object.keys(opts.headers).length === 0) {
     delete opts.headers;
   }
-  const response = await fetch(url, opts);
-  const contentType = response.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const payload = isJson ? await response.json().catch(() => null) : null;
+  let response = await fetch(url, opts);
+  let contentType = response.headers.get('content-type') || '';
+  let isJson = contentType.includes('application/json');
+  let payload = isJson ? await response.json().catch(() => null) : null;
+
+  const method = String(opts.method || 'GET').toUpperCase();
+  if (method === 'PATCH' && [403, 404, 405, 501].includes(response.status)) {
+    response = await fetch(url, { ...opts, method: 'POST' });
+    contentType = response.headers.get('content-type') || '';
+    isJson = contentType.includes('application/json');
+    payload = isJson ? await response.json().catch(() => null) : null;
+  }
 
   if (response.status === 401) {
     showMessage('error', 'Session expired. Redirecting to sign-in.');
@@ -469,6 +507,7 @@ function renderUsers() {
     cell.textContent = 'No users found.';
     row.appendChild(cell);
     usersTableBody.appendChild(row);
+    renderPluginAccess();
     return;
   }
   state.users.forEach((user) => {
@@ -563,7 +602,9 @@ function renderUsers() {
 
     const projectsCell = document.createElement('td');
     projectsCell.className = 'col-projects';
-    projectsCell.textContent = Array.isArray(user.projects) && user.projects.length
+    projectsCell.textContent = isAdminUser(user)
+      ? ADMIN_ALL_PROJECTS_LABEL
+      : Array.isArray(user.projects) && user.projects.length
       ? user.projects.join(', ')
       : '—';
 
@@ -607,6 +648,140 @@ function renderUsers() {
     row.append(usernameCell, roleCell, statusCell, apiKeyCell, projectsCell, createdCell, updatedCell, actionsCell);
     usersTableBody.appendChild(row);
   });
+  renderPluginAccess();
+}
+
+function renderPluginAccess() {
+  const tableBody = document.querySelector('#plugin-access-table tbody');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+
+  if (!state.users.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 4;
+    cell.textContent = 'No users found.';
+    row.appendChild(cell);
+    tableBody.appendChild(row);
+    return;
+  }
+
+  const plugins = Array.isArray(state.pluginMaps) ? state.pluginMaps : [];
+  const allMaps = plugins.flatMap((plugin) => (Array.isArray(plugin.maps) ? plugin.maps : []));
+  const mapProjectUniverse = new Set(allMaps.flatMap((map) => (
+    Array.isArray(map.projectIds) ? map.projectIds : []
+  ).filter((projectId) => state.permissions?.[projectId]?.public !== true)));
+
+  state.users.forEach((user) => {
+    const permissions = new Set(Array.isArray(user.permissions) ? user.permissions : []);
+    const isAdmin = isAdminUser(user);
+    const userProjects = new Set(Array.isArray(user.projects) ? user.projects : []);
+    const row = document.createElement('tr');
+
+    const userCell = document.createElement('td');
+    userCell.textContent = user.username;
+
+    const adminCell = document.createElement('td');
+    const adminOptions = document.createElement('div');
+    adminOptions.className = 'plugin-access-options';
+    PORTAL_PERMISSIONS.forEach((portal) => {
+      const label = document.createElement('label');
+      label.className = 'permission-chip';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.dataset.permission = portal.permission;
+      input.checked = isAdmin || permissions.has('portal:edit') || permissions.has(portal.permission);
+      input.disabled = isAdmin;
+      label.append(input, document.createTextNode(portal.label));
+      adminOptions.appendChild(label);
+    });
+    adminCell.appendChild(adminOptions);
+
+    const mapsCell = document.createElement('td');
+    mapsCell.className = 'plugin-map-cell';
+    if (!allMaps.length) {
+      const empty = document.createElement('p');
+      empty.className = 'help';
+      empty.textContent = 'No published plugin maps found yet.';
+      mapsCell.appendChild(empty);
+    } else {
+      plugins.forEach((plugin) => {
+        const maps = Array.isArray(plugin.maps) ? plugin.maps : [];
+        if (!maps.length) return;
+        const group = document.createElement('div');
+        group.className = 'plugin-map-group';
+        const heading = document.createElement('h4');
+        heading.textContent = plugin.label;
+        group.appendChild(heading);
+
+        maps.forEach((map) => {
+          const projectIds = Array.isArray(map.projectIds) ? map.projectIds : [];
+          const publicProjects = projectIds.filter((projectId) => state.permissions?.[projectId]?.public === true);
+          const allPublic = projectIds.length > 0 && publicProjects.length === projectIds.length;
+          const hasAccess = isAdmin
+            || allPublic
+            || (projectIds.length > 0 && projectIds.every((projectId) => state.permissions?.[projectId]?.public === true || userProjects.has(projectId)));
+          const label = document.createElement('label');
+          label.className = 'map-access-row';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.dataset.mapId = map.id;
+          input.dataset.projectIds = projectIds.join(',');
+          input.dataset.publicMap = allPublic ? '1' : '0';
+          input.checked = hasAccess;
+          input.disabled = isAdmin || allPublic || !projectIds.length;
+          const copy = document.createElement('span');
+          const accessNote = allPublic ? 'Public map' : (projectIds.length ? projectIds.join(', ') : 'No source project detected');
+          copy.innerHTML = `<strong>${escapeHtml(map.title || map.profileKey)}</strong><small>${escapeHtml(accessNote)}</small>`;
+          label.append(input, copy);
+          group.appendChild(label);
+        });
+        mapsCell.appendChild(group);
+      });
+    }
+
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save';
+    saveBtn.disabled = isAdmin;
+    saveBtn.addEventListener('click', async () => {
+      const nextPermissions = new Set(Array.isArray(user.permissions) ? user.permissions : []);
+      nextPermissions.delete('portal:edit');
+      PORTAL_PERMISSIONS.forEach((portal) => nextPermissions.delete(portal.permission));
+      row.querySelectorAll('input[data-permission]').forEach((input) => {
+        if (input.checked) nextPermissions.add(input.dataset.permission);
+      });
+
+      const nextProjects = new Set(Array.isArray(user.projects) ? user.projects : []);
+      mapProjectUniverse.forEach((projectId) => nextProjects.delete(projectId));
+      row.querySelectorAll('input[data-map-id]').forEach((input) => {
+        if (input.dataset.publicMap === '1') return;
+        if (!input.checked) return;
+        String(input.dataset.projectIds || '').split(',').map((id) => id.trim()).filter(Boolean).forEach((projectId) => nextProjects.add(projectId));
+      });
+
+      try {
+        await api(`/auth-admin/users/${user.id}`, {
+          method: 'PATCH',
+          body: {
+            permissions: Array.from(nextPermissions),
+            projects: Array.from(nextProjects)
+          }
+        });
+        showMessage('success', `Plugin map access updated for ${user.username}.`);
+        await loadUsers(false);
+        await loadProjects(false);
+      } catch (err) {
+        showMessage('error', parseError(err, 'Unable to update plugin map permissions.'));
+      }
+    });
+    actionsCell.appendChild(saveBtn);
+
+    row.append(userCell, adminCell, mapsCell, actionsCell);
+    tableBody.appendChild(row);
+  });
 }
 
 function renderPublicProjects() {
@@ -625,12 +800,9 @@ function renderPublicProjects() {
   projectList.forEach((project) => {
     const projectId = project.id;
     const access = state.permissions[projectId] || {};
-    const searchableEntries = Array.isArray(state.searchableByProject?.[projectId]) ? state.searchableByProject[projectId] : [];
-    const projectLayers = Array.isArray(state.layersByProject?.[projectId]) ? state.layersByProject[projectId] : [];
-    const layerAttributes = state.layerAttributesByProject?.[projectId] || {};
 
     const card = document.createElement('article');
-    card.className = 'project-card searchable-project-card';
+    card.className = 'project-card';
     card.dataset.projectId = projectId;
 
     const header = document.createElement('header');
@@ -662,35 +834,71 @@ function renderPublicProjects() {
     toggleText.textContent = 'Public';
     toggleWrap.append(checkbox, toggleText);
 
+    header.append(heading, toggleWrap);
+    card.appendChild(header);
+
+    container.appendChild(card);
+  });
+}
+
+function renderLayerPermissions() {
+  const container = document.getElementById('layer-permissions-list');
+  if (!container) return;
+
+  container.innerHTML = '';
+  const projectList = state.projects || [];
+  if (!projectList.length) {
+    container.textContent = 'No projects available.';
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'permission-grid';
+
+  projectList.forEach((project) => {
+    const projectId = project.id;
+    const projectLayers = Array.isArray(state.layersByProject?.[projectId]) ? state.layersByProject[projectId] : [];
+    const layerAttributes = state.layerAttributesByProject?.[projectId] || {};
+    const layerPermissions = state.layerPermissionsByProject?.[projectId] || new Map();
+
+    const card = document.createElement('article');
+    card.className = 'permission-card';
+    card.dataset.projectId = projectId;
+
+    const header = document.createElement('header');
+    const titleWrap = document.createElement('div');
+    const heading = document.createElement('h3');
+    heading.textContent = project.name || projectId;
+    const meta = document.createElement('p');
+    meta.className = 'help';
+    meta.textContent = `${projectLayers.length} vector layer${projectLayers.length === 1 ? '' : 's'}`;
+    titleWrap.append(heading, meta);
+
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'secondary-button';
-    saveBtn.textContent = 'Save searchable';
-
-    header.append(heading, toggleWrap, saveBtn);
+    saveBtn.textContent = 'Save layers';
+    header.append(titleWrap, saveBtn);
     card.appendChild(header);
 
-    const searchableIntro = document.createElement('p');
-    searchableIntro.className = 'help';
-    searchableIntro.textContent = 'Sokbara lager for this project:';
-    card.appendChild(searchableIntro);
-
     const list = document.createElement('div');
-    list.className = 'project-searchable-list';
+    list.className = 'layer-permission-list';
 
     if (!projectLayers.length) {
       const empty = document.createElement('p');
       empty.className = 'help';
-      empty.textContent = 'No searchable vector layers found.';
+      empty.textContent = 'No vector layers found.';
       list.appendChild(empty);
     } else {
       projectLayers.forEach((layer) => {
-        const config = searchableEntries.find((entry) => String(entry?.name || '') === String(layer.name || '')) || {};
+        const permission = layerPermissions.get(String(layer.name || '')) || layer || {};
+        const config = permission.search || {};
         const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
         const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
           ? layerMeta.nonGeometry
           : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
-        const enabled = !!config.name;
+        const searchableEnabled = permission.wfsSearchable === true;
+        const editableEnabled = permission.wfsEditable === true;
         const selectedSearch = pickPreferredAttribute(
           [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
           availableColumns
@@ -703,33 +911,46 @@ function renderPublicProjects() {
         const hintText = String(config.hintText || '').trim() || 'Search...';
 
         const row = document.createElement('div');
-        row.className = 'searchable-layer-row';
+        row.className = 'layer-permission-row';
         row.dataset.layerName = layer.name;
         row.dataset.geometryAttribute = selectedGeom;
 
-        const head = document.createElement('div');
-        head.className = 'searchable-layer-head';
-        const onOff = document.createElement('label');
-        onOff.className = 'public-project-toggle';
-        const layerCheck = document.createElement('input');
-        layerCheck.type = 'checkbox';
-        layerCheck.checked = enabled;
-        const layerLabel = document.createElement('span');
-        layerLabel.textContent = layer.title || layer.name;
-        onOff.append(layerCheck, layerLabel);
-        head.appendChild(onOff);
+        const layerName = document.createElement('div');
+        const strong = document.createElement('strong');
+        strong.textContent = layer.title || layer.name;
+        const small = document.createElement('small');
+        small.textContent = layer.name;
+        layerName.append(strong, small);
 
-        const body = document.createElement('div');
-        body.className = `searchable-layer-controls${enabled ? '' : ' is-hidden'}`;
+        const editToggle = document.createElement('label');
+        editToggle.className = 'permission-chip';
+        const editInput = document.createElement('input');
+        editInput.type = 'checkbox';
+        editInput.className = 'edit-check';
+        editInput.checked = editableEnabled;
+        editToggle.append(editInput, document.createTextNode('Edit'));
 
+        const searchToggle = document.createElement('label');
+        searchToggle.className = 'permission-chip';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'checkbox';
+        searchInput.className = 'search-check';
+        searchInput.checked = searchableEnabled;
+        searchToggle.append(searchInput, document.createTextNode('Search'));
+
+        const searchControls = document.createElement('div');
+        searchControls.className = `search-config-row${searchableEnabled ? '' : ' is-hidden'}`;
+
+        const columnOptions = availableColumns.length ? availableColumns : [''];
         const searchField = document.createElement('label');
         searchField.className = 'mini-field';
         searchField.innerHTML = '<span>searchAttribute</span>';
         const searchSelect = document.createElement('select');
         searchSelect.className = 'search-select';
-        searchSelect.innerHTML = availableColumns.map((col) => {
+        searchSelect.innerHTML = columnOptions.map((col) => {
+          const escaped = escapeHtml(col || '');
           const sel = selectedSearch === col ? ' selected' : '';
-          return `<option value="${col}"${sel}>${col}</option>`;
+          return `<option value="${escaped}"${sel}>${escapeHtml(col || 'No attributes detected')}</option>`;
         }).join('');
         searchField.appendChild(searchSelect);
 
@@ -738,9 +959,10 @@ function renderPublicProjects() {
         idField.innerHTML = '<span>idAttribute</span>';
         const idSelect = document.createElement('select');
         idSelect.className = 'id-select';
-        idSelect.innerHTML = availableColumns.map((col) => {
+        idSelect.innerHTML = columnOptions.map((col) => {
+          const escaped = escapeHtml(col || '');
           const sel = selectedId === col ? ' selected' : '';
-          return `<option value="${col}"${sel}>${col}</option>`;
+          return `<option value="${escaped}"${sel}>${escapeHtml(col || 'No attributes detected')}</option>`;
         }).join('');
         idField.appendChild(idSelect);
 
@@ -754,63 +976,68 @@ function renderPublicProjects() {
         hintInput.placeholder = 'Search...';
         hintField.appendChild(hintInput);
 
-        const geomField = document.createElement('div');
-        geomField.className = 'mini-field';
-        geomField.innerHTML = `<span>geometryAttribute</span><div class="searchable-geometry-auto">${selectedGeom || 'not detected'}</div>`;
-
-        layerCheck.addEventListener('change', () => {
-          body.classList.toggle('is-hidden', !layerCheck.checked);
+        searchInput.addEventListener('change', () => {
+          searchControls.classList.toggle('is-hidden', !searchInput.checked);
         });
 
-        body.append(searchField, idField, hintField, geomField);
-        row.append(head, body);
+        searchControls.append(searchField, idField, hintField);
+        row.append(layerName, editToggle, searchToggle, searchControls);
         list.appendChild(row);
       });
     }
 
     saveBtn.addEventListener('click', async () => {
-      const rows = Array.from(list.querySelectorAll('.searchable-layer-row'));
-      const payload = rows
-        .map((row) => {
-          const layerName = String(row.dataset.layerName || '');
-          const checked = !!row.querySelector('input[type="checkbox"]')?.checked;
-          if (!checked) return null;
-          const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
-          const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
-          const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
-          const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
-          if (!layerName || !searchAttribute || !idAttribute) return null;
-          return {
-            name: layerName,
-            idAttribute,
-            searchAttribute,
-            geometryAttribute,
-            hintText: hint,
-            fields: [searchAttribute],
-            titleField: searchAttribute
-          };
-        })
-        .filter(Boolean);
+      const rows = Array.from(list.querySelectorAll('.layer-permission-row'));
+      const payload = rows.map((row) => {
+        const layerName = String(row.dataset.layerName || '').trim();
+        const wfsEditable = !!row.querySelector('.edit-check')?.checked;
+        const wfsSearchable = !!row.querySelector('.search-check')?.checked;
+        const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
+        const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
+        const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
+        const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
+        return {
+          name: layerName,
+          wfsEditable,
+          wfsSearchable,
+          search: wfsSearchable && searchAttribute && idAttribute
+            ? {
+              name: layerName,
+              idAttribute,
+              searchAttribute,
+              geometryAttribute,
+              hintText: hint,
+              fields: [searchAttribute],
+              titleField: searchAttribute
+            }
+            : null
+        };
+      }).filter((row) => row.name);
 
       try {
-        await api(`/projects/${encodeURIComponent(projectId)}/searchable`, {
+        const response = await api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`, {
           method: 'POST',
-          body: payload
+          body: { layers: payload }
         });
-        state.searchableByProject[projectId] = payload;
-        showMessage('success', `Searchable layers saved for ${project.name || projectId}.`);
+        const permissionRows = Array.isArray(response?.layers) ? response.layers : [];
+        state.layerPermissionsByProject[projectId] = new Map(permissionRows.map((entry) => [String(entry?.name || ''), entry]).filter(([name]) => name));
+        showMessage('success', `Layer permissions saved for ${project.name || projectId}.`);
+        await loadProjects(false);
       } catch (err) {
-        showMessage('error', parseError(err, 'Unable to save searchable layers.'));
+        showMessage('error', parseError(err, 'Unable to save layer permissions.'));
       }
     });
 
     card.appendChild(list);
-    container.appendChild(card);
+    grid.appendChild(card);
   });
+
+  container.appendChild(grid);
 }
 
 function renderProjects() {
   renderPublicProjects();
+  renderLayerPermissions();
   
   const tableBody = document.querySelector('#project-access-table tbody');
   if (!tableBody) return;
@@ -830,6 +1057,7 @@ function renderProjects() {
   const projectList = state.projects || [];
   
   state.users.forEach((user) => {
+    const isAdmin = isAdminUser(user);
     const row = document.createElement('tr');
     
     const userCell = document.createElement('td');
@@ -857,13 +1085,15 @@ function renderProjects() {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.value = project.id;
-        checkbox.checked = userProjects.has(project.id);
+        checkbox.checked = isAdmin || userProjects.has(project.id);
+        checkbox.disabled = isAdmin;
         checkbox.dataset.userId = user.id;
         checkbox.dataset.projectId = project.id;
         const editCheckbox = document.createElement('input');
         editCheckbox.type = 'checkbox';
         editCheckbox.value = project.id;
-        editCheckbox.checked = editUsers.includes(user.id);
+        editCheckbox.checked = isAdmin || editUsers.includes(user.id);
+        editCheckbox.disabled = isAdmin;
         editCheckbox.dataset.editProjectId = project.id;
         editCheckbox.title = 'Allow WFS-T/project editing';
         label.append(
@@ -881,6 +1111,7 @@ function renderProjects() {
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.textContent = 'Save';
+    saveBtn.disabled = isAdmin;
     saveBtn.addEventListener('click', async () => {
       const checkboxes = projectsCell.querySelectorAll('input[type="checkbox"][data-project-id]');
       const selectedProjects = Array.from(checkboxes)
@@ -934,9 +1165,10 @@ async function loadUsers(showFeedback = false) {
 
 async function loadProjects(showFeedback = false) {
   try {
-    const [projectList, accessList] = await Promise.all([
+    const [projectList, accessList, pluginMapList] = await Promise.all([
       api('/projects'),
-      api('/auth-admin/projects')
+      api('/auth-admin/projects'),
+      api('/auth-admin/plugin-maps')
     ]);
     const normalizedProjects = Array.isArray(projectList)
       ? projectList
@@ -945,8 +1177,10 @@ async function loadProjects(showFeedback = false) {
         : [];
     state.projects = normalizedProjects;
     state.permissions = accessList?.projects || {};
+    state.pluginMaps = Array.isArray(pluginMapList?.plugins) ? pluginMapList.plugins : [];
     await loadSearchableCatalog();
     renderProjects();
+    renderPluginAccess();
     if (showFeedback) showMessage('success', 'Permissions refreshed.');
   } catch (err) {
     showMessage('error', parseError(err, 'Failed to load projects.'));
@@ -966,9 +1200,6 @@ userForm.addEventListener('submit', async (event) => {
   }
   const existingUser = state.users.find((u) => String(u.id || '') === id);
   const permissions = new Set(Array.isArray(existingUser?.permissions) ? existingUser.permissions : []);
-  permissions.delete('portal:edit');
-  permissions.delete('portal:edit:Qtiler2Origo');
-  if (portalEditPermissionInput?.checked) permissions.add('portal:edit:Qtiler2Origo');
   payload.permissions = Array.from(permissions);
   const password = passwordInput.value;
   if (!id && (!password || password.length < 6)) {
@@ -1024,6 +1255,8 @@ userFormReset.addEventListener('click', () => {
 
 document.getElementById('refresh-users').addEventListener('click', () => loadUsers(true));
 document.getElementById('refresh-projects').addEventListener('click', () => loadProjects(true));
+document.getElementById('refresh-layer-permissions')?.addEventListener('click', () => loadProjects(true));
+document.getElementById('refresh-plugin-access')?.addEventListener('click', () => loadUsers(true));
 
 resetUserForm();
 

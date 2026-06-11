@@ -730,7 +730,7 @@
         }
       }
 
-      const openRecacheDialog = ({ projectId, layerName, cachedEntry }) => {
+      const openRecacheDialog = ({ projectId, layerName, cachedEntry, targetType = 'layer' }) => {
         ensureRecacheDialogElements();
         return new Promise((resolve) => {
           if (recacheDialogResolve) {
@@ -752,13 +752,13 @@
           if (defaultMax == null) defaultMax = defaultMin;
 
           const heading = document.createElement('h2');
-          heading.textContent = tr('Recache layer');
+          heading.textContent = String(targetType).toLowerCase() === 'theme' ? tr('Recache theme') : tr('Recache layer');
           recacheDialogContainer.appendChild(heading);
 
           if (layerName) {
             const subtitle = document.createElement('div');
             subtitle.className = 'meta';
-            subtitle.textContent = tr('Layer: ') + layerName;
+            subtitle.textContent = (String(targetType).toLowerCase() === 'theme' ? tr('Theme: ') : tr('Layer: ')) + layerName;
             recacheDialogContainer.appendChild(subtitle);
           }
 
@@ -2845,6 +2845,8 @@
   project: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5A1.75 1.75 0 0 1 5.5 3.25h4.19c.46 0 .9.18 1.23.5l1.56 1.56c.33.32.77.5 1.23.5h6.29A1.75 1.75 0 0 1 21.5 7.5v10.75A2.75 2.75 0 0 1 18.75 21H5.25A2.75 2.75 0 0 1 2.5 18.25V5.75A.75.75 0 0 1 3.25 5h.5Zm.75 1.5v11.75c0 .69.56 1.25 1.25 1.25h13.5c.69 0 1.25-.56 1.25-1.25V8.5h-6.29c-.83 0-1.63-.33-2.22-.92L10.93 6H5.5a.75.75 0 0 0-.75.75Z"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.23 8.97a.75.75 0 0 1 1.06-.08L12 13.01l4.71-4.12a.75.75 0 0 1 .99 1.12l-5.2 4.55a.75.75 0 0 1-.99 0l-5.2-4.55a.75.75 0 0 1-.08-1.04Z"/></svg>',
         layer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8.25 12 13.5 22 8.25 12 3Zm8.18 9.58L12 17.35 3.82 12.58 2 13.5l10 5.75 10-5.75-1.82-.92Zm0 4.5L12 21.85 3.82 17.08 2 18l10 5.75 10-5.75-1.82-.92Z"/></svg>',
+        vector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 5.5A2.25 2.25 0 1 1 7 7.75v2.5h5.25A2.75 2.75 0 0 1 15 13v3.25h2A2.25 2.25 0 1 1 17 17.75h-2A1.75 1.75 0 0 1 13.25 16v-3A1.25 1.25 0 0 0 12 11.75H7v4.5a2.25 2.25 0 1 1-1.5 0v-8.5a2.25 2.25 0 0 1-.75-2.25ZM6.25 5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 12.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm12.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>',
+        raster: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.75 4h12.5A1.75 1.75 0 0 1 20 5.75v12.5A1.75 1.75 0 0 1 18.25 20H5.75A1.75 1.75 0 0 1 4 18.25V5.75A1.75 1.75 0 0 1 5.75 4Zm0 1.5a.25.25 0 0 0-.25.25v3.5h4v-3.75H5.75Zm5.25 0v3.75h7.5v-3.5a.25.25 0 0 0-.25-.25H11Zm7.5 5.25H11v7.75h7.25a.25.25 0 0 0 .25-.25v-7.5Zm-9 7.75v-7.75h-4v7.5c0 .14.11.25.25.25H9.5Z"/></svg>',
         wmts: '<img src="/css/images/wmts-letters.svg" alt="WMTS" width="28" height="18" loading="lazy" />',
         wms: '<img src="/css/images/wms-letters.svg" alt="WMS" width="28" height="18" loading="lazy" />',
         wfs: '<img src="/css/images/wfs-letters.svg" alt="WFS" width="28" height="18" loading="lazy" />',
@@ -4951,6 +4953,34 @@
         }
       }
 
+      async function reloadThemeRow(btn, project, themeName) {
+        if (!btn || !project?.id || !themeName) return;
+        const initialDisabled = btn.disabled;
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.title;
+        const restoreButton = () => {
+          btn.disabled = initialDisabled;
+          btn.innerHTML = btn.dataset.iconHtml || originalHtml;
+          btn.title = originalTitle;
+          btn.removeAttribute('aria-busy');
+        };
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+        btn.title = tr('Reloading theme: {theme}', { theme: themeName });
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          await ensureProjectBlock(project.id, { forceConfigReload: true });
+          showStatus(tr('Theme reloaded: {theme}', { theme: themeName }));
+        } catch (err) {
+          showStatus(tr('Failed to reload theme: {error}', { error: err?.message || String(err) }), true);
+          console.error('reloadThemeRow failed', err);
+          scheduleProjectRefresh(project.id, { delayMs: 0, forceConfigReload: true });
+        } finally {
+          restoreButton();
+        }
+      }
+
       function showProjectReplaceDialog(conflictPayload = {}) {
         const lang = String(conflictPayload?.language || currentLang || 'en').toLowerCase();
         const isEs = lang.startsWith('es');
@@ -5788,8 +5818,42 @@
 
   async function renderProjectLayers(project, payload, targetEl, wrapEl, { forceConfigReload = false, clearProjectInlineSlots = true, skipProjectChrome = false } = {}) {
         const projectMeta = (!Array.isArray(payload) && payload && typeof payload === 'object' && Array.isArray(payload.layers)) ? payload.project : null;
-  const layers = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.layers) ? payload.layers : []);
-  const themes = payload && Array.isArray(payload.themes) ? payload.themes : [];
+        const rawLayers = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.layers) ? payload.layers : []);
+        const rawThemes = payload && Array.isArray(payload.themes) ? payload.themes : [];
+        const normalizeThemeName = (value) => {
+          let name = String(value || '').trim();
+          while (/^theme:/i.test(name)) {
+            name = name.replace(/^theme:/i, '').trim();
+          }
+          return name;
+        };
+        const isThemeEntry = (entry) => {
+          if (!entry || typeof entry !== 'object') return false;
+          const kindToken = String(entry.kind || '').trim().toLowerCase();
+          if (kindToken === 'theme') return true;
+          if (/^theme:/i.test(String(entry.name || '').trim())) return true;
+          return !!entry.theme && !entry.geometry_type && !entry.layer_crs;
+        };
+        const themeByName = new Map();
+        const addThemeEntry = (entry) => {
+          const name = normalizeThemeName(entry && entry.name);
+          if (!name) return;
+          themeByName.set(name, { ...entry, name, kind: 'theme' });
+        };
+        const layers = [];
+        for (const entry of rawLayers) {
+          if (!entry || !entry.name) continue;
+          if (isThemeEntry(entry)) {
+            addThemeEntry(entry);
+          } else {
+            layers.push(entry);
+          }
+        }
+        for (const entry of rawThemes) {
+          if (!entry || !entry.name) continue;
+          addThemeEntry(entry);
+        }
+        const themes = Array.from(themeByName.values());
         const parent = wrapEl || targetEl.parentElement;
     const state = getProjectState(project.id);
       if (clearProjectInlineSlots) clearInlineJobSlotsForProject(project.id);
@@ -5819,6 +5883,54 @@
           const typeToken = String(layer.type || '').toUpperCase();
           if (layer.geometry_type && !['XYZ', 'OSM', 'WMS', 'WMTS', 'TILE', 'RASTER'].includes(typeToken)) return true;
           return false;
+        };
+
+        const isRasterLayerLike = (layer) => {
+          if (!layer) return false;
+          const tokens = [layer.kind, layer.type, layer.provider, layer.source_type]
+            .map((value) => String(value || '').trim().toLowerCase())
+            .filter(Boolean);
+          return tokens.some((token) => token.includes('raster') || token === 'gdal' || token === 'xyz' || token === 'wmts');
+        };
+
+        const isWmsLayerLike = (layer) => {
+          if (!layer) return false;
+          const tokens = [layer.kind, layer.type, layer.provider, layer.source_type, layer.scheme]
+            .map((value) => String(value || '').trim().toLowerCase())
+            .filter(Boolean);
+          return tokens.some((token) => token === 'wms' || token.includes('wms'));
+        };
+
+        const isWmtsLayerLike = (layer) => {
+          if (!layer) return false;
+          const tokens = [layer.kind, layer.type, layer.provider, layer.source_type]
+            .map((value) => String(value || '').trim().toLowerCase())
+            .filter(Boolean);
+          return tokens.some((token) => token === 'wmts' || token.includes('wmts'));
+        };
+
+        const isLocalLayerSource = (layer) => {
+          if (!layer) return false;
+          if (layer.remote_source || layer.remoteSource || layer.url) return false;
+          const providerToken = String(layer.provider || '').trim().toLowerCase();
+          if (['wms', 'wmts', 'xyz', 'postgres', 'postgis'].includes(providerToken)) return false;
+          return layer.cacheable !== false;
+        };
+
+        const getLayerDisplayKind = (layer) => {
+          if (isWmsLayerLike(layer)) return { key: 'wms', icon: 'wms', label: 'WMS' };
+          if (isWmtsLayerLike(layer) && !isVectorLayerLike(layer)) return { key: 'wmts', icon: 'wmts', label: 'WMTS' };
+          if (isVectorLayerLike(layer)) {
+            return isLocalLayerSource(layer)
+              ? { key: 'vector-local', icon: 'vector', label: 'Vector local' }
+              : { key: 'vector', icon: 'vector', label: 'Vector' };
+          }
+          if (isRasterLayerLike(layer)) {
+            return isLocalLayerSource(layer)
+              ? { key: 'raster-local', icon: 'raster', label: 'Raster local' }
+              : { key: 'raster', icon: 'raster', label: 'Raster' };
+          }
+          return { key: 'layer', icon: 'layer', label: 'Layer' };
         };
 
         const hasVectorLayers = Array.isArray(layers) && layers.some((l) => isVectorLayerLike(l));
@@ -6085,14 +6197,48 @@
         // fetch project cache index to know which layers have cached tiles
         let cacheIndex = null; const cachedByKey = new Map();
         let cachedProjectMin = null; let cachedProjectMax = null;
+        const cacheEntryHasTiles = (entry) => {
+          if (!entry) return false;
+          const count = Number(entry.tile_count ?? entry.tiles ?? entry.tileCount);
+          if (Number.isFinite(count) && count > 0) return true;
+          const progressCount = Number(entry.progress?.totalGenerated ?? entry.generated_tiles ?? entry.generatedTiles);
+          if (Number.isFinite(progressCount) && progressCount > 0) return true;
+          if (entry.has_tiles === true || entry.hasTiles === true || entry.cache_exists === true) return true;
+          const cachedMin = Number(entry.cached_zoom_min);
+          const cachedMax = Number(entry.cached_zoom_max);
+          return Number.isFinite(cachedMin) && Number.isFinite(cachedMax) && cachedMax >= cachedMin;
+        };
+        const mergeCacheEntries = (previous, next) => {
+          if (!previous) return next;
+          const merged = { ...previous, ...next };
+          const prevCount = Number(previous.tile_count ?? previous.tiles ?? previous.tileCount);
+          const nextCount = Number(next.tile_count ?? next.tiles ?? next.tileCount);
+          if (Number.isFinite(prevCount) || Number.isFinite(nextCount)) {
+            merged.tile_count = Math.max(Number.isFinite(prevCount) ? prevCount : 0, Number.isFinite(nextCount) ? nextCount : 0);
+          }
+          const prevProgress = Number(previous.progress?.totalGenerated ?? previous.generated_tiles ?? previous.generatedTiles);
+          const nextProgress = Number(next.progress?.totalGenerated ?? next.generated_tiles ?? next.generatedTiles);
+          if (Number.isFinite(prevProgress) || Number.isFinite(nextProgress)) {
+            merged.progress = { ...(previous.progress || {}), ...(next.progress || {}), totalGenerated: Math.max(Number.isFinite(prevProgress) ? prevProgress : 0, Number.isFinite(nextProgress) ? nextProgress : 0) };
+          }
+          if (cacheEntryHasTiles(previous) || cacheEntryHasTiles(next)) {
+            merged.cache_exists = true;
+          }
+          return merged;
+        };
         try {
           const r = await fetch('/cache/' + encodeURIComponent(project.id) + '/index.json');
           if (r.ok) {
             cacheIndex = await r.json();
             for (const e of (cacheIndex.layers||[])) {
               if (!e || !e.name) continue;
-              const kind = e.kind || 'layer';
-              cachedByKey.set(kind + ':' + e.name, e);
+              const rawCacheName = String(e.name || '').trim();
+              const rawKind = String(e.kind || 'layer').toLowerCase();
+              const kind = rawKind === 'theme' || /^theme:/i.test(rawCacheName) ? 'theme' : rawKind;
+              const cacheName = kind === 'theme' ? normalizeThemeName(rawCacheName) : e.name;
+              const cacheKey = kind + ':' + cacheName;
+              const existingCacheEntry = cachedByKey.get(cacheKey) || null;
+              cachedByKey.set(cacheKey, mergeCacheEntries(existingCacheEntry, { ...e, raw_name: rawCacheName, name: cacheName, kind }));
               const entryMinVal = Number(e.zoom_min);
               const entryMaxVal = Number(e.zoom_max);
               const entryMin = Number.isFinite(entryMinVal) ? Math.round(entryMinVal) : null;
@@ -6103,6 +6249,7 @@
           }
         } catch {}
         const cachePresenceByLayer = new Map();
+        const cachePresenceByTheme = new Map();
         let hasVectorTilesProjectCache = false;
         let hasQuantizedMeshProjectCache = false;
         if (isAdmin) {
@@ -6110,6 +6257,9 @@
             const params = new URLSearchParams();
             for (const layer of layers) {
               if (layer && layer.name) params.append('layer', layer.name);
+            }
+            for (const theme of themes) {
+              if (theme && theme.name) params.append('theme', theme.name);
             }
             const statusRes = await fetch('/cache/' + encodeURIComponent(project.id) + '/status?' + params.toString());
             if (statusRes.ok) {
@@ -6120,6 +6270,11 @@
               for (const [layerName, state] of Object.entries(layerStatus)) {
                 if (!layerName) continue;
                 cachePresenceByLayer.set(layerName, state || {});
+              }
+              const themeStatus = statusJson?.themes && typeof statusJson.themes === 'object' ? statusJson.themes : {};
+              for (const [themeName, state] of Object.entries(themeStatus)) {
+                if (!themeName) continue;
+                cachePresenceByTheme.set(themeName, state || {});
               }
             }
           } catch {
@@ -6172,7 +6327,8 @@
           const configLayer = state.config && state.config.layers ? state.config.layers[l.name] : null;
           const scheduleObj = configLayer && configLayer.schedule ? configLayer.schedule : null;
           const scheduleSummary = describeSchedule(scheduleObj);
-          const iconKind = cachedEntry && cachedEntry.scheme === 'wmts' ? 'wmts' : 'layer';
+          const displayKind = getLayerDisplayKind({ ...(cachedEntry || {}), ...l });
+          const iconKind = displayKind.icon || 'layer';
           const iconClass = iconKind === 'layer' ? 'layer-title-icon' : `layer-title-icon ${iconKind}`;
           const layerExtentWgs = normalizeExtentList(l.extent_wgs84);
           if (layerExtentWgs) {
@@ -6181,7 +6337,8 @@
           }
           const titlePieces = [
             `<span class="${iconClass}">${ICONS[iconKind] || ICONS.layer}</span>`,
-            `<span>${escapeHtml(l.name)}</span>`
+            `<span>${escapeHtml(l.name)}</span>`,
+            `<span class="layer-badge layer-badge-${escapeHtml(displayKind.key)}">${escapeHtml(displayKind.label)}</span>`
           ];
           if (badges.length) titlePieces.push(badges.join(' '));
           const metaPrimary = [];
@@ -6327,83 +6484,6 @@
 
           const reloadLayerBtn = makeIconButton(tr('Reload layer'), 'reload', () => reloadLayerRow(reloadLayerBtn, project, l.name), 'btn-secondary');
           rowMap.appendChild(reloadLayerBtn);
-
-          if (isAdmin && l && (l.kind === 'vector' || l.kind === 'VectorLayer' || l.geometry_type)) {
-            const editableWrap = document.createElement('label');
-            editableWrap.style.display = 'inline-flex';
-            editableWrap.style.alignItems = 'center';
-            editableWrap.style.gap = '6px';
-            editableWrap.style.padding = '0 6px';
-            editableWrap.style.height = '32px';
-            editableWrap.style.border = '1px solid var(--border)';
-            editableWrap.style.borderRadius = '8px';
-            editableWrap.style.background = 'var(--card)';
-            editableWrap.title = tr('Enable editing over WFS');
-
-            const editableInput = document.createElement('input');
-            editableInput.type = 'checkbox';
-            editableInput.checked = !(configLayer && configLayer.wfsEditable === false);
-            editableInput.addEventListener('click', (event) => event.stopPropagation());
-            editableInput.addEventListener('change', () => {
-              const next = !!editableInput.checked;
-              queueProjectConfigSave(project.id, {
-                layers: {
-                  [l.name]: {
-                    wfsEditable: next
-                  }
-                }
-              }, { immediate: true });
-              showStatus(next ? tr('Layer marked editable') : tr('Layer marked read-only'));
-            });
-
-            const editableText = document.createElement('span');
-            editableText.setAttribute('data-i18n', 'Editable');
-            editableText.textContent = tr('Editable');
-
-            editableWrap.appendChild(editableInput);
-            editableWrap.appendChild(editableText);
-            rowFlags.appendChild(editableWrap);
-
-            const qrigoEnabled = Array.isArray(window.qtilerPluginsEnabled)
-              ? window.qtilerPluginsEnabled.includes('Qrigo')
-              : false;
-            if (qrigoEnabled) {
-              const searchableWrap = document.createElement('label');
-              searchableWrap.style.display = 'inline-flex';
-              searchableWrap.style.alignItems = 'center';
-              searchableWrap.style.gap = '6px';
-              searchableWrap.style.padding = '0 6px';
-              searchableWrap.style.height = '32px';
-              searchableWrap.style.border = '1px solid var(--border)';
-              searchableWrap.style.borderRadius = '8px';
-              searchableWrap.style.background = 'var(--card)';
-              searchableWrap.title = tr('Enable searching over WFS');
-
-              const searchableInput = document.createElement('input');
-              searchableInput.type = 'checkbox';
-              searchableInput.checked = !(configLayer && configLayer.wfsSearchable === false);
-              searchableInput.addEventListener('click', (event) => event.stopPropagation());
-              searchableInput.addEventListener('change', () => {
-                const next = !!searchableInput.checked;
-                queueProjectConfigSave(project.id, {
-                  layers: {
-                    [l.name]: {
-                      wfsSearchable: next
-                    }
-                  }
-                }, { immediate: true });
-                showStatus(next ? tr('Layer marked searchable') : tr('Layer marked not searchable'));
-              });
-
-              const searchableText = document.createElement('span');
-              searchableText.setAttribute('data-i18n', 'Searchable');
-              searchableText.textContent = tr('Searchable');
-
-              searchableWrap.appendChild(searchableInput);
-              searchableWrap.appendChild(searchableText);
-              rowFlags.appendChild(searchableWrap);
-            }
-          }
 
           if (exampleLink && !hasCachedTiles) {
             // Index can contain bootstrap placeholders; only show sample link when tiles exist.
@@ -6594,6 +6674,18 @@
             metaBox.className = 'meta';
             const configTheme = state.config && state.config.themes ? state.config.themes[theme.name] : null;
             const cachedTheme = cachedByKey.get('theme:' + theme.name) || null;
+            const themeCachePresence = cachePresenceByTheme.get(theme.name) || null;
+            const themeTileCountRaw = cachedTheme ? (cachedTheme.tile_count ?? cachedTheme.tiles ?? cachedTheme.tileCount) : null;
+            const themeTileCount = Number.isFinite(Number(themeTileCountRaw)) ? Number(themeTileCountRaw) : 0;
+            const themeHasTilesFlag = cachedTheme ? (cachedTheme.has_tiles ?? cachedTheme.hasTiles) : null;
+            const hasCachedThemeTiles = cacheEntryHasTiles(cachedTheme) || themeCachePresence?.wmts === true;
+            const hasThemeWmsCache = !!themeCachePresence?.wms;
+            const hasAnyThemeCacheForDelete = hasCachedThemeTiles || hasThemeWmsCache;
+            const themeCacheStatus = String(cachedTheme?.status || '').toLowerCase();
+            const themePartialTileCountRaw = cachedTheme ? (cachedTheme.progress?.totalGenerated ?? cachedTheme.generated_tiles ?? cachedTheme.generatedTiles) : null;
+            const themePartialTileCount = Number.isFinite(Number(themePartialTileCountRaw)) ? Number(themePartialTileCountRaw) : 0;
+            const hasRecoverableThemePartialCache = !!cachedTheme && (themeTileCount > 0 || themeHasTilesFlag === true || themePartialTileCount > 0);
+            const hasPartialThemeCache = hasRecoverableThemePartialCache && (cachedTheme?.partial === true || ['aborted', 'error', 'running'].includes(themeCacheStatus));
             const cachedSources = cachedTheme && Array.isArray(cachedTheme.source_layers) ? cachedTheme.source_layers : [];
             const sources = Array.isArray(theme.layers) && theme.layers.length ? theme.layers : (configTheme && Array.isArray(configTheme.sourceLayers) ? configTheme.sourceLayers : cachedSources);
             const metaParts = [];
@@ -6628,6 +6720,10 @@
             const actionBox = document.createElement('div');
             actionBox.className = 'layer-actions-box';
 
+            const rowMap = document.createElement('div');
+            rowMap.className = 'layer-actions-row';
+            rowMap.dataset.row = 'map';
+
             const rowCache = document.createElement('div');
             rowCache.className = 'layer-actions-row';
             rowCache.dataset.row = 'cache';
@@ -6641,9 +6737,45 @@
             rowView.dataset.row = 'view';
 
             const themeObj = { name: theme.name, layers: sources };
+
+            const reloadThemeBtn = makeIconButton(tr('Reload layer'), 'reload', () => reloadThemeRow(reloadThemeBtn, project, theme.name), 'btn-secondary');
+            rowMap.appendChild(reloadThemeBtn);
             
             if (isAdmin) {
-              const cacheBtn = makeIconButton('Generate theme cache', 'play', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }), 'btn-primary');
+              const cacheBtn = makeIconButton((hasCachedThemeTiles || hasPartialThemeCache) ? tr('Recache theme') : tr('Generate theme cache'), 'play', null, 'btn-primary');
+              if (hasPartialThemeCache) {
+                cacheBtn.title = tr('Recache theme');
+                cacheBtn.addEventListener('click', async () => {
+                  const decision = await showPartialCacheResumeDialog({ targetName: theme.name, cachedEntry: cachedTheme });
+                  if (!decision) return;
+                  const resumeRange = decision === 'resume' ? deriveCachedZoomRange(cachedTheme) : null;
+                  try {
+                    await generateCache(cacheBtn, project.id, theme.name, themeObj, {
+                      kind: 'theme',
+                      recache: false,
+                      cachedEntry: cachedTheme,
+                      zoomOverride: decision === 'resume' ? resumeRange : null,
+                      forcePurgeBeforeStart: decision === 'replace'
+                    });
+                  } catch (err) {
+                    console.error('Partial theme cache restart failed', err);
+                  }
+                });
+              } else if (hasCachedThemeTiles) {
+                cacheBtn.title = tr('Recache theme');
+                cacheBtn.addEventListener('click', async () => {
+                  const selection = await openRecacheDialog({ projectId: project.id, layerName: theme.name, cachedEntry: cachedTheme, targetType: 'theme' });
+                  if (!selection) return;
+                  try {
+                    await generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: true, cachedEntry: cachedTheme, zoomOverride: selection });
+                  } catch (err) {
+                    console.error('Theme recache request failed', err);
+                  }
+                });
+              } else {
+                cacheBtn.title = tr('Generate theme cache');
+                cacheBtn.addEventListener('click', () => generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: false, cachedEntry: cachedTheme }));
+              }
               const scheduleThemeBtn = makeIconButton(tr('Configure auto cache'), 'calendar', () => openScheduleDialog({ projectId: project.id, targetType: 'theme', targetName: theme.name, configEntry: configTheme || null }));
               const cacheRunHost = document.createElement('span');
               cacheRunHost.style.display = 'inline-flex';
@@ -6653,6 +6785,18 @@
               cacheRunHost.appendChild(cacheBtn);
               rowCache.appendChild(cacheRunHost);
               registerInlineJobSlot({ projectId: project.id, targetMode: 'theme', targetName: theme.name, button: cacheBtn, host: cacheRunHost });
+              if (hasAnyThemeCacheForDelete) {
+                const delThemeBtn = makeIconButton(tr('Delete cache'), 'trash', null, 'btn-danger');
+                delThemeBtn.addEventListener('click', () => deleteCache(delThemeBtn, project.id, theme.name, {
+                  targetType: 'theme',
+                  hasWmtsCache: hasCachedThemeTiles,
+                  hasWmsCache: hasThemeWmsCache
+                }));
+                const delWrap = document.createElement('span');
+                delWrap.className = 'delete-cache-container has-cache';
+                delWrap.appendChild(delThemeBtn);
+                rowCache.appendChild(delWrap);
+              }
             }
 
             const themeCapabilitiesUrl = withApiKey(`${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${encodeURIComponent(project.id)}&layer=${encodeURIComponent(theme.name)}`, project);
@@ -6761,6 +6905,7 @@
               rowView.appendChild(themeDetailsBtn);
             }
 
+            if (rowMap.childElementCount > 0) actionBox.appendChild(rowMap);
             if (isAdmin && rowCache.childElementCount > 0) actionBox.appendChild(rowCache);
             if (canView && rowCopy.childElementCount > 0) actionBox.appendChild(rowCopy);
             if (canView && rowView.childElementCount > 0) actionBox.appendChild(rowView);
@@ -7140,7 +7285,7 @@
         }
       }
 
-      function chooseCacheDeleteType({ allowMesh = false } = {}) {
+      function chooseCacheDeleteType({ allowMesh = false, targetType = 'layer' } = {}) {
         return new Promise((resolve) => {
           const backdrop = document.createElement('div');
           backdrop.className = 'schedule-backdrop';
@@ -7156,7 +7301,9 @@
 
           const subtitle = document.createElement('p');
           subtitle.className = 'dialog-description';
-          subtitle.textContent = tr('Choose which cache type you want to delete for this layer.');
+          subtitle.textContent = String(targetType).toLowerCase() === 'theme'
+            ? tr('Choose which cache type you want to delete for this theme.')
+            : tr('Choose which cache type you want to delete for this layer.');
 
           const actions = document.createElement('div');
           actions.style.display = 'flex';
@@ -7189,8 +7336,11 @@
           btnCancel.className = 'btn btn-primary';
           btnCancel.textContent = tr('Cancel');
 
-          actions.append(btnWmts, btnWms, btnVector);
-          if (allowMesh) actions.appendChild(btnMesh);
+          actions.append(btnWmts, btnWms);
+          if (String(targetType).toLowerCase() !== 'theme') {
+            actions.appendChild(btnVector);
+            if (allowMesh) actions.appendChild(btnMesh);
+          }
           actions.appendChild(btnCancel);
           dialog.append(title, subtitle, actions);
           backdrop.appendChild(dialog);
@@ -7280,7 +7430,11 @@
 
       async function deleteCache(btn, projectId, layerName, options = {}) {
         const allowMesh = !!options?.hasMeshCache || (Array.isArray(window.qtilerPluginsEnabled) && window.qtilerPluginsEnabled.includes('QuantizedMesh'));
-        const cacheType = await chooseCacheDeleteType({ allowMesh });
+        const targetType = String(options?.targetType || 'layer').toLowerCase() === 'theme' ? 'theme' : 'layer';
+        const hadWmtsCache = options?.hasWmtsCache !== false;
+        const hadWmsCache = options?.hasWmsCache === true;
+        const fixedType = String(options?.fixedType || '').toLowerCase();
+        const cacheType = fixedType || await chooseCacheDeleteType({ allowMesh, targetType });
         if (!cacheType) return;
 
         const initialDisabled = btn.disabled;
@@ -7315,7 +7469,17 @@
             } else {
               showStatus(tr('{type} cache deleted: {layer}', { type: cacheType.toUpperCase(), layer: layerName }));
             }
-            if (cacheType === 'wmts' || cacheType === 'wms') {
+            if (targetType === 'theme') {
+              const remainingWmts = cacheType === 'wmts' ? false : hadWmtsCache;
+              const remainingWms = cacheType === 'wms' ? false : hadWmsCache;
+              if (!remainingWmts && !remainingWms) {
+                const deleteWrap = btn.closest ? btn.closest('.delete-cache-container') : null;
+                if (deleteWrap) deleteWrap.remove();
+              }
+            }
+            if (targetType === 'theme') {
+              scheduleProjectRefresh(projectId, { delayMs: 0, forceConfigReload: true });
+            } else if (cacheType === 'wmts' || cacheType === 'wms') {
               await reloadLayerRowSilent(projectId, layerName, { forceConfigReload: true });
             } else {
               scheduleProjectRefresh(projectId, { forceConfigReload: true });
@@ -7437,36 +7601,19 @@
         btn.setAttribute('aria-busy', 'true');
         showStatus(tr('Preparing project download: {project}', { project: project.name || project.id }));
         try {
-          const res = await fetch('/projects/' + encodeURIComponent(project.id) + '/download', {
-            method: 'GET',
-            credentials: 'include'
-          });
-          if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            const detail = data?.error || data?.details || res.statusText;
-            showStatus(tr('Project download failed: {error}', { error: detail }), true);
-            return;
-          }
-          const blob = await res.blob();
-          const disposition = String(res.headers.get('content-disposition') || '');
-          const nameMatch = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
-          const fallbackName = (project.id || 'project') + '.zip';
-          const fileName = nameMatch && nameMatch[1]
-            ? decodeURIComponent(nameMatch[1].replace(/^\"|\"$/g, '').trim())
-            : fallbackName;
-          const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
-          link.href = url;
-          link.download = fileName;
+          link.href = '/projects/' + encodeURIComponent(project.id) + '/download';
+          link.download = (project.id || 'project') + '.zip';
+          link.rel = 'noopener';
+          link.style.display = 'none';
           document.body.appendChild(link);
           link.click();
           link.remove();
-          URL.revokeObjectURL(url);
-          showStatus(tr('Project download ready: {project}', { project: project.name || project.id }));
+          showStatus(tr('Project download will start when the ZIP is ready: {project}', { project: project.name || project.id }));
         } catch (err) {
           showStatus(tr('Project download failed: {error}', { error: String(err) }), true);
         } finally {
-          restoreButton();
+          setTimeout(restoreButton, 1200);
         }
       }
 

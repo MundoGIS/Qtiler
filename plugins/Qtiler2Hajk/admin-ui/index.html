@@ -180,7 +180,7 @@
             <button type="button" class="publish-editor__tab-btn publish-editor__tab-btn--active" data-publish-tab="layers" aria-selected="true">1. Layers</button>
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="backgrounds" aria-selected="false" data-i18n="Qtiler2Hajk.step_backgrounds">2. Backgrounds</button>
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="tools" aria-selected="false" data-i18n="Qtiler2Hajk.step_controls_search">3. Controls &amp; search</button>
-            <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false" data-i18n="Qtiler2Hajk.step_origo_config">4. Hajk Configuration</button>
+            <button type="button" class="publish-editor__tab-btn" data-publish-tab="config" aria-selected="false" data-i18n="Qtiler2Hajk.step_hajk_config">4. Hajk Configuration</button>
             <button type="button" class="publish-editor__tab-btn" data-publish-tab="jsoneditor" aria-selected="false" data-i18n="Qtiler2Hajk.step_json_editor">5. JSON Editor</button>
           </nav>
 
@@ -211,6 +211,10 @@
                 <div class="field">
                   <label class="label" data-i18n="Qtiler2Hajk.project_layers">Project layers</label>
                   <p class="help" data-i18n="Qtiler2Hajk.project_layers_help" style="margin-bottom:0.5rem"></p>
+                  <div class="buttons are-small Qtiler2Hajk-layer-bulk-actions">
+                    <button type="button" class="button is-light" id="btn-select-all-project-layers" data-i18n="Qtiler2Hajk.layer_select_all">Select all</button>
+                    <button type="button" class="button is-light" id="btn-select-none-project-layers" data-i18n="Qtiler2Hajk.layer_select_none">Select none</button>
+                  </div>
                   <div id="projectLayersList" class="Qtiler2Hajk-checklist"></div>
                 </div>
               </fieldset>
@@ -242,6 +246,12 @@
               <fieldset class="modal-step">
                 <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_controls">3. Map controls</legend>
                 <p class="help" style="margin-bottom:0.6rem" data-i18n="Qtiler2Hajk.step_controls_help">Select the tools to show in the viewer. Click the gear icon next to a control to configure its options.</p>
+                <div class="notification is-info is-light" style="margin-bottom:0.75rem;padding:0.75rem 0.9rem">
+                  <strong data-i18n="Qtiler2Hajk.wfs_helper_title">WFS search and editing</strong>
+                  <p class="help" style="margin:0.35rem 0 0" data-i18n="Qtiler2Hajk.wfs_search_helper">Search uses Qtiler searchable layers. Mark layers as searchable in QtilerAuth, then add local or cross-project sources here; results follow project access.</p>
+                  <p class="help" style="margin:0.35rem 0 0" data-i18n="Qtiler2Hajk.wfs_edit_helper">Editing requires QtilerAuth active, the layer allowed as editable in QtilerAuth, user edit access, and the layer published as WFS.</p>
+                  <p class="help" style="margin:0.35rem 0 0" data-i18n="Qtiler2Hajk.wfs_generated_helper">Hajk receives the same Qtiler WFS metadata as Origo: attributes, geometry field, namespace and styles.</p>
+                </div>
                 <div class="Qtiler2Hajk-controls-grid">
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-mapmenu" checked /> <span data-ctrl-label>Layer switcher</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-legend" checked /> <span data-ctrl-label>Info click</span></label>
@@ -253,6 +263,7 @@
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-draw" checked /> <span data-ctrl-label>Sketch</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-bookmarks" /> <span data-ctrl-label>Bookmarks</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-propertychecker" /> <span data-ctrl-label>Property checker</span></label>
+                  <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-lantmaterisearch" /> <span data-ctrl-label>Lantmateriet search</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-routing" /> <span data-ctrl-label>Routing</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-anchor" /> <span data-ctrl-label>Share link / QR</span></label>
                   <label class="Qtiler2Hajk-control-item"><input type="checkbox" id="ctrl-location" /> <span data-ctrl-label>User location</span></label>
@@ -314,7 +325,7 @@
 
             <section class="publish-editor__tab-panel" data-publish-panel="config">
               <fieldset class="modal-step publish-editor__config-step">
-                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_origo_config">4. Hajk Configuration</legend>
+                <legend class="modal-step__legend" data-i18n="Qtiler2Hajk.step_hajk_config">4. Hajk Configuration</legend>
                 <div class="publish-editor__config-grid">
                   <div class="publish-editor__config-main">
                     <h4 class="title is-6" style="margin-bottom: 0.5rem;" data-i18n="Qtiler2Hajk.interactive_map">Interactive Map</h4>
@@ -331,6 +342,8 @@
                       <button type="button" class="button is-small is-info" id="btn-load-map-preview" data-i18n="Qtiler2Hajk.load_preview">Load Preview</button>
                       <button type="button" class="button is-small" id="btn-open-map-preview-tab" data-i18n="Qtiler2Hajk.open_in_new_tab">Open in new tab</button>
                       <button type="button" class="button is-small is-primary" id="btn-fetch-map-extent" data-i18n="Qtiler2Hajk.capture_view">Capture view (Center &amp; Zoom)</button>
+                      <button type="button" class="button is-small is-light" id="btn-clear-map-extent" data-i18n="Qtiler2Hajk.clear_extent">Clear extent</button>
+                      <button type="button" class="button is-small is-light" id="btn-center-default-background" data-i18n="Qtiler2Hajk.center_default_bg">Center on default background</button>
                     </div>
 
                     <div class="grid">
@@ -429,6 +442,7 @@
             <p id="publishStatusError" class="help is-danger" style="display:none; margin:0; flex:1 1 auto;"></p>
             <button id="saveDraftBtn" class="button is-light" type="button" data-i18n="Qtiler2Hajk.save_draft">Save draft</button>
             <button id="previewFooterBtn" class="button is-info is-light" type="button" data-i18n="Qtiler2Hajk.preview_btn">Preview</button>
+            <button id="preflightPublishBtn" class="button is-warning is-light" type="button" data-i18n="Qtiler2Hajk.preflight_btn">Check map</button>
             <button id="publishNowBtn" class="button is-primary" data-i18n="Qtiler2Hajk.publish_now">Publish</button>
             <button id="closePublishModalBottom" class="button" type="button" data-i18n="Qtiler2Hajk.cancel">Cancel</button>
           </footer>

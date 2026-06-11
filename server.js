@@ -724,6 +724,12 @@ app.use(express.static(publicDir, { index: false }));
     console.log(`Serving QGIS SVGs at/from: ${qgisSvgPath}`);
     app.use('/qgis-svg', express.static(qgisSvgPath, { maxAge: '1d' }));
   }
+
+  const qtilerSymbologySvgPath = path.join(process.cwd(), 'data', 'Qtiler-symbology');
+  if (fs.existsSync(qtilerSymbologySvgPath)) {
+    console.log(`Serving Qtiler SVG symbology at/from: ${qtilerSymbologySvgPath}`);
+    app.use('/qtiler-symbology-svg', express.static(qtilerSymbologySvgPath, { maxAge: '1d' }));
+  }
   
 const cacheDir = path.resolve(__dirname, "cache");
 const pythonDir = path.resolve(__dirname, "python");
@@ -1468,6 +1474,14 @@ const sanitizeStorageName = (value) => {
   return cleaned.replace(/[<>:"/\\|?*]/g, "_").replace(/\.\./g, "_") || "cache_item";
 };
 
+const normalizeThemeName = (value) => {
+  let name = String(value || "").trim();
+  while (/^theme:/i.test(name)) {
+    name = name.replace(/^theme:/i, "").trim();
+  }
+  return name;
+};
+
 const getProjectIndexPath = (projectId) => path.join(cacheDir, projectId, "index.json");
 
 const loadProjectIndexData = (projectId) => {
@@ -1494,6 +1508,7 @@ const writeProjectIndexData = (projectId, data) => {
 
 const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => {
   if (!projectId) return null;
+  const normalizedTargetName = targetMode === "theme" ? normalizeThemeName(targetName) : targetName;
   const data = loadProjectIndexData(projectId);
   const layers = Array.isArray(data.layers) ? data.layers : [];
   let existing = null;
@@ -1501,7 +1516,8 @@ const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => 
   for (const entry of layers) {
     if (!entry) continue;
     const kind = entry.kind || "layer";
-    if (entry.name === targetName && kind === targetMode) {
+    const entryName = kind === "theme" ? normalizeThemeName(entry.name) : entry.name;
+    if (entryName === normalizedTargetName && kind === targetMode) {
       existing = entry;
       continue;
     }
@@ -1509,7 +1525,7 @@ const upsertProjectIndexEntry = (projectId, targetMode, targetName, updater) => 
   }
   const updated = updater(existing || {}) || null;
   if (updated) {
-    updated.name = targetName;
+    updated.name = normalizedTargetName;
     updated.kind = targetMode;
     updated.updated = new Date().toISOString();
     filtered.push(updated);
@@ -3590,7 +3606,7 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
     const killPidTreeWin32 = (pid) => {
       if (!pid || process.platform !== 'win32') return;
       try {
-        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 7000 });
         if (!silentAbort) {
           if (tk?.stdout) console.log(`taskkill stdout: ${tk.stdout.toString()}`);
           if (tk?.stderr) console.log(`taskkill stderr: ${tk.stderr.toString()}`);
@@ -3953,6 +3969,7 @@ const deleteLayerCacheInternal = async (projectId, layerName, { force = false, s
 const deleteThemeCacheInternal = async (projectId, themeName, { force = false, silent = false } = {}) => {
   if (!projectId) throw new Error("project required");
   if (!themeName) throw new Error("theme required");
+  themeName = normalizeThemeName(themeName);
   const listJobPidFiles = () => {
     try {
       return fs.readdirSync(jobPidDir).filter((f) => f.endsWith('.json'));
@@ -4000,7 +4017,7 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
     const killPidTreeWin32 = (pid) => {
       if (!pid || process.platform !== 'win32') return;
       try {
-        spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+        spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 7000 });
       } catch (e) {
         if (!silentAbort) console.warn('taskkill tree failed', e?.message || e);
       }
@@ -4170,9 +4187,13 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
     if (!Array.isArray(index.layers)) index.layers = [];
     let foundTheme = false;
     index.layers = index.layers.map((entry) => {
-      if (!(entry && entry.name === themeName && (entry.kind || "layer") === "theme")) return entry;
+      const entryKindToken = String(entry?.kind || "layer").toLowerCase();
+      const entryIsTheme = entryKindToken === "theme" || /^theme:/i.test(String(entry?.name || "").trim());
+      if (!(entry && normalizeThemeName(entry.name) === themeName && entryIsTheme)) return entry;
       foundTheme = true;
       const updated = Object.assign({}, entry);
+      updated.name = themeName;
+      updated.kind = 'theme';
       updated.cached_zoom_min = null;
       updated.cached_zoom_max = null;
       if (Object.prototype.hasOwnProperty.call(updated, 'path')) updated.path = null;
@@ -4216,6 +4237,84 @@ const deleteThemeCacheInternal = async (projectId, themeName, { force = false, s
   }
   logProjectEvent(projectId, `Theme ${themeName} cache deleted${force ? " (force)" : ""}.`);
   return { project: projectId, theme: themeName };
+};
+
+const purgeWmsTileCacheForName = async (projectId, targetName, { silent = false } = {}) => {
+  const targetSeg = safePathSegment(targetName, { fallback: 'layers' });
+  const projectSeg = safePathSegment(projectId, { fallback: projectId || 'project' });
+  const candidateRoots = Array.from(new Set([
+    path.join(cacheDir, projectId, '_wms_tiles'),
+    path.join(cacheDir, projectSeg, '_wms_tiles'),
+    path.join(cacheDir, '_wms_tiles', projectSeg)
+  ]));
+
+  const removeDirBestEffort = async (dirPath) => {
+    if (!dirPath) return false;
+    try {
+      if (!fs.existsSync(dirPath)) return false;
+    } catch {
+      return false;
+    }
+    let removal = dirPath;
+    try {
+      const relocated = await relocateDirectoryForRemoval(dirPath);
+      if (relocated) removal = relocated;
+    } catch {
+      removal = dirPath;
+    }
+    try {
+      await removeDirectorySafe(removal, {});
+      if (removal !== dirPath) {
+        try { await removeDirectorySafe(dirPath, { attempts: 2, delayMs: 100 }); } catch {}
+      }
+      return true;
+    } catch (err) {
+      if (!silent) console.warn('Failed to remove WMS cache dir', dirPath, err?.message || err);
+      throw err;
+    }
+  };
+
+  let removed = false;
+  for (const root of candidateRoots) {
+    try {
+      if (!fs.existsSync(root)) continue;
+    } catch {
+      continue;
+    }
+    let crsDirs = [];
+    try {
+      crsDirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch {
+      crsDirs = [];
+    }
+    for (const crsName of crsDirs) {
+      removed = (await removeDirBestEffort(path.join(root, crsName, targetSeg))) || removed;
+    }
+    removed = (await removeDirBestEffort(path.join(root, targetSeg))) || removed;
+  }
+  return removed;
+};
+
+const deleteThemeWmsCacheInternal = async (projectId, themeName, { silent = false } = {}) => {
+  if (!projectId) throw new Error('project required');
+  if (!themeName) throw new Error('theme required');
+  themeName = normalizeThemeName(themeName);
+  const removed = await purgeWmsTileCacheForName(projectId, themeName, { silent });
+  try {
+    updateProjectConfig(projectId, {
+      themes: {
+        [themeName]: {
+          lastResult: 'deleted',
+          lastMessage: removed ? 'Theme WMS cache removed' : 'Theme WMS cache already empty',
+          lastRunAt: new Date().toISOString()
+        }
+      }
+    }, { skipReschedule: true });
+  } catch (cfgErr) {
+    if (!silent) console.warn('Failed to record theme WMS delete in config', cfgErr);
+  }
+  logProjectEvent(projectId, `Theme ${themeName} WMS cache deleted.`);
+  return { project: projectId, theme: themeName, removed };
 };
 
 // Detectar ejecutable python (permite override por .env). No usar hardcoded C:\ fallbacks — exigir .env
@@ -4346,7 +4445,7 @@ const findProcessPidsByCommandLine = (needle) => {
   if (!needle) return [];
   try {
     const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*${needle.replace(/'/g, "''" )}*' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Depth 3`;
-    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { shell: true, timeout: 5000, encoding: 'utf8' });
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { timeout: 5000, encoding: 'utf8' });
     const out = (res.stdout || '').trim();
     if (!out) return [];
     let parsed = null;
@@ -4378,7 +4477,7 @@ const findProcessPidsByCommandLineAll = (needles = []) => {
     const esc = (s) => s.replace(/'/g, "''");
     const conds = terms.map((t) => `$_.CommandLine -like '*${esc(t)}*'`).join(' -and ');
     const psCmd = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ${conds} } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Depth 3`;
-    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { shell: true, timeout: 7000, encoding: 'utf8' });
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psCmd], { timeout: 7000, encoding: 'utf8' });
     const out = (res.stdout || '').trim();
     if (!out) return [];
     let parsed = null;
@@ -4409,7 +4508,7 @@ const findDescendantPids = (rootPid) => {
       }
       Get-Kids $root; $children | ConvertTo-Json -Depth 5
     `;
-    const res = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { shell: true, timeout: 7000, encoding: 'utf8' });
+    const res = spawnSync('powershell', ['-NoProfile', '-Command', psScript], { timeout: 7000, encoding: 'utf8' });
     const out = (res.stdout || '').trim();
     if (!out) return [];
     let parsed = null;
@@ -4431,7 +4530,7 @@ const forceKillPids = (pids = []) => {
   try {
     for (const pid of pids) {
       try {
-        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
         results.push({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
       } catch (e) {
         results.push({ pid, code: null, error: String(e) });
@@ -5516,11 +5615,14 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
   const themes = [];
   for (const entry of rawLayers) {
     if (!entry || !entry.name) continue;
-    const kindToken = typeof entry.kind === "string" ? entry.kind.toLowerCase() : (entry.theme ? "theme" : "layer");
+    const rawKindToken = typeof entry.kind === "string" ? entry.kind.toLowerCase() : (entry.theme ? "theme" : "layer");
+    const kindToken = rawKindToken === "theme" || /^theme:/i.test(String(entry.name || '').trim()) ? "theme" : rawKindToken;
     const clone = cloneIndexEntry(entry) || {};
     clone.kind = kindToken;
     clone.projectId = projectId;
     if (kindToken === "theme") {
+      clone.name = normalizeThemeName(clone.name);
+      if (!clone.name) continue;
       themes.push(clone);
     } else {
       layers.push(clone);
@@ -5826,7 +5928,7 @@ const abortGenerateCacheJobInternal = async (id, { silentAbort = false } = {}) =
     if (process.platform === 'win32' && pid) {
       try {
         if (!silentAbort) console.log(`Abort: taskkill tree first for job ${id} pid=${pid}`);
-        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 7000 });
+        const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 7000 });
         if (!silentAbort) {
           console.log(`Abort: taskkill tree stdout: ${tk.stdout?.toString?.() || ''}`);
           console.log(`Abort: taskkill tree stderr: ${tk.stderr?.toString?.() || ''}`);
@@ -6086,7 +6188,9 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
   if (layer && theme) return res.status(400).json({ error: "too_many_targets", details: "Solo se permite layer o theme" });
 
   const targetMode = theme ? "theme" : "layer";
-  const targetName = (theme || layer || "").toString().trim();
+  const targetName = targetMode === "theme"
+    ? normalizeThemeName(theme)
+    : (layer || "").toString().trim();
   if (!targetName) {
     return res.status(400).json({ error: "invalid_target_name" });
   }
@@ -6113,7 +6217,17 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
     try {
       const indexData = loadProjectIndexData(projectKey);
       const layers = Array.isArray(indexData.layers) ? indexData.layers : [];
-      existingEntry = layers.find((entry) => entry && entry.name === targetName && (entry.kind || "layer") === targetMode) || null;
+      const candidates = layers.filter((entry) => {
+        if (!entry || !entry.name) return false;
+        const rawKindToken = String(entry.kind || (entry.theme ? "theme" : "layer")).trim().toLowerCase();
+        const entryKind = rawKindToken === "theme" || /^theme:/i.test(String(entry.name || "").trim()) ? "theme" : rawKindToken;
+        const entryName = entryKind === "theme" ? normalizeThemeName(entry.name) : String(entry.name || "").trim();
+        return entryKind === targetMode && entryName === targetName;
+      });
+      existingEntry = candidates.find((entry) => !/^theme:/i.test(String(entry.name || "").trim())) || candidates[0] || null;
+      if (existingEntry && targetMode === "theme") {
+        existingEntry = { ...existingEntry, name: targetName };
+      }
     } catch (err) {
       existingEntry = null;
     }
@@ -6202,9 +6316,9 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
 
   const args = [];
   if (targetMode === "layer") {
-    args.push("--layer", layer);
+    args.push("--layer", targetName);
   } else {
-    args.push("--theme", theme);
+    args.push("--theme", targetName);
   }
   args.push(
     "--zoom_min", String(zoomMin),
@@ -6397,7 +6511,7 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
         }
         const update = targetMode === "theme"
           ? { themes: { [targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } }
-          : { layers: { [layer]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
+          : { layers: { [targetName]: { lastResult: job.status, lastMessage, lastRunAt: new Date(job.endedAt).toISOString() } } };
         updateProjectConfig(projectKey, update);
       } catch (cfgErr) {
         console.warn("Failed to update project config with job result", cfgErr);
@@ -6420,7 +6534,7 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
         lastParams: {
           ...req.body,
           project: projectKey,
-          ...(targetMode === "theme" ? { theme: targetName } : { layer })
+          ...(targetMode === "theme" ? { theme: targetName } : { layer: targetName })
         },
         lastRequestedAt: nowIso
       };
@@ -6438,7 +6552,7 @@ app.post("/generate-cache", requireAdminOrInternal, (req, res) => {
       if (targetMode === "theme") {
         patch.themes = { [targetName]: targetPatch };
       } else {
-        patch.layers = { [layer]: targetPatch };
+        patch.layers = { [targetName]: targetPatch };
       }
       if (typeof req.body.project_extent === "string") {
         const parts = req.body.project_extent.split(",").map((s) => Number(s.trim())).filter((v) => Number.isFinite(v));
@@ -6569,14 +6683,33 @@ app.delete(
 
 app.delete('/cache/:project/:name', requireAdmin, async (req, res) => {
   const project = req.params.project;
-  const name = req.params.name;
+  const rawName = req.params.name;
+  const name = normalizeThemeName(rawName) || rawName;
   const force = (req.query && (req.query.force === '1' || req.query.force === 'true')) || false;
   const requestedType = String(req.query?.type || 'all').toLowerCase();
   const cacheType = ['all', 'wmts', 'wms'].includes(requestedType) ? requestedType : 'all';
   const layerPath = path.join(cacheDir, project, name);
   const themePath = path.join(cacheDir, project, '_themes', name);
   try {
-    if (cacheType !== 'wms' && fs.existsSync(themePath)) {
+    const isThemeTarget = (() => {
+      if (fs.existsSync(themePath)) return true;
+      try {
+        const idx = loadProjectIndexData(project);
+        const entries = Array.isArray(idx?.layers) ? idx.layers : [];
+        return entries.some((entry) => {
+          if (!entry || normalizeThemeName(entry.name) !== name) return false;
+          const kindToken = String(entry.kind || 'layer').toLowerCase();
+          return kindToken === 'theme' || /^theme:/i.test(String(entry.name || '').trim());
+        });
+      } catch {
+        return false;
+      }
+    })();
+    if (isThemeTarget && cacheType === 'wms') {
+      await deleteThemeWmsCacheInternal(project, name, { silent: false });
+      return res.json({ status: 'deleted', project, theme: name, force, type: 'wms' });
+    }
+    if (isThemeTarget && cacheType !== 'wms') {
       await deleteThemeCacheInternal(project, name, { force: Boolean(force), silent: false });
       return res.json({ status: 'deleted', project, theme: name, path: themePath, force, type: 'wmts' });
     }
@@ -6724,7 +6857,7 @@ app.post('/generate-cache/admin/:id/diagnose', requireAdmin, async (req, res) =>
       const killResults = [];
       for (const p of Array.from(toKill).filter(Number.isFinite)) {
         try {
-          const tk = spawnSync('taskkill', ['/PID', String(p), '/T', '/F'], { shell: true, timeout: 5000 });
+          const tk = spawnSync('taskkill', ['/PID', String(p), '/T', '/F'], { timeout: 5000 });
           killResults.push({ pid: p, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
         } catch (e) {
           killResults.push({ pid: p, error: String(e) });
@@ -6754,7 +6887,7 @@ app.post('/generate-cache/admin/orphans/:id/kill', requireAdmin, async (req, res
   const results = [];
   try {
     if (pid) {
-      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
       results.push({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
     }
     // also attempt additional kills by commandline match
@@ -6778,7 +6911,7 @@ app.post('/admin/kill-pid', requireAdmin, async (req, res) => {
     const pid = Number.isFinite(Number(body.pid)) ? Number(body.pid) : null;
     if (!pid) return res.status(400).json({ error: 'invalid_pid' });
     try {
-      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: true, timeout: 5000 });
+      const tk = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { timeout: 5000 });
       return res.json({ pid, code: tk.status, stdout: (tk.stdout||'').toString(), stderr: (tk.stderr||'').toString() });
     } catch (e) {
       return res.status(500).json({ error: String(e) });
@@ -7050,8 +7183,9 @@ const buildWmtsInventory = (options = {}) => {
     for (const layerEntry of index.layers) {
       const scheme = typeof layerEntry.scheme === "string" ? layerEntry.scheme.toLowerCase() : null;
       const tileCrs = (layerEntry.tile_crs || layerEntry.crs || "EPSG:3857").toUpperCase();
-      const kind = typeof layerEntry.kind === "string" ? layerEntry.kind.toLowerCase() : "layer";
-      const isTheme = kind === "theme";
+      const rawKind = typeof layerEntry.kind === "string" ? layerEntry.kind.toLowerCase() : "layer";
+      const isTheme = rawKind === "theme" || /^theme:/i.test(String(layerEntry.name || layerEntry.theme || "").trim());
+      const kind = isTheme ? "theme" : rawKind;
       const layerPresetIdRaw = typeof layerEntry.tile_matrix_preset === "string" ? layerEntry.tile_matrix_preset.trim() : "";
       let layerPresetId = layerPresetIdRaw || null;
       if (layerPresetId && layerPresetId.endsWith(".json")) {
@@ -7076,8 +7210,10 @@ const buildWmtsInventory = (options = {}) => {
       const isWebMercator = scheme === "xyz" && tileCrs === "EPSG:3857";
       if (!hasCustomSet && !isWebMercator) continue;
 
-      const layerName = layerEntry.name || layerEntry.layer || layerEntry.theme || "layer";
-      const storageName = layerEntry.layer || layerEntry.theme || layerEntry.name || layerName;
+      const rawLayerName = layerEntry.name || layerEntry.layer || layerEntry.theme || "layer";
+      const layerName = isTheme ? normalizeThemeName(rawLayerName) : rawLayerName;
+      const rawStorageName = layerEntry.layer || layerEntry.theme || layerEntry.name || layerName;
+      const storageName = isTheme ? normalizeThemeName(rawStorageName) : rawStorageName;
 
       if (filterLayerRaw) {
         const candidateRaw = String(layerName ?? '').trim();
@@ -7328,7 +7464,7 @@ app.get(
           return queueTileRender(renderParams, filePath, (qerr, outFile, meta) => {
             if (qerr) {
               logProjectEvent(layer.project, `On-demand render failed for ${filePath}: ${String(qerr)}`);
-              if (!res.headersSent) return res.status(500).send("Generation failed");
+              return sendOnDemandTileError(res, qerr, "Generation failed");
               return;
             }
             logProjectEvent(layer.project, `On-demand render completed: ${outFile}`);
@@ -7340,7 +7476,7 @@ app.get(
           });
         } catch (queueErr) {
           console.warn('Failed to queue tile render', queueErr);
-          if (!res.headersSent) return res.status(500).send("Generation failed");
+          return sendOnDemandTileError(res, queueErr, "Generation failed");
         }
       }
     });
@@ -8036,24 +8172,42 @@ app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.projec
     const requestedLayers = Array.isArray(requestedLayersRaw)
       ? requestedLayersRaw
       : (typeof requestedLayersRaw === 'string' && requestedLayersRaw.trim() ? [requestedLayersRaw] : []);
+    const requestedThemesRaw = req.query?.theme;
+    const requestedThemes = Array.isArray(requestedThemesRaw)
+      ? requestedThemesRaw
+      : (typeof requestedThemesRaw === 'string' && requestedThemesRaw.trim() ? [requestedThemesRaw] : []);
     const layerNames = Array.from(new Set(requestedLayers
       .map((name) => String(name || '').trim())
+      .filter(Boolean)));
+    const themeNames = Array.from(new Set(requestedThemes
+      .map((name) => normalizeThemeName(name))
       .filter(Boolean)));
 
     const indexData = loadProjectIndexData(projectId);
     const indexLayers = Array.isArray(indexData?.layers) ? indexData.layers : [];
     const indexByName = new Map();
+    const themeIndexByName = new Map();
     for (const entry of indexLayers) {
-      if (!entry || (entry.kind && entry.kind !== 'layer')) continue;
+      if (!entry) continue;
       const name = String(entry.name || '').trim();
       if (!name) continue;
-      indexByName.set(name, entry);
+      const rawKindToken = String(entry.kind || (entry.theme ? 'theme' : 'layer')).trim().toLowerCase();
+      const kindToken = rawKindToken === 'theme' || /^theme:/i.test(name) ? 'theme' : rawKindToken;
+      if (kindToken === 'theme') {
+        const themeName = normalizeThemeName(name);
+        const list = themeIndexByName.get(themeName) || [];
+        list.push({ ...entry, name: themeName, raw_name: name });
+        themeIndexByName.set(themeName, list);
+      }
+      else indexByName.set(name, entry);
     }
 
     const targetLayers = layerNames.length ? layerNames : Array.from(indexByName.keys());
+    const targetThemes = themeNames.length ? themeNames : Array.from(themeIndexByName.keys());
     const vectorTiles = hasVectorTilesCacheForProject(projectId);
     const quantizedMesh = hasQuantizedMeshCacheForProject(projectId);
     const layers = {};
+    const themes = {};
 
     for (const layerName of targetLayers) {
       const indexEntry = indexByName.get(layerName) || null;
@@ -8078,11 +8232,38 @@ app.get('/cache/:project/status', ensureProjectAccess((req) => req.params.projec
       };
     }
 
+    for (const themeName of targetThemes) {
+      const themeEntries = themeIndexByName.get(themeName) || [];
+      const wmts = themeEntries.some((indexEntry) => {
+        const count = Number(indexEntry?.tile_count ?? indexEntry?.tiles ?? indexEntry?.tileCount);
+        if (Number.isFinite(count) && count > 0) return true;
+        const progressCount = Number(indexEntry?.progress?.totalGenerated ?? indexEntry?.generated_tiles ?? indexEntry?.generatedTiles);
+        if (Number.isFinite(progressCount) && progressCount > 0) return true;
+        const hasTilesFlag = indexEntry?.has_tiles ?? indexEntry?.hasTiles;
+        if (hasTilesFlag === true) return true;
+        if (indexEntry?.cache_exists === true) return true;
+        const cachedMin = Number(indexEntry?.cached_zoom_min);
+        const cachedMax = Number(indexEntry?.cached_zoom_max);
+        if (Number.isFinite(cachedMin) && Number.isFinite(cachedMax) && cachedMax >= cachedMin) return true;
+        const candidatePath = typeof indexEntry?.path === 'string' && indexEntry.path.trim()
+          ? indexEntry.path
+          : path.join(cacheDir, projectId, '_themes', themeName);
+        return directoryHasTileLikeFilesBounded(candidatePath);
+      }) || directoryHasTileLikeFilesBounded(path.join(cacheDir, projectId, '_themes', themeName));
+      const wms = hasWmsCacheForLayer(projectId, themeName);
+      themes[themeName] = {
+        wmts,
+        wms,
+        any: wmts || wms
+      };
+    }
+
     return res.json({
       project: projectId,
       vectorTiles,
       quantizedMesh,
-      layers
+      layers,
+      themes
     });
   } catch (err) {
     return res.status(500).json({ error: 'cache_status_failed', details: String(err?.message || err || '') });
@@ -8202,7 +8383,7 @@ app.delete("/cache/:project", requireAdmin, async (req, res) => {
       // 2) taskkill escalation
       if (procAlive(jobPid)) {
         try {
-          const tk = spawnSync('taskkill', ['/PID', String(jobPid), '/T', '/F'], { shell: true, timeout: 5000 });
+          const tk = spawnSync('taskkill', ['/PID', String(jobPid), '/T', '/F'], { timeout: 5000 });
           console.log(`project delete: taskkill for job ${id} pid=${jobPid} -> ${tk.status}`);
         } catch (e) { console.warn(`project delete: taskkill failed for job ${id}`, e?.message || e); }
         await new Promise(r => setTimeout(r, 500));
@@ -8667,6 +8848,23 @@ const deleteTileFileIfInvalid = (filePath) => {
   }
 };
 
+const sendOnDemandTileError = (res, err, fallbackMessage = 'Tile generation failed') => {
+  if (!res || res.headersSent) return true;
+  const message = String(err?.message || err || '').trim();
+  if (message === 'on_demand_paused' || message === 'session_aborted' || message === 'aborted') {
+    try { res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); } catch {}
+    res.status(204).end();
+    return true;
+  }
+  if (err?.statusCode === 503 || err?.code === 'QUEUE_FULL') {
+    try { res.setHeader('Retry-After', '2'); } catch {}
+    res.status(503).send('Tile rendering busy');
+    return true;
+  }
+  res.status(500).send(fallbackMessage);
+  return true;
+};
+
 
 
 // --- FUNCIÓN ACTUALIZADA ---
@@ -9060,7 +9258,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (err, outFile, meta) => {
       if (err) {
         logProjectEvent(project, `Tile render error (fallback): ${fallbackFile} | ${err?.message || err}`);
-        if (!res.headersSent) return res.status(500).send('Tile generation failed');
+        return sendOnDemandTileError(res, err);
       } else {
         logProjectEvent(project, `Tile render success (fallback): ${outFile}`);
         if (!res.headersSent) return res.sendFile(outFile, () => {
@@ -9087,7 +9285,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
         return queueTileRender({ project, layer: theme, z, x, y, sid }, fallbackFile, (layerErr, layerOutFile, layerMeta) => {
           if (layerErr) {
              logProjectEvent(project, `Tile render error (forced fallback): ${fallbackFile} | ${layerErr?.message || layerErr}`);
-             if (!res.headersSent) return res.status(500).send('Tile generation failed');
+             return sendOnDemandTileError(res, layerErr);
           } else {
              logProjectEvent(project, `Tile render success (forced fallback): ${layerOutFile}`);
              if (!res.headersSent) return res.sendFile(layerOutFile, () => {
@@ -9099,7 +9297,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
         });
       }
       
-      if (!res.headersSent) return res.status(500).send('Tile generation failed');
+      return sendOnDemandTileError(res, err);
     } else {
       logProjectEvent(project, `Tile render success: ${outFile}`);
       if (!res.headersSent) return res.sendFile(outFile, () => {
@@ -9173,7 +9371,7 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
   queueTileRender({ project, layer, z, x, y, sid }, file, (err, outFile, meta) => {
     if (err) {
       logProjectEvent(project, `Tile render error: ${file} | ${err?.message || err}`);
-      if (!res.headersSent) return res.status(500).send('Tile generation failed');
+      return sendOnDemandTileError(res, err);
     } else {
       logProjectEvent(project, `Tile render success: ${outFile}`);
       setWmtsTileCacheHeaders(res);
@@ -9202,7 +9400,7 @@ app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
   queueTileRender({ project: 'nogo', layer, z, x, y }, file, (err, outFile, meta) => {
     if (err) {
       logProjectEvent('nogo', `Tile render error: ${file} | ${err?.message || err}`);
-      return res.status(500).json({ error: 'tile_render_failed', details: String(err) });
+      return sendOnDemandTileError(res, err);
     }
     logProjectEvent('nogo', `Tile render success: ${outFile}`);
     res.sendFile(outFile, () => {
@@ -9645,7 +9843,7 @@ app.get("/wmts", (req, res, next) => {
                 queueTileRender(renderParams, filePath, (qerr, outFile, meta) => {
                     if (qerr) {
                         logProjectEvent(projectId, `KVP Render failed: ${String(qerr)}`);
-                        if (!res.headersSent) res.status(500).send("Generation failed");
+                      return sendOnDemandTileError(res, qerr, "Generation failed");
                     } else {
                         // Éxito: enviar archivo generado
                     setWmtsTileCacheHeaders(res);

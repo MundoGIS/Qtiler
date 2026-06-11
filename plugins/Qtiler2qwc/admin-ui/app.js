@@ -1215,7 +1215,16 @@ function normalizeLayersPayload(payload) {
       if (!row || typeof row !== 'object') return null;
       const name = String(row.name || row.id || '').trim();
       if (!name) return null;
-      return { name, geometry: String(row.geometry_type || row.geometry || row.kind || '').trim() };
+      const kind = String(row.kind || row.type || '').trim().toLowerCase();
+      const isTheme = row.isTheme === true || kind === 'theme' || name.startsWith('theme:');
+      return {
+        name,
+        title: String(row.title || row.name || row.id || '').trim() || name,
+        geometry: isTheme ? 'theme' : String(row.geometry_type || row.geometry || row.kind || '').trim(),
+        kind: isTheme ? 'theme' : kind,
+        isTheme,
+        themeName: isTheme ? String(row.themeName || name.replace(/^theme:/, '')).trim() : ''
+      };
     })
     .filter(Boolean);
 }
@@ -2061,10 +2070,14 @@ publishNowBtn?.addEventListener('click', async () => {
   // For backward compatibility, the layer object also exposes `visible` (visible on start).
   const visibleSet = new Set(layerNames);
   const mainLayersPayload = allLayerNames.map((name) => {
+    const layer = (publishState.mainLayers || []).find((item) => String(item?.name || '') === name) || {};
     const state = publishState.mainLayerStates[name] || { included: true, visible: true };
     const included = state.included !== false;
     return {
       name,
+      title: layer.title || name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
       role: 'main',
       sourceProjectId: projectId,
       included,
@@ -2083,6 +2096,9 @@ publishNowBtn?.addEventListener('click', async () => {
       if (!st.included) return;
       extraLayersPayload.push({
         name: n,
+        title: layer.title || n,
+        isTheme: layer.isTheme === true,
+        themeName: layer.themeName || null,
         role: 'main',
         sourceProjectId: srcProjectId,
         sourceProjectCrs: src.projectCrs || null,

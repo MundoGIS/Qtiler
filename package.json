@@ -37,6 +37,7 @@
   "homepage": "https://github.com/MundoGIS/Qtiler/blob/master/README.md",
   "dependencies": {
     "adm-zip": "^0.5.12",
+    "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.8.0",
     "cookie-parser": "^1.4.6",

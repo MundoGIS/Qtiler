@@ -115,6 +115,9 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_attribute_table': 'AttributeTable',
     'Qtiler2Hajk.feat_routing': 'Routing',
     'Qtiler2Hajk.publish_now': 'Publish',
+    'Qtiler2Hajk.preflight_btn': 'Check map',
+    'Qtiler2Hajk.preflight_checking': 'Checking...',
+    'Qtiler2Hajk.preflight_ok': 'Map check passed. Projects, layers and backgrounds are available.',
     'Qtiler2Hajk.save_draft': 'Save draft',
     'Qtiler2Hajk.draft_saved': '✓ Draft saved',
     'Qtiler2Hajk.preview_btn': 'Preview',
@@ -143,6 +146,13 @@ const QTWC_I18N = {
     'Qtiler2Hajk.load_preview': 'Load Preview',
     'Qtiler2Hajk.open_in_new_tab': 'Open in new tab',
     'Qtiler2Hajk.capture_view': 'Capture view (Center & Zoom)',
+    'Qtiler2Hajk.clear_extent': 'Clear extent',
+    'Qtiler2Hajk.center_default_bg': 'Center on default background',
+    'Qtiler2Hajk.layer_select_all': 'Select all',
+    'Qtiler2Hajk.layer_select_none': 'Select none',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent cleared.',
+    'Qtiler2Hajk.default_bg_centered': 'Map centered on the default background.',
+    'Qtiler2Hajk.default_bg_center_failed': 'Could not center on the default background: {msg}',
     'Qtiler2Hajk.fullscreen': 'Full screen',
     'Qtiler2Hajk.windowed': 'Windowed',
     'Qtiler2Hajk.interactive_map': 'Interactive Map',
@@ -321,6 +331,10 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_dxf_export_desc': 'Download layers as AutoCAD DXF',
     'Qtiler2Hajk.feat_attribute_table_desc': 'Tabular view of feature attributes',
     'Qtiler2Hajk.feat_routing_desc': 'Calculate routes between points',
+    'Qtiler2Hajk.wfs_helper_title': 'WFS search and editing',
+    'Qtiler2Hajk.wfs_search_helper': 'Search uses Qtiler searchable layers. Mark layers as searchable in QtilerAuth, then add local or cross-project sources here; results follow project access.',
+    'Qtiler2Hajk.wfs_edit_helper': 'Editing requires QtilerAuth active, the layer allowed as editable in QtilerAuth, user edit access, and the layer published as WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk receives the same Qtiler WFS metadata as Origo: attributes, geometry field, namespace and styles.',
     'Qtiler2Hajk.tool_config': 'Configuration',
     'Qtiler2Hajk.cfg_share_url': 'Share service URL',
     'Qtiler2Hajk.cfg_share_url_ph': 'https://example.com/share',
@@ -526,6 +540,19 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_group_name_ph': 'technical name',
     'Qtiler2Hajk.pub_group_title_ph': 'visible title',
     'Qtiler2Hajk.pub_assign_help': 'Check layers in step 1 to assign them.',
+    'Qtiler2Hajk.extra_layers_legend': 'Additional project layers',
+    'Qtiler2Hajk.extra_layers_help': 'Add WMS or WFS layers from other published QGIS projects.',
+    'Qtiler2Hajk.extra_layers_add': 'Add layers',
+    'Qtiler2Hajk.extra_layers_empty': 'No external layers added.',
+    'Qtiler2Hajk.extra_layers_remove': 'Remove',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Add layers from another project',
+    'Qtiler2Hajk.extra_layers_project': 'Project',
+    'Qtiler2Hajk.extra_layers_cancel': 'Cancel',
+    'Qtiler2Hajk.extra_layers_apply': 'Add selected layers',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Select a project',
+    'Qtiler2Hajk.extra_layers_current_project': 'The main project is already listed above. Pick a different project here.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'No layers available for this project.',
+    'Qtiler2Hajk.layer_generic': 'Layer',
     'Qtiler2Hajk.pub_search_legend': 'Search options',
     'Qtiler2Hajk.pub_search_hint_label': 'Suggested text',
     'Qtiler2Hajk.pub_search_min_label': 'Minimum characters',
@@ -540,6 +567,7 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_search_source_no_layers': 'No searchable layers configured for this project.',
     'Qtiler2Hajk.pub_search_source_remove': 'Remove',
     'Qtiler2Hajk.pub_search_source_current': 'Current project',
+    'Qtiler2Hajk.pub_search_no_projects': 'No projects are available. Check the server connection or add publishable projects.',
     'Qtiler2Hajk.pub_edit_profile_title': 'Edit name, layers, backgrounds, groups and tools',
     'Qtiler2Hajk.hiw.button': 'How it works & Security',
     'Qtiler2Hajk.hiw.title': 'How Qtiler2Hajk works & security',
@@ -666,6 +694,9 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_attribute_table': 'Tabla de atributos',
     'Qtiler2Hajk.feat_routing': 'Rutas',
     'Qtiler2Hajk.publish_now': 'Publicar',
+    'Qtiler2Hajk.preflight_btn': 'Comprobar mapa',
+    'Qtiler2Hajk.preflight_checking': 'Comprobando...',
+    'Qtiler2Hajk.preflight_ok': 'La comprobación pasó. Los proyectos, capas y fondos están disponibles.',
     'Qtiler2Hajk.save_draft': 'Guardar borrador',
     'Qtiler2Hajk.draft_saved': '✓ Borrador guardado',
     'Qtiler2Hajk.preview_btn': 'Vista previa',
@@ -694,6 +725,13 @@ const QTWC_I18N = {
     'Qtiler2Hajk.load_preview': 'Cargar vista previa',
     'Qtiler2Hajk.open_in_new_tab': 'Abrir en pestaña nueva',
     'Qtiler2Hajk.capture_view': 'Capturar vista (Centro y Zoom)',
+    'Qtiler2Hajk.clear_extent': 'Limpiar extent',
+    'Qtiler2Hajk.center_default_bg': 'Centrar en fondo predeterminado',
+    'Qtiler2Hajk.layer_select_all': 'Seleccionar todas',
+    'Qtiler2Hajk.layer_select_none': 'Seleccionar ninguna',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent limpiado.',
+    'Qtiler2Hajk.default_bg_centered': 'Mapa centrado en el fondo predeterminado.',
+    'Qtiler2Hajk.default_bg_center_failed': 'No se pudo centrar en el fondo predeterminado: {msg}',
     'Qtiler2Hajk.fullscreen': 'Pantalla completa',
     'Qtiler2Hajk.windowed': 'Ventana',
     'Qtiler2Hajk.interactive_map': 'Mapa interactivo',
@@ -872,6 +910,10 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_dxf_export_desc': 'Descargar capas como AutoCAD DXF',
     'Qtiler2Hajk.feat_attribute_table_desc': 'Vista tabular de atributos de elementos',
     'Qtiler2Hajk.feat_routing_desc': 'Calcular rutas entre puntos',
+    'Qtiler2Hajk.wfs_helper_title': 'Búsqueda y edición WFS',
+    'Qtiler2Hajk.wfs_search_helper': 'La búsqueda usa las capas buscables de Qtiler. Márcalas como buscables en QtilerAuth y añade aquí fuentes locales o de otros proyectos; los resultados respetan el acceso del proyecto.',
+    'Qtiler2Hajk.wfs_edit_helper': 'La edición requiere QtilerAuth activo, la capa permitida como editable en QtilerAuth, acceso de edición para el usuario y la capa publicada como WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk recibe los mismos metadatos WFS de Qtiler que Origo: atributos, campo geométrico, namespace y estilos.',
     'Qtiler2Hajk.tool_config': 'Configuración',
     'Qtiler2Hajk.cfg_share_url': 'URL del servicio de compartir',
     'Qtiler2Hajk.cfg_share_url_ph': 'https://ejemplo.com/share',
@@ -1077,6 +1119,19 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_group_name_ph': 'nombre técnico',
     'Qtiler2Hajk.pub_group_title_ph': 'título visible',
     'Qtiler2Hajk.pub_assign_help': 'Marca capas en el paso 1 para asignarlas.',
+    'Qtiler2Hajk.extra_layers_legend': 'Capas adicionales de proyectos',
+    'Qtiler2Hajk.extra_layers_help': 'Añade capas WMS o WFS desde otros proyectos QGIS publicados.',
+    'Qtiler2Hajk.extra_layers_add': 'Añadir capas',
+    'Qtiler2Hajk.extra_layers_empty': 'No se han añadido capas externas.',
+    'Qtiler2Hajk.extra_layers_remove': 'Quitar',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Añadir capas desde otro proyecto',
+    'Qtiler2Hajk.extra_layers_project': 'Proyecto',
+    'Qtiler2Hajk.extra_layers_cancel': 'Cancelar',
+    'Qtiler2Hajk.extra_layers_apply': 'Añadir capas seleccionadas',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Selecciona un proyecto',
+    'Qtiler2Hajk.extra_layers_current_project': 'El proyecto principal ya aparece arriba. Elige aquí otro proyecto.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'No hay capas disponibles para este proyecto.',
+    'Qtiler2Hajk.layer_generic': 'Capa',
     'Qtiler2Hajk.pub_search_legend': 'Opciones de Búsqueda',
     'Qtiler2Hajk.pub_search_hint_label': 'Texto sugerido',
     'Qtiler2Hajk.pub_search_min_label': 'Caracteres mínimos',
@@ -1091,6 +1146,7 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_search_source_no_layers': 'No hay capas buscables configuradas para este proyecto.',
     'Qtiler2Hajk.pub_search_source_remove': 'Quitar',
     'Qtiler2Hajk.pub_search_source_current': 'Proyecto actual',
+    'Qtiler2Hajk.pub_search_no_projects': 'No hay proyectos disponibles. Verifica la conexión con el servidor o añade proyectos publicables.',
     'Qtiler2Hajk.pub_edit_profile_title': 'Editar nombre, capas, fondos, grupos y herramientas',
     'Qtiler2Hajk.hiw.button': 'Cómo funciona y seguridad',
     'Qtiler2Hajk.hiw.title': 'Cómo funciona Qtiler2Hajk y por qué es seguro',
@@ -1217,6 +1273,9 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_attribute_table': 'Attributtabell',
     'Qtiler2Hajk.feat_routing': 'Ruttplanering',
     'Qtiler2Hajk.publish_now': 'Publicera',
+    'Qtiler2Hajk.preflight_btn': 'Kontrollera karta',
+    'Qtiler2Hajk.preflight_checking': 'Kontrollerar...',
+    'Qtiler2Hajk.preflight_ok': 'Kartkontrollen gick igenom. Projekt, lager och bakgrunder är tillgängliga.',
     'Qtiler2Hajk.save_draft': 'Spara utkast',
     'Qtiler2Hajk.draft_saved': '✓ Utkast sparat',
     'Qtiler2Hajk.preview_btn': 'Förhandsgranska',
@@ -1245,6 +1304,13 @@ const QTWC_I18N = {
     'Qtiler2Hajk.load_preview': 'Ladda förhandsvisning',
     'Qtiler2Hajk.open_in_new_tab': 'Öppna i ny flik',
     'Qtiler2Hajk.capture_view': 'Fånga vy (Centrum och zoom)',
+    'Qtiler2Hajk.clear_extent': 'Rensa extent',
+    'Qtiler2Hajk.center_default_bg': 'Centrera på standardbakgrund',
+    'Qtiler2Hajk.layer_select_all': 'Välj alla',
+    'Qtiler2Hajk.layer_select_none': 'Välj inga',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent rensad.',
+    'Qtiler2Hajk.default_bg_centered': 'Kartan centrerades på standardbakgrunden.',
+    'Qtiler2Hajk.default_bg_center_failed': 'Kunde inte centrera på standardbakgrunden: {msg}',
     'Qtiler2Hajk.fullscreen': 'Helskärm',
     'Qtiler2Hajk.windowed': 'Fönsterläge',
     'Qtiler2Hajk.interactive_map': 'Interaktiv karta',
@@ -1413,6 +1479,10 @@ const QTWC_I18N = {
     'Qtiler2Hajk.feat_dxf_export_desc': 'Ladda ner lager som AutoCAD DXF',
     'Qtiler2Hajk.feat_attribute_table_desc': 'Tabellvy av objektattribut',
     'Qtiler2Hajk.feat_routing_desc': 'Beräkna rutter mellan punkter',
+    'Qtiler2Hajk.wfs_helper_title': 'WFS-sökning och redigering',
+    'Qtiler2Hajk.wfs_search_helper': 'Sökning använder Qtilers sökbara lager. Markera lager som sökbara i QtilerAuth och lägg sedan till lokala källor eller källor från andra projekt här; resultat följer projektåtkomst.',
+    'Qtiler2Hajk.wfs_edit_helper': 'Redigering kräver aktivt QtilerAuth, att lagret är tillåtet som redigerbart i QtilerAuth, redigeringsåtkomst för användaren och att lagret publiceras som WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samma Qtiler WFS-metadata som Origo: attribut, geometrijfält, namespace och stilar.',
     'Qtiler2Hajk.tool_config': 'Konfiguration',
     'Qtiler2Hajk.cfg_share_url': 'Delningstjänst-URL',
     'Qtiler2Hajk.cfg_share_url_ph': 'https://example.com/share',
@@ -1618,6 +1688,19 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_group_name_ph': 'tekniskt namn',
     'Qtiler2Hajk.pub_group_title_ph': 'synlig titel',
     'Qtiler2Hajk.pub_assign_help': 'Kryssa lager i steg 1 för att tilldela dem.',
+    'Qtiler2Hajk.extra_layers_legend': 'Ytterligare projektlager',
+    'Qtiler2Hajk.extra_layers_help': 'Lägg till WMS- eller WFS-lager från andra publicerade QGIS-projekt.',
+    'Qtiler2Hajk.extra_layers_add': 'Lägg till lager',
+    'Qtiler2Hajk.extra_layers_empty': 'Inga externa lager tillagda.',
+    'Qtiler2Hajk.extra_layers_remove': 'Ta bort',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Lägg till lager från ett annat projekt',
+    'Qtiler2Hajk.extra_layers_project': 'Projekt',
+    'Qtiler2Hajk.extra_layers_cancel': 'Avbryt',
+    'Qtiler2Hajk.extra_layers_apply': 'Lägg till valda lager',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Välj ett projekt',
+    'Qtiler2Hajk.extra_layers_current_project': 'Huvudprojektet finns redan ovan. Välj ett annat projekt här.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'Inga lager tillgängliga för detta projekt.',
+    'Qtiler2Hajk.layer_generic': 'Lager',
     'Qtiler2Hajk.pub_search_legend': 'Sökalternativ',
     'Qtiler2Hajk.pub_search_hint_label': 'Föreslagen text',
     'Qtiler2Hajk.pub_search_min_label': 'Minsta antal tecken',
@@ -1632,6 +1715,7 @@ const QTWC_I18N = {
     'Qtiler2Hajk.pub_search_source_no_layers': 'Inga sökbara lager konfigurerade för detta projekt.',
     'Qtiler2Hajk.pub_search_source_remove': 'Ta bort',
     'Qtiler2Hajk.pub_search_source_current': 'Aktuellt projekt',
+    'Qtiler2Hajk.pub_search_no_projects': 'Inga projekt är tillgängliga. Kontrollera serveranslutningen eller lägg till publicerbara projekt.',
     'Qtiler2Hajk.pub_edit_profile_title': 'Redigera namn, lager, bakgrunder, grupper och verktyg',
     'Qtiler2Hajk.hiw.button': 'Så fungerar det & säkerhet',
     'Qtiler2Hajk.hiw.title': 'Så fungerar Qtiler2Hajk och varför det är säkert',
@@ -1680,6 +1764,10 @@ QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Hajk.no_profiles': 'Ingen publiserte profiler ennå. Klikk "Ny profil" for å opprette en.',
   'Qtiler2Hajk.project_layers': 'Prosjektlag',
   'Qtiler2Hajk.project_layers_help': 'Aktiver lag for å inkludere dem i det publiserte kartet. Bryteren \'Synlig ved start\' styrer om et inkludert lag vises når kartet åpnes. Vektorlag kan valgfritt publiseres som WFS for å aktivere attributtabell og redigering — lag uten WFS serveres som WMS og vises med et miniatyrbilde av laget.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-søk og redigering',
+  'Qtiler2Hajk.wfs_search_helper': 'Søk bruker Qtilers søkbare lag. Marker lag som søkbare i QtilerAuth, og legg deretter til lokale kilder eller kilder fra andre prosjekter her; resultater følger prosjekttilgang.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Redigering krever aktiv QtilerAuth, at laget er tillatt som redigerbart i QtilerAuth, redigeringstilgang for brukeren og at laget publiseres som WFS.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samme Qtiler WFS-metadata som Origo: attributter, geometrifelt, namespace og stiler.',
   'Qtiler2Hajk.portal_site_header_height': 'Headerhøyde',
   'Qtiler2Hajk.portal_site_header_font': 'Header-skrifttype',
   'Qtiler2Hajk.portal_site_header_color1': 'Headerfarge 1',
@@ -1710,6 +1798,10 @@ QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Hajk.no_profiles': 'Ingen publicerede profiler endnu. Klik på "Ny profil" for at oprette en.',
   'Qtiler2Hajk.project_layers': 'Projektlag',
   'Qtiler2Hajk.project_layers_help': 'Aktivér lag for at inkludere dem i det offentliggjorte kort. Knappen \'Synlig ved start\' styrer, om et inkluderet lag vises, når kortet åbnes. Vektorlag kan valgfrit publiceres som WFS for at aktivere attributtabel og redigering — lag uden WFS serveres som WMS og vises med et miniaturebillede af laget.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-søgning og redigering',
+  'Qtiler2Hajk.wfs_search_helper': 'Søgning bruger Qtilers søgbare lag. Markér lag som søgbare i QtilerAuth, og tilføj derefter lokale kilder eller kilder fra andre projekter her; resultater følger projektadgang.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Redigering kræver aktiv QtilerAuth, at laget er tilladt som redigerbart i QtilerAuth, redigeringsadgang for brugeren og at laget publiceres som WFS.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samme Qtiler WFS-metadata som Origo: attributter, geometrifelt, namespace og stile.',
   'Qtiler2Hajk.portal_site_header_height': 'Headerhøjde',
   'Qtiler2Hajk.portal_site_header_font': 'Header-skrifttype',
   'Qtiler2Hajk.portal_site_header_color1': 'Headerfarve 1',
@@ -1738,6 +1830,10 @@ QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
   'Qtiler2Hajk.no_profiles': 'Julkaistuja profiileja ei vielä ole. Luo sellainen napsauttamalla "Uusi profiili".',
   'Qtiler2Hajk.project_layers': 'Projektin tasot',
   'Qtiler2Hajk.project_layers_help': 'Aktivoi tasot sisällyttääksesi ne julkaistuun karttaan. \'Näkyvissä alussa\' -kytkin ohjaa, näytetäänkö sisällytetty taso, kun kartta avataan. Vektoritasot voidaan valinnaisesti julkaista WFS:nä, jotta ominaisuustaulukko ja muokkaus voidaan ottaa käyttöön — tasot ilman WFS:ää tarjotaan WMS:nä ja näytetään tason pikkukuvalla.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-haku ja muokkaus',
+  'Qtiler2Hajk.wfs_search_helper': 'Haku käyttää Qtilerin haettavia tasoja. Merkitse tasot haettaviksi QtilerAuthissa ja lisää sitten tähän paikallisia tai muiden projektien lähteitä; tulokset noudattavat projektin käyttöoikeuksia.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Muokkaus edellyttää aktiivista QtilerAuthia, että taso on sallittu muokattavaksi QtilerAuthissa, käyttäjällä on muokkausoikeus ja taso julkaistaan WFS:nä.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk saa samat Qtiler WFS -metatiedot kuin Origo: attribuutit, geometriakentän, namespacen ja tyylit.',
   'Qtiler2Hajk.portal_site_header_height': 'Ylätunnisteen korkeus',
   'Qtiler2Hajk.portal_site_header_font': 'Ylätunnisteen fontti',
   'Qtiler2Hajk.portal_site_header_color1': 'Ylätunnisteen väri 1',
@@ -1843,9 +1939,9 @@ const detachedEditorPageId = String(adminEditorParams.get('page') || '').trim();
 const isDetachedMapEditor = detachedEditorMode === 'map';
 const isDetachedPortalEditor = detachedEditorMode === 'portal';
 const isDetachedEditorWindow = isDetachedMapEditor || isDetachedPortalEditor;
-const publishedProfilesRefreshKey = 'qtiler2origo-published-profiles-refresh';
+const publishedProfilesRefreshKey = 'qtiler2hajk-published-profiles-refresh';
 const publishedProfilesChannel = (() => {
-  try { return 'BroadcastChannel' in window ? new BroadcastChannel('qtiler2origo-published-profiles') : null; } catch (_) { return null; }
+  try { return 'BroadcastChannel' in window ? new BroadcastChannel('qtiler2hajk-published-profiles') : null; } catch (_) { return null; }
 })();
 let publishedProfilesRefreshInFlight = null;
 
@@ -1938,6 +2034,7 @@ const publishModalPanels = Array.from(document.querySelectorAll('[data-publish-p
 const publishNowBtn = document.getElementById('publishNowBtn');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
 const previewFooterBtn = document.getElementById('previewFooterBtn');
+const preflightPublishBtn = document.getElementById('preflightPublishBtn');
 const removeDemoBtn = document.getElementById('removeDemoBtn');
 const publishName = document.getElementById('publishName');
 const publishDescription = document.getElementById('publishDescription');
@@ -1948,6 +2045,8 @@ const backgroundProjectSelect = document.getElementById('backgroundProjectSelect
 const projectLayersList = document.getElementById('projectLayersList');
 const backgroundLayersList = document.getElementById('backgroundLayersList');
 const defaultBackgroundList = document.getElementById('defaultBackgroundList');
+const selectAllProjectLayersBtn = document.getElementById('btn-select-all-project-layers');
+const selectNoneProjectLayersBtn = document.getElementById('btn-select-none-project-layers');
 const publishLayersDynamicSlot = document.getElementById('publishLayersDynamicSlot');
 const publishToolsDynamicSlot = document.getElementById('publishToolsDynamicSlot');
 const featureSearch = document.getElementById('featureSearch');
@@ -2064,6 +2163,12 @@ const HAJK_TOOL_DEFS = [
   { id: 'ctrl-draw',     name: 'sketch',        options: null, label: 'Sketch', defaultChecked: true },
   { id: 'ctrl-bookmarks', name: 'bookmarks',    options: null, label: 'Bookmarks', defaultChecked: false },
   { id: 'ctrl-propertychecker', name: 'propertychecker', options: null, label: 'Property checker', defaultChecked: false },
+  { id: 'ctrl-lantmaterisearch', name: 'lantmaterisearch', options: {
+    proxyUrl: '/plugins/Qtiler2Hajk/api/lantmateri-proxy',
+    searchTypes: ['fastighet', 'taxering', 'adress', 'ort'],
+    zoomLevel: 14,
+    gdprNotice: 'Information fran Lantmateriet kan innehalla personuppgifter. Anvand endast i tjansteutovning enligt gallande regler.'
+  }, label: 'Lantmateriet search', defaultChecked: false },
   { id: 'ctrl-routing',  name: 'routing',       options: null, label: 'Routing', defaultChecked: false },
   { id: 'ctrl-anchor',   name: 'anchor',        options: null, label: 'Share link / QR', defaultChecked: false },
   { id: 'ctrl-location', name: 'location',      options: null, label: 'User location', defaultChecked: false },
@@ -3451,6 +3556,9 @@ function buildCurrentWfsLayerConfig() {
     searchable: ruleObj.searchable === true,
     editable: ruleObj.editable !== false,
     serveAsWfs: ruleObj.serveAsWfs !== false,
+    designerOptions: ruleObj.designerOptions && typeof ruleObj.designerOptions === 'object'
+      ? JSON.parse(JSON.stringify(ruleObj.designerOptions))
+      : null,
     wfsStyle: Array.isArray(currentRules) && currentRules.length
       ? rulesToOrigoStyle(currentRules)
       : (ruleObj.wfsStyle || null),
@@ -3473,6 +3581,9 @@ function applyWfsLayerJsonConfig(parsed) {
   if (typeof fullCfg.editable === 'boolean') publishState.mainRules[layerName].editable = fullCfg.editable;
   if (typeof fullCfg.serveAsWfs === 'boolean') publishState.mainRules[layerName].serveAsWfs = fullCfg.serveAsWfs;
   if (fullCfg.geometryType) publishState.mainRules[layerName].geometryType = String(fullCfg.geometryType);
+  if (fullCfg.designerOptions && typeof fullCfg.designerOptions === 'object') {
+    publishState.mainRules[layerName].designerOptions = JSON.parse(JSON.stringify(fullCfg.designerOptions));
+  }
   currentAttributes = Array.isArray(fullCfg.attributes)
     ? normalizeAttributesList(fullCfg.attributes)
     : [];
@@ -3544,8 +3655,12 @@ async function api(url, options = {}) {
   }
 
   if (!res.ok) {
-    const detail = (isJson && (payload?.error || payload?.details)) || payload || res.statusText;
-    throw new Error(String(detail));
+    const issues = Array.isArray(payload?.issues)
+      ? payload.issues.map((issue) => issue?.message || issue?.details || issue?.error || issue).filter(Boolean)
+      : [];
+    const detail = (isJson && (payload?.details || payload?.message || payload?.error)) || payload || res.statusText;
+    const message = issues.length ? `${detail}: ${issues.join('; ')}` : detail;
+    throw new Error(String(message));
   }
   return payload;
 }
@@ -3608,6 +3723,7 @@ const publishState = {
   defaultBackgroundKey: 'none',
   groups: [],            // [{ name, title, parent, expanded }]
   layerGroups: {},       // { layerName: 'groupName' }
+  layerTitles: {},       // { layerKey: 'visible layer title' }
   controls: {},          // { search: { hintText, minLength, limit, ... } }
   searchSources: [],     // [{ projectId, layers: [layerName,...] }]
   searchSourceCatalog: {}, // { projectId: [{ name, ... }] } — cached searchable layers per project
@@ -4831,11 +4947,17 @@ function normalizeLayersPayload(payload, options = {}) {
       const name = String(row.name || row.id || '').trim();
       if (!name) return null;
       const key = makeLayerKey(sourceProjectId, name);
+      const kind = String(row.kind || row.type || '').trim().toLowerCase();
+      const isTheme = row.isTheme === true || kind === 'theme' || name.startsWith('theme:');
       return {
         key,
         name,
+        title: String(row.title || row.name || row.id || '').trim() || name,
         sourceProjectId,
-        geometry: String(row.geometry_type || row.geometry || row.kind || '').trim()
+        geometry: isTheme ? 'theme' : String(row.geometry_type || row.geometry || row.kind || '').trim(),
+        kind: isTheme ? 'theme' : kind,
+        isTheme,
+        themeName: isTheme ? String(row.themeName || name.replace(/^theme:/, '')).trim() : ''
       };
     })
     .filter(Boolean);
@@ -4904,18 +5026,38 @@ function renderLayerChecklist(container, layers, rules = {}) {
       : '';
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
-      <div class="Qtiler2Hajk-layer-row">
+      <div class="Qtiler2Hajk-layer-row" data-layer-row="${escapeHtml(layerKey)}">
         ${!isMainLayerList ? includeControl : ''}
         ${bgThumb}
         <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Hajk-layer-row__main">
           <div class="Qtiler2Hajk-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
       </div>
     `;
   }).join('');
+  syncProjectLayerOptionState();
   try { renderPublishConfigSummary(); } catch {}
+}
+
+function syncProjectLayerOptionState() {
+  if (!projectLayersList) return;
+  projectLayersList.querySelectorAll('.Qtiler2Hajk-layer-row[data-layer-row]').forEach((row) => {
+    const includeInput = row.querySelector('input[type="checkbox"][data-layer-include]');
+    if (!includeInput) return;
+    const included = includeInput.checked === true;
+    row.classList.toggle('is-excluded', !included);
+    row.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      if (input === includeInput) return;
+      input.disabled = !included;
+      input.closest('.button')?.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-style-layer]').forEach((button) => {
+      button.disabled = !included;
+      button.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+  });
 }
 
 function getCheckedLayerNames(container) {
@@ -4937,7 +5079,16 @@ function setCheckedLayerNames(container, names) {
   container.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => {
     el.checked = set.has(el.getAttribute('data-layer-include'));
   });
+  if (container === projectLayersList) syncProjectLayerOptionState();
   try { renderPublishConfigSummary(); } catch {}
+}
+
+function setAllProjectLayersIncluded(included) {
+  if (!projectLayersList) return;
+  const names = included ? getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean) : [];
+  setCheckedLayerNames(projectLayersList, names);
+  renderLayerAssignments();
+  schedulePreviewRefresh();
 }
 
 function getInitialVisibleLayerNames() {
@@ -4955,6 +5106,8 @@ function buildBackgroundOptions() {
     type: 'layer',
     sourceProjectId: backgroundProjectId,
     name: layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
     title: backgroundProjectId ? `${backgroundProjectId} / ${layer.name}` : layer.name,
     required: false
   }));
@@ -5089,6 +5242,11 @@ function ensureExtraSections() {
         if (layerName) {
           publishState.layerGroups[layerName] = String(target.value || 'root');
         }
+        const titleLayerKey = target.getAttribute('data-layer-title-for');
+        if (titleLayerKey) {
+          publishState.layerTitles[titleLayerKey] = String(target.value || '').trim();
+          schedulePreviewRefresh();
+        }
       });
   }
 
@@ -5098,10 +5256,10 @@ function ensureExtraSections() {
     extraLayersSection.id = 'Qtiler2HajkExtraLayersSection';
     extraLayersSection.className = 'modal-step';
     extraLayersSection.innerHTML = `
-      <legend class="modal-step__legend">Additional project layers</legend>
+      <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Hajk.extra_layers_legend'))}</legend>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
-        <p class="help" style="margin:0">Add WMS or WFS layers from other published QGIS projects.</p>
-        <button type="button" id="Qtiler2HajkOpenExternalLayers" class="button is-small">+ Add layers</button>
+        <p class="help" style="margin:0">${escapeHtml(t('Qtiler2Hajk.extra_layers_help'))}</p>
+        <button type="button" id="Qtiler2HajkOpenExternalLayers" class="button is-small">+ ${escapeHtml(t('Qtiler2Hajk.extra_layers_add'))}</button>
       </div>
       <div id="Qtiler2HajkExtraLayersList"></div>`;
     layersSlot.appendChild(extraLayersSection);
@@ -5114,6 +5272,11 @@ function ensureExtraSections() {
     searchSection.className = 'modal-step';
     searchSection.innerHTML = `
       <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Hajk.pub_search_legend'))}</legend>
+      <div class="notification is-info is-light" style="margin-bottom:12px;padding:0.7rem 0.85rem">
+        <strong>${escapeHtml(t('Qtiler2Hajk.wfs_helper_title'))}</strong>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Hajk.wfs_search_helper'))}</p>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Hajk.wfs_edit_helper'))}</p>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
         <label class="field"><span class="label">${escapeHtml(t('Qtiler2Hajk.pub_search_hint_label'))}</span>
           <input id="Qtiler2HajkSearchHint" class="input is-small" type="text" placeholder="${escapeHtml(t('Qtiler2Hajk.pub_search_placeholder'))}" /></label>
@@ -5194,7 +5357,7 @@ function renderExternalLayersSummary() {
   if (!host) return;
   const rows = Array.isArray(publishState.extraLayers) ? publishState.extraLayers : [];
   if (!rows.length) {
-    host.innerHTML = `<p class="help">No external layers added.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_empty'))}</p>`;
     return;
   }
   host.innerHTML = rows.map((layer) => {
@@ -5206,7 +5369,7 @@ function renderExternalLayersSummary() {
         <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
       </div>
       <span class="tag is-light">${rule.serveAsWfs ? 'WFS' : 'WMS'}</span>
-      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">Remove</button>
+      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">${escapeHtml(t('Qtiler2Hajk.extra_layers_remove'))}</button>
     </div>`;
   }).join('');
 }
@@ -5221,19 +5384,19 @@ function ensureExternalLayerModal() {
     <div class="modal-background" data-close-external-layer-modal></div>
     <div class="modal-card" style="width:min(920px, calc(100vw - 32px))">
       <header class="modal-card-head">
-        <p class="modal-card-title">Add layers from another project</p>
-        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal>Quitar</button>
+        <p class="modal-card-title">${escapeHtml(t('Qtiler2Hajk.extra_layers_modal_title'))}</p>
+        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal></button>
       </header>
       <section class="modal-card-body">
         <label class="field">
-          <span class="label">Project</span>
+          <span class="label">${escapeHtml(t('Qtiler2Hajk.extra_layers_project'))}</span>
           <select id="Qtiler2HajkExternalProjectSelect" class="input"></select>
         </label>
         <div id="Qtiler2HajkExternalProjectLayers" style="display:grid;gap:8px;max-height:55vh;overflow:auto"></div>
       </section>
       <footer class="modal-card-foot" style="justify-content:space-between">
-        <button type="button" class="button" data-close-external-layer-modal>Cancel</button>
-        <button type="button" class="button is-primary" id="Qtiler2HajkExternalLayerApply">Add selected layers</button>
+        <button type="button" class="button" data-close-external-layer-modal>${escapeHtml(t('Qtiler2Hajk.extra_layers_cancel'))}</button>
+        <button type="button" class="button is-primary" id="Qtiler2HajkExternalLayerApply">${escapeHtml(t('Qtiler2Hajk.extra_layers_apply'))}</button>
       </footer>
     </div>`;
   document.body.appendChild(modal);
@@ -5245,17 +5408,17 @@ async function renderExternalLayerModalList(projectId) {
   if (!host) return;
   const pid = String(projectId || '').trim();
   if (!pid) {
-    host.innerHTML = `<p class="help">Select a project.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_pick_project'))}</p>`;
     return;
   }
   const currentProjectId = String(publishProjectSelect?.value || '').trim();
   if (pid === currentProjectId) {
-    host.innerHTML = `<p class="help">The main project is already listed above. Pick a different project here.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_current_project'))}</p>`;
     return;
   }
   const layers = await getProjectLayersCatalog(pid);
   if (!layers.length) {
-    host.innerHTML = `<p class="help">No layers available for this project.</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_no_layers'))}</p>`;
     return;
   }
   host.innerHTML = layers.map((layer) => {
@@ -5268,7 +5431,7 @@ async function renderExternalLayerModalList(projectId) {
       <input type="checkbox" data-external-layer-check="${escapeHtml(key)}" ${checked} />
       <div>
         <div><strong>${escapeHtml(layer.name)}</strong></div>
-        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || 'Layer')}</div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || t('Qtiler2Hajk.layer_generic'))}</div>
       </div>
       <select class="input is-small" style="width:92px" data-external-layer-mode="${escapeHtml(key)}" ${isVector ? '' : 'disabled'}>
         <option value="WMS" ${mode === 'WMS' ? 'selected' : ''}>WMS</option>
@@ -5290,7 +5453,7 @@ function bindExternalLayerPickerEvents() {
         .filter((project) => project.id && project.id !== currentProjectId)
         .map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>`)
         .join('');
-      select.innerHTML = `<option value="">Select a project</option>${options}`;
+      select.innerHTML = `<option value="">${escapeHtml(t('Qtiler2Hajk.extra_layers_pick_project'))}</option>${options}`;
       modal.classList.add('is-active');
       await renderExternalLayerModalList(String(select.value || '').trim());
     });
@@ -5507,6 +5670,8 @@ function renderLayerAssignments() {
     if (!name || !layerKey) return '';
     const isActive = checkedSet.has(layerKey);
     const groupSel = publishState.layerGroups[layerKey] || 'root';
+    const layerTitle = String(publishState.layerTitles[layerKey] || '').trim();
+    const defaultTitle = String(layer?.title || name).trim() || name;
     const opacity = isActive ? '1' : '0.6';
     const dot = isActive
       ? '<span title="active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex:0 0 8px"></span>'
@@ -5514,9 +5679,10 @@ function renderLayerAssignments() {
     const removeBtn = isActive
       ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.pub_search_source_remove'))}</button>`
       : '<span></span>';
-    return `<div style="display:grid;grid-template-columns:14px 1fr 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
+    return `<div style="display:grid;grid-template-columns:14px minmax(140px,1fr) minmax(160px,1fr) 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
       ${dot}
       <span title="${escapeHtml(name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}${layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim() ? ` [${escapeHtml(layer.sourceProjectId)}]` : ''}</span>
+      <input class="input is-small" type="text" data-layer-title-for="${escapeHtml(layerKey)}" value="${escapeHtml(layerTitle)}" placeholder="${escapeHtml(defaultTitle)}" />
       <select class="input is-small" data-layer-group-for="${escapeHtml(layerKey)}">${getGroupOptionsHtml(groupSel)}</select>
       ${removeBtn}
     </div>`;
@@ -5595,7 +5761,7 @@ async function loadProjectLayers(projectId, target = 'main') {
     // that would override the saved profile's per-layer `serveAsWfs` flag and
     // make every layer appear as WFS until the user toggles one (which then
     // re-renders all the others as unchecked, looking like a mass-deselect).
-    projectLayersList.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => { el.checked = true; });
+    setCheckedLayerNames(projectLayersList, normalized.map((layer) => getLayerKey(layer)).filter(Boolean));
     refreshExtraSections();
     return;
   }
@@ -5649,7 +5815,7 @@ async function renderSearchSources() {
   // otherwise render with just the placeholder option and the user would
   // be unable to pick anything.
   if (!Array.isArray(publishState.projects) || publishState.projects.length === 0) {
-    host.innerHTML = `<p class="help" style="margin:0;color:#a00">${escapeHtml('No hay proyectos disponibles. Verifica la conexión con el servidor o que existan proyectos publicables.')}</p>`;
+    host.innerHTML = `<p class="help" style="margin:0;color:#a00">${escapeHtml(t('Qtiler2Hajk.pub_search_no_projects'))}</p>`;
     return;
   }
 
@@ -5806,6 +5972,7 @@ function closePublishModal() {
   clearPublishStatusError();
   publishState.groups = [];
   publishState.layerGroups = {};
+  publishState.layerTitles = {};
   publishState.initialVisibility = {};
   publishState.controls = {};
   publishState.extraLayers = [];
@@ -5815,6 +5982,7 @@ function closePublishModal() {
 
 async function preparePublishModal(editProfileId = null) {
   publishState.editingProfileId = editProfileId;
+  publishState.layerTitles = {};
   await loadProjectsForPublish();
 
   if (editProfileId) {
@@ -5859,6 +6027,9 @@ async function preparePublishModal(editProfileId = null) {
       savedMain.forEach((layer) => {
         const key = makeLayerKey(String(layer?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(layer?.name || '').trim());
         if (!key) return;
+        const savedTitle = String(layer?.title || '').trim();
+        const rawName = String(layer?.name || '').trim();
+        publishState.layerTitles[key] = savedTitle && savedTitle !== rawName ? savedTitle : '';
         publishState.mainRules[key] = {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
@@ -5972,8 +6143,8 @@ async function preparePublishModal(editProfileId = null) {
         : [];
       publishState.layerGroups = {};
       savedMain.forEach((l) => {
-        const ln = String(l?.name || '').trim();
-        if (ln) publishState.layerGroups[ln] = String(l?.group || 'root').trim() || 'root';
+        const key = makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l?.name || '').trim());
+        if (key) publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
       });
       // Restore Origo controls: update textarea and checkboxes
       const savedControls = Array.isArray(profile.controls) ? profile.controls : [];
@@ -6490,6 +6661,7 @@ openPublishModalBtn?.addEventListener('click', async () => {
 
 publishProjectSelect?.addEventListener('change', async () => {
   const projectId = String(publishProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
   if (!projectId) {
     projectLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_project_selected'))}</p>`;
     schedulePreviewRefresh();
@@ -6500,6 +6672,7 @@ publishProjectSelect?.addEventListener('change', async () => {
 
 backgroundProjectSelect?.addEventListener('change', async () => {
   const projectId = String(backgroundProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
   if (!projectId) {
     backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_bg_selected'))}</p>`;
     refreshBackgroundOptions();
@@ -6510,6 +6683,7 @@ backgroundProjectSelect?.addEventListener('change', async () => {
 });
 
 backgroundLayersList?.addEventListener('change', () => {
+  clearMapViewOverrides({ refresh: false });
   refreshBackgroundOptions();
   schedulePreviewRefresh();
 });
@@ -6544,8 +6718,17 @@ projectLayersList?.addEventListener('change', (event) => {
   }
 
   if (!target.hasAttribute('data-layer-include')) return;
+  syncProjectLayerOptionState();
   renderLayerAssignments();
   schedulePreviewRefresh();
+});
+
+selectAllProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(true);
+});
+
+selectNoneProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(false);
 });
 
 projectLayersList?.addEventListener('click', (event) => {
@@ -6564,6 +6747,7 @@ defaultBackgroundList?.addEventListener('change', (event) => {
   const key = String(target.getAttribute('data-default-bg-key') || '').trim();
   if (key) {
     publishState.defaultBackgroundKey = key;
+    clearMapViewOverrides({ refresh: false });
     // Update "Default" tags in-place
     defaultBackgroundList.querySelectorAll('.Qtiler2Hajk-bg-item').forEach((row) => {
       const radio = row.querySelector('input[type="radio"]');
@@ -6586,6 +6770,7 @@ saveDraftBtn?.addEventListener('click', () => {
     const draftKey = 'qtiler2origo-draft-' + String(publishState.editingProfileId || publishName?.value || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
     localStorage.setItem(draftKey, JSON.stringify({
       mainRules: publishState.mainRules,
+      layerTitles: publishState.layerTitles,
       extraLayers: publishState.extraLayers,
       backgrounds: publishState.backgrounds,
       features: publishState.features,
@@ -6609,6 +6794,139 @@ saveDraftBtn?.addEventListener('click', () => {
 
 previewFooterBtn?.addEventListener('click', () => {
   setPublishModalTab('config');
+});
+
+function buildPublishApiBody() {
+  const mapName = String(publishName?.value || '').trim();
+  if (!mapName) {
+    const err = new Error(t('Qtiler2Hajk.name_required'));
+    err.field = 'name';
+    throw err;
+  }
+  const mapDescription = String(publishDescription?.value || '').trim();
+  const projectId = String(publishProjectSelect.value || '').trim();
+  if (!projectId) {
+    const err = new Error('Select a main project before publishing.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) {
+    const err = new Error('No project layers are available. Check project access or reload the modal.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  if (!selectedLayers.length) {
+    const err = new Error('Select at least one main layer to publish.');
+    err.tab = 'layers';
+    throw err;
+  }
+
+  const layersPayload = selectedLayers.map((layer) => {
+    const key = getLayerKey(layer);
+    return {
+      name: layer.name,
+      title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
+      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      visible: publishState.initialVisibility[key] !== false,
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+    };
+  });
+  const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
+  const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+    .map((layer) => String(layer?.name || '').trim())
+    .filter(Boolean);
+  refreshBackgroundOptions();
+  const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+    key: item.key, type: item.type, title: item.title,
+    sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+    name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
+    isDefault: item.key === publishState.defaultBackgroundKey
+  }));
+  const layerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+  return {
+    mapName,
+    body: {
+      name: mapName,
+      description: mapDescription,
+      editingProfileId: publishState.editingProfileId || null,
+      projectId,
+      layers: layersPayload,
+      backgroundProjectId: backgroundProjectId || null,
+      backgroundLayerNames, backgrounds,
+      defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+      layerRules,
+      controls: (function(){ try { return JSON.parse(controlsJsonInput?.value || '[]'); } catch(e){ return []; } })(),
+      pageSettings: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').pageSettings; } catch(e){ return undefined; } })(),
+      featureinfoOptions: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').featureinfoOptions; } catch(e){ return undefined; } })(),
+      extent: (function(){ try { const v = JSON.parse(extentInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      center: (function(){ try { const v = JSON.parse(centerInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      centerCrs: (function(){ const c = String(centerInput?.dataset?.crs || '').trim(); return c || undefined; })(),
+      zoom: (function(){ try { const z = parseFloat(zoomInput?.value); return isNaN(z) ? undefined : z; } catch(e){ return undefined; } })(),
+      minZoom: (function(){ const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      maxZoom: (function(){ const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      toolConfig: {
+        shareServiceUrl: String(cfgShareUrl?.value || '').trim(),
+        routingServiceUrl: String(cfgRoutingUrl?.value || '').trim(),
+        elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
+        dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
+      },
+      groups: (publishState.groups || [])
+        .map((g) => ({
+          name: String(g?.name || '').trim(),
+          title: String(g?.title || g?.name || '').trim(),
+          parent: String(g?.parent || '').trim(),
+          expanded: g?.expanded !== false
+        }))
+        .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+      features: {
+        searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+          .map((src) => ({
+            projectId: String(src?.projectId || '').trim(),
+            layers: Array.isArray(src?.layers)
+              ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+              : []
+          }))
+          .filter((s) => s.projectId)
+      }
+    }
+  };
+}
+
+preflightPublishBtn?.addEventListener('click', async () => {
+  if (currentEditingWfsLayer) {
+    try { saveStyleEditor(); } catch (err) { showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers'); return; }
+  }
+  clearPublishStatusError();
+  if (publishNameError) publishNameError.style.display = 'none';
+  const originalText = preflightPublishBtn.textContent;
+  preflightPublishBtn.disabled = true;
+  preflightPublishBtn.textContent = t('Qtiler2Hajk.preflight_checking');
+  try {
+    const { body } = buildPublishApiBody();
+    await api('/plugins/Qtiler2Hajk/api/publish', { method: 'POST', body: { ...body, dryRun: true } });
+    addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+  } catch (err) {
+    if (err?.field === 'name') {
+      if (publishNameError) { publishNameError.textContent = err.message; publishNameError.style.display = ''; }
+      publishName?.focus();
+    } else {
+      showPublishStatusError(String(err?.message || 'Map check failed.'), err?.tab || 'layers');
+    }
+  } finally {
+    preflightPublishBtn.disabled = false;
+    preflightPublishBtn.textContent = originalText;
+  }
 });
 
 publishNowBtn?.addEventListener('click', async () => {
@@ -6654,6 +6972,9 @@ publishNowBtn?.addEventListener('click', async () => {
     const key = getLayerKey(layer);
     return {
       name: layer.name,
+      title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
       visible: publishState.initialVisibility[key] !== false,
       group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
@@ -6669,6 +6990,8 @@ publishNowBtn?.addEventListener('click', async () => {
     key: item.key, type: item.type, title: item.title,
     sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
     name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
     isDefault: item.key === publishState.defaultBackgroundKey
   }));
   const layerRules = {};
@@ -6938,6 +7261,9 @@ function buildMapPreviewPayload() {
   const selectedLayers = getSelectedPublishLayers();
   const previewLayerSpecs = selectedLayers.map((layer) => ({
     name: layer.name,
+    title: String(publishState.layerTitles[getLayerKey(layer)] || '').trim() || layer.title || layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
     sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
     visible: publishState.initialVisibility[getLayerKey(layer)] !== false,
     group: String(publishState.layerGroups?.[getLayerKey(layer)] || 'root').trim() || 'root'
@@ -7271,31 +7597,65 @@ function getPreviewView() {
   return getPreviewMapApi()?.view || null;
 }
 
+function capturePreviewViewToInputs({ includeExtent = true } = {}) {
+  const mapApi = getPreviewMapApi();
+  const view = mapApi?.view;
+  const map = mapApi?.map;
+  if (!view || !map) return false;
+  const center = typeof view.getCenter === 'function' ? view.getCenter() : null;
+  const zoom = typeof view.getZoom === 'function' ? view.getZoom() : null;
+  const size = typeof map.getSize === 'function' ? map.getSize() : null;
+  const extent = includeExtent && size && typeof view.calculateExtent === 'function' ? view.calculateExtent(size) : null;
+  const projCode = (() => {
+    try { return view.getProjection()?.getCode?.() || ''; } catch { return ''; }
+  })();
+  if (centerInput && Array.isArray(center)) {
+    centerInput.value = JSON.stringify(center.map((v) => Math.round(v)));
+    if (projCode) centerInput.dataset.crs = projCode;
+  }
+  if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom.toFixed(2);
+  if (includeExtent && extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent.map((v) => Math.round(v)));
+  renderPublishConfigSummary();
+  return true;
+}
+
+function clearMapExtentInput({ refresh = true } = {}) {
+  clearMapViewOverrides({ refresh });
+}
+
+function clearMapViewOverrides({ refresh = true } = {}) {
+  if (centerInput) { centerInput.value = ''; delete centerInput.dataset.crs; }
+  if (zoomInput) zoomInput.value = '';
+  if (extentInput) extentInput.value = '';
+  if (minZoomInput) minZoomInput.value = '';
+  if (maxZoomInput) maxZoomInput.value = '';
+  renderPublishConfigSummary();
+  if (refresh) schedulePreviewRefresh();
+}
+
+async function centerPreviewOnDefaultBackground() {
+  clearMapViewOverrides({ refresh: false });
+  await loadMapPreview({ silent: true });
+  addLog(t('Qtiler2Hajk.default_bg_centered'), 'ok');
+}
+
 document.getElementById('btn-fetch-map-extent')?.addEventListener('click', () => {
   try {
-    const mapApi = getPreviewMapApi();
-    const view = mapApi?.view;
-    const map = mapApi?.map;
-    if (!view || !map) { addLog('Carga el mapa preview primero.', 'error'); return; }
-    const center = view.getCenter();
-    const zoom = view.getZoom();
-    const size = map.getSize();
-    const extent = size ? view.calculateExtent(size) : null;
-    // Stamp the CRS the captured coordinates are in, so a future Load Preview
-    // can detect a CRS change and discard stale overrides instead of placing
-    // the camera in the wrong hemisphere.
-    const projCode = (() => {
-      try { return view.getProjection()?.getCode?.() || ''; } catch { return ''; }
-    })();
-    if (centerInput && Array.isArray(center)) {
-      centerInput.value = JSON.stringify(center.map((v) => Math.round(v)));
-      if (projCode) centerInput.dataset.crs = projCode;
-    }
-    if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom.toFixed(2);
-    if (extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent.map((v) => Math.round(v)));
+    if (!capturePreviewViewToInputs({ includeExtent: true })) { addLog('Carga el mapa preview primero.', 'error'); return; }
   } catch (e) {
     addLog(t('Qtiler2Hajk.map_state_read_failed', { msg: e.message }), 'error');
   }
+});
+
+document.getElementById('btn-clear-map-extent')?.addEventListener('click', () => {
+  clearMapExtentInput();
+  addLog(t('Qtiler2Hajk.map_extent_cleared'), 'ok');
+});
+
+document.getElementById('btn-center-default-background')?.addEventListener('click', () => {
+  centerPreviewOnDefaultBackground().catch((err) => {
+    addLog(t('Qtiler2Hajk.default_bg_center_failed', { msg: err?.message || err }), 'error');
+  });
 });
 
 // Capture min/max zoom from the current preview zoom level. Workflow:
@@ -9013,12 +9373,14 @@ function rulePreviewSampleSvg(rule, geomFamily) {
     if (!rule.point) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="6" fill="#3b82f6" stroke="#2563eb" stroke-width="1"/></svg>`;
     if (rule.point.mode === 'icon' && rule.point.icon && rule.point.icon.src) {
       let src = rule.point.icon.src;
-      // If a color is set on a /qgis-svg/ icon, route through the server-side
+      // If a color is set on a served SVG icon, route through the server-side
       // colorizer so the preview reflects the chosen color.
       const color = rule.point.icon.color;
-      if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && src.startsWith('/qgis-svg/')) {
+      if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && (src.startsWith('/qgis-svg/') || src.startsWith('/qtiler-symbology-svg/'))) {
         const hex = String(color).trim().replace(/^#?/, '#');
-        src = src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
+        src = src.startsWith('/qtiler-symbology-svg/')
+          ? src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/') + `?color=${encodeURIComponent(hex)}`
+          : src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
       }
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><image href="${src}" x="${W/2-16}" y="${H/2-16}" width="32" height="32" preserveAspectRatio="xMidYMid meet"/></svg>`;
     }
@@ -9197,6 +9559,9 @@ saveStyleEditor = function() {
       if (parsed.serveAsWfs !== undefined) r.serveAsWfs = !!parsed.serveAsWfs;
       if (parsed.geometryType) r.geometryType = parsed.geometryType;
       if (parsed.attributes !== undefined) r.attributes = normalizeAttributesList(parsed.attributes);
+      if (parsed.designerOptions && typeof parsed.designerOptions === 'object') {
+        r.designerOptions = JSON.parse(JSON.stringify(parsed.designerOptions));
+      }
       const checkedNames = getCheckedLayerNames(projectLayersList);
       closeStyleEditor();
       renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
@@ -9217,6 +9582,7 @@ saveStyleEditor = function() {
     publishState.mainRules[layerName].wfsStyle = styleObj;
     publishState.mainRules[layerName].attributes = normalizeAttributesList(currentAttributes);
     publishState.mainRules[layerName].geometryType = getLayerGeometryType(layerName) || null;
+    publishState.mainRules[layerName].designerOptions = JSON.parse(JSON.stringify(getDesignerPatternOptions()));
     const checkedNames = getCheckedLayerNames(projectLayersList);
     closeStyleEditor();
     renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
@@ -9367,7 +9733,7 @@ function generateMapConfigJson() {
       const rules = publishState.mainRules[key] || {};
       return {
         name: layer.name,
-        title: layer.title || layer.name,
+        title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
         sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
         visible: publishState.initialVisibility[key] !== false,
         group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
@@ -9392,6 +9758,8 @@ function generateMapConfigJson() {
       title: item.title,
       sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
       name: item.type === 'layer' ? item.name : null,
+      isTheme: item.type === 'layer' ? item.isTheme === true : false,
+      themeName: item.type === 'layer' ? item.themeName || null : null,
       isDefault: item.key === publishState.defaultBackgroundKey
     }));
 
@@ -9634,12 +10002,16 @@ function applyMapJsonChanges() {
     if (Array.isArray(config.layers)) {
       publishState.initialVisibility = {};
       publishState.layerGroups = {};
+      publishState.layerTitles = {};
       publishState.mainRules = {};
       
       config.layers.forEach(layer => {
         const key = `${layer.sourceProjectId || config.projectId}::${layer.name}`;
         publishState.initialVisibility[key] = layer.visible !== false;
         publishState.layerGroups[key] = layer.group || 'root';
+        publishState.layerTitles[key] = String(layer.title || '').trim() && String(layer.title || '').trim() !== String(layer.name || '').trim()
+          ? String(layer.title || '').trim()
+          : '';
         publishState.mainRules[key] = {
           searchable: layer.searchable || false,
           editable: layer.editable || false,

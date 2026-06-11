@@ -469,7 +469,7 @@
 
       if (isVectorLayer(layerData)) {
         const wfsSourceName = `Qtiler_${projectKey}_WFS`;
-        const editable = !(configLayer && configLayer.wfsEditable === false);
+        const editable = configLayer && configLayer.wfsEditable === true;
         const wfsSource = {
           url: `${origin}/wfs?project=${encodeURIComponent(projectId)}&api_key=`,
           type: 'WFS'
