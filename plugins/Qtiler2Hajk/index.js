@@ -4538,8 +4538,8 @@ ${mapIcon}
           const srcKey = `wmts_bg_${layerNameSafe}`;
           source[srcKey] = {
             url: isThemeBackground
-              ? buildThemeWmtsUrl(baseUrl, srcProjId, bgThemeName)
-              : `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(wmtsLayerName)}/{z}/{x}/{y}.png`,
+              ? buildThemeWmtsUrl(baseUrl, srcProjId, bgThemeName, true)
+              : `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(wmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`,
             type: 'XYZ',
             projection: bgTileGrid.crs || projCode
           };
@@ -5673,8 +5673,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     if (wmtsBgLayerName) {
       sourceMap[wmtsBgLayerName] = {
         url: isThemeBgLayer
-          ? buildThemeWmtsUrl(baseUrl, bgProject, bgThemeName)
-          : `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(previewWmtsLayerName)}/{z}/{x}/{y}.png`,
+          ? buildThemeWmtsUrl(baseUrl, bgProject, bgThemeName, true)
+          : `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(previewWmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`,
         type: 'XYZ',
         projection: (bgTileGrid && bgTileGrid.crs) || projCode
       };

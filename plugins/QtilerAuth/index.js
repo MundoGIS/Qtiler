@@ -771,6 +771,42 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return readProjectLayerPermissions(projectId);
   };
 
+  const PROJECT_ACCESS_CACHE_TTL_MS = Number(process.env.QTILER_AUTH_PROJECTS_CACHE_TTL_MS || 5000);
+  const LAYER_PERMISSIONS_CACHE_TTL_MS = Number(process.env.QTILER_AUTH_LAYERS_CACHE_TTL_MS || 5000);
+
+  let projectAccessCache = { ts: 0, data: null };
+  const layerPermissionsCache = new Map();
+
+  const getProjectAccessSnapshotCached = () => {
+    const now = Date.now();
+    if (projectAccessCache.data && (now - projectAccessCache.ts) < PROJECT_ACCESS_CACHE_TTL_MS) {
+      return projectAccessCache.data;
+    }
+    const fresh = readProjectAccessFromDb(dataRoot);
+    projectAccessCache = { ts: now, data: fresh };
+    return fresh;
+  };
+
+  const invalidateProjectAccessCache = () => {
+    projectAccessCache = { ts: 0, data: null };
+  };
+
+  const getLayerPermissionsCached = (projectId) => {
+    const now = Date.now();
+    const cached = layerPermissionsCache.get(projectId);
+    if (cached && (now - cached.ts) < LAYER_PERMISSIONS_CACHE_TTL_MS) {
+      return cached.rows;
+    }
+    const rows = readProjectLayerPermissions(projectId);
+    layerPermissionsCache.set(projectId, { ts: now, rows });
+    return rows;
+  };
+
+  const invalidateLayerPermissionsCache = (projectId) => {
+    if (!projectId) return;
+    layerPermissionsCache.delete(projectId);
+  };
+
   const pluginMapSources = [
     { id: 'Qtiler2qwc', label: 'QWC maps', runtime: path.join(dataRoot, 'Qtiler2qwc', 'qwc2'), publicBase: '/plugins/Qtiler2qwc/published' },
     { id: 'Qtiler2Origo', label: 'Origo maps', runtime: path.join(dataRoot, 'Qtiler2Origo', 'origo'), publicBase: '/plugins/Qtiler2Origo/published' },
@@ -1456,7 +1492,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   });
 
   adminRouter.get('/projects', (_req, res) => {
-    const data = readProjectAccessFromDb(dataRoot);
+    const data = getProjectAccessSnapshotCached();
     res.json({ projects: data.projects });
   });
 
@@ -1474,6 +1510,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     if (editUsers !== undefined) entry.editUsers = editUsers;
     if (editRoles !== undefined) entry.editRoles = editRoles;
     upsertProjectAccess(id, entry);
+    invalidateProjectAccessCache();
     const updated = getProjectAccess(id);
     res.json({ project: updated });
   };
@@ -1484,7 +1521,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   adminRouter.get('/projects/:id/layers', (req, res) => {
     const projectId = sanitizeProjectId(req.params.id);
     if (!projectId) return res.status(400).json({ error: 'invalid_project' });
-    res.json({ projectId, layers: readProjectLayerPermissions(projectId) });
+    res.json({ projectId, layers: getLayerPermissionsCached(projectId) });
   });
 
   adminRouter.post('/projects/:id/layers', (req, res) => {
@@ -1492,6 +1529,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     if (!projectId) return res.status(400).json({ error: 'invalid_project' });
     const rows = Array.isArray(req.body?.layers) ? req.body.layers : (Array.isArray(req.body) ? req.body : []);
     const layers = saveProjectLayerPermissions(projectId, rows);
+    invalidateLayerPermissionsCache(projectId);
     res.json({ projectId, layers });
   });
 

@@ -9283,7 +9283,21 @@ function processRenderQueue() {
 }
 // servir tiles on-demand
 app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
-  const { project, theme, z, x, y } = req.params;
+  const { project, theme } = req.params;
+  const findQ = (name) => {
+    const low = String(name).toLowerCase();
+    for (const key of Object.keys(req.query || {})) {
+      if (String(key).toLowerCase() === low) return req.query[key];
+    }
+    return undefined;
+  };
+  const hasTemplateToken = (value) => /[{}]/.test(String(value || ''));
+  const z = hasTemplateToken(req.params.z) ? String(findQ('TileMatrix') || req.params.z) : req.params.z;
+  const x = hasTemplateToken(req.params.x) ? String(findQ('TileCol') || req.params.x) : req.params.x;
+  const y = hasTemplateToken(req.params.y) ? String(findQ('TileRow') || req.params.y) : req.params.y;
+  if (hasTemplateToken(z) || hasTemplateToken(x) || hasTemplateToken(y)) {
+    return res.status(400).send('Invalid WMTS tile template parameters');
+  }
   const sid = normalizeViewerSessionId(req.query && req.query.sid);
   if (isPublicLayerExcludedForRequest(req, project, `theme:${theme}`, [theme])) {
     return res.status(403).send('Layer is not publicly available');

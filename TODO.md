@@ -1,0 +1,11 @@
+- [x] Add lightweight in-memory cache for /auth-admin/projects data in plugins/QtilerAuth/index.js
+- [x] Add per-project cache for layer permissions in plugins/QtilerAuth/index.js
+- [x] Invalidate project access cache when project access is updated
+- [x] Invalidate layer permissions cache when layer permissions are saved
+- [x] Run quick verification pass by reviewing modified routes/flows
+- [ ] Ensure newly uploaded projects appear immediately in QtilerAuth admin list after page reload
+- [ ] Merge /projects with /auth-admin/projects defaults in admin-ui loadProjects()
+
+- [x] Qtiler2Hajk: revisar handler WMTS de themes y placeholders aceptados
+- [x] Qtiler2Hajk: corregir generación de URL de background theme para usar TileMatrix/TileCol/TileRow
+- [x] Qtiler2Hajk: validar rutas afectadas y consistencia preview/published
