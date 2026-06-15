@@ -9,3 +9,12 @@
 - [x] Qtiler2Hajk: revisar handler WMTS de themes y placeholders aceptados
 - [x] Qtiler2Hajk: corregir generación de URL de background theme para usar TileMatrix/TileCol/TileRow
 - [x] Qtiler2Hajk: validar rutas afectadas y consistencia preview/published
+- [x] Qtiler2Hajk WFS styles: corregir tipo de displayFields (string CSV)
+- [x] Qtiler2Hajk WFS styles: revisar searchFields/attributes para compatibilidad
+- [x] Qtiler2Hajk WFS styles: validar por código que no queden displayFields como array
+- [x] Qtiler2Hajk legend: mostrar iconos SVG correctamente en leyenda
+- [x] Qtiler2Hajk point icons: tamaño estándar por defecto (24px, clamp 16-32)
+- [x] Qtiler2Hajk legend rules: mostrar reglas de capa con su estilo en leyenda
+- [ ] Qtiler2Hajk legend icons: render SVG inline real para evitar icono vacío
+- [ ] Qtiler2Hajk map polygon patterns: aplicar pattern fills en mapa Hajk (no solo leyenda)
+- [ ] Qtiler2Hajk validate: pruebas completas UI + curl endpoints + regresión

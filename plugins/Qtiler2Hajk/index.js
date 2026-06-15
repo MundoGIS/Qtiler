@@ -3927,6 +3927,15 @@ ${mapIcon}
     };
   };
 
+  const DEFAULT_POINT_ICON_SIZE = 24;
+  const MIN_POINT_ICON_SIZE = 16;
+  const MAX_POINT_ICON_SIZE = 32;
+  const clampPointIconSize = (value, fallback = DEFAULT_POINT_ICON_SIZE) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.max(MIN_POINT_ICON_SIZE, Math.min(MAX_POINT_ICON_SIZE, n));
+  };
+
   const toHajkVectorStyleOptions = (styleDef, layer = {}) => {
     const rule = unwrapPrimaryStyleRule(styleDef);
     const geometryType = String(layer?.geometryType || '').toLowerCase();
@@ -3942,12 +3951,13 @@ ${mapIcon}
       if (icon && typeof icon === 'object' && typeof icon.src === 'string' && icon.src.trim()) {
         out.icon = icon.src.trim();
         const scale = numberOrNull(icon.scale);
-        if (scale !== null && scale > 0) out.pointSize = Math.max(1, scale * 8);
+        if (scale !== null && scale > 0) out.pointSize = clampPointIconSize(scale * 8);
+        else out.pointSize = DEFAULT_POINT_ICON_SIZE;
       }
       const circle = rule.circle || null;
       if (circle && typeof circle === 'object') {
         const radius = numberOrNull(circle.radius);
-        if (radius !== null && radius > 0) out.pointSize = Math.max(1, radius * 2);
+        if (radius !== null && radius > 0) out.pointSize = clampPointIconSize(radius * 2);
         if (!out.fillColor) out.fillColor = colorOrNull(circle.fill?.color);
         if (!out.lineColor) out.lineColor = colorOrNull(circle.stroke?.color);
         if (!out.lineWidth) out.lineWidth = numberOrNull(circle.stroke?.width);
@@ -3959,7 +3969,7 @@ ${mapIcon}
       if (lineDash.length) out.lineStyle = lineDash.length > 1 && lineDash[0] <= lineDash[1] ? 'dot' : 'dash';
     }
 
-    if (!out.pointSize && geometryType.includes('point')) out.pointSize = 8;
+    if (geometryType.includes('point')) out.pointSize = clampPointIconSize(out.pointSize, DEFAULT_POINT_ICON_SIZE);
     if (!out.fillColor && geometryType.includes('polygon')) out.fillColor = 'rgba(59, 130, 246, 0.25)';
     if (!out.lineColor && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineColor = '#2563eb';
     if (!out.lineWidth && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineWidth = 2;
@@ -4209,9 +4219,20 @@ ${mapIcon}
     const geometryType = String(layer?.geometryType || '').toLowerCase();
     const fallbackStroke = '#2563eb';
     const fallbackFill = geometryType.includes('polygon') ? 'rgba(59,130,246,0.25)' : '#3b82f6';
-    if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
-      const src = svgAttr(entry.icon.src);
-      return { defs: '', body: `<image href="${src}" x="${Math.max(0, (width - 20) / 2)}" y="${Math.max(0, (height - 20) / 2)}" width="20" height="20" preserveAspectRatio="xMidYMid meet"/>` };
+    if (entry.icon && typeof entry.icon === 'object') {
+      const iconPx = clampPointIconSize((Number(entry.icon.scale) || 0) > 0 ? Number(entry.icon.scale) * 8 : DEFAULT_POINT_ICON_SIZE, DEFAULT_POINT_ICON_SIZE);
+      const legendSize = Math.max(14, Math.min(22, Math.round(iconPx * 0.8)));
+      const iconColor = svgAttr(entry.icon.color || '#2563eb');
+      const strokeColor = svgAttr(entry.icon.strokeColor || '#1d4ed8');
+      const strokeWidth = Math.max(0.8, Math.min(2.5, Number(entry.icon.strokeWidth) || 1.1));
+      const cx = width / 2;
+      const cy = height / 2;
+      // Inline symbol to avoid external image href issues in SVG data-uri legend rendering.
+      // This guarantees a visible icon in legend even when icon.src cannot be fetched.
+      return {
+        defs: '',
+        body: `<g><circle cx="${cx}" cy="${cy}" r="${Math.max(4, legendSize / 3.2)}" fill="${iconColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/><path d="M${cx} ${cy - Math.max(4, legendSize * 0.28)} L${cx + Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} L${cx - Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} Z" fill="white" fill-opacity="0.9"/></g>`
+      };
     }
     if (entry.circle && typeof entry.circle === 'object') {
       const fill = svgAttr(entry.circle.fill?.color || fallbackFill);
@@ -4908,7 +4929,7 @@ ${mapIcon}
                url: lSource.url,
                layers: [l.name],
                searchFields: displayFields,
-               displayFields: displayFields.slice(0, 3),
+               displayFields: displayFields.slice(0, 3).join(','),
                geometryField: l.geometryName || 'geometry',
                outputFormat: 'GML2',
                infobox,
@@ -4924,7 +4945,7 @@ ${mapIcon}
                url: lSource.url,
                layers: [l.name],
                searchFields: Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean) : [],
-               displayFields: Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean).slice(0, 3) : [],
+               displayFields: (Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean).slice(0, 3) : []).join(','),
                geometryField: l.geometryName || 'geometry',
                outputFormat: 'GML2',
                projection: projCode,
