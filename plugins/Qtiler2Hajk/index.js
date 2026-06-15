@@ -3790,14 +3790,15 @@ ${mapIcon}
         if (Array.isArray(node)) { node.forEach(visit); return; }
         if (node.icon && typeof node.icon === 'object'
             && typeof node.icon.src === 'string'
-            && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))
-            && typeof node.icon.color === 'string') {
-          const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(node.icon.color.trim());
+            && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))) {
+          const m = (typeof node.icon.color === 'string') ? /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(node.icon.color.trim()) : null;
+          const colored = node.icon.src.startsWith('/qtiler-symbology-svg/')
+            ? node.icon.src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/')
+            : node.icon.src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/');
           if (m) {
-            const colored = node.icon.src.startsWith('/qtiler-symbology-svg/')
-              ? node.icon.src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/')
-              : node.icon.src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/');
             node.icon.src = `${colored}?color=${encodeURIComponent('#' + m[1])}`;
+          } else {
+            node.icon.src = colored;
           }
         }
         for (const k of Object.keys(node)) visit(node[k]);
@@ -3929,7 +3930,7 @@ ${mapIcon}
 
   const DEFAULT_POINT_ICON_SIZE = 24;
   const MIN_POINT_ICON_SIZE = 16;
-  const MAX_POINT_ICON_SIZE = 32;
+  const MAX_POINT_ICON_SIZE = 120;
   const clampPointIconSize = (value, fallback = DEFAULT_POINT_ICON_SIZE) => {
     const n = Number(value);
     if (!Number.isFinite(n) || n <= 0) return fallback;
@@ -4106,8 +4107,22 @@ ${mapIcon}
         }
 
         if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
-          const size = Math.max(1, Math.round((Number(entry.icon.scale) || 0.05) * 160));
-          const symbolizer = `<PointSymbolizer><Graphic><ExternalGraphic><OnlineResource xlink:type="simple" xlink:href="${xmlEscape(entry.icon.src)}"/><Format>image/svg+xml</Format></ExternalGraphic><Size>${xmlEscape(size)}</Size></Graphic></PointSymbolizer>`;
+          const explicitPointSize = numberOrNull(entry.pointSize);
+          const fromScale = (Number(entry.icon.scale) || 0) > 0
+            ? clampPointIconSize(Number(entry.icon.scale) * 8, DEFAULT_POINT_ICON_SIZE)
+            : DEFAULT_POINT_ICON_SIZE;
+          const size = clampPointIconSize(explicitPointSize ?? fromScale, DEFAULT_POINT_ICON_SIZE);
+
+          let iconHref = String(entry.icon.src || '').trim();
+          if (iconHref.startsWith('/qgis-svg/') || iconHref.startsWith('/qtiler-symbology-svg/')) {
+            iconHref = `${baseUrl.replace(/\/+$/, '')}${iconHref}`;
+          }
+
+          const iconFormat = /\.png(?:\?|$)/i.test(iconHref)
+            ? 'image/png'
+            : (/\.jpe?g(?:\?|$)/i.test(iconHref) ? 'image/jpeg' : 'image/svg+xml');
+
+          const symbolizer = `<PointSymbolizer><Graphic><ExternalGraphic><OnlineResource xlink:type="simple" xlink:href="${xmlEscape(iconHref)}"/><Format>${iconFormat}</Format></ExternalGraphic><Size>${xmlEscape(size)}</Size></Graphic></PointSymbolizer>`;
           addSymbolizerRule(entry, symbolizer, 'icon');
           continue;
         }
@@ -4221,7 +4236,7 @@ ${mapIcon}
     const fallbackFill = geometryType.includes('polygon') ? 'rgba(59,130,246,0.25)' : '#3b82f6';
     if (entry.icon && typeof entry.icon === 'object') {
       const iconPx = clampPointIconSize((Number(entry.icon.scale) || 0) > 0 ? Number(entry.icon.scale) * 8 : DEFAULT_POINT_ICON_SIZE, DEFAULT_POINT_ICON_SIZE);
-      const legendSize = Math.max(14, Math.min(22, Math.round(iconPx * 0.8)));
+      const legendSize = Math.max(14, Math.min(64, Math.round(iconPx * 0.8)));
       const iconColor = svgAttr(entry.icon.color || '#2563eb');
       const strokeColor = svgAttr(entry.icon.strokeColor || '#1d4ed8');
       const strokeWidth = Math.max(0.8, Math.min(2.5, Number(entry.icon.strokeWidth) || 1.1));
@@ -8098,6 +8113,30 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         return res.status(400).end('bad path');
       }
       let content = await fs.promises.readFile(filePath, 'utf8');
+
+      // OpenLayers and Hajk Legend require physical width/height and viewBox for accurate aspect scaling
+      let hasVB = /viewBox\s*=/i.test(content);
+      const wMatch = content.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
+      const hMatch = content.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
+      
+      if (!hasVB && wMatch && hMatch) {
+        content = content.replace(/<svg\b/i, `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}" `);
+        hasVB = true;
+      }
+      
+      if (!wMatch || !hMatch) {
+         const vbMatch = content.match(/viewBox=["']?[\d.-]+\s+[\d.-]+\s+([\d.]+)\s+([\d.]+)["']?/i);
+         const w = (wMatch && wMatch[1]) || (vbMatch ? vbMatch[1] : '100');
+         const h = (hMatch && hMatch[1]) || (vbMatch ? vbMatch[2] : '100');
+         if (!wMatch && !hMatch) {
+           content = content.replace(/<svg\b/i, `<svg width="${w}" height="${h}" `);
+         } else if (!wMatch) {
+           content = content.replace(/<svg\b/i, `<svg width="${w}" `);
+         } else if (!hMatch) {
+           content = content.replace(/<svg\b/i, `<svg height="${h}" `);
+         }
+      }
+
       const colorRaw = String(req.query.color || '').trim();
       const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(colorRaw);
       if (colorMatch) {

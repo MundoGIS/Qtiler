@@ -8945,7 +8945,7 @@ function buildRuleEditorMarkup(rule, idx) {
         <label style="grid-column:1/4">${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.strokeOpacity" value="${rule.point.circle.strokeOpacity}" /></label>
       </div>
       <div data-ptpanel="icon" ${!isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
-        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:56px;height:56px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
+        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:calc(${(rule.point.icon.scale || 1)} * 32px);height:calc(${(rule.point.icon.scale || 1)} * 32px);max-width:120px;max-height:120px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
         <button type="button" class="button small" data-rk="icon.pick">${T('wfs_pick_svg')}</button>
         <div></div>
         <label style="grid-column:1/4">${T('wfs_url')}<input type="text" style="width:100%" data-rk="icon.src" value="${rule.point.icon.src}" /></label>
@@ -9280,6 +9280,13 @@ function updateRuleField(idx, key, value) {
     if (sub === 'color') r.point.icon.color = value;
     else if (sub === 'useColor') r.point.icon.useColor = !!value;
     else r.point.icon[sub] = (sub === 'src') ? value : Number(value);
+    if (sub === 'scale') {
+      const img = document.querySelector(`[data-rule-editor-root="${idx}"] img[data-rk="icon.preview"]`);
+      if (img) {
+        img.style.width = `calc(${r.point.icon.scale || 1} * 32px)`;
+        img.style.height = `calc(${r.point.icon.scale || 1} * 32px)`;
+      }
+    }
     afterRuleChange();
     return;
   }

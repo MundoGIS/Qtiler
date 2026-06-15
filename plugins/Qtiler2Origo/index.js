@@ -3778,14 +3778,15 @@ ${mapIcon}
         if (Array.isArray(node)) { node.forEach(visit); return; }
         if (node.icon && typeof node.icon === 'object'
             && typeof node.icon.src === 'string'
-            && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))
-            && typeof node.icon.color === 'string') {
-          const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(node.icon.color.trim());
+            && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))) {
+          const m = (typeof node.icon.color === 'string') ? /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(node.icon.color.trim()) : null;
+          const colored = node.icon.src.startsWith('/qtiler-symbology-svg/')
+            ? node.icon.src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/')
+            : node.icon.src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/');
           if (m) {
-            const colored = node.icon.src.startsWith('/qtiler-symbology-svg/')
-              ? node.icon.src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/')
-              : node.icon.src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/');
             node.icon.src = `${colored}?color=${encodeURIComponent('#' + m[1])}`;
+          } else {
+            node.icon.src = colored;
           }
         }
         for (const k of Object.keys(node)) visit(node[k]);
@@ -7274,6 +7275,30 @@ ${mapIcon}
         return res.status(400).end('bad path');
       }
       let content = await fs.promises.readFile(filePath, 'utf8');
+
+      // OpenLayers and Origo required explicit viewBox and matching width/height for aspect ratios
+      let hasVB = /viewBox\s*=/i.test(content);
+      const wMatch = content.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
+      const hMatch = content.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
+      
+      if (!hasVB && wMatch && hMatch) {
+        content = content.replace(/<svg\b/i, `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}" `);
+        hasVB = true;
+      }
+      
+      if (!wMatch || !hMatch) {
+         const vbMatch = content.match(/viewBox=["']?[\d.-]+\s+[\d.-]+\s+([\d.]+)\s+([\d.]+)["']?/i);
+         const w = (wMatch && wMatch[1]) || (vbMatch ? vbMatch[1] : '100');
+         const h = (hMatch && hMatch[1]) || (vbMatch ? vbMatch[2] : '100');
+         if (!wMatch && !hMatch) {
+           content = content.replace(/<svg\b/i, `<svg width="${w}" height="${h}" `);
+         } else if (!wMatch) {
+           content = content.replace(/<svg\b/i, `<svg width="${w}" `);
+         } else if (!hMatch) {
+           content = content.replace(/<svg\b/i, `<svg height="${h}" `);
+         }
+      }
+
       const colorRaw = String(req.query.color || '').trim();
       const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(colorRaw);
       if (colorMatch) {

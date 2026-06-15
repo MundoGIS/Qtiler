@@ -696,6 +696,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   };
 
   const patchQwc2View3dRuntime = async () => {
+    const colorLayerRegex = /([a-zA-Z0-9_$]+)\.getFields&&[a-zA-Z0-9_$]+\.getFields\(([a-zA-Z0-9_$]+)\)\.then\(function\(([a-zA-Z0-9_$]+)\)\{([a-zA-Z0-9_$]+)\.updateColorLayer\([a-zA-Z0-9_$]+\.id,\{fields:[a-zA-Z0-9_$]+\}\)\}\),([a-zA-Z0-9_$]+)\},\s*\{\}\)\}\)/;
+    
+    // Legacy anchors (for older un-minified builds). We won't need to patch availableIn3D or getSceneObject if they are already fixed upstream or use regex where needed.
     const colorLayerAnchor = 'void 0===t[o.id].fields&&u.getFields&&u.getFields(o).then(function(e){n.updateColorLayer(o.id,{fields:e})}),t},{})}),an(n,"applyColorLayerUpdates"';
     const colorLayerReplacement = 'void 0===t[o.id].fields&&u.getFields&&u.getFields(o).then(function(e){n.updateColorLayer(o.id,{fields:e})}),function e(r){var i,a;null===(i=r.sublayers)||void 0===i||null===(a=i.forEach)||void 0===a||a.call(i,function(r){var i,a,s,c;r.wfs3dLayer&&r.extrusionHeight&&(t[r.wfs3dLayer.id]=qt(qt({},r.wfs3dLayer),{},{visibility:null===(i=r.visibility)||void 0===i||i,opacity:null!==(a=r.opacity)&&void 0!==a?a:255,extrusionHeight:r.extrusionHeight,color:null!==(s=r.color)&&void 0!==s?s:null===(c=r.wfs3dLayer)||void 0===c?void 0:c.color})),e(r)})}(o),t},{})}),an(n,"applyColorLayerUpdates"';
     const available3dAnchor = 'availableIn3D:c,cfg:K(K({},a.cfg),n.props.appConfig.pluginsDef.cfg[a.name+"Plugin"])';
@@ -747,10 +750,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       if (next.includes('wfs3dLayer')) {
         colorLayerAlreadyPatched++;
       } else {
-        const colorLayerCount = next.split(colorLayerAnchor).length - 1;
-        if (colorLayerCount === 1) {
-          next = next.replace(colorLayerAnchor, colorLayerReplacement);
+        const colorLayerMatch = next.match(colorLayerRegex);
+        if (colorLayerMatch) {
+          const [fullMatch, _p, _o, _e, _n, _t] = colorLayerMatch;
+          const dynamicColorLayerReplacement = `${_p}.getFields&&${_p}.getFields(${_o}).then(function(${_e}){${_n}.updateColorLayer(${_o}.id,{fields:${_e}})}),function e(r){var i,a;null===(i=r.sublayers)||void 0===i||null===(a=i.forEach)||void 0===a||a.call(i,function(r){var i,a,s,c;r.wfs3dLayer&&r.extrusionHeight&&(${_t}[r.wfs3dLayer.id]=Object.assign({},r.wfs3dLayer,{visibility:null===(i=r.visibility)||void 0===i||i,opacity:null!==(a=r.opacity)&&void 0!==a?a:255,extrusionHeight:r.extrusionHeight,color:null!==(s=r.color)&&void 0!==s?s:null===(c=r.wfs3dLayer)||void 0===c?void 0:c.color})),e(r)})}(${_o}),${_t}},{})})`;
+          next = next.replace(colorLayerRegex, dynamicColorLayerReplacement);
           colorLayerPatched++;
+        } else {
+          const colorLayerCount = next.split(colorLayerAnchor).length - 1;
+          if (colorLayerCount === 1) {
+            next = next.replace(colorLayerAnchor, colorLayerReplacement);
+            colorLayerPatched++;
+          }
         }
       }
       if (next.includes('!!a.availableIn3D||c')) {
