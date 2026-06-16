@@ -7,17 +7,50 @@ setlocal enabledelayedexpansion
 title Qtiler Installer by MundoGIS
 
 set "QTILER_ELEVATED_ARG="
+set "QTILER_FORCED_ROOT=%QTILER_FORCED_ROOT%"
+
+:parse_installer_args
+if "%~1"=="" goto installer_args_done
 if /i "%~1"=="--elevated" (
     set "QTILER_ELEVATED_ARG=--elevated"
     shift
+    goto parse_installer_args
 )
+if /i "%~1"=="--root" (
+    set "QTILER_FORCED_ROOT=%~2"
+    shift
+    shift
+    goto parse_installer_args
+)
+shift
+goto parse_installer_args
+
+:installer_args_done
+
+REM Resolve the real Qtiler package root before elevation. When a batch file is
+REM launched from an elevated context, Windows can otherwise start in
+REM C:\Windows\System32 and make the installer look incomplete.
+set "QTILER_LAUNCH_DIR=%CD%"
+set "QTILER_SCRIPT_DIR=%~dp0"
+set "QTILER_BOOT_ROOT="
+if defined QTILER_FORCED_ROOT (
+    if exist "%QTILER_FORCED_ROOT%\package.json" if exist "%QTILER_FORCED_ROOT%\server.js" if exist "%QTILER_FORCED_ROOT%\tools\run_qgis_python.bat" set "QTILER_BOOT_ROOT=%QTILER_FORCED_ROOT%"
+)
+if exist "%QTILER_SCRIPT_DIR%package.json" if exist "%QTILER_SCRIPT_DIR%server.js" if exist "%QTILER_SCRIPT_DIR%tools\run_qgis_python.bat" set "QTILER_BOOT_ROOT=%QTILER_SCRIPT_DIR%"
+if not defined QTILER_BOOT_ROOT (
+    if exist "%QTILER_LAUNCH_DIR%\package.json" if exist "%QTILER_LAUNCH_DIR%\server.js" if exist "%QTILER_LAUNCH_DIR%\tools\run_qgis_python.bat" set "QTILER_BOOT_ROOT=%QTILER_LAUNCH_DIR%"
+)
+if not defined QTILER_BOOT_ROOT set "QTILER_BOOT_ROOT=%QTILER_SCRIPT_DIR%"
+if "%QTILER_BOOT_ROOT:~-1%"=="\" set "QTILER_BOOT_ROOT=%QTILER_BOOT_ROOT:~0,-1%"
+set "QTILER_INSTALLER_BAT=%QTILER_BOOT_ROOT%\install.bat"
+if not exist "%QTILER_INSTALLER_BAT%" set "QTILER_INSTALLER_BAT=%~f0"
 
 REM --- Self-elevate to administrator ---
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Requesting administrator privileges...
     echo A new elevated installer window should open. Keep that window open for installation messages.
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$bat = '%~f0'; $work = '%~dp0'; $q = [char]34; $cmd = 'call ' + $q + $bat + $q + ' --elevated'; Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/k', $cmd) -WorkingDirectory $work -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$bat = '%QTILER_INSTALLER_BAT%'; $work = '%QTILER_BOOT_ROOT%'; $q = [char]34; $cmd = 'set ' + $q + 'QTILER_FORCED_ROOT=' + $work + $q + ' & call ' + $q + $bat + $q + ' --elevated --root ' + $q + $work + $q; Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/k', $cmd) -WorkingDirectory $work -Verb RunAs"
     if errorlevel 1 (
         echo ERROR: Could not request administrator privileges.
         echo Right-click install.bat and choose Run as administrator.
@@ -27,9 +60,11 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-cd /d "%~dp0"
+cd /d "%QTILER_BOOT_ROOT%"
 if errorlevel 1 (
-    echo ERROR: Could not enter installer folder: %~dp0
+    echo ERROR: Could not enter installer folder: %QTILER_BOOT_ROOT%
+    echo Installer path: %~f0
+    echo Launch folder:  %QTILER_LAUNCH_DIR%
     echo Right-click install.bat from the Qtiler folder and choose Run as administrator.
     pause
     exit /b 1
@@ -77,6 +112,7 @@ if not exist "%QTILER_ROOT%\service\install-service.js" goto missing_installer_f
 if not exist "%QTILER_ROOT%\service\uninstall-service.js" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\run_qgis_python.bat" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtilerauth-install-policy.mjs" goto missing_installer_files
+if not exist "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\mesh_build.py" echo WARNING: tools\mesh_build.py was not found. QuantizedMesh builds will not work until it is restored.
 if not exist "%QTILER_ROOT%\tools\mesh_dem_to_terrain_runner.mjs" echo WARNING: tools\mesh_dem_to_terrain_runner.mjs was not found. QuantizedMesh builds will not work until it is restored.
 echo   Administrator privileges: OK
@@ -91,8 +127,19 @@ goto preflight_ok
 :missing_installer_files
 echo ERROR: This Qtiler folder is incomplete.
 echo Required files include package.json, server.js, service scripts and required tools under tools\.
+echo.
+echo Selected installer root: %QTILER_ROOT%
+echo Installer script path:   %~f0
+echo Original launch folder:  %QTILER_LAUNCH_DIR%
+echo Forced installer root:   %QTILER_FORCED_ROOT%
+echo.
+echo If the selected root is C:\Windows\System32, Windows is launching the wrong copy or shortcut.
+echo Open the extracted Qtiler package folder and run that folder's install.bat.
 echo Please extract or copy the full Qtiler package and run install.bat again.
 >>"%QTILER_INSTALL_LOG%" echo ERROR: Required installer files are missing under %QTILER_ROOT%.
+>>"%QTILER_INSTALL_LOG%" echo Installer script path: %~f0
+>>"%QTILER_INSTALL_LOG%" echo Original launch folder: %QTILER_LAUNCH_DIR%
+>>"%QTILER_INSTALL_LOG%" echo Forced installer root: %QTILER_FORCED_ROOT%
 pause
 exit /b 1
 
@@ -102,7 +149,7 @@ exit /b 1
 REM ----------------------------------------------------------------------
 REM  Step 0: Choose install/update mode and locate any previous runtime data
 REM ----------------------------------------------------------------------
-for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$svc = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'QTiler' } | Select-Object -First 1; if (-not $svc) { exit 0 }; $pathName = [string]$svc.PathName; $exe = $null; $m = [regex]::Match($pathName, '\"([^\"]*qtiler\.exe)\"', 'IgnoreCase'); if ($m.Success) { $exe = $m.Groups[1].Value } else { $m = [regex]::Match($pathName, '([^\s]*qtiler\.exe)', 'IgnoreCase'); if ($m.Success) { $exe = $m.Groups[1].Value } }; $root = $null; if ($exe) { $xmlPath = Join-Path (Split-Path -Parent $exe) 'qtiler.xml'; if (Test-Path -LiteralPath $xmlPath) { try { [xml]$xml = Get-Content -LiteralPath $xmlPath -Raw; $root = [string]$xml.service.workingdirectory } catch {} }; if (-not $root) { $root = Split-Path -Parent (Split-Path -Parent $exe) } }; if ($root) { Write-Output $root }"`) do set "QTILER_PREVIOUS_ROOT=%%I"
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1"`) do set "QTILER_PREVIOUS_ROOT=%%I"
 
 if defined QTILER_PREVIOUS_ROOT (
     >>"%QTILER_INSTALL_LOG%" echo Existing QTiler service detected at %QTILER_PREVIOUS_ROOT%.
@@ -537,7 +584,7 @@ REM ----------------------------------------------------------------------
 echo [Qtiler] Applying QtilerAuth licensing policy...
 >>"%QTILER_INSTALL_LOG%" echo Step 4b: applying QtilerAuth licensing policy.
 if not exist data mkdir data >nul 2>&1
-for /f "tokens=1,* delims==" %%A in (`node tools\qtilerauth-install-policy.mjs "%QTILER_ROOT%" "%QTILER_SETUP_MODE%"`) do (
+for /f "usebackq tokens=1,* delims==" %%A in (`node tools\qtilerauth-install-policy.mjs "%QTILER_ROOT%" "%QTILER_SETUP_MODE%"`) do (
     if /i "%%A"=="QTILERAUTH_EXPECTED" set "QTILERAUTH_EXPECTED=%%B"
     if /i "%%A"=="QTILERAUTH_INSTALL_STATUS" set "QTILERAUTH_INSTALL_STATUS=%%B"
 )
@@ -547,7 +594,12 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-if not defined QTILERAUTH_INSTALL_STATUS set "QTILERAUTH_INSTALL_STATUS=unknown"
+if not defined QTILERAUTH_INSTALL_STATUS (
+    echo ERROR: QtilerAuth licensing policy did not return a status.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: QtilerAuth licensing policy did not return a status.
+    pause
+    exit /b 1
+)
 >>"%QTILER_INSTALL_LOG%" echo QtilerAuth licensing policy applied. Expected=%QTILERAUTH_EXPECTED%, status=%QTILERAUTH_INSTALL_STATUS%.
 echo.
 
