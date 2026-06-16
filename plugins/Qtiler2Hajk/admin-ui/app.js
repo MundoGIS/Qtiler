@@ -90,6 +90,8 @@ const QTWC_I18N = {
     'Qtiler2Hajk.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing; layers without WFS are served as WMS with GetLegendGraphic or an optional manual legend icon.',
     'Qtiler2Hajk.layer_include': 'Include',
     'Qtiler2Hajk.layer_initial_visibility': 'Visible on map start',
+    'Qtiler2Hajk.layer_title': 'Map title',
+    'Qtiler2Hajk.layer_title_placeholder': 'Visible title (optional)',
     'Qtiler2Hajk.layer_include_help': 'If enabled, this layer is included in the published map.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
     'Qtiler2Hajk.wms_legend_auto': 'WMS legend',
@@ -675,6 +677,8 @@ const QTWC_I18N = {
     'Qtiler2Hajk.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opcion Visible al abrir controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edicion; si no se activa WFS, la capa se sirve como WMS con leyenda GetLegendGraphic o un icono manual opcional.',
     'Qtiler2Hajk.layer_include': 'Incluir',
     'Qtiler2Hajk.layer_initial_visibility': 'Visible al abrir',
+    'Qtiler2Hajk.layer_title': 'Titulo en el mapa',
+    'Qtiler2Hajk.layer_title_placeholder': 'Titulo visible (opcional)',
     'Qtiler2Hajk.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
     'Qtiler2Hajk.wms_legend_auto': 'Leyenda WMS',
@@ -1260,6 +1264,8 @@ const QTWC_I18N = {
     'Qtiler2Hajk.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med GetLegendGraphic eller en valfri manuell legendikon.',
     'Qtiler2Hajk.layer_include': 'Inkludera',
     'Qtiler2Hajk.layer_initial_visibility': 'Synlig vid start',
+    'Qtiler2Hajk.layer_title': 'Karttitel',
+    'Qtiler2Hajk.layer_title_placeholder': 'Synlig titel (valfritt)',
     'Qtiler2Hajk.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
     'Qtiler2Hajk.wms_legend_auto': 'WMS-legend',
@@ -2315,7 +2321,10 @@ function renderPublishConfigSummary() {
   const mapMinZoom = String(minZoomInput?.value || '').trim();
   const mapMaxZoom = String(maxZoomInput?.value || '').trim();
   const layerItems = activeLayers.length
-    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => `<li>${escapeHtml(layer.name)}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`).join('')}</ul>`
+    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => {
+        const displayTitle = getLayerDisplayTitle(layer);
+        return `<li>${escapeHtml(displayTitle)}${displayTitle && displayTitle !== layer.name ? ` <span style="color:#64748b">(${escapeHtml(layer.name)})</span>` : ''}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`;
+      }).join('')}</ul>`
     : `<p class="publish-editor__summary-empty">${escapeHtml(t('Qtiler2Hajk.summary_no_active_layers'))}</p>`;
   const backgroundItems = activeBackgroundLayers.length
     ? `<ul class="publish-editor__summary-list">${activeBackgroundLayers.map((layer) => `<li>${escapeHtml(layer.name)}</li>`).join('')}</ul>`
@@ -3046,6 +3055,11 @@ function isVectorGeometry(geometry) {
 
 function getLayerKey(layer) {
   return String(layer?.key || layer?.name || '').trim();
+}
+
+function getLayerDisplayTitle(layer) {
+  const key = getLayerKey(layer);
+  return String(publishState.layerTitles?.[key] || layer?.title || layer?.name || '').trim();
 }
 
 function makeLayerKey(projectId, layerName) {
@@ -5005,6 +5019,8 @@ function renderLayerChecklist(container, layers, rules = {}) {
     }
     const tagText = tags.length ? `<span class="Qtiler2Hajk-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
     const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
+    const layerTitle = String(publishState.layerTitles?.[layerKey] || '').trim();
+    const defaultTitle = String(layer.title || layer.name || '').trim() || layer.name;
     
     let styleButton = '';
     if (isVectorLayer) {
@@ -5063,6 +5079,14 @@ function renderLayerChecklist(container, layers, rules = {}) {
         </label>
       `
       : '';
+    const titleControl = isMainLayerList
+      ? `
+        <label class="field" style="margin:0;min-width:180px;max-width:260px">
+          <span class="label" style="font-size:11px;margin-bottom:2px">${escapeHtml(t('Qtiler2Hajk.layer_title'))}</span>
+          <input class="input is-small" type="text" data-layer-title="${escapeHtml(layerKey)}" value="${escapeHtml(layerTitle)}" placeholder="${escapeHtml(defaultTitle || t('Qtiler2Hajk.layer_title_placeholder'))}" />
+        </label>
+      `
+      : '';
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
       <div class="Qtiler2Hajk-layer-row" data-layer-row="${escapeHtml(layerKey)}">
@@ -5072,7 +5096,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
           <div class="Qtiler2Hajk-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${titleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
       </div>
     `;
   }).join('');
@@ -5096,7 +5120,7 @@ function syncProjectLayerOptionState() {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
-    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url]').forEach((el) => {
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
       el.disabled = !included;
       el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
@@ -6755,6 +6779,16 @@ projectLayersList?.addEventListener('change', (event) => {
     schedulePreviewRefresh();
     return;
   }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    publishState.layerTitles = publishState.layerTitles || {};
+    publishState.layerTitles[layerKey] = String(target.value || '').trim();
+    renderLayerAssignments();
+    renderPublishConfigSummary();
+    schedulePreviewRefresh();
+    return;
+  }
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
 
   if (target.hasAttribute('data-wfs-toggle')) {
@@ -6790,7 +6824,16 @@ projectLayersList?.addEventListener('change', (event) => {
 
 projectLayersList?.addEventListener('input', (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || !target.hasAttribute('data-wms-legend-url')) return;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    publishState.layerTitles = publishState.layerTitles || {};
+    publishState.layerTitles[layerKey] = String(target.value || '').trim();
+    renderPublishConfigSummary();
+    return;
+  }
+  if (!target.hasAttribute('data-wms-legend-url')) return;
   const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
   if (!layerKey) return;
   const value = String(target.value || '').trim();

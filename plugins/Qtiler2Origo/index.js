@@ -4056,6 +4056,7 @@ ${mapIcon}
     const wfsSourceKeys = new Set();
     for (const layer of mainLayers) {
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
+      const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
       const cachedLayers = await getCachedLayersForProject(srcProjId);
       if (shouldUseWfsForPublishedLayer(layer)) {
         // Fetch real WFS meta (attributes + geometryName + featureNS) so the
@@ -4131,7 +4132,7 @@ ${mapIcon}
         }
         const wfsDef = {
           name: layer.name,
-          title: layer.name,
+          title: displayTitle,
           group: String(layer.group || 'root'),
           source: wfsSrcKey,
           type: 'WFS',
@@ -4162,7 +4163,7 @@ ${mapIcon}
         const wmsDef = {
           name: layer.name,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
-          title: layer.name,
+          title: displayTitle,
           group: String(layer.group || 'root'),
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
@@ -4559,6 +4560,7 @@ ${mapIcon}
           if (!name) return null;
           return {
             name,
+            title: String(entry.title || name).trim() || name,
             sourceProjectId: normalizeProjectId(entry.sourceProjectId || projectId) || projectId,
             visible: entry.visible !== false,
             group: String(entry.group || 'root').trim() || 'root'
@@ -4827,6 +4829,7 @@ ${mapIcon}
     for (const layerSpec of previewLayerSpecs) {
       const sourceProjectId = normalizeProjectId(layerSpec.sourceProjectId || projectId) || projectId;
       const layerName = String(layerSpec.name || '').trim();
+      const displayTitle = String(layerSpec.title || layerName).trim() || layerName;
       const layerRuleKey = `${sourceProjectId}::${layerName}`;
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
@@ -4861,7 +4864,7 @@ ${mapIcon}
         const wfsDef = {
           name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
           id: layerName,
-          title: layerName,
+          title: displayTitle,
           group: String(layerSpec.group || 'root').trim() || 'root',
           source: wfsSourceKey,
           type: 'WFS',
@@ -4891,7 +4894,7 @@ ${mapIcon}
         layersArr.push({
           name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
           id: layerName,
-          title: layerName,
+          title: displayTitle,
           group: String(layerSpec.group || 'root').trim() || 'root',
           source: ensurePreviewWmsSource(sourceProjectId),
           type: 'WMS',
@@ -4908,7 +4911,7 @@ ${mapIcon}
       layersArr.push({
         name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
         id: layerName,
-        title: layerName,
+        title: displayTitle,
         group: String(layerSpec.group || 'root').trim() || 'root',
         source: ensurePreviewWmsSource(sourceProjectId),
         type: 'WMS',
@@ -6058,14 +6061,17 @@ ${mapIcon}
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-      const thumbMeta = await regeneratePublishedThumbnail({
+      const previousThumbMeta = await readPublishedThumbnailMeta(profileKey).catch(() => null);
+      void regeneratePublishedThumbnail({
         profileKey,
         profile: payload,
         baseUrl: syncBaseUrl,
         cookieHeader: req.headers.cookie,
         apiKey: getRequestApiKey(req),
         authorization: req.get?.('authorization') || ''
-      }).catch(() => null);
+      }).catch((thumbErr) => {
+        console.warn('[Qtiler2Origo] published thumbnail regeneration warning:', thumbErr?.message || thumbErr);
+      });
       void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
         console.warn('[Qtiler2Origo] publish runtime sync warning:', syncErr?.message || syncErr);
       });
@@ -6087,7 +6093,7 @@ ${mapIcon}
         // Use the plugin-local Origo path for launching the map.
         launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
-        thumbnailUrl: thumbMeta?.url ? `${base}${thumbMeta.url}` : ''
+        thumbnailUrl: previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : ''
       });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_failed', details: String(err?.message || err) });

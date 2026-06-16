@@ -90,6 +90,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing; layers without WFS are served as WMS with a generated thumbnail or an optional manual SVG/PNG legend icon.',
     'Qtiler2Origo.layer_include': 'Include',
     'Qtiler2Origo.layer_initial_visibility': 'Visible on map start',
+    'Qtiler2Origo.layer_title': 'Map title',
+    'Qtiler2Origo.layer_title_placeholder': 'Visible title (optional)',
     'Qtiler2Origo.layer_include_help': 'If enabled, this layer is included in the published map.',
     'Qtiler2Origo.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
     'Qtiler2Origo.wms_legend_auto': 'WMS thumbnail',
@@ -675,6 +677,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opcion Visible al abrir controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edicion; si no se activa WFS, la capa se sirve como WMS con thumbnail generado o un icono manual SVG/PNG opcional.',
     'Qtiler2Origo.layer_include': 'Incluir',
     'Qtiler2Origo.layer_initial_visibility': 'Visible al abrir',
+    'Qtiler2Origo.layer_title': 'Titulo en el mapa',
+    'Qtiler2Origo.layer_title_placeholder': 'Titulo visible (opcional)',
     'Qtiler2Origo.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
     'Qtiler2Origo.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
     'Qtiler2Origo.wms_legend_auto': 'Thumbnail WMS',
@@ -1260,6 +1264,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med genererad thumbnail eller en valfri manuell SVG/PNG-legendikon.',
     'Qtiler2Origo.layer_include': 'Inkludera',
     'Qtiler2Origo.layer_initial_visibility': 'Synlig vid start',
+    'Qtiler2Origo.layer_title': 'Karttitel',
+    'Qtiler2Origo.layer_title_placeholder': 'Synlig titel (valfritt)',
     'Qtiler2Origo.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
     'Qtiler2Origo.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
     'Qtiler2Origo.wms_legend_auto': 'WMS-thumbnail',
@@ -2332,7 +2338,7 @@ function renderPublishConfigSummary() {
   const mapMinZoom = String(minZoomInput?.value || '').trim();
   const mapMaxZoom = String(maxZoomInput?.value || '').trim();
   const layerItems = activeLayers.length
-    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => `<li>${escapeHtml(layer.name)}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`).join('')}</ul>`
+    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => `<li>${escapeHtml(getLayerDisplayTitle(layer) || layer.name)}${getLayerDisplayTitle(layer) && getLayerDisplayTitle(layer) !== layer.name ? ` <span style="color:#64748b">(${escapeHtml(layer.name)})</span>` : ''}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`).join('')}</ul>`
     : `<p class="publish-editor__summary-empty">${escapeHtml(t('Qtiler2Origo.summary_no_active_layers'))}</p>`;
   const backgroundItems = activeBackgroundLayers.length
     ? `<ul class="publish-editor__summary-list">${activeBackgroundLayers.map((layer) => `<li>${escapeHtml(layer.name)}</li>`).join('')}</ul>`
@@ -2953,6 +2959,25 @@ function getLayerKey(layer) {
   return String(layer?.key || layer?.name || '').trim();
 }
 
+function getLayerRule(layerOrKey) {
+  const key = typeof layerOrKey === 'string' ? String(layerOrKey || '').trim() : getLayerKey(layerOrKey);
+  const name = typeof layerOrKey === 'string' ? key : String(layerOrKey?.name || '').trim();
+  return (publishState.mainRules && ((key && publishState.mainRules[key]) || (name && publishState.mainRules[name]))) || {};
+}
+
+function ensureLayerRule(layerKey, defaults = {}) {
+  const key = String(layerKey || '').trim();
+  if (!key) return defaults;
+  publishState.mainRules = publishState.mainRules || {};
+  publishState.mainRules[key] = { ...defaults, ...(publishState.mainRules[key] || {}) };
+  return publishState.mainRules[key];
+}
+
+function getLayerDisplayTitle(layer) {
+  const rule = getLayerRule(layer);
+  return String(rule.title || rule.displayTitle || layer?.title || layer?.name || '').trim();
+}
+
 function makeLayerKey(projectId, layerName) {
   const pid = String(projectId || '').trim();
   const name = String(layerName || '').trim();
@@ -2984,7 +3009,7 @@ function getMainLayerByName(layerName) {
 function getLayerGeometryType(layerName) {
   const layer = getMainLayerByName(layerName);
   const key = String(layerName || '').trim();
-  return String(layer?.geometry || publishState.mainRules?.[key]?.geometryType || '').trim();
+  return String(layer?.geometry || getLayerRule(key)?.geometryType || '').trim();
 }
 
 function geometryFamily(geometryType) {
@@ -3471,10 +3496,10 @@ function setStyleEditorTab(tabName) {
 function buildCurrentWfsLayerConfig() {
   const layerName = currentEditingWfsLayer;
   const layerObj = getMainLayerByName(layerName) || {};
-  const ruleObj = (publishState.mainRules && publishState.mainRules[layerName]) || {};
+  const ruleObj = getLayerRule(layerName);
   return {
     name: layerName,
-    title: layerObj.title || layerName,
+    title: String(ruleObj.title || layerObj.title || layerObj.name || layerName).trim() || layerName,
     geometryType: ruleObj.geometryType || layerObj.geometry || null,
     searchable: ruleObj.searchable === true,
     editable: ruleObj.editable !== false,
@@ -3500,6 +3525,11 @@ function applyWfsLayerJsonConfig(parsed) {
   if (typeof fullCfg.searchable === 'boolean') publishState.mainRules[layerName].searchable = fullCfg.searchable;
   if (typeof fullCfg.editable === 'boolean') publishState.mainRules[layerName].editable = fullCfg.editable;
   if (typeof fullCfg.serveAsWfs === 'boolean') publishState.mainRules[layerName].serveAsWfs = fullCfg.serveAsWfs;
+  if (typeof fullCfg.title === 'string') {
+    const title = fullCfg.title.trim();
+    if (title && title !== layerName) publishState.mainRules[layerName].title = title;
+    else delete publishState.mainRules[layerName].title;
+  }
   if (fullCfg.geometryType) publishState.mainRules[layerName].geometryType = String(fullCfg.geometryType);
   currentAttributes = Array.isArray(fullCfg.attributes)
     ? normalizeAttributesList(fullCfg.attributes)
@@ -4891,7 +4921,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
   const bgProjectId = isBackgroundList ? String(backgroundProjectSelect?.value || '').trim() : '';
   container.innerHTML = layers.map((layer) => {
     const layerKey = getLayerKey(layer);
-    const rule = rules[layerKey] || {};
+    const rule = rules[layerKey] || getLayerRule(layer);
     const tags = [];
     if (rule.searchable) tags.push(t('Qtiler2Origo.searchable'));
     if (rule.editable) tags.push(t('Qtiler2Origo.editable'));
@@ -4902,6 +4932,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
     }
     const tagText = tags.length ? `<span class="Qtiler2Origo-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
     const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
+    const displayTitle = String(rule.title || rule.displayTitle || '').trim();
     
     let styleButton = '';
     if (isVectorLayer) {
@@ -4960,6 +4991,14 @@ function renderLayerChecklist(container, layers, rules = {}) {
         </label>
       `
       : '';
+    const titleControl = isMainLayerList
+      ? `
+        <label class="field" style="margin:0;min-width:180px;max-width:260px">
+          <span class="label" style="font-size:11px;margin-bottom:2px">${escapeHtml(t('Qtiler2Origo.layer_title'))}</span>
+          <input class="input is-small" type="text" data-layer-title="${escapeHtml(layerKey)}" value="${escapeHtml(displayTitle)}" placeholder="${escapeHtml(t('Qtiler2Origo.layer_title_placeholder'))}" />
+        </label>
+      `
+      : '';
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
       <div class="Qtiler2Origo-layer-row" data-layer-row="${escapeHtml(layerKey)}">
@@ -4969,7 +5008,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${titleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
       </div>
     `;
   }).join('');
@@ -4993,7 +5032,7 @@ function syncProjectLayerOptionState() {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
-    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url]').forEach((el) => {
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
       el.disabled = !included;
       el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
@@ -5273,8 +5312,9 @@ async function addExternalLayers(projectId, selectedItems) {
       publishState.initialVisibility[layerKey] = true;
     }
     const baseRule = rules[layerName] || {};
+    const existingRule = publishState.mainRules[layerKey] || {};
     publishState.mainRules[layerKey] = {
-      ...(publishState.mainRules[layerKey] || {}),
+      ...existingRule,
       searchable: baseRule.searchable === true,
       editable: item.mode === 'WFS' ? baseRule.editable === true : false,
       serveAsWfs: item.mode === 'WFS',
@@ -5284,6 +5324,9 @@ async function addExternalLayers(projectId, selectedItems) {
       hintText: baseRule.hintText || null,
       geometryType: String(baseRule.geometryType || layerObj.geometry || '').trim() || null
     };
+    if (existingRule.title || existingRule.displayTitle) {
+      publishState.mainRules[layerKey].title = String(existingRule.title || existingRule.displayTitle).trim();
+    }
   }
 }
 
@@ -5419,7 +5462,14 @@ function bindExternalLayerPickerEvents() {
         return layer ? { name: layer.name, mode: String(modeSelect?.value || 'WMS').trim().toUpperCase() === 'WFS' ? 'WFS' : 'WMS' } : null;
       }).filter(Boolean);
       await addExternalLayers(projectId, selectedItems);
+      const checkedNames = new Set(getCheckedLayerNames(projectLayersList));
+      selectedItems.forEach((item) => {
+        const layer = (publishState.projectLayerCatalog[projectId] || []).find((entry) => String(entry?.name || '') === String(item?.name || ''));
+        const key = getLayerKey(layer);
+        if (key) checkedNames.add(key);
+      });
       renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, Array.from(checkedNames));
       renderExternalLayersSummary();
       refreshExtraSections();
       modal.classList.remove('is-active');
@@ -5947,6 +5997,7 @@ async function preparePublishModal(editProfileId = null) {
         const externalLayer = {
           key: makeLayerKey(srcPid, layerName),
           name: layerName,
+          title: String(layer?.title || layerName).trim() || layerName,
           sourceProjectId: srcPid,
           geometry: String(layer?.geometryType || '').trim()
         };
@@ -5970,8 +6021,10 @@ async function preparePublishModal(editProfileId = null) {
           attributes: Array.isArray(layer?.attributes) ? JSON.parse(JSON.stringify(layer.attributes)) : (publishState.mainRules[key]?.attributes || []),
           searchable: layer?.searchable === true,
           editable: layer?.editable !== false,
+          title: String(layer?.title || '').trim() || undefined,
           geometryType: String(layer?.geometryType || publishState.mainRules[key]?.geometryType || '').trim() || null
         };
+        if (!publishState.mainRules[key].title) delete publishState.mainRules[key].title;
       });
       // Background project and selected/default background state
       const profileBackgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
@@ -6074,7 +6127,8 @@ async function preparePublishModal(editProfileId = null) {
       publishState.layerGroups = {};
       savedMain.forEach((l) => {
         const ln = String(l?.name || '').trim();
-        if (ln) publishState.layerGroups[ln] = String(l?.group || 'root').trim() || 'root';
+        const key = makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, ln);
+        if (key) publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
       });
       // Restore Origo controls: update textarea and checkboxes
       const savedControls = Array.isArray(profile.controls) ? profile.controls : [];
@@ -6631,6 +6685,17 @@ projectLayersList?.addEventListener('change', (event) => {
     schedulePreviewRefresh();
     return;
   }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    const value = String(target.value || '').trim();
+    const rule = ensureLayerRule(layerKey, { searchable: false, editable: false });
+    if (value) rule.title = value;
+    else delete rule.title;
+    renderPublishConfigSummary();
+    schedulePreviewRefresh();
+    return;
+  }
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
 
   if (target.hasAttribute('data-wfs-toggle')) {
@@ -6666,7 +6731,18 @@ projectLayersList?.addEventListener('change', (event) => {
 
 projectLayersList?.addEventListener('input', (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || !target.hasAttribute('data-wms-legend-url')) return;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    const value = String(target.value || '').trim();
+    const rule = ensureLayerRule(layerKey, { searchable: false, editable: false });
+    if (value) rule.title = value;
+    else delete rule.title;
+    renderPublishConfigSummary();
+    return;
+  }
+  if (!target.hasAttribute('data-wms-legend-url')) return;
   const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
   if (!layerKey) return;
   const value = String(target.value || '').trim();
@@ -6807,9 +6883,10 @@ function buildPublishApiBody() {
 
   const layersPayload = selectedLayers.map((layer) => {
     const key = getLayerKey(layer);
+    const title = getLayerDisplayTitle(layer) || layer.name;
     return {
       name: layer.name,
-      title: layer.title || layer.name,
+      title,
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
@@ -6833,7 +6910,7 @@ function buildPublishApiBody() {
   const layerRules = {};
   selectedLayers.forEach((layer) => {
     const key = getLayerKey(layer);
-    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+    layerRules[key] = getLayerRule(layer) || { searchable: false, editable: false };
   });
   return {
     mapName,
@@ -6951,9 +7028,10 @@ publishNowBtn?.addEventListener('click', async () => {
 
   const layersPayload = selectedLayers.map((layer) => {
     const key = getLayerKey(layer);
+    const title = getLayerDisplayTitle(layer) || layer.name;
     return {
       name: layer.name,
-      title: layer.title || layer.name,
+      title,
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
@@ -6978,7 +7056,7 @@ publishNowBtn?.addEventListener('click', async () => {
   const layerRules = {};
   selectedLayers.forEach((layer) => {
     const key = getLayerKey(layer);
-    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+    layerRules[key] = getLayerRule(layer) || { searchable: false, editable: false };
   });
 
   publishNowBtn.disabled = true;
@@ -7241,7 +7319,7 @@ function buildMapPreviewPayload() {
   const selectedLayers = getSelectedPublishLayers();
   const previewLayerSpecs = selectedLayers.map((layer) => ({
     name: layer.name,
-    title: layer.title || layer.name,
+    title: getLayerDisplayTitle(layer) || layer.name,
     isTheme: layer.isTheme === true,
     themeName: layer.themeName || null,
     sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
@@ -7252,7 +7330,7 @@ function buildMapPreviewPayload() {
   const previewLayerRules = {};
   selectedLayers.forEach((layer) => {
     const key = getLayerKey(layer);
-    previewLayerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+    previewLayerRules[key] = getLayerRule(layer) || { searchable: false, editable: false };
   });
   const layerRulesParam = Object.keys(previewLayerRules).length ? JSON.stringify(previewLayerRules) : '';
   // Resolve the active background so the preview map uses the SAME tile grid
@@ -7415,6 +7493,7 @@ async function buildMapPreviewUrl() {
   if (payload.maxZoom) params.set('maxZoom', String(payload.maxZoom));
   if (payload.controls?.length) params.set('controls', JSON.stringify(payload.controls));
   const directConfigUrl = `${pluginRootPath}api/preview-config.json?${params.toString()}`;
+  const directPreviewMaxUrlLength = 1800;
   try {
     const res = await fetch(`${pluginRootPath}api/preview-state`, {
       method: 'POST',
@@ -7434,10 +7513,10 @@ async function buildMapPreviewUrl() {
       const stateConfigUrl = `${pluginRootPath}api/preview-config.json?state=${encodeURIComponent(data.state)}&project=${encodeURIComponent(String(payload.project || ''))}`;
       return buildPreviewShellUrl(stateConfigUrl);
     }
-    return buildPreviewShellUrl(directConfigUrl);
+    if (directConfigUrl.length <= directPreviewMaxUrlLength) return buildPreviewShellUrl(directConfigUrl);
+    throw new Error('Preview state response did not include a token, and the preview payload is too large for a URL.');
   } catch (err) {
-    const aborted = err?.name === 'TimeoutError' || err?.name === 'AbortError' || /timed out|aborted/i.test(String(err?.message || err || ''));
-    if (directConfigUrl.length <= 3500 || aborted) {
+    if (directConfigUrl.length <= directPreviewMaxUrlLength) {
       return buildPreviewShellUrl(directConfigUrl);
     }
     throw err;
@@ -9713,10 +9792,10 @@ function generateMapConfigJson() {
     
     const layersPayload = selectedLayers.map((layer) => {
       const key = getLayerKey(layer);
-      const rules = publishState.mainRules[key] || {};
+      const rules = getLayerRule(layer) || {};
       return {
         name: layer.name,
-        title: layer.title || layer.name,
+        title: getLayerDisplayTitle(layer) || layer.name,
         sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
         visible: publishState.initialVisibility[key] !== false,
         group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
@@ -9988,17 +10067,19 @@ function applyMapJsonChanges() {
       publishState.mainRules = {};
       
       config.layers.forEach(layer => {
-        const key = `${layer.sourceProjectId || config.projectId}::${layer.name}`;
+        const key = makeLayerKey(layer.sourceProjectId || config.projectId, layer.name);
         publishState.initialVisibility[key] = layer.visible !== false;
         publishState.layerGroups[key] = layer.group || 'root';
         publishState.mainRules[key] = {
           searchable: layer.searchable || false,
           editable: layer.editable || false,
           serveAsWfs: layer.serveAsWfs || false,
+          title: String(layer.title || '').trim() || undefined,
           wfsStyle: layer.wfsStyle || undefined,
           attributes: layer.attributes || undefined,
           geometryType: layer.geometryType || undefined
         };
+        if (!publishState.mainRules[key].title) delete publishState.mainRules[key].title;
       });
     }
     

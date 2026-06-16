@@ -4740,6 +4740,7 @@ ${mapIcon}
     const wfsSourceKeys = new Set();
     for (const layer of mainLayers) {
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
+      const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
       const cachedLayers = await getCachedLayersForProject(srcProjId);
       if (shouldUseWfsForPublishedLayer(layer)) {
         // Fetch real WFS meta (attributes + geometryName + featureNS) so the
@@ -4824,7 +4825,7 @@ ${mapIcon}
         const wfsDef = {
           name: layer.name,
           sourceProjectId: srcProjId,
-          title: layer.name,
+          title: displayTitle,
           group: String(layer.group || 'root'),
           source: wfsSrcKey,
           type: 'WFS',
@@ -4854,7 +4855,7 @@ ${mapIcon}
           name: layer.name,
           sourceProjectId: srcProjId,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
-          title: layer.name,
+          title: displayTitle,
           group: String(layer.group || 'root'),
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
@@ -5837,6 +5838,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         ...rule,
         name: layerName,
         sourceProjectId,
+        title: String(spec.title || layerName).trim() || layerName,
         role: 'main',
         visible: spec.visible !== false,
         group: String(spec.group || rule.group || 'root').trim() || 'root'
@@ -6083,6 +6085,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     for (const layerSpec of previewLayerSpecs) {
       const sourceProjectId = normalizeProjectId(layerSpec.sourceProjectId || projectId) || projectId;
       const layerName = String(layerSpec.name || '').trim();
+      const displayTitle = String(layerSpec.title || layerName).trim() || layerName;
       const layerRuleKey = `${sourceProjectId}::${layerName}`;
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
@@ -6117,7 +6120,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const wfsDef = {
           name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
           id: layerName,
-          title: layerName,
+          title: displayTitle,
           group: String(layerSpec.group || 'root').trim() || 'root',
           source: wfsSourceKey,
           type: 'WFS',
@@ -6155,7 +6158,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       layersArr.push({
         name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
         id: layerName,
-        title: layerName,
+        title: displayTitle,
         group: String(layerSpec.group || 'root').trim() || 'root',
         source: ensurePreviewWmsSource(sourceProjectId),
         type: 'WMS',

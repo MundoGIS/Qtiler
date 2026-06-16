@@ -410,10 +410,13 @@ Run these commands in an elevated terminal. The service uses your `.env` and wri
 
 ## Deploying behind IIS or Apache HTTPD
 Most production setups place Qtiler on Windows Server and expose it via IIS or Apache HTTPD using URL Rewrite:
-1. Run Qtiler on an internal port (for example `http://localhost:3000`).
-2. Configure IIS URL Rewrite (or Apache `mod_proxy`/`mod_rewrite`) to forward `/portal`, `/wmts`, `/admin`, `/plugins`, and `/viewer` to that port.
-3. Add HTTPS certificates and harden headers/caching rules at the proxy level.
-4. Optionally keep the Node service internal and only publish the proxy site.
+1. Run Qtiler on the internal `PORT` configured in `.env` (for example `http://127.0.0.1:3007`).
+2. Configure IIS URL Rewrite (or Apache `mod_proxy`/`mod_rewrite`) to forward `/portal`, `/wmts`, `/wms`, `/wfs`, `/admin`, `/plugins`, `/viewer`, and API routes to that same port.
+3. Set `PUBLIC_BASE_URL` to the external HTTPS URL so generated WMTS/WMS/WFS capabilities and published viewer configs do not advertise localhost.
+4. Forward `X-Forwarded-Proto=https`, `X-Forwarded-Host`, and `X-Forwarded-For`, and keep `QTILER_TRUST_PROXY=loopback` when IIS and Qtiler run on the same host.
+5. Disable WebDAV or explicitly allow `PATCH`, `PUT`, and `DELETE`; Qtiler uses those methods for admin, publish/delete, and WFS editing workflows.
+6. Add HTTPS certificates and harden headers/caching rules at the proxy level.
+7. Optionally keep the Node service internal and only publish the proxy site.
 
 Need assistance designing the reverse-proxy rules or securing the stack? Contact MundoGIS at [mundogis.se](https://mundogis.se) or email support@mundogis.se.
 
