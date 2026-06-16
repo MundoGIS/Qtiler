@@ -80,6 +80,10 @@ set "QTILER_ADMIN_PASSWORD_DISPLAY="
 set "QTILER_ADMIN_PASSWORD_PRESERVE=0"
 set "QTILERAUTH_EXPECTED=1"
 set "QTILERAUTH_INSTALL_STATUS="
+set "QTILER_SERVICE_NAME=QTiler"
+set "QTILER_SERVICE_NAME_DEFAULT=QTiler"
+set "QTILER_VERSION=unknown"
+set "QTILER_PREVIOUS_VERSION="
 
 echo ================================================================
 echo                    Qtiler Installer by MundoGIS
@@ -102,7 +106,26 @@ where powershell >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Windows PowerShell was not found in PATH.
     echo Qtiler installer requires PowerShell for dialogs, downloads and service checks.
+    echo This Windows installation is missing a required system component. Install or repair Windows PowerShell, then run install.bat again.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: PowerShell not found in PATH.
+    pause
+    exit /b 1
+)
+where sc.exe >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Windows Service Control ^(sc.exe^) was not found in PATH.
+    echo Qtiler must install and manage a Windows service. Repair the Windows PATH or Service Control tools, then run install.bat again.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: sc.exe not found in PATH.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Windows Service Control (sc.exe) was not found in PATH.' + [Environment]::NewLine + [Environment]::NewLine + 'Qtiler must install and manage a Windows service. Repair the Windows PATH or Windows service tools, then run install.bat again.', 'Qtiler Installer - Windows Requirement Missing', 'OK', 'Error')" >nul
+    pause
+    exit /b 1
+)
+where msiexec.exe >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Windows Installer ^(msiexec.exe^) was not found in PATH.
+    echo Qtiler may need Windows Installer to install Node.js automatically. Repair Windows Installer, then run install.bat again.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: msiexec.exe not found in PATH.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Windows Installer (msiexec.exe) was not found in PATH.' + [Environment]::NewLine + [Environment]::NewLine + 'Qtiler may need Windows Installer to install Node.js automatically. Repair Windows Installer, then run install.bat again.', 'Qtiler Installer - Windows Requirement Missing', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -113,11 +136,18 @@ if not exist "%QTILER_ROOT%\service\uninstall-service.js" goto missing_installer
 if not exist "%QTILER_ROOT%\tools\run_qgis_python.bat" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtilerauth-install-policy.mjs" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1" goto missing_installer_files
+if not exist "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" goto missing_installer_files
+if not exist "%QTILER_ROOT%\tools\qtiler-service.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\mesh_build.py" echo WARNING: tools\mesh_build.py was not found. QuantizedMesh builds will not work until it is restored.
 if not exist "%QTILER_ROOT%\tools\mesh_dem_to_terrain_runner.mjs" echo WARNING: tools\mesh_dem_to_terrain_runner.mjs was not found. QuantizedMesh builds will not work until it is restored.
+for /f "usebackq delims=" %%V in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Join-Path $env:QTILER_ROOT 'package.json'; try { $v = ((Get-Content -Raw -LiteralPath $pkg) | ConvertFrom-Json).version; if ($v) { $v } } catch { }"`) do set "QTILER_VERSION=%%V"
+if not defined QTILER_VERSION set "QTILER_VERSION=unknown"
 echo   Administrator privileges: OK
 echo   PowerShell: OK
+echo   Windows Service Control: OK
+echo   Windows Installer: OK
 echo   Required Qtiler files: OK
+echo   Qtiler package version: %QTILER_VERSION%
 echo   Node.js: checked before QGIS setup and installed automatically if missing
 echo   QGIS Desktop: you will be asked for a QGIS 3.x folder after setup mode is selected
 echo.
@@ -136,6 +166,7 @@ echo.
 echo If the selected root is C:\Windows\System32, Windows is launching the wrong copy or shortcut.
 echo Open the extracted Qtiler package folder and run that folder's install.bat.
 echo Please extract or copy the full Qtiler package and run install.bat again.
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('This Qtiler folder is incomplete.' + [Environment]::NewLine + [Environment]::NewLine + 'Required files include package.json, server.js, service scripts and required tools under tools.' + [Environment]::NewLine + [Environment]::NewLine + 'Selected root:' + [Environment]::NewLine + '%QTILER_ROOT%' + [Environment]::NewLine + [Environment]::NewLine + 'Extract the full Qtiler package and run install.bat from that folder.', 'Qtiler Installer - Incomplete Package', 'OK', 'Error')" >nul
 >>"%QTILER_INSTALL_LOG%" echo ERROR: Required installer files are missing under %QTILER_ROOT%.
 >>"%QTILER_INSTALL_LOG%" echo Installer script path: %~f0
 >>"%QTILER_INSTALL_LOG%" echo Original launch folder: %QTILER_LAUNCH_DIR%
@@ -144,7 +175,7 @@ pause
 exit /b 1
 
 :preflight_ok
->>"%QTILER_INSTALL_LOG%" echo Step 0: checking existing QTiler Windows service.
+>>"%QTILER_INSTALL_LOG%" echo Step 0: checking existing Qtiler Windows service.
 
 REM ----------------------------------------------------------------------
 REM  Step 0: Choose install/update mode and locate any previous runtime data
@@ -152,8 +183,8 @@ REM ----------------------------------------------------------------------
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1"`) do set "QTILER_PREVIOUS_ROOT=%%I"
 
 if defined QTILER_PREVIOUS_ROOT (
-    >>"%QTILER_INSTALL_LOG%" echo Existing QTiler service detected at %QTILER_PREVIOUS_ROOT%.
-    echo Existing QTiler Windows service detected.
+    >>"%QTILER_INSTALL_LOG%" echo Existing Qtiler service detected at %QTILER_PREVIOUS_ROOT%.
+    echo Existing Qtiler Windows service detected.
     echo   Current service root: %QTILER_PREVIOUS_ROOT%
     echo   This installer root:  %QTILER_ROOT%
     echo.
@@ -169,7 +200,7 @@ if defined QTILER_PREVIOUS_ROOT (
 )
 
 if not defined QTILER_PREVIOUS_ROOT (
-    echo No existing QTiler Windows service was detected.
+    echo No existing Qtiler Windows service was detected.
     echo.
     echo N = New installation from this folder.
     echo U = Update an existing installation from another folder and preserve its runtime data.
@@ -179,7 +210,7 @@ if not defined QTILER_PREVIOUS_ROOT (
     ) else (
         set "QTILER_SETUP_MODE=new"
     )
-    >>"%QTILER_INSTALL_LOG%" echo No existing QTiler service detected. Setup mode selected: !QTILER_SETUP_MODE!.
+    >>"%QTILER_INSTALL_LOG%" echo No existing Qtiler service detected. Setup mode selected: !QTILER_SETUP_MODE!.
 )
 
 if /i "%QTILER_SETUP_MODE%"=="update" if not defined QTILER_PREVIOUS_ROOT goto ask_previous_root
@@ -189,7 +220,7 @@ goto previous_root_ok
 echo.
 echo [Qtiler] Waiting for previous Qtiler installation folder input...
 >>"%QTILER_INSTALL_LOG%" echo Waiting for previous Qtiler installation folder input dialog.
-for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Enter the full path to the existing Qtiler installation that should be updated.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop the QTiler service if present, back up .env, data, maps, cache, config, uploads, logs and custom plugins, then copy them into this new package.' + [Environment]::NewLine + [Environment]::NewLine + 'Example: C:\Qtiler', 'Qtiler Installer - Previous Installation Path', 'C:\Qtiler')"`) do set "QTILER_PREVIOUS_ROOT=%%I"
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Enter the full path to the existing Qtiler installation that should be updated.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop the Qtiler Windows service if present, back up .env, data, maps, cache, config, uploads, logs and custom plugins, then copy them into this new package.' + [Environment]::NewLine + [Environment]::NewLine + 'Example: C:\Qtiler', 'Qtiler Installer - Previous Installation Path', 'C:\Qtiler')"`) do set "QTILER_PREVIOUS_ROOT=%%I"
 if not defined QTILER_PREVIOUS_ROOT (
     echo Installation cancelled by user.
     >>"%QTILER_INSTALL_LOG%" echo Installation cancelled at previous installation folder prompt.
@@ -214,61 +245,96 @@ if not exist "%QTILER_PREVIOUS_ROOT%\.env" if not exist "%QTILER_PREVIOUS_ROOT%\
 
 :previous_root_ok
 
+if /i "%QTILER_SETUP_MODE%"=="update" if exist "%QTILER_PREVIOUS_ROOT%\package.json" (
+    for /f "usebackq delims=" %%V in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Join-Path $env:QTILER_PREVIOUS_ROOT 'package.json'; try { $v = ((Get-Content -Raw -LiteralPath $pkg) | ConvertFrom-Json).version; if ($v) { $v } } catch { }"`) do set "QTILER_PREVIOUS_VERSION=%%V"
+)
 if /i "%QTILER_SETUP_MODE%"=="update" (
-    echo [Qtiler] Stopping existing service before preserving runtime state...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "$svc = Get-Service -Name 'QTiler' -ErrorAction SilentlyContinue;" ^
-        "if ($svc -and $svc.Status -ne 'Stopped') { Stop-Service -Name 'QTiler' -Force -ErrorAction Stop; $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45)); Write-Host '  Existing QTiler service stopped.' }" ^
-        "elseif ($svc) { Write-Host '  Existing QTiler service is already stopped.' }" ^
-        "else { Write-Host '  QTiler service is not installed.' }"
-    if errorlevel 1 (
-        echo ERROR: Could not stop existing QTiler Windows service before update.
+    if defined QTILER_PREVIOUS_VERSION (
+        echo Existing Qtiler version detected: %QTILER_PREVIOUS_VERSION%
+        echo This installer will update Qtiler to version: %QTILER_VERSION%
+        >>"%QTILER_INSTALL_LOG%" echo Previous version: %QTILER_PREVIOUS_VERSION%. Target version: %QTILER_VERSION%.
+    ) else (
+        echo This installer will update Qtiler to version: %QTILER_VERSION%
+        >>"%QTILER_INSTALL_LOG%" echo Previous version not detected. Target version: %QTILER_VERSION%.
+    )
+    echo.
+)
+
+REM ----------------------------------------------------------------------
+REM  Step 0a: Ask for Windows service name
+REM ----------------------------------------------------------------------
+if exist "%QTILER_ROOT%\.env" (
+    for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /c:"QTILER_SERVICE_NAME=" "%QTILER_ROOT%\.env" 2^>nul`) do (
+        if /i "%%A"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME_DEFAULT=%%B"
+    )
+)
+if /i "%QTILER_SETUP_MODE%"=="update" if exist "%QTILER_PREVIOUS_ROOT%\.env" (
+    for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /c:"QTILER_SERVICE_NAME=" "%QTILER_PREVIOUS_ROOT%\.env" 2^>nul`) do (
+        if /i "%%A"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME_DEFAULT=%%B"
+    )
+)
+if not defined QTILER_SERVICE_NAME_DEFAULT set "QTILER_SERVICE_NAME_DEFAULT=QTiler"
+
+:ask_service_name
+echo [Qtiler] Waiting for Windows service name input...
+>>"%QTILER_INSTALL_LOG%" echo Step 0a: waiting for Windows service name input. Default=%QTILER_SERVICE_NAME_DEFAULT%.
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Choose the Windows Service name for this Qtiler installation.' + [Environment]::NewLine + [Environment]::NewLine + 'Use a unique name if this server will host more than one Qtiler instance.' + [Environment]::NewLine + 'Allowed characters: letters, numbers, spaces, dot, underscore and hyphen.' + [Environment]::NewLine + [Environment]::NewLine + 'Default: %QTILER_SERVICE_NAME_DEFAULT%', 'Qtiler Installer - Windows Service Name', '%QTILER_SERVICE_NAME_DEFAULT%')"`) do set "QTILER_SERVICE_NAME=%%I"
+if not defined QTILER_SERVICE_NAME (
+    echo Installation cancelled by user.
+    >>"%QTILER_INSTALL_LOG%" echo Installation cancelled at Windows service name prompt.
+    pause
+    exit /b 1
+)
+set "QTILER_SERVICE_NAME=%QTILER_SERVICE_NAME:"=%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if ('%QTILER_SERVICE_NAME%' -notmatch '^[A-Za-z0-9._ -]{1,80}$') { exit 1 }"
+if errorlevel 1 (
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The service name must be 1-80 characters and may only contain letters, numbers, spaces, dot, underscore and hyphen.', 'Qtiler Installer - Invalid Service Name', 'OK', 'Error')" >nul
+    goto ask_service_name
+)
+echo Selected Windows service name: %QTILER_SERVICE_NAME%
+>>"%QTILER_INSTALL_LOG%" echo Selected Windows service name: %QTILER_SERVICE_NAME%.
+echo.
+
+if /i "%QTILER_SETUP_MODE%"=="update" (
+    echo.
+    echo IMPORTANT: Update mode will stop the Qtiler Windows service and back up user runtime data before continuing.
+    echo Bundled Qtiler plugins will be updated from this package. Custom plugins and plugin user data will be preserved.
+    echo Do not close this installer while the update is running. Closing the window can leave the service stopped or runtime data only partially copied.
+    choice /C YN /N /M "Continue with update mode? [Y/N]: "
+    if errorlevel 2 (
+        echo Update cancelled by user before any update changes were applied.
+        >>"%QTILER_INSTALL_LOG%" echo Update cancelled by user before service stop/runtime backup.
         pause
         exit /b 1
     )
     echo.
+    echo [Qtiler] Stopping existing service before preserving runtime state...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action stop -ServiceName "%QTILER_SERVICE_NAME%"
+    if errorlevel 1 (
+        echo ERROR: Could not stop existing Qtiler Windows service before update.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not stop the existing Qtiler Windows service before the update.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'The update was stopped before runtime data was copied. Check Windows Services, then run the installer again as administrator.', 'Qtiler Installer - Update Service Stop Failed', 'OK', 'Error')" >nul
+        pause
+        exit /b 1
+    )
+    for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"`) do set "QTILER_BACKUP_STAMP=%%S"
+    echo.
     if /i not "%QTILER_PREVIOUS_ROOT%"=="%QTILER_ROOT%" (
         echo.
         echo [Qtiler] Copying runtime state from existing installation...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-            "$old = '%QTILER_PREVIOUS_ROOT%';" ^
-            "$new = '%QTILER_ROOT%';" ^
-            "if (-not (Test-Path -LiteralPath $old)) { Write-Host ('ERROR: previous Qtiler root not found: ' + $old); exit 1 };" ^
-            "$stamp = Get-Date -Format 'yyyyMMdd_HHmmss';" ^
-            "$backupRoot = Join-Path $new ('upgrade-backups\replaced-new-package-data-' + $stamp);" ^
-            "$userBackupRoot = Join-Path $new ('upgrade-backups\user-runtime-backup-' + $stamp);" ^
-            "$preserveDirs = @('data','cache','qgisprojects','config','logs','temp_uploads');" ^
-            "$preserveFiles = @('.env','auth.db','symbology-style.db');" ^
-            "New-Item -ItemType Directory -Path $userBackupRoot -Force | Out-Null;" ^
-            "foreach ($name in $preserveDirs) { $src = Join-Path $old $name; if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $userBackupRoot $name) -Recurse -Force } };" ^
-            "foreach ($name in $preserveFiles) { $src = Join-Path $old $name; if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $userBackupRoot $name) -Force } };" ^
-            "$oldPlugins = Join-Path $old 'plugins'; $newPlugins = Join-Path $new 'plugins'; $bundled = @('Qrigo','Qtiler2Origo','Qtiler2Hajk','Qtiler2qwc','QtilerAuth'); if (Test-Path -LiteralPath $oldPlugins) { $customBackup = Join-Path $userBackupRoot 'plugins'; New-Item -ItemType Directory -Path $customBackup -Force | Out-Null; Get-ChildItem -LiteralPath $oldPlugins -Directory | ForEach-Object { if ($bundled -notcontains $_.Name) { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $customBackup $_.Name) -Recurse -Force } } };" ^
-            "Write-Host ('  Backup of previous runtime data: ' + $userBackupRoot);" ^
-            "foreach ($name in $preserveDirs) { $src = Join-Path $old $name; $dst = Join-Path $new $name; if (Test-Path -LiteralPath $src) { if (Test-Path -LiteralPath $dst) { New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null; Move-Item -LiteralPath $dst -Destination (Join-Path $backupRoot $name) -Force }; Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force; Write-Host ('  Restored directory: ' + $name) } };" ^
-            "foreach ($name in $preserveFiles) { $src = Join-Path $old $name; $dst = Join-Path $new $name; if (Test-Path -LiteralPath $src) { if (Test-Path -LiteralPath $dst) { New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null; Move-Item -LiteralPath $dst -Destination (Join-Path $backupRoot $name) -Force }; Copy-Item -LiteralPath $src -Destination $dst -Force; Write-Host ('  Restored file: ' + $name) } };" ^
-            "if (Test-Path -LiteralPath $oldPlugins) { New-Item -ItemType Directory -Path $newPlugins -Force | Out-Null; Get-ChildItem -LiteralPath $oldPlugins -Directory | ForEach-Object { if ($bundled -notcontains $_.Name) { $dst = Join-Path $newPlugins $_.Name; if (-not (Test-Path -LiteralPath $dst)) { Copy-Item -LiteralPath $_.FullName -Destination $dst -Recurse -Force; Write-Host ('  Restored custom plugin: ' + $_.Name) } } } };" ^
-            "Write-Host '  Runtime state copy complete.'"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_PREVIOUS_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%" -DestinationRoot "%QTILER_ROOT%" -ReplacedBackupRoot "%QTILER_ROOT%\upgrade-backups\r-%QTILER_BACKUP_STAMP%"
         if errorlevel 1 (
             echo ERROR: Could not copy runtime state from the existing installation.
+            powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not copy runtime data from the existing Qtiler installation.' + [Environment]::NewLine + [Environment]::NewLine + 'Source:' + [Environment]::NewLine + '%QTILER_PREVIOUS_ROOT%' + [Environment]::NewLine + [Environment]::NewLine + 'Backup target:' + [Environment]::NewLine + '%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%' + [Environment]::NewLine + [Environment]::NewLine + 'Check disk space, file permissions, antivirus restrictions and the installer log.', 'Qtiler Installer - Update Backup Failed', 'OK', 'Error')" >nul
             pause
             exit /b 1
         )
         echo.
     ) else (
         echo [Qtiler] Update mode selected in the existing installation folder. Backing up runtime data before continuing...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-            "$root = '%QTILER_ROOT%';" ^
-            "$stamp = Get-Date -Format 'yyyyMMdd_HHmmss';" ^
-            "$userBackupRoot = Join-Path $root ('upgrade-backups\user-runtime-backup-' + $stamp);" ^
-            "$preserveDirs = @('data','cache','qgisprojects','config','logs','temp_uploads');" ^
-            "$preserveFiles = @('.env','auth.db','symbology-style.db');" ^
-            "New-Item -ItemType Directory -Path $userBackupRoot -Force | Out-Null;" ^
-            "foreach ($name in $preserveDirs) { $src = Join-Path $root $name; if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $userBackupRoot $name) -Recurse -Force; Write-Host ('  Backed up directory: ' + $name) } };" ^
-            "foreach ($name in $preserveFiles) { $src = Join-Path $root $name; if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $userBackupRoot $name) -Force; Write-Host ('  Backed up file: ' + $name) } };" ^
-            "$plugins = Join-Path $root 'plugins'; $bundled = @('Qrigo','Qtiler2Origo','Qtiler2Hajk','Qtiler2qwc','QtilerAuth'); if (Test-Path -LiteralPath $plugins) { $customBackup = Join-Path $userBackupRoot 'plugins'; New-Item -ItemType Directory -Path $customBackup -Force | Out-Null; Get-ChildItem -LiteralPath $plugins -Directory | ForEach-Object { if ($bundled -notcontains $_.Name) { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $customBackup $_.Name) -Recurse -Force; Write-Host ('  Backed up custom plugin: ' + $_.Name) } } };" ^
-            "Write-Host ('  Backup of current runtime data: ' + $userBackupRoot)"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%"
         if errorlevel 1 (
             echo ERROR: Could not create in-place update backup.
+            powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not create the in-place update backup.' + [Environment]::NewLine + [Environment]::NewLine + 'Backup target:' + [Environment]::NewLine + '%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%' + [Environment]::NewLine + [Environment]::NewLine + 'Check disk space, file permissions, antivirus restrictions and the installer log.', 'Qtiler Installer - Update Backup Failed', 'OK', 'Error')" >nul
             pause
             exit /b 1
         )
@@ -390,6 +456,21 @@ goto ask_port
 
 :port_ok
 set "QTILER_PORT_INVALID="
+set "QTILER_PORT_IN_USE="
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$conn = Get-NetTCPConnection -LocalPort %QTILER_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($conn) { $procName = ''; try { $procName = (Get-Process -Id $conn.OwningProcess -ErrorAction Stop).ProcessName } catch {}; Write-Output (($conn.OwningProcess.ToString()) + ' ' + $procName) }"`) do set "QTILER_PORT_IN_USE=%%P"
+if defined QTILER_PORT_IN_USE (
+    echo WARNING: TCP port %QTILER_PORT% is already in use by process %QTILER_PORT_IN_USE%.
+    >>"%QTILER_INSTALL_LOG%" echo WARNING: selected port %QTILER_PORT% already in use by %QTILER_PORT_IN_USE%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('TCP port %QTILER_PORT% is already in use by process: %QTILER_PORT_IN_USE%' + [Environment]::NewLine + [Environment]::NewLine + 'Choose another port unless you are intentionally updating the service that already owns this port and it will be restarted by this installer.', 'Qtiler Installer - Port In Use', 'OK', 'Warning')" >nul
+    choice /C RC /N /M "Port %QTILER_PORT% is in use. Re-enter port or continue anyway [R/C]: "
+    if errorlevel 2 (
+        echo Continuing with port %QTILER_PORT% by user confirmation.
+        >>"%QTILER_INSTALL_LOG%" echo User chose to continue with occupied port %QTILER_PORT%.
+    ) else (
+        set "QTILER_PORT_IN_USE="
+        goto ask_port
+    )
+)
 echo Selected Qtiler HTTP port: %QTILER_PORT%
 >>"%QTILER_INSTALL_LOG%" echo Selected Qtiler HTTP port: %QTILER_PORT%.
 echo.
@@ -525,7 +606,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "if ('%QTILER_ADMIN_PASSWORD_PRESERVE%' -eq '1' -and $existingEnv.ContainsKey('QTILER_DEFAULT_ADMIN_PASSWORD')) { $adminPassword = [string]$existingEnv['QTILER_DEFAULT_ADMIN_PASSWORD'] };" ^
     "if ([string]::IsNullOrWhiteSpace($adminPassword)) { Write-Host 'ERROR: QTILER_DEFAULT_ADMIN_PASSWORD is required.'; exit 1 };" ^
   "$nodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $nodeExe) { $nodeExe = 'C:\Program Files\nodejs\node.exe' };" ^
-                                                                "$q = [char]34; $updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; QTILER_DEFAULT_ADMIN_PASSWORD = $adminPassword; PYTHON_EXE = '%QGIS_PYTHON_EXE%'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ($q + '%QGIS_PYTHON_EXE%' + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_build.py') + $q); QUANTIZED_MESH_ENGINE_CMD = ($q + $nodeExe + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs') + $q); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
+                                                                "$q = [char]34; $updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_SERVICE_NAME = '%QTILER_SERVICE_NAME%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; QTILER_DEFAULT_ADMIN_PASSWORD = $adminPassword; PYTHON_EXE = '%QGIS_PYTHON_EXE%'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ($q + '%QGIS_PYTHON_EXE%' + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_build.py') + $q); QUANTIZED_MESH_ENGINE_CMD = ($q + $nodeExe + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs') + $q); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
   "if (Test-Path $envFile) { $ts = Get-Date -Format 'yyyyMMdd_HHmmss'; Copy-Item $envFile ($envFile + '.bak.' + $ts) -Force; $lines = Get-Content -LiteralPath $envFile } elseif (Test-Path (Join-Path $qtilerRoot '.env.example')) { $lines = Get-Content -LiteralPath (Join-Path $qtilerRoot '.env.example') } else { $lines = @('# Qtiler environment configuration - generated by install.bat') };" ^
   "$out = New-Object System.Collections.Generic.List[string]; $seen = @{};" ^
   "foreach ($line in $lines) { $m = [regex]::Match($line, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*='); if ($m.Success -and $updates.Contains($m.Groups[1].Value)) { $k = $m.Groups[1].Value; $out.Add($k + '=' + $updates[$k]); $seen[$k] = $true } else { $patched = $line -ireplace [regex]::Escape('C:\Qtiler'), $qtilerRoot; $out.Add($patched) } };" ^
@@ -543,6 +624,7 @@ echo.
 echo Configured in .env:
 echo   QTILER_INSTALL_MODE=%QTILER_INSTALL_MODE%
 echo   PORT=%QTILER_PORT%
+echo   QTILER_SERVICE_NAME=%QTILER_SERVICE_NAME%
 echo   PUBLIC_BASE_URL=%QTILER_PUBLIC_URL%
 echo   QTILER_BEHIND_IIS=%QTILER_BEHIND_IIS%
 echo   QTILER_PUBLIC_HTTPS=%QTILER_HTTPS%
@@ -551,7 +633,7 @@ echo   QTILER_ENABLE_HSTS=%QTILER_ENABLE_HSTS_VALUE%
 echo   QTILER_CORS_ALLOWED_ORIGINS=%QTILER_CORS_ALLOWED_ORIGINS_VALUE%
 echo   QTILER_DEFAULT_ADMIN_PASSWORD=%QTILER_ADMIN_PASSWORD_DISPLAY%
 echo.
-echo You can change these values later in %QTILER_ROOT%\.env and restart the QTiler service.
+echo You can change these values later in %QTILER_ROOT%\.env and restart the selected Qtiler Windows service.
 echo Initial QtilerAuth admin username is: admin
 echo Initial QtilerAuth admin password is stored in .env as QTILER_DEFAULT_ADMIN_PASSWORD.
 echo.
@@ -572,6 +654,7 @@ call npm.cmd install --omit=dev --no-audit --no-fund
 if errorlevel 1 (
     echo ERROR: npm install failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: npm install failed with exit code %errorlevel%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm install failed while installing Qtiler dependencies.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%' + [Environment]::NewLine + [Environment]::NewLine + 'Also verify internet access, npm access, disk space and antivirus restrictions.', 'Qtiler Installer - Dependency Install Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -591,12 +674,14 @@ for /f "usebackq tokens=1,* delims==" %%A in (`node tools\qtilerauth-install-pol
 if errorlevel 1 (
     echo ERROR: Could not apply QtilerAuth licensing policy.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: could not apply QtilerAuth licensing policy.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth licensing policy could not be applied.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer stopped to avoid issuing or renewing a trial incorrectly.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - Licensing Policy Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
 if not defined QTILERAUTH_INSTALL_STATUS (
     echo ERROR: QtilerAuth licensing policy did not return a status.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: QtilerAuth licensing policy did not return a status.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth licensing policy did not return a status.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer stopped to avoid enabling QtilerAuth in an unsafe state.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - Licensing Policy Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -607,58 +692,50 @@ REM ----------------------------------------------------------------------
 REM  Step 5: Install Qtiler as a Windows service
 REM ----------------------------------------------------------------------
 echo [Qtiler] Stopping existing Windows service if it is already running...
->>"%QTILER_INSTALL_LOG%" echo Step 5: stopping existing QTiler Windows service if present.
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$svc = Get-Service -Name 'QTiler' -ErrorAction SilentlyContinue;" ^
-    "if ($svc -and $svc.Status -ne 'Stopped') {" ^
-    "  Stop-Service -Name 'QTiler' -Force -ErrorAction Stop;" ^
-    "  $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45));" ^
-    "  Write-Host '  Existing QTiler service stopped so the updated .env will be loaded.'" ^
-    "} elseif ($svc) { Write-Host '  Existing QTiler service is already stopped.' }" ^
-    "else { Write-Host '  QTiler service is not installed yet.' }"
+>>"%QTILER_INSTALL_LOG%" echo Step 5: stopping existing Qtiler Windows service if present. Requested service name: %QTILER_SERVICE_NAME%.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action stop -ServiceName "%QTILER_SERVICE_NAME%"
 if errorlevel 1 (
-    echo ERROR: Could not stop existing QTiler Windows service.
-    >>"%QTILER_INSTALL_LOG%" echo ERROR: could not stop existing QTiler Windows service.
+    echo ERROR: Could not stop existing Qtiler Windows service: %QTILER_SERVICE_NAME%
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: could not stop existing Qtiler Windows service %QTILER_SERVICE_NAME%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not stop the existing Qtiler Windows service.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Close applications using Qtiler, check Windows Services, then run the installer again.', 'Qtiler Installer - Service Stop Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
 echo.
 
 echo [Qtiler] Removing existing Windows service definition if present...
->>"%QTILER_INSTALL_LOG%" echo Step 5: removing existing QTiler Windows service definition if present.
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$svc = Get-Service -Name 'QTiler' -ErrorAction SilentlyContinue;" ^
-    "if ($svc) { exit 0 } else { exit 2 }"
+>>"%QTILER_INSTALL_LOG%" echo Step 5: removing existing Qtiler Windows service definition if present. Requested service name: %QTILER_SERVICE_NAME%.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action exists -ServiceName "%QTILER_SERVICE_NAME%"
 if %errorlevel% equ 0 (
     node service\uninstall-service.js
     if errorlevel 1 (
-        echo ERROR: Could not remove existing QTiler Windows service.
+        echo ERROR: Could not remove existing Qtiler Windows service: %QTILER_SERVICE_NAME%
         >>"%QTILER_INSTALL_LOG%" echo ERROR: node service\uninstall-service.js failed.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not remove the existing Qtiler Windows service definition.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and run the installer again as administrator.', 'Qtiler Installer - Service Removal Failed', 'OK', 'Error')" >nul
         pause
         exit /b 1
     )
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "$deadline = (Get-Date).AddSeconds(45);" ^
-        "while ((Get-Date) -lt $deadline) { if (-not (Get-Service -Name 'QTiler' -ErrorAction SilentlyContinue)) { Write-Host '  Existing QTiler service removed.'; exit 0 }; Start-Sleep -Milliseconds 1000 }" ^
-        "Write-Host 'ERROR: QTiler service was not removed within the timeout.'; exit 1"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action wait-removed -ServiceName "%QTILER_SERVICE_NAME%"
     if errorlevel 1 (
-        echo ERROR: Existing QTiler Windows service did not uninstall cleanly.
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: existing QTiler Windows service did not uninstall within timeout.
+        echo ERROR: Existing Qtiler Windows service did not uninstall cleanly: %QTILER_SERVICE_NAME%
+        >>"%QTILER_INSTALL_LOG%" echo ERROR: existing Qtiler Windows service did not uninstall within timeout.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The existing Qtiler Windows service did not uninstall within the timeout.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services, wait a moment, then run the installer again as administrator.', 'Qtiler Installer - Service Removal Timeout', 'OK', 'Error')" >nul
         pause
         exit /b 1
     )
 ) else (
-    echo   No existing QTiler service definition found.
-    >>"%QTILER_INSTALL_LOG%" echo No existing QTiler service definition found.
+    echo   No existing Qtiler service definition found.
+    >>"%QTILER_INSTALL_LOG%" echo No existing Qtiler service definition found.
 )
 echo.
 
 echo [Qtiler] Installing Qtiler as a Windows service...
->>"%QTILER_INSTALL_LOG%" echo Step 5: installing QTiler Windows service.
+>>"%QTILER_INSTALL_LOG%" echo Step 5: installing Qtiler Windows service as %QTILER_SERVICE_NAME%.
 node service\install-service.js
 if errorlevel 1 (
     echo ERROR: Windows service installation failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Windows service installation failed.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Windows service installation failed.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Run the installer as administrator and check that antivirus or Windows policy is not blocking service creation.', 'Qtiler Installer - Service Install Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -669,11 +746,12 @@ REM ----------------------------------------------------------------------
 REM  Step 5b: Start the Windows service and wait until HTTP is really ready
 REM ----------------------------------------------------------------------
 echo [Qtiler] Starting Windows service...
->>"%QTILER_INSTALL_LOG%" echo Step 5b: starting QTiler Windows service.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Service -Name 'QTiler' -ErrorAction Stop; Write-Host '  Service start requested.' } catch { if ($_.Exception.Message -notmatch 'already been started|already running') { Write-Host ('ERROR: ' + $_.Exception.Message); exit 1 } else { Write-Host '  Service already running.' } }"
+>>"%QTILER_INSTALL_LOG%" echo Step 5b: starting Qtiler Windows service %QTILER_SERVICE_NAME%.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action start -ServiceName "%QTILER_SERVICE_NAME%"
 if errorlevel 1 (
-    echo ERROR: Could not start QTiler Windows service.
-    >>"%QTILER_INSTALL_LOG%" echo ERROR: could not start QTiler Windows service.
+    echo ERROR: Could not start Qtiler Windows service: %QTILER_SERVICE_NAME%
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: could not start Qtiler Windows service %QTILER_SERVICE_NAME%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not start the Qtiler Windows service.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and the Qtiler logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Start Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -718,8 +796,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "if ($authExpected) { Write-Host ('  QtilerAuth is responding at ' + $authUrl) } else { Write-Host '  QtilerAuth readiness skipped because it is not enabled by the preserved license state.' }"
 if errorlevel 1 (
     echo ERROR: Qtiler service started but Qtiler or the expected QtilerAuth endpoint did not become ready in time.
-    echo Check logs in %QTILER_ROOT%\logs and Windows Services for QTiler startup details.
+    echo Check logs in %QTILER_ROOT%\logs and Windows Services for %QTILER_SERVICE_NAME% startup details.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service started but HTTP/QtilerAuth readiness failed. QtilerAuth expected=%QTILERAUTH_EXPECTED%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service started, but Qtiler did not become ready in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log and application logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Readiness Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
@@ -729,14 +808,32 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
-powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler has been installed successfully.' + [Environment]::NewLine + [Environment]::NewLine + 'Setup mode: %QTILER_SETUP_MODE%' + [Environment]::NewLine + 'Configured profile: %QTILER_INSTALL_MODE%' + [Environment]::NewLine + 'Public URL: %QTILER_PUBLIC_URL%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + 'IIS / HTTPS: %QTILER_BEHIND_IIS% / %QTILER_HTTPS%' + [Environment]::NewLine + 'QtilerAuth status: %QTILERAUTH_INSTALL_STATUS%' + [Environment]::NewLine + [Environment]::NewLine + 'Administrator login:' + [Environment]::NewLine + 'Username: admin' + [Environment]::NewLine + 'Password: %QTILER_ADMIN_PASSWORD_DISPLAY%' + [Environment]::NewLine + [Environment]::NewLine + 'For new installs, copy and store this password now. During updates, the existing .env password, users, licenses, uploaded projects, cache and plugin data are preserved.' + [Environment]::NewLine + [Environment]::NewLine + 'Updates do not issue or renew QtilerAuth trial licenses. If the preserved QtilerAuth trial or license is expired, QtilerAuth remains disabled after the update.' + [Environment]::NewLine + [Environment]::NewLine + 'These settings are stored in .env and can be changed after installation. Restart the QTiler service after editing .env.' + [Environment]::NewLine + [Environment]::NewLine + 'For license contract questions about the authentication plugin, please contact support@mundogis.se.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Add-Type -AssemblyName System.Windows.Forms;" ^
+    "$balloon = [char]::ConvertFromUtf32(0x1F388); $party = [char]::ConvertFromUtf32(0x1F389);" ^
+    "$nl = [Environment]::NewLine;" ^
+    "$isUpdate = $env:QTILER_SETUP_MODE -ieq 'update';" ^
+    "$headline = if ($isUpdate) { 'Qtiler update completed successfully.' } else { 'Qtiler installation completed successfully.' };" ^
+    "$versionLine = if ($isUpdate) { 'Updated to version: ' + $env:QTILER_VERSION } else { 'Installed version: ' + $env:QTILER_VERSION };" ^
+    "$previousLine = if ($isUpdate -and $env:QTILER_PREVIOUS_VERSION) { 'Previous version: ' + $env:QTILER_PREVIOUS_VERSION + $nl } else { '' };" ^
+    "$passwordNote = if ($isUpdate) { 'The existing administrator password was preserved.' } else { 'Store this administrator password now.' };" ^
+    "$body = ($balloon + ' ' + $party + ' ' + $balloon + $nl + $nl + $headline + $nl + $versionLine + $nl + $previousLine + $nl + 'Setup mode: ' + $env:QTILER_SETUP_MODE + $nl + 'Configured profile: ' + $env:QTILER_INSTALL_MODE + $nl + 'Windows service: ' + $env:QTILER_SERVICE_NAME + $nl + 'Public URL: ' + $env:QTILER_PUBLIC_URL + $nl + 'Port: ' + $env:QTILER_PORT + $nl + 'IIS / HTTPS: ' + $env:QTILER_BEHIND_IIS + ' / ' + $env:QTILER_HTTPS + $nl + 'QtilerAuth status: ' + $env:QTILERAUTH_INSTALL_STATUS + $nl + $nl + 'Administrator login:' + $nl + 'Username: admin' + $nl + 'Password: ' + $env:QTILER_ADMIN_PASSWORD_DISPLAY + $nl + $nl + $passwordNote + $nl + $nl + 'Updates preserve .env, users, licenses, uploaded projects, cache and plugin user data.' + $nl + 'Bundled Qtiler plugins are updated from the installed package; custom plugins are preserved.' + $nl + 'Updates do not issue or renew QtilerAuth trial licenses.' + $nl + $nl + 'These settings are stored in .env. Restart the selected Windows service after editing .env.' + $nl + $nl + 'For license contract questions about the authentication plugin, contact support@mundogis.se.');" ^
+    "[System.Windows.Forms.MessageBox]::Show($body, 'Qtiler Installation Complete', 'OK', 'Information')" >nul
 
 echo ================================================================
-echo  Qtiler has been installed successfully.
+if /i "%QTILER_SETUP_MODE%"=="update" (
+    echo  Qtiler update completed successfully.
+    if defined QTILER_PREVIOUS_VERSION echo  Previous version: %QTILER_PREVIOUS_VERSION%
+    echo  Updated to version: %QTILER_VERSION%
+) else (
+    echo  Qtiler installation completed successfully.
+    echo  Installed version: %QTILER_VERSION%
+)
 echo.
 echo  Configuration written to .env:
 echo    Setup mode:     %QTILER_SETUP_MODE%
 echo    Profile:        %QTILER_INSTALL_MODE%
+echo    Service:        %QTILER_SERVICE_NAME%
 echo    Public URL:     %QTILER_PUBLIC_URL%
 echo    Port:           %QTILER_PORT%
 echo    IIS:            %QTILER_BEHIND_IIS%
@@ -747,12 +844,13 @@ echo    QtilerAuth:     %QTILERAUTH_INSTALL_STATUS%
 echo.
 echo  You can change these settings later in:
 echo    %QTILER_ROOT%\.env
-echo  Restart the QTiler service after editing .env.
+echo  Restart the %QTILER_SERVICE_NAME% service after editing .env.
 echo.
 echo  QtilerAuth policy:
 echo    Eligible new installs enable the first 3-month trial.
 echo    Updates preserve existing license/trial state and never renew a trial.
 echo    If the preserved QtilerAuth license or trial is expired, QtilerAuth stays disabled.
+echo    Bundled Qtiler plugins are updated from this package; custom plugins are preserved.
 echo  For questions about license contracts for this authentication
 echo  plugin, please contact support@mundogis.se.
 echo ================================================================
@@ -780,12 +878,14 @@ if %errorlevel% equ 0 (
         echo ERROR: Could not parse Node.js version: !NODE_VER!
         echo Please install the latest Node.js LTS from https://nodejs.org and run install.bat again.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Could not parse Node.js version: !NODE_VER!
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler could not read the installed Node.js version: !NODE_VER!' + [Environment]::NewLine + [Environment]::NewLine + 'Install or repair the latest Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Error', 'OK', 'Error')" >nul
         exit /b 1
     )
     if !NODE_MAJOR! LSS 20 (
         echo ERROR: Qtiler requires Node.js 20 LTS or newer. Detected: !NODE_VER!
         echo Please install the latest Node.js LTS from https://nodejs.org and run install.bat again.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js version too old: !NODE_VER!
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler requires Node.js 20 LTS or newer.' + [Environment]::NewLine + [Environment]::NewLine + 'Detected version: !NODE_VER!' + [Environment]::NewLine + [Environment]::NewLine + 'Install the latest Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Too Old', 'OK', 'Error')" >nul
         exit /b 1
     )
 ) else (
@@ -797,6 +897,7 @@ if %errorlevel% equ 0 (
     if not exist "!NODE_MSI!" (
         echo ERROR: Failed to download Node.js installer. Please install Node.js LTS manually from https://nodejs.org and re-run this installer.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: failed to download Node.js installer.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler could not download the Node.js LTS installer.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the internet connection or proxy settings, install Node.js LTS manually from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Download Failed', 'OK', 'Error')" >nul
         exit /b 1
     )
     echo Installing Node.js silently. This may take a few minutes...
@@ -805,6 +906,7 @@ if %errorlevel% equ 0 (
     if errorlevel 1 (
         echo ERROR: Node.js installation failed ^(msiexec exit code %errorlevel%^).
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js msiexec failed with exit code %errorlevel%.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Node.js installation failed.' + [Environment]::NewLine + [Environment]::NewLine + 'Windows Installer exit code: %errorlevel%' + [Environment]::NewLine + [Environment]::NewLine + 'Install Node.js LTS manually from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Install Failed', 'OK', 'Error')" >nul
         exit /b 1
     )
     REM Refresh PATH from registry so node/npm are visible in this shell
@@ -815,6 +917,7 @@ if %errorlevel% equ 0 (
         echo Node.js installed, but not visible in this shell.
         echo Please close this window, open a new one, and run install.bat again.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js installed but not visible in PATH.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Node.js was installed, but it is not visible in the current PATH.' + [Environment]::NewLine + [Environment]::NewLine + 'Close this installer window, open a new elevated command prompt, and run install.bat again.', 'Qtiler Installer - Node.js PATH Not Updated', 'OK', 'Warning')" >nul
         exit /b 1
     )
     for /f "tokens=*" %%v in ('node -v') do set "NODE_VER=%%v"
@@ -826,6 +929,7 @@ if errorlevel 1 (
     echo ERROR: npm is not available even though Node.js is installed.
     echo Repair or reinstall Node.js LTS, then run install.bat again.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: npm not found after Node.js check.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm is not available even though Node.js is installed.' + [Environment]::NewLine + [Environment]::NewLine + 'Repair or reinstall Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - npm Missing', 'OK', 'Error')" >nul
     exit /b 1
 )
 for /f "tokens=*" %%v in ('npm.cmd -v') do set "NPM_VER=%%v"

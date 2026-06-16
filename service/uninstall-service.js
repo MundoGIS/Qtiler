@@ -7,12 +7,15 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Service } from 'node-windows';
+import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(root, '.env') });
+const serviceName = String(process.env.QTILER_SERVICE_NAME || 'QTiler').trim() || 'QTiler';
 
 const svc = new Service({
-    name: 'QTiler',
+  name: serviceName,
   script: path.join(root, 'server.js')
 });
 

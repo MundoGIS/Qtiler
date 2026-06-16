@@ -30,6 +30,7 @@ const envEntries = [];
 [
   'NODE_OPTIONS',
   'PORT',
+  'QTILER_SERVICE_NAME',
   'PUBLIC_BASE_URL',
   'QTILER_INSTALL_MODE',
   'QTILER_BEHIND_IIS',
@@ -147,8 +148,9 @@ const envEntries = [];
 });
 
 // Configure service
+const serviceName = String(process.env.QTILER_SERVICE_NAME || 'QTiler').trim() || 'QTiler';
 const svc = new Service({
-  name: 'QTiler',
+  name: serviceName,
   description: 'QGIS tile cache & WMTS/XYZ generator',
   script: path.join(root, 'server.js'),
   workingDirectory: root,
