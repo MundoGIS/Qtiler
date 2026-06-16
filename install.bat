@@ -16,11 +16,77 @@ if %errorlevel% neq 0 (
 
 cd /d "%~dp0"
 set "QTILER_ROOT=%cd%"
+set "QTILER_SETUP_MODE=new"
+set "QTILER_PREVIOUS_ROOT="
+set "QTILER_EXISTING_ADMIN_PASSWORD="
+set "QTILER_ADMIN_PASSWORD="
+set "QTILER_ADMIN_PASSWORD_DISPLAY="
+set "QTILER_ADMIN_PASSWORD_PRESERVE=0"
 
 echo ================================================================
 echo                    Qtiler Installer by MundoGIS
 echo ================================================================
 echo.
+
+REM ----------------------------------------------------------------------
+REM  Step 0: Detect existing QTiler service and choose install/update mode
+REM ----------------------------------------------------------------------
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$svc = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'QTiler' } | Select-Object -First 1; if (-not $svc) { exit 0 }; $pathName = [string]$svc.PathName; $exe = $null; $m = [regex]::Match($pathName, '\"([^\"]*qtiler\.exe)\"', 'IgnoreCase'); if ($m.Success) { $exe = $m.Groups[1].Value } else { $m = [regex]::Match($pathName, '([^\s]*qtiler\.exe)', 'IgnoreCase'); if ($m.Success) { $exe = $m.Groups[1].Value } }; $root = $null; if ($exe) { $xmlPath = Join-Path (Split-Path -Parent $exe) 'qtiler.xml'; if (Test-Path -LiteralPath $xmlPath) { try { [xml]$xml = Get-Content -LiteralPath $xmlPath -Raw; $root = [string]$xml.service.workingdirectory } catch {} }; if (-not $root) { $root = Split-Path -Parent (Split-Path -Parent $exe) } }; if ($root) { Write-Output $root }"`) do set "QTILER_PREVIOUS_ROOT=%%I"
+
+if defined QTILER_PREVIOUS_ROOT (
+    echo Existing QTiler Windows service detected.
+    echo   Current service root: %QTILER_PREVIOUS_ROOT%
+    echo   This installer root:  %QTILER_ROOT%
+    echo.
+    echo U = Update existing installation, preserve .env, users, licenses, uploaded projects, cache and plugin data.
+    echo N = New/replacement installation from this folder.
+    choice /C UN /N /M "Choose update or new install [U/N]: "
+    if errorlevel 2 (
+        set "QTILER_SETUP_MODE=new"
+    ) else (
+        set "QTILER_SETUP_MODE=update"
+    )
+)
+
+if /i "%QTILER_SETUP_MODE%"=="update" (
+    echo [Qtiler] Stopping existing service before preserving runtime state...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "$svc = Get-Service -Name 'QTiler' -ErrorAction SilentlyContinue;" ^
+        "if ($svc -and $svc.Status -ne 'Stopped') { Stop-Service -Name 'QTiler' -Force -ErrorAction Stop; $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45)); Write-Host '  Existing QTiler service stopped.' }" ^
+        "elseif ($svc) { Write-Host '  Existing QTiler service is already stopped.' }" ^
+        "else { Write-Host '  QTiler service is not installed.' }"
+    if errorlevel 1 (
+        echo ERROR: Could not stop existing QTiler Windows service before update.
+        pause
+        exit /b 1
+    )
+    echo.
+    if /i not "%QTILER_PREVIOUS_ROOT%"=="%QTILER_ROOT%" (
+        echo.
+        echo [Qtiler] Copying runtime state from existing installation...
+        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+            "$old = '%QTILER_PREVIOUS_ROOT%';" ^
+            "$new = '%QTILER_ROOT%';" ^
+            "if (-not (Test-Path -LiteralPath $old)) { Write-Host ('ERROR: previous Qtiler root not found: ' + $old); exit 1 };" ^
+            "$stamp = Get-Date -Format 'yyyyMMdd_HHmmss';" ^
+            "$backupRoot = Join-Path $new ('upgrade-backups\before-runtime-copy-' + $stamp);" ^
+            "$preserveDirs = @('data','cache','qgisprojects','config','logs','temp_uploads');" ^
+            "$preserveFiles = @('.env','auth.db','symbology-style.db');" ^
+            "foreach ($name in $preserveDirs) { $src = Join-Path $old $name; $dst = Join-Path $new $name; if (Test-Path -LiteralPath $src) { if (Test-Path -LiteralPath $dst) { New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null; Move-Item -LiteralPath $dst -Destination (Join-Path $backupRoot $name) -Force }; Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force; Write-Host ('  Preserved directory: ' + $name) } };" ^
+            "foreach ($name in $preserveFiles) { $src = Join-Path $old $name; $dst = Join-Path $new $name; if (Test-Path -LiteralPath $src) { if (Test-Path -LiteralPath $dst) { New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null; Move-Item -LiteralPath $dst -Destination (Join-Path $backupRoot $name) -Force }; Copy-Item -LiteralPath $src -Destination $dst -Force; Write-Host ('  Preserved file: ' + $name) } };" ^
+            "$oldPlugins = Join-Path $old 'plugins'; $newPlugins = Join-Path $new 'plugins'; $bundled = @('Qrigo','Qtiler2Origo','Qtiler2Hajk','Qtiler2qwc','QtilerAuth'); if (Test-Path -LiteralPath $oldPlugins) { New-Item -ItemType Directory -Path $newPlugins -Force | Out-Null; Get-ChildItem -LiteralPath $oldPlugins -Directory | ForEach-Object { if ($bundled -notcontains $_.Name) { $dst = Join-Path $newPlugins $_.Name; if (-not (Test-Path -LiteralPath $dst)) { Copy-Item -LiteralPath $_.FullName -Destination $dst -Recurse -Force; Write-Host ('  Preserved custom plugin: ' + $_.Name) } } } };" ^
+            "Write-Host '  Runtime state copy complete.'"
+        if errorlevel 1 (
+            echo ERROR: Could not copy runtime state from the existing installation.
+            pause
+            exit /b 1
+        )
+        echo.
+    ) else (
+        echo [Qtiler] Update mode selected in the existing installation folder. Runtime data will be preserved in place.
+        echo.
+    )
+)
 
 REM ----------------------------------------------------------------------
 REM  Step 1: Ask for QGIS Desktop installation path (popup window)
@@ -111,8 +177,8 @@ REM ----------------------------------------------------------------------
 REM  Step 1c: Ask for installation profile and public IIS/HTTPS settings
 REM ----------------------------------------------------------------------
 echo Installation profile:
-echo   T = Test / prueba installation
-echo   P = Production / produccion installation
+echo   T = Test installation
+echo   P = Production installation
 choice /C TP /N /M "Choose installation profile [T/P]: "
 if errorlevel 2 (
     set "QTILER_INSTALL_MODE=production"
@@ -176,6 +242,35 @@ if "%QTILER_BEHIND_IIS%"=="1" (
 )
 echo.
 
+REM ----------------------------------------------------------------------
+REM  Step 1d: Ask for the initial QtilerAuth admin password
+REM ----------------------------------------------------------------------
+if exist "%QTILER_ROOT%\.env" (
+    for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /c:"QTILER_DEFAULT_ADMIN_PASSWORD=" "%QTILER_ROOT%\.env" 2^>nul`) do (
+        if /i "%%A"=="QTILER_DEFAULT_ADMIN_PASSWORD" set "QTILER_EXISTING_ADMIN_PASSWORD=%%B"
+    )
+)
+if /i "%QTILER_SETUP_MODE%"=="update" if defined QTILER_EXISTING_ADMIN_PASSWORD (
+    set "QTILER_ADMIN_PASSWORD_PRESERVE=1"
+    set "QTILER_ADMIN_PASSWORD_DISPLAY=preserved from existing .env"
+    echo Existing QtilerAuth admin bootstrap password will be preserved from .env.
+    echo.
+    goto admin_password_ok
+)
+
+:ask_admin_password
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; Add-Type -AssemblyName System.Windows.Forms; $pattern='^[A-Za-z0-9._@#+=-]{8,128}$'; while ($true) { $p=[Microsoft.VisualBasic.Interaction]::InputBox('Choose the initial QtilerAuth administrator password.' + [Environment]::NewLine + [Environment]::NewLine + 'Username: admin' + [Environment]::NewLine + 'Allowed characters: letters, numbers, . _ @ # + = -' + [Environment]::NewLine + 'Length: 8-128 characters' + [Environment]::NewLine + [Environment]::NewLine + 'You will see this password again at the end so you can copy and store it.', 'Qtiler Installer - Admin Password', ''); if ([string]::IsNullOrWhiteSpace($p)) { exit 2 }; $c=[Microsoft.VisualBasic.Interaction]::InputBox('Confirm the initial QtilerAuth administrator password.', 'Qtiler Installer - Confirm Admin Password', ''); if ($p -ne $c) { [System.Windows.Forms.MessageBox]::Show('The passwords do not match. Please try again.', 'Qtiler Installer - Password Mismatch', 'OK', 'Error') > $null; continue }; if ($p -notmatch $pattern) { [System.Windows.Forms.MessageBox]::Show('The password must be 8-128 characters and may only contain letters, numbers, . _ @ # + = -', 'Qtiler Installer - Invalid Password', 'OK', 'Error') > $null; continue }; Write-Output $p; exit 0 }"`) do set "QTILER_ADMIN_PASSWORD=%%I"
+if not defined QTILER_ADMIN_PASSWORD (
+    echo Installation cancelled by user.
+    pause
+    exit /b 1
+)
+set "QTILER_ADMIN_PASSWORD_DISPLAY=%QTILER_ADMIN_PASSWORD%"
+echo Initial QtilerAuth admin password selected for username: admin
+echo.
+
+:admin_password_ok
+
 REM Resolve Qt plugin path (qt5 preferred, qt6 fallback)
 set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins"
 if exist "%QGIS_ROOT%\apps\qt5\plugins" set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins;%QGIS_ROOT%\apps\qt5\plugins"
@@ -191,11 +286,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$envFile = Join-Path '%QTILER_ROOT%' '.env';" ^
   "$qtilerRoot = '%QTILER_ROOT%';" ^
     "$existingEnv = @{};" ^
-    "if (Test-Path $envFile) { Get-Content -LiteralPath $envFile | ForEach-Object { $m = [regex]::Match($_, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$'); if ($m.Success) { $existingEnv[$m.Groups[1].Value] = $m.Groups[2].Value } } }" ^
-    "$adminPassword = ''; if ($existingEnv.ContainsKey('QTILER_DEFAULT_ADMIN_PASSWORD')) { $adminPassword = [string]$existingEnv['QTILER_DEFAULT_ADMIN_PASSWORD'] };" ^
-    "if ([string]::IsNullOrWhiteSpace($adminPassword)) { $bytes = New-Object byte[] 18; $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create(); try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }; $adminPassword = 'Qtiler-' + ([Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','A').Replace('/','B')) }" ^
+    "if (Test-Path $envFile) { Get-Content -LiteralPath $envFile | ForEach-Object { $m = [regex]::Match($_, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$'); if ($m.Success) { $existingEnv[$m.Groups[1].Value] = $m.Groups[2].Value } } };" ^
+    "$adminPassword = '%QTILER_ADMIN_PASSWORD%';" ^
+    "if ('%QTILER_ADMIN_PASSWORD_PRESERVE%' -eq '1' -and $existingEnv.ContainsKey('QTILER_DEFAULT_ADMIN_PASSWORD')) { $adminPassword = [string]$existingEnv['QTILER_DEFAULT_ADMIN_PASSWORD'] };" ^
+    "if ([string]::IsNullOrWhiteSpace($adminPassword)) { Write-Host 'ERROR: QTILER_DEFAULT_ADMIN_PASSWORD is required.'; exit 1 };" ^
   "$nodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $nodeExe) { $nodeExe = 'C:\Program Files\nodejs\node.exe' };" ^
-                "$updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; QTILER_DEFAULT_ADMIN_PASSWORD = $adminPassword; PYTHON_EXE = '%QGIS_ROOT%\bin\python.exe'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ('%QGIS_ROOT%\bin\python.exe ' + (Join-Path $qtilerRoot 'tools\mesh_build.py')); QUANTIZED_MESH_ENGINE_CMD = ($nodeExe + ' ' + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs')); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
+                                                                "$updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; QTILER_DEFAULT_ADMIN_PASSWORD = $adminPassword; PYTHON_EXE = '%QGIS_ROOT%\bin\python.exe'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ('%QGIS_ROOT%\bin\python.exe ' + (Join-Path $qtilerRoot 'tools\mesh_build.py')); QUANTIZED_MESH_ENGINE_CMD = ($nodeExe + ' ' + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs')); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
   "if (Test-Path $envFile) { $ts = Get-Date -Format 'yyyyMMdd_HHmmss'; Copy-Item $envFile ($envFile + '.bak.' + $ts) -Force; $lines = Get-Content -LiteralPath $envFile } elseif (Test-Path (Join-Path $qtilerRoot '.env.example')) { $lines = Get-Content -LiteralPath (Join-Path $qtilerRoot '.env.example') } else { $lines = @('# Qtiler environment configuration - generated by install.bat') };" ^
   "$out = New-Object System.Collections.Generic.List[string]; $seen = @{};" ^
   "foreach ($line in $lines) { $m = [regex]::Match($line, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*='); if ($m.Success -and $updates.Contains($m.Groups[1].Value)) { $k = $m.Groups[1].Value; $out.Add($k + '=' + $updates[$k]); $seen[$k] = $true } else { $patched = $line -ireplace [regex]::Escape('C:\Qtiler'), $qtilerRoot; $out.Add($patched) } };" ^
@@ -217,7 +313,7 @@ echo   QTILER_PUBLIC_HTTPS=%QTILER_HTTPS%
 echo   QTILER_TRUST_PROXY=%QTILER_TRUST_PROXY_VALUE%
 echo   QTILER_ENABLE_HSTS=%QTILER_ENABLE_HSTS_VALUE%
 echo   QTILER_CORS_ALLOWED_ORIGINS=%QTILER_CORS_ALLOWED_ORIGINS_VALUE%
-echo   QTILER_DEFAULT_ADMIN_PASSWORD=generated or preserved in .env
+echo   QTILER_DEFAULT_ADMIN_PASSWORD=%QTILER_ADMIN_PASSWORD_DISPLAY%
 echo.
 echo You can change these values later in %QTILER_ROOT%\.env and restart the QTiler service.
 echo Initial QtilerAuth admin username is: admin
@@ -395,23 +491,27 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
-powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler has been installed successfully.' + [Environment]::NewLine + [Environment]::NewLine + 'Configured profile: %QTILER_INSTALL_MODE%' + [Environment]::NewLine + 'Public URL: %QTILER_PUBLIC_URL%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + 'IIS / HTTPS: %QTILER_BEHIND_IIS% / %QTILER_HTTPS%' + [Environment]::NewLine + [Environment]::NewLine + 'These settings are stored in .env and can be changed after installation. Restart the QTiler service after editing .env.' + [Environment]::NewLine + [Environment]::NewLine + 'QtilerAuth is enabled with a 3-month trial. For license contract questions about the authentication plugin, please contact support@mundogis.se.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler has been installed successfully.' + [Environment]::NewLine + [Environment]::NewLine + 'Setup mode: %QTILER_SETUP_MODE%' + [Environment]::NewLine + 'Configured profile: %QTILER_INSTALL_MODE%' + [Environment]::NewLine + 'Public URL: %QTILER_PUBLIC_URL%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + 'IIS / HTTPS: %QTILER_BEHIND_IIS% / %QTILER_HTTPS%' + [Environment]::NewLine + [Environment]::NewLine + 'Administrator login:' + [Environment]::NewLine + 'Username: admin' + [Environment]::NewLine + 'Password: %QTILER_ADMIN_PASSWORD_DISPLAY%' + [Environment]::NewLine + [Environment]::NewLine + 'For new installs, copy and store this password now. During updates, the existing .env password, users, licenses, uploaded projects, cache and plugin data are preserved.' + [Environment]::NewLine + [Environment]::NewLine + 'These settings are stored in .env and can be changed after installation. Restart the QTiler service after editing .env.' + [Environment]::NewLine + [Environment]::NewLine + 'QtilerAuth is enabled with a 3-month trial unless an existing license was preserved. For license contract questions about the authentication plugin, please contact support@mundogis.se.', 'Qtiler Installation Complete', 'OK', 'Information')" >nul
 
 echo ================================================================
 echo  Qtiler has been installed successfully.
 echo.
 echo  Configuration written to .env:
+echo    Setup mode:     %QTILER_SETUP_MODE%
 echo    Profile:        %QTILER_INSTALL_MODE%
 echo    Public URL:     %QTILER_PUBLIC_URL%
 echo    Port:           %QTILER_PORT%
 echo    IIS:            %QTILER_BEHIND_IIS%
 echo    HTTPS:          %QTILER_HTTPS%
+echo    Admin user:     admin
+echo    Admin password: %QTILER_ADMIN_PASSWORD_DISPLAY%
 echo.
 echo  You can change these settings later in:
 echo    %QTILER_ROOT%\.env
 echo  Restart the QTiler service after editing .env.
 echo.
-echo  QtilerAuth is enabled with a 3-month trial.
+echo  QtilerAuth is enabled. Existing licenses are preserved during update mode;
+echo  new installations start with a 3-month trial.
 echo  For questions about license contracts for this authentication
 echo  plugin, please contact support@mundogis.se.
 echo ================================================================

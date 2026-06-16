@@ -142,6 +142,7 @@ tools/package-projectsearch-plugin.mjs
 tools/package-vectortiles-plugin.mjs
 tools/package-wmscache-plugin.mjs
 tools/mesh_dem_to_terrain_runner.mjs
+tools/package-Qtiler2Hajk-plugin.mjs
 tools/mesh_build.py
 tools/vendorize-mesh-dem-to-terrain.mjs
 tools/package-quantizedmesh-plugin.mjs

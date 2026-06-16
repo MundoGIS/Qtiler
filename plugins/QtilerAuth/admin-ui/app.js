@@ -878,11 +878,7 @@ function renderLayerPermissions() {
     meta.textContent = `${projectLayers.length} layer${projectLayers.length === 1 ? '' : 's'}`;
     titleWrap.append(heading, meta);
 
-    const saveBtn = document.createElement('button');
-    saveBtn.type = 'button';
-    saveBtn.className = 'secondary-button';
-    saveBtn.textContent = 'Save layers';
-    header.append(titleWrap, saveBtn);
+    header.appendChild(titleWrap);
     card.appendChild(header);
 
     const list = document.createElement('div');
@@ -996,64 +992,81 @@ function renderLayerPermissions() {
 
         searchInput.addEventListener('change', () => {
           searchControls.classList.toggle('is-hidden', !searchInput.checked);
+          scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
         });
 
         searchControls.append(searchField, idField, hintField);
         row.append(layerName, excludeToggle, editToggle, searchToggle, searchControls);
+        row.querySelectorAll('input, select').forEach((control) => {
+          if (control === searchInput) return;
+          control.addEventListener('change', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
+        });
+        hintInput.addEventListener('input', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
         list.appendChild(row);
       });
     }
-
-    saveBtn.addEventListener('click', async () => {
-      const rows = Array.from(list.querySelectorAll('.layer-permission-row'));
-      const payload = rows.map((row) => {
-        const layerName = String(row.dataset.layerName || '').trim();
-        const isVectorLayer = row.dataset.vectorLayer === '1';
-        const publicExcluded = !!row.querySelector('.exclude-check')?.checked;
-        const wfsEditable = isVectorLayer && !!row.querySelector('.edit-check')?.checked;
-        const wfsSearchable = isVectorLayer && !!row.querySelector('.search-check')?.checked;
-        const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
-        const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
-        const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
-        const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
-        return {
-          name: layerName,
-          publicExcluded,
-          wfsEditable,
-          wfsSearchable,
-          search: wfsSearchable && searchAttribute && idAttribute
-            ? {
-              name: layerName,
-              idAttribute,
-              searchAttribute,
-              geometryAttribute,
-              hintText: hint,
-              fields: [searchAttribute],
-              titleField: searchAttribute
-            }
-            : null
-        };
-      }).filter((row) => row.name);
-
-      try {
-        const response = await api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`, {
-          method: 'POST',
-          body: { layers: payload }
-        });
-        const permissionRows = Array.isArray(response?.layers) ? response.layers : [];
-        state.layerPermissionsByProject[projectId] = new Map(permissionRows.map((entry) => [String(entry?.name || ''), entry]).filter(([name]) => name));
-        showMessage('success', `Layer permissions saved for ${project.name || projectId}.`);
-        await loadProjects(false);
-      } catch (err) {
-        showMessage('error', parseError(err, 'Unable to save layer permissions.'));
-      }
-    });
 
     card.appendChild(list);
     grid.appendChild(card);
   });
 
   container.appendChild(grid);
+}
+
+const layerPermissionAutosaveTimers = new Map();
+
+function collectLayerPermissionPayload(list) {
+  const rows = Array.from(list.querySelectorAll('.layer-permission-row'));
+  return rows.map((row) => {
+    const layerName = String(row.dataset.layerName || '').trim();
+    const isVectorLayer = row.dataset.vectorLayer === '1';
+    const publicExcluded = !!row.querySelector('.exclude-check')?.checked;
+    const wfsEditable = isVectorLayer && !!row.querySelector('.edit-check')?.checked;
+    const wfsSearchable = isVectorLayer && !!row.querySelector('.search-check')?.checked;
+    const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
+    const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
+    const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
+    const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
+    return {
+      name: layerName,
+      publicExcluded,
+      wfsEditable,
+      wfsSearchable,
+      search: wfsSearchable && searchAttribute && idAttribute
+        ? {
+          name: layerName,
+          idAttribute,
+          searchAttribute,
+          geometryAttribute,
+          hintText: hint,
+          fields: [searchAttribute],
+          titleField: searchAttribute
+        }
+        : null
+    };
+  }).filter((row) => row.name);
+}
+
+function scheduleLayerPermissionAutosave(projectId, projectLabel, list) {
+  const key = String(projectId || '').trim();
+  if (!key) return;
+  const existing = layerPermissionAutosaveTimers.get(key);
+  if (existing) window.clearTimeout(existing);
+  const timer = window.setTimeout(async () => {
+    layerPermissionAutosaveTimers.delete(key);
+    try {
+      const response = await api(`/auth-admin/projects/${encodeURIComponent(key)}/layers`, {
+        method: 'POST',
+        body: { layers: collectLayerPermissionPayload(list) }
+      });
+      const permissionRows = Array.isArray(response?.layers) ? response.layers : [];
+      state.layerPermissionsByProject[key] = new Map(permissionRows.map((entry) => [String(entry?.name || ''), entry]).filter(([name]) => name));
+      showMessage('success', `Layer permissions saved for ${projectLabel}.`, { ttlMs: 2500 });
+    } catch (err) {
+      showMessage('error', parseError(err, 'Unable to save layer permissions.'));
+    }
+  }, 450);
+  layerPermissionAutosaveTimers.set(key, timer);
 }
 
 function renderProjects() {

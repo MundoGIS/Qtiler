@@ -87,6 +87,11 @@ exactly like the licensed product so you can validate users, ACLs, brute-force
 protection, captcha and API-key flows in your own environment. After expiry the
 plugin auto-disables and the base Qtiler server keeps running.
 
+Trial time is counted from the first activation on the machine. Updates and
+reinstalls on the same Windows server do not renew the three-month trial; Qtiler
+persists the trial start/expiry in both runtime data and machine-level trial
+state so the remaining days continue from the original activation.
+
 Open the QtilerAuth admin page and click **“How it works & Security”** for an
 in-product walkthrough of the architecture (available in English, Spanish,
 Swedish and Norwegian). For licensing and pricing contact
@@ -300,10 +305,25 @@ After installation, sign in with the default admin account:
 
 - Username: `admin`
 - Password: value from `QTILER_DEFAULT_ADMIN_PASSWORD`.
-   If not set, the default is `MundoGIS-2026`.
+   `install.bat` asks for this password during installation and writes it to `.env`.
 
 For security, change this password immediately after your first login.
 Do this from the backend admin interface (`/admin`) in the authentication/user management section.
+
+## Updating an existing Windows installation
+When `install.bat` detects an existing `QTiler` Windows service, it asks whether to update the existing installation or perform a new/replacement install.
+
+Choose **Update** when the customer already has users, projects, published maps, caches, plugin settings or a paid QtilerAuth license. Update mode stops the service, preserves runtime state, reinstalls dependencies/service files, and starts Qtiler again.
+
+Preserved state includes:
+
+- `.env` including `QTILER_DEFAULT_ADMIN_PASSWORD`, public URL, ports, QGIS paths and secrets
+- `data/` including `auth.db`, `licenses.json`, plugin state, portals, thumbnails and published map configuration
+- `qgisprojects/`, `cache/`, `config/`, `logs/`, `temp_uploads/`
+- Top-level runtime databases such as `auth.db` and `symbology-style.db` when present
+- Custom/non-bundled plugin folders from `plugins/` when they do not already exist in the new checkout
+
+If updating from a fresh GitHub checkout in a new folder, the installer copies the preserved state from the current service root into the new folder before reinstalling the service. Existing QtilerAuth licenses remain valid on the same machine because the license state and machine fingerprint data are preserved. Trial licenses keep their original start and expiry dates; update mode never grants a fresh three-month trial.
 
 ### Repository layout
 ```
@@ -428,7 +448,7 @@ QGIS_PREFIX=C:\OSGeo4W\apps\qgis
 OSGEO4W_BIN=C:\OSGeo4W\bin
 PYTHON_EXE=C:\OSGeo4W\bin\python.exe
 QT_PLUGIN_PATH=C:\OSGeo4W\apps\qgis\qtplugins
-QTILER_DEFAULT_ADMIN_PASSWORD=MundoGIS-2026
+QTILER_DEFAULT_ADMIN_PASSWORD=<set by install.bat>
 PROJECT_UPLOAD_MAX_BYTES=209715200
 ```
 

@@ -1952,6 +1952,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   };
 
+  const resolveLayerFlagEntry = (flags, layerName) => {
+    const name = String(layerName || '').trim();
+    if (!name || !flags || typeof flags !== 'object') return null;
+    const direct = flags[name] && typeof flags[name] === 'object' ? flags[name] : null;
+    if (direct) return direct;
+    const safeName = safeLayerNameForWfs(name);
+    for (const [key, value] of Object.entries(flags || {})) {
+      if (safeLayerNameForWfs(key) === safeName && value && typeof value === 'object') return value;
+    }
+    return null;
+  };
+
   /**
    * Compute the project extent and CRS from cache index data.
    * Returns { wgs84, native, crs } or null.
@@ -5904,17 +5916,25 @@ ${mapIcon}
       if (req.body?.dryRun === true) {
         return res.json({ ok: true, dryRun: true, issues: [] });
       }
+      const projectLayerFlagsByProject = new Map();
+      for (const entry of layerEntries) {
+        const sourceProjectId = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
+        if (!projectLayerFlagsByProject.has(sourceProjectId)) {
+          projectLayerFlagsByProject.set(sourceProjectId, await readProjectLayerFlags(sourceProjectId));
+        }
+      }
       const layers = layerEntries.map((sourceLayer) => {
         const name = String(sourceLayer?.name || '').trim();
         const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
+        const authFlags = resolveLayerFlagEntry(projectLayerFlagsByProject.get(sourceProjectId), name);
         const themeName = String(sourceLayer?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : '')).trim();
         const isTheme = sourceLayer?.isTheme === true || !!themeName;
         const layerRuleKey = `${sourceProjectId}::${name}`;
         const rule = layerRulesInput[layerRuleKey] && typeof layerRulesInput[layerRuleKey] === 'object'
           ? layerRulesInput[layerRuleKey]
           : ((layerRulesInput[name] && typeof layerRulesInput[name] === 'object') ? layerRulesInput[name] : {});
-        const fallbackSearchable = sourceLayer?.searchable === true;
-        const fallbackEditable = sourceLayer?.editable === true;
+        const fallbackSearchable = sourceLayer?.searchable === true || authFlags?.wfsSearchable === true;
+        const fallbackEditable = sourceLayer?.editable === true || authFlags?.wfsEditable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
         const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || '').trim() || null;
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
@@ -5932,7 +5952,7 @@ ${mapIcon}
           group: incomingGroupByName[layerRuleKey] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: isTheme ? false : ((rule.searchable === true) || fallbackSearchable),
           editable: isTheme ? false : ((rule.editable === true) || fallbackEditable),
-          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true),
+          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true || fallbackServeAsWfs || authFlags?.wfsEditable === true),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,

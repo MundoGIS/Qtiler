@@ -46,11 +46,16 @@ export const registerPluginRoutes = ({
   removeRecursive
 }) => {
   const licenseStorePath = path.join(dataDir, 'licenses.json');
-  // LICENSE_SECRET is now ONLY used for signing locally-generated trial
-  // metadata (so customers can't extend their own trial by editing
-  // data/licenses.json). It is NEVER required to verify commercial license
-  // keys — those are verified with the embedded RSA public key below.
-  // If absent, trial activation timestamps simply aren't tamper-protected.
+  const machineTrialStorePath = path.join(
+    process.env.ProgramData || (process.platform === 'win32' ? 'C:\\ProgramData' : path.join(os.homedir(), '.qtiler')),
+    'Qtiler',
+    'plugin-trials.json'
+  );
+  // LICENSE_SECRET is used for legacy trial signatures and trial-license
+  // activation timestamps. Built-in 90-day trial records are now signed from
+  // the machine fingerprint so they survive .env regeneration on reinstall.
+  // It is NEVER required to verify commercial license keys — those are
+  // verified with the embedded RSA public key below.
   const licenseSecret = process.env.LICENSE_SECRET || '';
   // Allow the developer machine to override the embedded key (so we can test
   // a freshly rotated key without rebuilding) and to point at an external
@@ -204,16 +209,70 @@ export const registerPluginRoutes = ({
     return false;
   };
 
-  const signTrial = (pluginName, instanceId, startedAt, expiresAt) => {
-    if (!licenseSecret) return null;
+  const getMachineTrialSecret = () => crypto
+    .createHash('sha256')
+    .update(`qtiler-plugin-trial|${getMachineFingerprint()}`)
+    .digest('hex');
+
+  const signTrialWithSecret = (secret, pluginName, instanceId, startedAt, expiresAt) => {
+    if (!secret) return null;
     const raw = `${pluginName || ''}|${instanceId || ''}|${startedAt || ''}|${expiresAt || ''}`;
-    return crypto.createHmac('sha256', licenseSecret).update(raw).digest('hex');
+    return crypto.createHmac('sha256', secret).update(raw).digest('hex');
+  };
+
+  const signTrial = (pluginName, instanceId, startedAt, expiresAt) => {
+    return signTrialWithSecret(getMachineTrialSecret(), pluginName, instanceId, startedAt, expiresAt);
   };
 
   const verifyTrialSignature = (pluginName, instanceId, trial) => {
-    if (!trial || !trial.sig || !licenseSecret) return false;
-    const expected = signTrial(pluginName, instanceId, trial.startedAt, trial.expiresAt);
-    return expected === trial.sig;
+    if (!trial || !trial.sig) return false;
+    const modern = signTrial(pluginName, instanceId, trial.startedAt, trial.expiresAt);
+    if (modern && modern === trial.sig) return true;
+    const legacy = signTrialWithSecret(licenseSecret, pluginName, instanceId, trial.startedAt, trial.expiresAt);
+    return !!legacy && legacy === trial.sig;
+  };
+
+  const normalizeTrialSignature = (pluginName, instanceId, trial) => {
+    if (!trial || !trial.startedAt || !trial.expiresAt) return trial;
+    return { ...trial, sig: signTrial(pluginName, instanceId, trial.startedAt, trial.expiresAt) };
+  };
+
+  const readMachineTrialStore = () => {
+    try {
+      if (!fs.existsSync(machineTrialStorePath)) return { plugins: {} };
+      const parsed = JSON.parse(fs.readFileSync(machineTrialStorePath, 'utf8'));
+      return parsed && typeof parsed === 'object' && parsed.plugins && typeof parsed.plugins === 'object'
+        ? parsed
+        : { plugins: {} };
+    } catch {
+      return { plugins: {} };
+    }
+  };
+
+  const writeMachineTrialStore = (store) => {
+    try {
+      fs.mkdirSync(path.dirname(machineTrialStorePath), { recursive: true });
+      fs.writeFileSync(machineTrialStorePath, JSON.stringify(store, null, 2), 'utf8');
+    } catch (err) {
+      console.warn('[licenses] Failed to save machine trial store', err?.message || err);
+    }
+  };
+
+  const persistMachineTrial = (pluginName, trial) => {
+    if (!trial?.startedAt || !trial?.expiresAt) return;
+    const machineStore = readMachineTrialStore();
+    machineStore.plugins[pluginName] = {
+      startedAt: trial.startedAt,
+      expiresAt: trial.expiresAt,
+      sig: trial.sig
+    };
+    writeMachineTrialStore(machineStore);
+  };
+
+  const readMachineTrial = (pluginName, instanceId) => {
+    const trial = readMachineTrialStore().plugins?.[pluginName] || null;
+    if (!trial || !verifyTrialSignature(pluginName, instanceId, trial)) return null;
+    return normalizeTrialSignature(pluginName, instanceId, trial);
   };
 
   const signTrialActivation = (pluginName, instanceId, activatedAt) => {
@@ -236,13 +295,18 @@ export const registerPluginRoutes = ({
     try {
       const dbTrial = getPluginTrial(dataDir, pluginName);
       if (dbTrial) {
-        // Restore trial into the JSON store from the persistent DB record
-        if (!entry.trial || entry.trial.startedAt !== dbTrial.first_installed_at) {
-          entry.trial = {
-            startedAt: dbTrial.first_installed_at,
-            expiresAt: dbTrial.trial_expires_at,
-            sig: dbTrial.trial_sig
-          };
+        let trial = {
+          startedAt: dbTrial.first_installed_at,
+          expiresAt: dbTrial.trial_expires_at,
+          sig: dbTrial.trial_sig
+        };
+        if (!verifyTrialSignature(pluginName, store.instanceId, trial)) {
+          throw new Error('stored trial signature is invalid');
+        }
+        trial = normalizeTrialSignature(pluginName, store.instanceId, trial);
+        persistMachineTrial(pluginName, trial);
+        if (!entry.trial || entry.trial.startedAt !== trial.startedAt || entry.trial.expiresAt !== trial.expiresAt || entry.trial.sig !== trial.sig) {
+          entry.trial = trial;
           saveLicenseStore(store);
         }
         return entry.trial;
@@ -251,18 +315,28 @@ export const registerPluginRoutes = ({
       console.warn('[licenses] Failed to read trial from auth.db', err?.message || err);
     }
 
+    const machineTrial = readMachineTrial(pluginName, store.instanceId);
+    if (!entry.trial && machineTrial) {
+      entry.trial = machineTrial;
+      saveLicenseStore(store);
+    }
+
     if (!entry.trial) {
       const startedAt = new Date().toISOString();
       const trialEnds = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       const sig = signTrial(pluginName, store.instanceId, startedAt, trialEnds);
       entry.trial = { startedAt, expiresAt: trialEnds, sig };
       saveLicenseStore(store);
+    } else if (verifyTrialSignature(pluginName, store.instanceId, entry.trial)) {
+      entry.trial = normalizeTrialSignature(pluginName, store.instanceId, entry.trial);
+      saveLicenseStore(store);
     }
+    persistMachineTrial(pluginName, entry.trial);
 
     // Persist to auth.db so it survives uninstall/reinstall
     try {
       const existing = getPluginTrial(dataDir, pluginName);
-      if (!existing && entry.trial) {
+      if (entry.trial && (!existing || existing.trial_sig !== entry.trial.sig || existing.trial_expires_at !== entry.trial.expiresAt || existing.first_installed_at !== entry.trial.startedAt)) {
         upsertPluginTrial(dataDir, {
           pluginName,
           firstInstalledAt: entry.trial.startedAt,
@@ -343,9 +417,15 @@ export const registerPluginRoutes = ({
     }
 
     if (entry.trial && !verifyTrialSignature(pluginName, store.instanceId, entry.trial)) {
-      status = 'expired';
-      daysLeft = 0;
-      return { status, expiresAt: null, daysLeft, code: 'trial_tampered', warning: trialTamperWarning };
+      const machineTrial = readMachineTrial(pluginName, store.instanceId);
+      if (machineTrial) {
+        entry.trial = machineTrial;
+        saveLicenseStore(store);
+      } else {
+        status = 'expired';
+        daysLeft = 0;
+        return { status, expiresAt: null, daysLeft, code: 'trial_tampered', warning: trialTamperWarning };
+      }
     }
 
     const trial = ensureTrial(store, pluginName);
@@ -432,6 +512,18 @@ export const registerPluginRoutes = ({
       }
     }
   };
+
+  const licenseEnforceIntervalMs = Math.max(
+    60 * 1000,
+    Number(process.env.QTILER_LICENSE_ENFORCE_INTERVAL_MS || 5 * 60 * 1000) || 5 * 60 * 1000
+  );
+  const licenseEnforceTimer = setInterval(() => {
+    enforceLicenses().catch((err) => {
+      console.warn('[licenses] Periodic license enforcement failed', err?.message || err);
+    });
+  }, licenseEnforceIntervalMs);
+  if (typeof licenseEnforceTimer.unref === 'function') licenseEnforceTimer.unref();
+
   if (pluginManager && typeof pluginManager.setLicenseGuard === 'function') {
     pluginManager.setLicenseGuard((pluginName) => {
       if (!pricing[pluginName]) return true;
@@ -569,7 +661,8 @@ export const registerPluginRoutes = ({
     });
   });
 
-  app.get('/licenses/status', requireAdminIfEnabled, (req, res) => {
+  app.get('/licenses/status', requireAdminIfEnabled, async (req, res) => {
+    await enforceLicenses();
     const store = loadLicenseStore();
     ensureInstanceId(store);
     const out = {
