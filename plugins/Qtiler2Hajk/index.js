@@ -853,6 +853,115 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return res.send(rebased);
   };
 
+  const patchHajkRuntimeVectorIcons = async () => {
+    const candidates = [];
+    const walk = async (dir) => {
+      let entries;
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (/\.js$/i.test(entry.name)) {
+          candidates.push(full);
+        }
+      }
+    };
+
+    await walk(installRoot);
+    let patched = 0;
+    let already = 0;
+    const anchor = 'legendIcon:e.legendIcon,lineColor:e.lineColor';
+    const iconAnchor = 'legendIcon:e.legendIcon,icon:e.icon,lineColor:e.lineColor';
+    const replacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
+    const sldFallbackAnchor = 'catch(n){const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const sldFallbackLegacyReplacement = 'catch(n){this.config.icon&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const sldFallbackReplacement = 'catch(n){(this.config.qtilerStyleRules||this.config.icon)&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const qtilerRulesStyleAnchor = '(e.icon||e.lineColor||e.lineWidth||e.fillColor||e.lineStyle)&&this.layer.setStyle(this.createStyle())';
+    const qtilerRulesStyleReplacement = '(e.qtilerStyleRules||e.icon||e.lineColor||e.lineWidth||e.fillColor||e.lineStyle)&&this.layer.setStyle(this.createStyle())';
+    const qtilerRulesAnchor = 'function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesLegacyReplacement = 'const U=this.config.qtilerStyleRules||[];function Q($){if(!Array.isArray(U)||!U.length)return null;const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):void 0,te=String(Q==null?"":Q),oe=String(Z.value==null?"":Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:null}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesOldNormalizerReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){$=String($==null?"":$).trim();for(let G=0;G<2;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));return $}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):$&&$.getProperties?$.getProperties()[Z.property]:void 0,te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){if($&&typeof $=="object")try{$=JSON.stringify($)}catch{}$=String($==null?"":$).trim();for(let G=0;G<3;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));($.startsWith("\\\\\\\"")&&$.endsWith("\\\\\\\""))&&($=$.slice(2,-2));return $.replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'")}function W($,G){if(!$||!G)return;let Z=$.get?$.get(G):void 0;if(Z!==void 0&&Z!==null)return Z;const Q=$.getProperties?$.getProperties():{};if(Object.prototype.hasOwnProperty.call(Q,G))return Q[G];const te=String(G).toLowerCase(),oe=Object.keys(Q).find(Ee=>String(Ee).toLowerCase()===te);return oe?Q[oe]:void 0}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=W($,Z.property),te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}})||U[0];return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number.isFinite(Number(G.anchorX))?Number(G.anchorX):.5,Number.isFinite(Number(G.anchorY))?Number(G.anchorY):.5]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesReturnAnchor = 'return[new ur(X())]}}class';
+    const qtilerRulesReturnReplacement = 'return U.length?Q:[new ur(X())]}}class';
+    for (const filePath of candidates) {
+      let raw;
+      try {
+        raw = await fs.promises.readFile(filePath, 'utf8');
+      } catch {
+        continue;
+      }
+      if (!raw.includes('createStyle(e){const n=this.config.icon')) continue;
+      let next = raw;
+      if (next.includes(replacement)) {
+        already++;
+      } else {
+        const activeAnchor = next.includes(iconAnchor) ? iconAnchor : anchor;
+        const count = next.split(activeAnchor).length - 1;
+        if (count > 0) {
+          next = next.split(activeAnchor).join(replacement);
+          patched += count;
+        }
+      }
+      if (next.includes(qtilerRulesOldNormalizerReplacement) && !next.includes('slice(2,-2)')) {
+        const oldNormalizerCount = next.split(qtilerRulesOldNormalizerReplacement).length - 1;
+        next = next.split(qtilerRulesOldNormalizerReplacement).join(qtilerRulesReplacement);
+        patched += oldNormalizerCount;
+      }
+      if (!next.includes('function z($)')) {
+        const legacyRulesCount = next.split(qtilerRulesLegacyReplacement).length - 1;
+        if (legacyRulesCount > 0) {
+          next = next.split(qtilerRulesLegacyReplacement).join(qtilerRulesReplacement);
+          patched += legacyRulesCount;
+        }
+        const rulesCount = legacyRulesCount > 0 ? 0 : (next.split(qtilerRulesAnchor).length - 1);
+        if (rulesCount > 0) {
+          next = next.split(qtilerRulesAnchor).join(qtilerRulesReplacement);
+          patched += rulesCount;
+        }
+      }
+      if (next.includes(qtilerRulesAnchor) || !next.includes('return U.length?Q:[new ur(X())]')) {
+        const returnCount = next.split(qtilerRulesReturnAnchor).length - 1;
+        if (returnCount > 0) {
+          next = next.split(qtilerRulesReturnAnchor).join(qtilerRulesReturnReplacement);
+          patched += returnCount;
+        }
+      }
+      if (!next.includes(qtilerRulesStyleReplacement)) {
+        const styleTriggerCount = next.split(qtilerRulesStyleAnchor).length - 1;
+        if (styleTriggerCount > 0) {
+          next = next.split(qtilerRulesStyleAnchor).join(qtilerRulesStyleReplacement);
+          patched += styleTriggerCount;
+        }
+      }
+      if (!next.includes(sldFallbackReplacement)) {
+        const legacyFallbackCount = next.split(sldFallbackLegacyReplacement).length - 1;
+        if (legacyFallbackCount > 0) {
+          next = next.split(sldFallbackLegacyReplacement).join(sldFallbackReplacement);
+          patched += legacyFallbackCount;
+        }
+        const fallbackCount = legacyFallbackCount > 0 ? 0 : (next.split(sldFallbackAnchor).length - 1);
+        if (fallbackCount > 0) {
+          next = next.split(sldFallbackAnchor).join(sldFallbackReplacement);
+          patched += fallbackCount;
+        }
+      }
+      if (next !== raw) {
+        await fs.promises.writeFile(filePath, next, 'utf8');
+      }
+    }
+    if (patched || already) {
+      console.log(`[${pluginSlug}] Hajk runtime vector icon patch: patched=${patched}, already=${already}`);
+    }
+  };
+
+  await patchHajkRuntimeVectorIcons();
+
   const adminOnly = ensureAdmin(security);
   const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
   const portalEditorOnly = (req, res, next) => {
@@ -3782,9 +3891,10 @@ ${mapIcon}
   // /qgis-svg/* to use the colorizer endpoint when an icon.color is set.
   // This is needed because OL Icon `color` doesn't tint SVGs whose paths
   // already have explicit fill attributes.
-  const rewriteSvgIconColors = (style) => {
+  const rewriteSvgIconColors = (style, baseUrl = '') => {
     try {
       const cloned = JSON.parse(JSON.stringify(style));
+      const normalizedBaseUrl = String(baseUrl || '').replace(/\/+$/, '');
       const visit = (node) => {
         if (!node || typeof node !== 'object') return;
         if (Array.isArray(node)) { node.forEach(visit); return; }
@@ -3799,6 +3909,9 @@ ${mapIcon}
             node.icon.src = `${colored}?color=${encodeURIComponent('#' + m[1])}`;
           } else {
             node.icon.src = colored;
+          }
+          if (normalizedBaseUrl && node.icon.src.startsWith('/')) {
+            node.icon.src = `${normalizedBaseUrl}${node.icon.src}`;
           }
         }
         for (const k of Object.keys(node)) visit(node[k]);
@@ -3937,6 +4050,58 @@ ${mapIcon}
     return Math.max(MIN_POINT_ICON_SIZE, Math.min(MAX_POINT_ICON_SIZE, n));
   };
 
+  const hajkPointSizeFromIconScale = (scale) => {
+    const n = Number(scale);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT_POINT_ICON_SIZE;
+    return clampPointIconSize(n * 480, DEFAULT_POINT_ICON_SIZE);
+  };
+
+  const hajkMapPointSizeFromIconScale = (scale) => {
+    const n = Number(scale);
+    if (!Number.isFinite(n) || n <= 0) return 8;
+    return Math.max(0.05, Math.min(8, n * 8));
+  };
+
+  const metersPerUnitForProjection = (projCode = '') => String(projCode).toUpperCase() === 'EPSG:4326' ? 111319.49079327358 : 1;
+
+  const scaleDenominatorToResolution = (denominator, projCode = '') => {
+    const value = Number(denominator);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return (value * 0.00028) / metersPerUnitForProjection(projCode);
+  };
+
+  const firstZoomAtOrBelowResolution = (resolutions, targetResolution) => {
+    if (!Array.isArray(resolutions) || !Number.isFinite(targetResolution) || targetResolution <= 0) return null;
+    for (let index = 0; index < resolutions.length; index++) {
+      const resolution = Number(resolutions[index]);
+      if (Number.isFinite(resolution) && resolution <= targetResolution) return index;
+    }
+    return resolutions.length ? resolutions.length - 1 : null;
+  };
+
+  const lastZoomAtOrAboveResolution = (resolutions, targetResolution) => {
+    if (!Array.isArray(resolutions) || !Number.isFinite(targetResolution) || targetResolution <= 0) return null;
+    let found = null;
+    for (let index = 0; index < resolutions.length; index++) {
+      const resolution = Number(resolutions[index]);
+      if (Number.isFinite(resolution) && resolution >= targetResolution) found = index;
+    }
+    return found;
+  };
+
+  const toHajkVectorScaleZoomOptions = (styleDef, resolutions, projCode = '') => {
+    const rule = unwrapPrimaryStyleRule(styleDef);
+    const out = {};
+    const maxScaleResolution = scaleDenominatorToResolution(rule?.maxScale, projCode);
+    const minScaleResolution = scaleDenominatorToResolution(rule?.minScale, projCode);
+    const minZoom = firstZoomAtOrBelowResolution(resolutions, maxScaleResolution);
+    const maxZoom = lastZoomAtOrAboveResolution(resolutions, minScaleResolution);
+    if (minZoom !== null) out.minZoom = minZoom;
+    if (maxZoom !== null) out.maxZoom = maxZoom;
+    if (out.minZoom != null && out.maxZoom != null && out.maxZoom < out.minZoom) delete out.maxZoom;
+    return out;
+  };
+
   const toHajkVectorStyleOptions = (styleDef, layer = {}) => {
     const rule = unwrapPrimaryStyleRule(styleDef);
     const geometryType = String(layer?.geometryType || '').toLowerCase();
@@ -3952,8 +4117,8 @@ ${mapIcon}
       if (icon && typeof icon === 'object' && typeof icon.src === 'string' && icon.src.trim()) {
         out.icon = icon.src.trim();
         const scale = numberOrNull(icon.scale);
-        if (scale !== null && scale > 0) out.pointSize = clampPointIconSize(scale * 8);
-        else out.pointSize = DEFAULT_POINT_ICON_SIZE;
+        if (scale !== null && scale > 0) out.pointSize = hajkMapPointSizeFromIconScale(scale);
+        else out.pointSize = 8;
       }
       const circle = rule.circle || null;
       if (circle && typeof circle === 'object') {
@@ -3970,7 +4135,7 @@ ${mapIcon}
       if (lineDash.length) out.lineStyle = lineDash.length > 1 && lineDash[0] <= lineDash[1] ? 'dot' : 'dash';
     }
 
-    if (geometryType.includes('point')) out.pointSize = clampPointIconSize(out.pointSize, DEFAULT_POINT_ICON_SIZE);
+    if (geometryType.includes('point') && !out.icon) out.pointSize = clampPointIconSize(out.pointSize, DEFAULT_POINT_ICON_SIZE);
     if (!out.fillColor && geometryType.includes('polygon')) out.fillColor = 'rgba(59, 130, 246, 0.25)';
     if (!out.lineColor && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineColor = '#2563eb';
     if (!out.lineWidth && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineWidth = 2;
@@ -4049,6 +4214,9 @@ ${mapIcon}
     if ((literal.startsWith("'") && literal.endsWith("'")) || (literal.startsWith('"') && literal.endsWith('"'))) {
       literal = literal.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
     }
+    if ((literal.startsWith("'") && literal.endsWith("'")) || (literal.startsWith('"') && literal.endsWith('"'))) {
+      literal = literal.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+    }
     const prop = `<ogc:PropertyName>${xmlEscape(field)}</ogc:PropertyName>`;
     const lit = `<ogc:Literal>${xmlEscape(literal)}</ogc:Literal>`;
     const comparison = {
@@ -4066,6 +4234,50 @@ ${mapIcon}
     return `<ogc:Filter><ogc:${comparison}>${prop}${lit}</ogc:${comparison}></ogc:Filter>`;
   };
 
+  const parseQtilerRuleFilter = (filter) => {
+    const raw = String(filter || '').trim();
+    if (!raw) return null;
+    const match = raw.match(/^\[([^\]]+)\]\s*(==|!=|>=|<=|>|<|LIKE)\s*(.+)$/i);
+    if (!match) return null;
+    let value = match[3].trim();
+    for (let index = 0; index < 2; index++) {
+      if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+        value = value.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+      }
+    }
+    if (value.startsWith('\\"') && value.endsWith('\\"')) {
+      value = value.slice(2, -2);
+    }
+    value = value.replace(/\\"/g, '"').replace(/\\'/g, "'");
+    return {
+      property: match[1].trim(),
+      operator: match[2].toUpperCase(),
+      value
+    };
+  };
+
+  const toHajkRuntimeStyleRules = (styleDef, baseUrl = '') => {
+    const entries = getHajkLegendStyleEntries(styleDef, {});
+    return entries
+      .map((entry) => {
+        if (!entry?.icon || typeof entry.icon !== 'object' || !entry.icon.src) return null;
+        const filter = parseQtilerRuleFilter(entry.filter);
+        const fromScale = Number(entry.icon.scale) > 0 ? hajkMapPointSizeFromIconScale(entry.icon.scale) : null;
+        const explicitPointSize = Number(entry.pointSize);
+        const pointSize = fromScale ?? (Number.isFinite(explicitPointSize) ? explicitPointSize : DEFAULT_POINT_ICON_SIZE);
+        return {
+          ...(filter || {}),
+          icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
+          pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
+          anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
+          anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5,
+          symbolXOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolXOffset || ''),
+          symbolYOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolYOffset || '')
+        };
+      })
+      .filter(Boolean);
+  };
+
   const sldScale = (rule) => {
     const parts = [];
     const minDenominator = Number(rule?.minScale);
@@ -4079,7 +4291,7 @@ ${mapIcon}
     return parts.join('');
   };
 
-  const toHajkVectorSldText = (styleDef, layer = {}) => {
+  const toHajkVectorSldText = (styleDef, layer = {}, baseUrl = '') => {
     if (!Array.isArray(styleDef) || !styleDef.length) return '';
     const geometryType = String(layer?.geometryType || '').toLowerCase();
     const rules = [];
@@ -4109,7 +4321,7 @@ ${mapIcon}
         if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
           const explicitPointSize = numberOrNull(entry.pointSize);
           const fromScale = (Number(entry.icon.scale) || 0) > 0
-            ? clampPointIconSize(Number(entry.icon.scale) * 8, DEFAULT_POINT_ICON_SIZE)
+            ? hajkPointSizeFromIconScale(entry.icon.scale)
             : DEFAULT_POINT_ICON_SIZE;
           const size = clampPointIconSize(explicitPointSize ?? fromScale, DEFAULT_POINT_ICON_SIZE);
 
@@ -4158,6 +4370,14 @@ ${mapIcon}
     const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
     if (!baseUrl || !name || !pid) return '';
     return `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(name)}?project=${encodeURIComponent(pid)}`;
+  };
+
+  const makeWmsLegendUrl = (baseUrl, layerName, projectId, options = {}) => {
+    const name = String(layerName || '').trim();
+    const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
+    if (!baseUrl || !name || !pid) return '';
+    const wait = options.wait === true ? '&QTILER_WAIT_LEGEND=1' : '';
+    return `${baseUrl}/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.0.0&FORMAT=image/png&LAYER=${encodeURIComponent(name)}${wait}`;
   };
 
   const svgAttr = (value) => String(value == null ? '' : value).replace(/[<>&"']/g, '');
@@ -4228,15 +4448,119 @@ ${mapIcon}
     };
   };
 
+  const toAbsoluteHajkIconSrc = (src, baseUrl = '') => {
+    const raw = String(src || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+    if (raw.startsWith('/qgis-svg/') || raw.startsWith('/qgis-svg-colored/')
+        || raw.startsWith('/qtiler-symbology-svg/') || raw.startsWith('/qtiler-symbology-svg-colored/')) {
+      return baseUrl ? `${String(baseUrl).replace(/\/+$/, '')}${raw}` : raw;
+    }
+    return raw;
+  };
+
+  const resolveLocalSvgIconPath = (src) => {
+    let pathname = String(src || '').trim();
+    if (!pathname) return null;
+    try {
+      if (/^https?:\/\//i.test(pathname)) pathname = new URL(pathname).pathname;
+    } catch {
+      return null;
+    }
+    try {
+      pathname = decodeURIComponent(pathname.split('?')[0]).replace(/\\/g, '/');
+    } catch {
+      pathname = pathname.split('?')[0].replace(/\\/g, '/');
+    }
+    const qgisPrefixes = ['/qgis-svg-colored/', '/qgis-svg/'];
+    for (const prefix of qgisPrefixes) {
+      if (pathname.startsWith(prefix)) {
+        const rel = pathname.slice(prefix.length).replace(/\.\.+/g, '');
+        const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
+        return path.join(qgisPrefix, 'svg', rel);
+      }
+    }
+    const qtilerPrefixes = ['/qtiler-symbology-svg-colored/', '/qtiler-symbology-svg/'];
+    for (const prefix of qtilerPrefixes) {
+      if (pathname.startsWith(prefix)) {
+        const rel = pathname.slice(prefix.length).replace(/\.\.+/g, '');
+        return path.join(dataRoot, 'Qtiler-symbology', rel);
+      }
+    }
+    return null;
+  };
+
+  const prepareInlineSvgContent = (content, color = '') => {
+    let svg = String(content || '')
+      .replace(/<\?xml[^>]*>/gi, '')
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .trim();
+    if (!/<svg\b/i.test(svg)) return '';
+    if (!/viewBox\s*=/i.test(svg)) {
+      const wMatch = svg.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
+      const hMatch = svg.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
+      if (wMatch && hMatch) svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}" `);
+    }
+    const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(String(color || '').trim());
+    if (colorMatch) {
+      const fillColor = `#${colorMatch[1]}`;
+      svg = svg.replace(/fill\s*=\s*"(?!none)([^"]*)"/gi, `fill="${fillColor}"`);
+      svg = svg.replace(/fill\s*=\s*'(?!none)([^']*)'/gi, `fill='${fillColor}'`);
+      svg = svg.replace(/fill\s*:\s*(?!none)#?[0-9a-fA-F]{3,8}/gi, `fill:${fillColor}`);
+      svg = svg.replace(/fill\s*:\s*(?!none)rgb\([^)]+\)/gi, `fill:${fillColor}`);
+      if (!/fill\s*=|fill\s*:/i.test(svg)) svg = svg.replace(/<svg\b/i, `<svg fill="${fillColor}"`);
+    }
+    return svg;
+  };
+
+  const inlineSvgIconForLegend = (src, color, x, y, size) => {
+    const filePath = resolveLocalSvgIconPath(src);
+    if (!filePath) return '';
+    let effectiveColor = color;
+    if (!effectiveColor) {
+      try {
+        effectiveColor = new URL(String(src), 'http://qtiler.local').searchParams.get('color') || '';
+      } catch {
+        effectiveColor = '';
+      }
+    }
+    let content;
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      return '';
+    }
+    const svg = prepareInlineSvgContent(content, effectiveColor);
+    if (!svg) return '';
+    return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs) => {
+      const cleanedAttrs = String(attrs || '')
+        .replace(/\s(?:x|y|width|height)=["'][^"']*["']/gi, '')
+        .replace(/\s(?:x|y|width|height)=[^\s>]*/gi, '');
+      return `<svg${cleanedAttrs} x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet">`;
+    });
+  };
+
   const hajkLegendSymbolSvg = (entry = {}, layer = {}, rowIndex = 0, options = {}) => {
     const width = Number(options.width) || 36;
     const height = Number(options.height) || 24;
+    const baseUrl = options.baseUrl || '';
     const geometryType = String(layer?.geometryType || '').toLowerCase();
     const fallbackStroke = '#2563eb';
     const fallbackFill = geometryType.includes('polygon') ? 'rgba(59,130,246,0.25)' : '#3b82f6';
     if (entry.icon && typeof entry.icon === 'object') {
-      const iconPx = clampPointIconSize((Number(entry.icon.scale) || 0) > 0 ? Number(entry.icon.scale) * 8 : DEFAULT_POINT_ICON_SIZE, DEFAULT_POINT_ICON_SIZE);
-      const legendSize = Math.max(14, Math.min(64, Math.round(iconPx * 0.8)));
+      const src = toAbsoluteHajkIconSrc(entry.icon.src, baseUrl);
+      const legendSize = Math.max(16, Math.min(28, Number(entry.icon.legendSize) || 22));
+      if (src) {
+        const x = (width - legendSize) / 2;
+        const y = (height - legendSize) / 2;
+        const inlineSvg = inlineSvgIconForLegend(src, entry.icon.color, x, y, legendSize);
+        if (inlineSvg) return { defs: '', body: inlineSvg };
+        return {
+          defs: '',
+          body: `<image href="${xmlEscape(src)}" x="${x}" y="${y}" width="${legendSize}" height="${legendSize}" preserveAspectRatio="xMidYMid meet"/>`
+        };
+      }
       const iconColor = svgAttr(entry.icon.color || '#2563eb');
       const strokeColor = svgAttr(entry.icon.strokeColor || '#1d4ed8');
       const strokeWidth = Math.max(0.8, Math.min(2.5, Number(entry.icon.strokeWidth) || 1.1));
@@ -4271,23 +4595,28 @@ ${mapIcon}
     return { defs: '', body: `<path d="M4 ${height - 6} L${width - 4} 6" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"${dash}/>` };
   };
 
-  const toHajkVectorRuleLegendIcon = (styleDef, layer = {}) => {
-    const entry = getHajkLegendStyleEntries(styleDef, layer)[0];
+  const toHajkVectorRuleLegendIcon = (styleDef, layer = {}, baseUrl = '') => {
+     const entries = getHajkLegendStyleEntries(styleDef, layer);
+     if (entries.length !== 1) return '';
+     const entry = entries[0];
     if (!entry) return '';
+    if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
+       return toAbsoluteHajkIconSrc(entry.icon.src, baseUrl);
+    }
     const symbol = hajkLegendSymbolSvg(entry, layer, 0, { width: 32, height: 32 });
     return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${symbol.defs}${symbol.body}</svg>`);
   };
 
-  const toHajkVectorRuleLegend = (styleDef, layer = {}) => {
+  const toHajkVectorRuleLegend = (styleDef, layer = {}, baseUrl = '') => {
     const entries = getHajkLegendStyleEntries(styleDef, layer);
     if (!entries.length) return '';
-    if (entries.length === 1) return toHajkVectorRuleLegendIcon(styleDef, layer);
+    if (entries.length === 1) return toHajkVectorRuleLegendIcon(styleDef, layer, baseUrl);
     const rowHeight = 28;
     const width = 240;
     const height = Math.max(32, entries.length * rowHeight + 4);
     const defs = [];
     const rows = entries.map((entry, index) => {
-      const symbol = hajkLegendSymbolSvg(entry, layer, index, { width: 34, height: 22 });
+      const symbol = hajkLegendSymbolSvg(entry, layer, index, { width: 34, height: 22, baseUrl });
       if (symbol.defs) defs.push(symbol.defs);
       const label = String(entry.legendLabel || entry.label || entry.name || `${layer?.title || layer?.name || 'Rule'} ${index + 1}`).trim();
       const y = 4 + index * rowHeight;
@@ -4438,7 +4767,7 @@ ${mapIcon}
         if (layer.wfsStyle) {
           if (typeof layer.wfsStyle === 'object') {
             styleName = safeStyleName;
-            hajkStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle);
+            hajkStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle, baseUrl);
             const patternRuntime = extractRuntimePatternStyle(hajkStyles[styleName], {
               designerOptions: layer.designerOptions,
               geometryType: layer.geometryType
@@ -4449,7 +4778,7 @@ ${mapIcon}
           }
         } else if (cLayer && cLayer.origoStyle) {
           styleName = safeStyleName;
-          hajkStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+          hajkStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle, baseUrl);
           const patternRuntime = extractRuntimePatternStyle(hajkStyles[styleName], {
             designerOptions: layer.designerOptions,
             geometryType: layer.geometryType
@@ -4533,7 +4862,10 @@ ${mapIcon}
           queryable: true,
           visible: layer.visible !== false,
           style: thumbStyleName,
-          thumbnail: thumbUrl
+          thumbnail: thumbUrl,
+          wmsLegendMode: layer.wmsLegendMode,
+          wmsLegendIcon: layer.wmsLegendIcon,
+          wmsLegendUrl: layer.wmsLegendUrl
         };
         // Restrict GetFeatureInfo popup attributes to the user-defined list.
         // Origo `attributes` filters which fields are shown for both WMS
@@ -4900,14 +5232,32 @@ ${mapIcon}
          : `${String(l.source || 'qtiler').replace(/[^A-Za-z0-9]/g, '_')}_${String(l.name || l.id || 'layer').replace(/[^A-Za-z0-9]/g, '_')}`;
        const visibleAtStart = l.visible !== false;
        const layerListTargetId = hajkLayerId;
+      let layerLegendIcon = l.thumbnail || '';
        
        if (lSource && lSource.type === 'WFS') {
-           const styleOptions = toHajkVectorStyleOptions(hajkStyles[l.style], l);
            const fullVectorStyle = hajkStyles[l.style];
-           const vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l);
-           const vectorLegendIcon = vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions);
-           const vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l) || vectorLegendIcon;
-           const vectorSldText = toHajkVectorSldText(fullVectorStyle, l);
+           let styleOptions = {};
+           let scaleZoomOptions = {};
+           let vectorRuleLegendIcon = '';
+           let vectorLegendIcon = '';
+           let vectorLegend = '';
+           let vectorSldText = '';
+           let qtilerStyleRules = [];
+           try {
+             const hasMultiRuleLegend = getHajkLegendStyleEntries(fullVectorStyle, l).length > 1;
+             styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l);
+             scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode);
+             qtilerStyleRules = hasMultiRuleLegend ? toHajkRuntimeStyleRules(fullVectorStyle, baseUrl) : [];
+             vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl);
+             vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
+             vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon;
+             vectorSldText = qtilerStyleRules.length ? '' : (styleOptions.icon ? '' : toHajkVectorSldText(fullVectorStyle, l, baseUrl));
+           } catch (err) {
+             console.error('[Qtiler2Hajk] WFS style/legend build failed:', l?.name || l?.id || '', err?.stack || err);
+             styleOptions = toHajkVectorStyleOptions(null, l);
+             vectorLegendIcon = toHajkVectorLegendIcon(styleOptions);
+             vectorLegend = vectorLegendIcon;
+           }
            const searchId = `${hajkLayerId}_search`;
            const displayFields = Array.isArray(l.attributes) && l.attributes.length
              ? l.attributes.map((a) => a.name || a).filter(Boolean)
@@ -4930,14 +5280,19 @@ ${mapIcon}
              content: infobox,
              legend: vectorLegend || '',
              legendIcon: vectorLegendIcon || undefined,
+             icon: styleOptions.icon || undefined,
+             pointSize: styleOptions.pointSize || undefined,
              attribution: '',
              drawOrder,
              style: l.style,
              styles: fullVectorStyle,
+             qtilerStyleRules: qtilerStyleRules.length ? qtilerStyleRules : undefined,
              sldStyle: vectorSldText ? l.style : undefined,
              sldText: vectorSldText || undefined,
+             ...scaleZoomOptions,
              ...styleOptions
            });
+           layerLegendIcon = vectorLegendIcon || vectorLegend || layerLegendIcon;
            wfslayers.push({
                id: searchId,
                caption: l.title,
@@ -5004,15 +5359,20 @@ ${mapIcon}
                  legend: l.thumbnail || '',
                  legendIcon: l.thumbnail || undefined
                });
+               layerLegendIcon = l.thumbnail || layerLegendIcon;
        } else {
-           const wmsLegendIcon = l.thumbnail || makeLayerThumbnailUrl(baseUrl, l.id || l.name, layerProjectId);
+           const automaticWmsLegendUrl = makeWmsLegendUrl(baseUrl, l.id || l.name, layerProjectId);
+           const manualWmsLegendUrl = toAbsoluteHajkIconSrc(l.wmsLegendUrl || l.wmsLegendIcon || l.legendIcon || '', baseUrl);
+           const wmsLegendUrl = String(l.wmsLegendMode || '').toLowerCase() === 'manual' && manualWmsLegendUrl
+             ? manualWmsLegendUrl
+             : automaticWmsLegendUrl;
            wmslayers.push({
                id: hajkLayerId,
                caption: l.title,
                url: lSource ? lSource.url : '',
                  projection: projCode,
                  layers: [l.id || l.name],
-                 layersInfo: [{ id: l.id || l.name, caption: l.title, legend: '', infobox: '', style: '', queryable: l.queryable !== false }],
+                 layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: '', style: '', queryable: l.queryable !== false }],
                serverType: "qgis",
                  visibleAtStart,
                  crossOrigin: 'use-credentials',
@@ -5020,12 +5380,13 @@ ${mapIcon}
                  imageFormat: 'image/png',
                  version: '1.1.1',
                  infoFormat: 'application/json',
-                 legend: '',
-                 legendIcon: wmsLegendIcon || undefined,
+                 legend: wmsLegendUrl || '',
+                 legendIcon: wmsLegendUrl || undefined,
                  attribution: '',
                  drawOrder,
                  layerType: isBackgroundLayer ? 'base' : undefined
            });
+                   layerLegendIcon = wmsLegendUrl || layerLegendIcon;
        }
        
        const layRef = {
@@ -5034,7 +5395,7 @@ ${mapIcon}
                caption: l.title,
                visibleAtStart,
            layerType: isBackgroundLayer ? 'base' : undefined,
-           legendIcon: l.thumbnail || undefined,
+           legendIcon: layerLegendIcon || undefined,
            infobox: ""
        };
        
@@ -5333,8 +5694,9 @@ ${mapIcon}
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.json(config);
     } catch (err) {
-      console.error('[Qtiler2Hajk] mapconfig.json dynamic build failed:', err?.message || err);
-      return next();
+      console.error('[Qtiler2Hajk] mapconfig.json dynamic build failed:', err?.stack || err);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.status(500).json({ error: 'map_config_build_failed', message: err?.message || 'Map config build failed' });
     }
   });
 
@@ -5355,8 +5717,9 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.json(config);
     } catch (err) {
-      console.error('[Qtiler2Hajk] index.json dynamic build failed:', err?.message || err);
-      return next();
+      console.error('[Qtiler2Hajk] index.json dynamic build failed:', err?.stack || err);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.status(500).json({ error: 'map_config_build_failed', message: err?.message || 'Map config build failed' });
     }
   });
   app.get(`/plugins/${pluginSlug}/api/preview-config.json`, async (req, res) => {
@@ -5735,7 +6098,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const safeStyleName = `${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
         if (rule?.wfsStyle && typeof rule.wfsStyle === 'object') {
           styleName = safeStyleName;
-          previewStyles[styleName] = rewriteSvgIconColors(rule.wfsStyle);
+          previewStyles[styleName] = rewriteSvgIconColors(rule.wfsStyle, baseUrl);
           const patternRuntime = extractRuntimePatternStyle(previewStyles[styleName], {
             designerOptions: rule?.designerOptions,
             geometryType: rule?.geometryType
@@ -5745,7 +6108,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           styleName = rule.wfsStyle;
         } else if (cLayer?.origoStyle) {
           styleName = safeStyleName;
-          previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+          previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle, baseUrl);
         }
         let resolvedAttrs = (Array.isArray(rule?.attributes) && rule.attributes.length)
           ? normalizeInfoclickAttributes(rule.attributes)
@@ -5772,6 +6135,19 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           if (gt.includes('polygon')) wfsDef.geometryType = 'Polygon';
           else if (gt.includes('line')) wfsDef.geometryType = 'LineString';
           else if (gt.includes('point')) wfsDef.geometryType = 'Point';
+        }
+        Object.assign(
+          wfsDef,
+          toHajkVectorStyleOptions(previewStyles[styleName], wfsDef),
+          toHajkVectorScaleZoomOptions(previewStyles[styleName], finalResolutions, projCode)
+        );
+        {
+          const qtilerStyleRules = toHajkRuntimeStyleRules(previewStyles[styleName], baseUrl);
+          if (qtilerStyleRules.length > 1) {
+            wfsDef.qtilerStyleRules = qtilerStyleRules;
+            delete wfsDef.sldText;
+            delete wfsDef.sldStyle;
+          }
         }
         layersArr.push(wfsDef);
         continue;
@@ -6469,6 +6845,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const extractedRoot = await locateExtractRoot(extractDir);
       await removeRecursive(installRoot);
       await copyRecursive(extractedRoot, installRoot);
+      await patchHajkRuntimeVectorIcons();
 
       await stateStore.update((draft) => ({
         ...(draft || {}),
@@ -6720,6 +7097,12 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           out.themeName = themeName;
         }
         if (ruleHasStyle) out.wfsStyle = rule.wfsStyle;
+        const wmsLegendMode = String(rule?.wmsLegendMode || '').trim().toLowerCase();
+        const wmsLegendIcon = String(rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
+        const wmsLegendUrl = String(rule?.wmsLegendUrl || rule?.legend || '').trim();
+        if (wmsLegendMode === 'manual') out.wmsLegendMode = 'manual';
+        if (wmsLegendIcon) out.wmsLegendIcon = wmsLegendIcon;
+        if (wmsLegendUrl) out.wmsLegendUrl = wmsLegendUrl;
         if (rule?.designerOptions && typeof rule.designerOptions === 'object' && Object.keys(rule.designerOptions).length) {
           out.designerOptions = rule.designerOptions;
         }

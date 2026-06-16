@@ -3770,6 +3770,21 @@ ${mapIcon}
   // /qgis-svg/* to use the colorizer endpoint when an icon.color is set.
   // This is needed because OL Icon `color` doesn't tint SVGs whose paths
   // already have explicit fill attributes.
+  const normalizeOrigoIconStyle = (icon) => {
+    if (!icon || typeof icon !== 'object') return icon;
+    const out = { ...icon };
+    const src = String(out.src || '').trim();
+    if (/\.svg(?:\?|$)/i.test(src) && !Array.isArray(out.imgSize)) {
+      out.imgSize = [480, 480];
+    }
+    if (out.scale != null) {
+      const scale = Number(out.scale);
+      if (Number.isFinite(scale) && scale > 0) out.scale = scale;
+      else delete out.scale;
+    }
+    return out;
+  };
+
   const rewriteSvgIconColors = (style) => {
     try {
       const cloned = JSON.parse(JSON.stringify(style));
@@ -3789,11 +3804,27 @@ ${mapIcon}
             node.icon.src = colored;
           }
         }
+        if (node.icon && typeof node.icon === 'object') {
+          node.icon = normalizeOrigoIconStyle(node.icon);
+        }
         for (const k of Object.keys(node)) visit(node[k]);
       };
       visit(cloned);
       return cloned;
     } catch { return style; }
+  };
+
+  const resolveManualWmsLegendUrl = (layer, fallbackUrl = '') => {
+    if (!layer || typeof layer !== 'object') return fallbackUrl || '';
+    const raw = String(layer.wmsLegendUrl || layer.wmsLegendIcon || layer.legendIcon || '').trim();
+    if (String(layer.wmsLegendMode || '').trim().toLowerCase() !== 'manual' || !raw) return fallbackUrl || '';
+    return raw;
+  };
+
+  const buildManualWmsLegendIconUrl = (rawUrl, baseUrl) => {
+    const raw = String(rawUrl || '').trim();
+    if (!raw) return '';
+    return `${baseUrl}/plugins/${pluginSlug}/api/legend-icon?src=${encodeURIComponent(raw)}`;
   };
 
   const normalizeInfoclickAttributes = (attrs) => {
@@ -4125,7 +4156,9 @@ ${mapIcon}
         const safe = `${String(srcProjId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layer.name).replace(/\s+/g, '_')}`;
         const thumbStyleName = `wms_thumb_${safe}`;
         const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(srcProjId)}?LAYERS=${encodeURIComponent(layer.name)}`;
-        origoStyles[thumbStyleName] = [[{ image: { src: thumbUrl } }]];
+        const manualLegendRaw = resolveManualWmsLegendUrl(layer, '');
+        const legendUrl = manualLegendRaw ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl) : thumbUrl;
+        origoStyles[thumbStyleName] = [[{ icon: { src: legendUrl }, image: { src: legendUrl } }]];
         const wmsDef = {
           name: layer.name,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
@@ -4137,7 +4170,7 @@ ${mapIcon}
           queryable: true,
           visible: layer.visible !== false,
           style: thumbStyleName,
-          thumbnail: thumbUrl
+          thumbnail: legendUrl
         };
         // Restrict GetFeatureInfo popup attributes to the user-defined list.
         // Origo `attributes` filters which fields are shown for both WMS
@@ -4848,6 +4881,28 @@ ${mapIcon}
           else if (gt.includes('point')) wfsDef.geometryType = 'Point';
         }
         layersArr.push(wfsDef);
+        continue;
+      }
+      const manualLegendRaw = resolveManualWmsLegendUrl(rule, '');
+      if (manualLegendRaw) {
+        const manualLegendUrl = buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl);
+        const styleName = `wms_thumb_${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
+        previewStyles[styleName] = [[{ icon: { src: manualLegendUrl }, image: { src: manualLegendUrl } }]];
+        layersArr.push({
+          name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
+          id: layerName,
+          title: layerName,
+          group: String(layerSpec.group || 'root').trim() || 'root',
+          source: ensurePreviewWmsSource(sourceProjectId),
+          type: 'WMS',
+          renderMode: 'image',
+          format: 'image/png',
+          transparent: true,
+          queryable: false,
+          visible: layerSpec.visible !== false,
+          style: styleName,
+          thumbnail: manualLegendUrl
+        });
         continue;
       }
       layersArr.push({
@@ -5885,6 +5940,12 @@ ${mapIcon}
           out.themeName = themeName;
         }
         if (ruleHasStyle) out.wfsStyle = rule.wfsStyle;
+        const wmsLegendMode = String(rule?.wmsLegendMode || '').trim().toLowerCase();
+        const wmsLegendIcon = String(rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
+        const wmsLegendUrl = String(rule?.wmsLegendUrl || rule?.legend || '').trim();
+        if (wmsLegendMode === 'manual') out.wmsLegendMode = 'manual';
+        if (wmsLegendIcon) out.wmsLegendIcon = wmsLegendIcon;
+        if (wmsLegendUrl) out.wmsLegendUrl = wmsLegendUrl;
         if (rule?.designerOptions && typeof rule.designerOptions === 'object' && Object.keys(rule.designerOptions).length) {
           out.designerOptions = rule.designerOptions;
         }
@@ -6996,6 +7057,27 @@ ${mapIcon}
       res.json({ projectId, profileKey, launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}` });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_launch_url_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/legend-icon`, async (req, res) => {
+    try {
+      const raw = String(req.query?.src || '').trim();
+      if (!raw || /[\r\n]/.test(raw)) return res.status(400).send('Invalid icon URL');
+      if (/^(?:javascript|data|vbscript):/i.test(raw)) return res.status(400).send('Invalid icon URL');
+      const format = String(req.query?.format || req.query?.FORMAT || '').trim().toLowerCase();
+      if (format.includes('json')) {
+        const title = String(req.query?.title || req.query?.label || 'Legend').trim() || 'Legend';
+        return res.json({ Legend: [{ layerName: title, rules: [{ title, name: title }] }] });
+      }
+      let target = raw;
+      if (!/^https?:\/\//i.test(target) && !target.startsWith('/')) {
+        target = `/${target.replace(/^\/+/, '')}`;
+      }
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.redirect(302, target);
+    } catch (err) {
+      res.status(500).send(String(err?.message || err));
     }
   });
 

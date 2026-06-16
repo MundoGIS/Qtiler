@@ -87,11 +87,17 @@ const QTWC_I18N = {
     'Qtiler2Hajk.modal_title_edit': 'Edit profile: {id}',
     'Qtiler2Hajk.main_project': 'Main project',
     'Qtiler2Hajk.project_layers': 'Project layers',
-    'Qtiler2Hajk.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing \u2014 layers without WFS are served as WMS and displayed using a layer thumbnail.',
+    'Qtiler2Hajk.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing; layers without WFS are served as WMS with GetLegendGraphic or an optional manual legend icon.',
     'Qtiler2Hajk.layer_include': 'Include',
     'Qtiler2Hajk.layer_initial_visibility': 'Visible on map start',
     'Qtiler2Hajk.layer_include_help': 'If enabled, this layer is included in the published map.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
+    'Qtiler2Hajk.wms_legend_auto': 'WMS legend',
+    'Qtiler2Hajk.wms_legend_manual': 'Manual icon',
+    'Qtiler2Hajk.wms_legend_pick': 'Pick SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Clear',
+    'Qtiler2Hajk.wms_legend_url': 'Legend URL or SVG path',
+    'Qtiler2Hajk.wms_legend_help': 'WMS layers use GetLegendGraphic by default. Pick an SVG or paste an image URL to override the legend item.',
     'Qtiler2Hajk.bg_project': 'Background project (optional)',
     'Qtiler2Hajk.bg_layers': 'Background layers',
     'Qtiler2Hajk.default_bg': 'Default background',
@@ -586,7 +592,7 @@ const QTWC_I18N = {
     'Qtiler2Hajk.hiw.flow.4': 'Brand the experience with logo, header visibility/height and toolbar controls, then publish: maps are reachable at /Qtiler2Hajk/maps/<name> and the portal home at /Qtiler2Hajk/maps.',
     'Qtiler2Hajk.hiw.maps.title': '3. Maps & QGIS library',
     'Qtiler2Hajk.hiw.maps.1': 'Maps are built directly from QGIS projects: layers, styles, scales and CRS come from the project on disk.',
-    'Qtiler2Hajk.hiw.maps.2': 'Default WMTS background invariants ensure every map has a working base layer, and vector layers that are not explicitly marked for WFS stay published as WMS layers with their thumbnail-style presentation.',
+    'Qtiler2Hajk.hiw.maps.2': 'Default WMTS background invariants ensure every map has a working base layer, and vector layers that are not explicitly marked for WFS stay published as WMS layers with WMS legends or optional manual legend icons.',
     'Qtiler2Hajk.hiw.maps.3': 'Bookmarks, print layouts, themes and the portal map-picker all surface published maps automatically from the same base plugin state.',
     'Qtiler2Hajk.hiw.wfs.title': '4. WFS edit & cache reuse',
     'Qtiler2Hajk.hiw.wfs.1': 'Editable WFS layers reuse the Qtiler WFS endpoint, including multipart edits and edit-existing-feature-by-id. A layer is exposed as WFS only when it is explicitly enabled for WFS or editing.',
@@ -666,11 +672,17 @@ const QTWC_I18N = {
     'Qtiler2Hajk.modal_title_edit': 'Editar perfil: {id}',
     'Qtiler2Hajk.main_project': 'Proyecto principal',
     'Qtiler2Hajk.project_layers': 'Capas del proyecto',
-    'Qtiler2Hajk.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opci\u00f3n \u2018Visible al abrir\u2019 controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edici\u00f3n \u2014 si no se activa WFS, la capa se sirve como WMS y se muestra con el thumbnail de la capa.',
+    'Qtiler2Hajk.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opcion Visible al abrir controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edicion; si no se activa WFS, la capa se sirve como WMS con leyenda GetLegendGraphic o un icono manual opcional.',
     'Qtiler2Hajk.layer_include': 'Incluir',
     'Qtiler2Hajk.layer_initial_visibility': 'Visible al abrir',
     'Qtiler2Hajk.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
+    'Qtiler2Hajk.wms_legend_auto': 'Leyenda WMS',
+    'Qtiler2Hajk.wms_legend_manual': 'Icono manual',
+    'Qtiler2Hajk.wms_legend_pick': 'Elegir SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Limpiar',
+    'Qtiler2Hajk.wms_legend_url': 'URL de leyenda o ruta SVG',
+    'Qtiler2Hajk.wms_legend_help': 'Las capas WMS usan GetLegendGraphic por defecto. Elige un SVG o pega una URL de imagen para reemplazar la leyenda.',
     'Qtiler2Hajk.bg_project': 'Proyecto de fondo (opcional)',
     'Qtiler2Hajk.bg_layers': 'Capas de fondo',
     'Qtiler2Hajk.default_bg': 'Fondo por defecto',
@@ -1245,11 +1257,17 @@ const QTWC_I18N = {
     'Qtiler2Hajk.modal_title_edit': 'Redigera profil: {id}',
     'Qtiler2Hajk.main_project': 'Huvudprojekt',
     'Qtiler2Hajk.project_layers': 'Projektlager',
-    'Qtiler2Hajk.project_layers_help': 'Aktivera lager f\u00f6r att inkludera dem i den publicerade kartan. V\u00e4xeln \u2018Synlig vid start\u2019 avg\u00f6r om ett inkluderat lager visas n\u00e4r kartan \u00f6ppnas. Vektorlager kan valfritt publiceras som WFS f\u00f6r att m\u00f6jligg\u00f6ra attributtabell och redigering \u2014 lager utan WFS serveras som WMS och visas med ett miniatyrbildsutsnitt av lagret.',
+    'Qtiler2Hajk.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med GetLegendGraphic eller en valfri manuell legendikon.',
     'Qtiler2Hajk.layer_include': 'Inkludera',
     'Qtiler2Hajk.layer_initial_visibility': 'Synlig vid start',
     'Qtiler2Hajk.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
     'Qtiler2Hajk.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
+    'Qtiler2Hajk.wms_legend_auto': 'WMS-legend',
+    'Qtiler2Hajk.wms_legend_manual': 'Manuell ikon',
+    'Qtiler2Hajk.wms_legend_pick': 'Välj SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Rensa',
+    'Qtiler2Hajk.wms_legend_url': 'Legend-URL eller SVG-sökväg',
+    'Qtiler2Hajk.wms_legend_help': 'WMS-lager använder GetLegendGraphic som standard. Välj en SVG eller klistra in en bild-URL för att ersätta legendobjektet.',
     'Qtiler2Hajk.bg_project': 'Bakgrundsprojekt (valfritt)',
     'Qtiler2Hajk.bg_layers': 'Bakgrundslager',
     'Qtiler2Hajk.default_bg': 'Standardbakgrund',
@@ -5002,6 +5020,27 @@ function renderLayerChecklist(container, layers, rules = {}) {
       `;
     }
 
+    let wmsLegendControls = '';
+    if (isMainLayerList && !layer.isTheme && !rule.serveAsWfs) {
+      const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
+      const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
+      const preview = manualLegend
+        ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Hajk-wms-legend-preview" />`
+        : `<span class="Qtiler2Hajk-wms-legend-empty">${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</span>`;
+      wmsLegendControls = `
+        <div class="Qtiler2Hajk-wms-legend-controls" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_help'))}">
+          <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
+            <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</option>
+            <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_manual'))}</option>
+          </select>
+          <button type="button" class="button is-small is-light" data-wms-legend-pick="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_pick'))}</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_clear'))}</button>
+          <input class="input is-small" type="text" data-wms-legend-url="${escapeHtml(layerKey)}" value="${escapeHtml(manualLegend)}" placeholder="${escapeHtml(t('Qtiler2Hajk.wms_legend_url'))}" />
+          ${preview}
+        </div>
+      `;
+    }
+
     let bgThumb = '';
     if (isBackgroundList && bgProjectId) {
       const tUrl = `/plugins/Qtiler2Hajk/api/thumbnail/${encodeURIComponent(bgProjectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
@@ -5033,7 +5072,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
           <div class="Qtiler2Hajk-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
       </div>
     `;
   }).join('');
@@ -5056,6 +5095,10 @@ function syncProjectLayerOptionState() {
     row.querySelectorAll('button[data-style-layer]').forEach((button) => {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url]').forEach((el) => {
+      el.disabled = !included;
+      el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
   });
 }
@@ -6034,6 +6077,9 @@ async function preparePublishModal(editProfileId = null) {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
           wfsStyle: layer?.wfsStyle || null,
+          wmsLegendMode: String(layer?.wmsLegendMode || publishState.mainRules[key]?.wmsLegendMode || 'auto').trim() || 'auto',
+          wmsLegendIcon: String(layer?.wmsLegendIcon || layer?.legendIcon || publishState.mainRules[key]?.wmsLegendIcon || '').trim(),
+          wmsLegendUrl: String(layer?.wmsLegendUrl || layer?.legend || publishState.mainRules[key]?.wmsLegendUrl || '').trim(),
           designerOptions: layer?.designerOptions && typeof layer.designerOptions === 'object'
             ? JSON.parse(JSON.stringify(layer.designerOptions))
             : (publishState.mainRules[key]?.designerOptions || {}),
@@ -6690,6 +6736,25 @@ backgroundLayersList?.addEventListener('change', () => {
 
 projectLayersList?.addEventListener('change', (event) => {
   const target = event.target;
+  if (target instanceof HTMLSelectElement && target.hasAttribute('data-wms-legend-mode')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-mode') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = target.value === 'manual' ? 'manual' : 'auto';
+    schedulePreviewRefresh();
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-wms-legend-url')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+    if (!layerKey) return;
+    const value = String(target.value || '').trim();
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = value ? 'manual' : (publishState.mainRules[layerKey].wmsLegendMode || 'auto');
+    publishState.mainRules[layerKey].wmsLegendUrl = value;
+    publishState.mainRules[layerKey].wmsLegendIcon = value;
+    schedulePreviewRefresh();
+    return;
+  }
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
 
   if (target.hasAttribute('data-wfs-toggle')) {
@@ -6723,6 +6788,17 @@ projectLayersList?.addEventListener('change', (event) => {
   schedulePreviewRefresh();
 });
 
+projectLayersList?.addEventListener('input', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.hasAttribute('data-wms-legend-url')) return;
+  const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+  if (!layerKey) return;
+  const value = String(target.value || '').trim();
+  publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+  publishState.mainRules[layerKey].wmsLegendUrl = value;
+  publishState.mainRules[layerKey].wmsLegendIcon = value;
+});
+
 selectAllProjectLayersBtn?.addEventListener('click', () => {
   setAllProjectLayersIncluded(true);
 });
@@ -6734,6 +6810,36 @@ selectNoneProjectLayersBtn?.addEventListener('click', () => {
 projectLayersList?.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const pickButton = target.closest('button[data-wms-legend-pick]');
+  if (pickButton) {
+    const layerKey = String(pickButton.getAttribute('data-wms-legend-pick') || '').trim();
+    if (!layerKey) return;
+    openSvgPicker((url) => {
+      publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+      publishState.mainRules[layerKey].wmsLegendMode = 'manual';
+      publishState.mainRules[layerKey].wmsLegendIcon = url;
+      publishState.mainRules[layerKey].wmsLegendUrl = url;
+      const checkedNames = getCheckedLayerNames(projectLayersList);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      schedulePreviewRefresh();
+    });
+    return;
+  }
+  const clearButton = target.closest('button[data-wms-legend-clear]');
+  if (clearButton) {
+    const layerKey = String(clearButton.getAttribute('data-wms-legend-clear') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = 'auto';
+    publishState.mainRules[layerKey].wmsLegendIcon = '';
+    publishState.mainRules[layerKey].wmsLegendUrl = '';
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    schedulePreviewRefresh();
+    return;
+  }
   const button = target.closest('button[data-style-layer]');
   if (!button) return;
   const layerName = String(button.getAttribute('data-style-layer') || '').trim();

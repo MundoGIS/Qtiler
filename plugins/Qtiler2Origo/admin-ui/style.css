@@ -1596,6 +1596,37 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   cursor: not-allowed;
 }
 
+.Qtiler2Origo-wms-legend-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.Qtiler2Origo-wms-legend-controls select,
+.Qtiler2Origo-wms-legend-controls input {
+  height: 2rem;
+}
+
+.Qtiler2Origo-wms-legend-controls input {
+  width: min(18rem, 42vw);
+}
+
+.Qtiler2Origo-wms-legend-preview {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border: 1px solid #d8dde3;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.Qtiler2Origo-wms-legend-empty {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
 .Qtiler2Origo-layer-bulk-actions {
   margin: 0 0 0.5rem;
 }

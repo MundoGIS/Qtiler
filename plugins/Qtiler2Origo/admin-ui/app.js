@@ -87,11 +87,17 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Edit profile: {id}',
     'Qtiler2Origo.main_project': 'Main project',
     'Qtiler2Origo.project_layers': 'Project layers',
-    'Qtiler2Origo.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing \u2014 layers without WFS are served as WMS and displayed using a layer thumbnail.',
+    'Qtiler2Origo.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing; layers without WFS are served as WMS with a generated thumbnail or an optional manual SVG/PNG legend icon.',
     'Qtiler2Origo.layer_include': 'Include',
     'Qtiler2Origo.layer_initial_visibility': 'Visible on map start',
     'Qtiler2Origo.layer_include_help': 'If enabled, this layer is included in the published map.',
     'Qtiler2Origo.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
+    'Qtiler2Origo.wms_legend_auto': 'WMS thumbnail',
+    'Qtiler2Origo.wms_legend_manual': 'Manual icon',
+    'Qtiler2Origo.wms_legend_pick': 'Pick SVG',
+    'Qtiler2Origo.wms_legend_clear': 'Clear',
+    'Qtiler2Origo.wms_legend_url': 'SVG/PNG URL or path',
+    'Qtiler2Origo.wms_legend_help': 'WMS layers use a generated thumbnail by default. Pick a QGIS SVG or paste an SVG/PNG URL to override the legend icon.',
     'Qtiler2Origo.bg_project': 'Background project (optional)',
     'Qtiler2Origo.bg_layers': 'Background layers',
     'Qtiler2Origo.default_bg': 'Default background',
@@ -666,11 +672,17 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Editar perfil: {id}',
     'Qtiler2Origo.main_project': 'Proyecto principal',
     'Qtiler2Origo.project_layers': 'Capas del proyecto',
-    'Qtiler2Origo.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opci\u00f3n \u2018Visible al abrir\u2019 controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edici\u00f3n \u2014 si no se activa WFS, la capa se sirve como WMS y se muestra con el thumbnail de la capa.',
+    'Qtiler2Origo.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opcion Visible al abrir controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edicion; si no se activa WFS, la capa se sirve como WMS con thumbnail generado o un icono manual SVG/PNG opcional.',
     'Qtiler2Origo.layer_include': 'Incluir',
     'Qtiler2Origo.layer_initial_visibility': 'Visible al abrir',
     'Qtiler2Origo.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
     'Qtiler2Origo.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
+    'Qtiler2Origo.wms_legend_auto': 'Thumbnail WMS',
+    'Qtiler2Origo.wms_legend_manual': 'Icono manual',
+    'Qtiler2Origo.wms_legend_pick': 'Elegir SVG',
+    'Qtiler2Origo.wms_legend_clear': 'Limpiar',
+    'Qtiler2Origo.wms_legend_url': 'URL o ruta SVG/PNG',
+    'Qtiler2Origo.wms_legend_help': 'Las capas WMS usan un thumbnail generado por defecto. Elige un SVG de QGIS o pega una URL SVG/PNG para reemplazar el icono de leyenda.',
     'Qtiler2Origo.bg_project': 'Proyecto de fondo (opcional)',
     'Qtiler2Origo.bg_layers': 'Capas de fondo',
     'Qtiler2Origo.default_bg': 'Fondo por defecto',
@@ -1245,11 +1257,17 @@ const QTWC_I18N = {
     'Qtiler2Origo.modal_title_edit': 'Redigera profil: {id}',
     'Qtiler2Origo.main_project': 'Huvudprojekt',
     'Qtiler2Origo.project_layers': 'Projektlager',
-    'Qtiler2Origo.project_layers_help': 'Aktivera lager f\u00f6r att inkludera dem i den publicerade kartan. V\u00e4xeln \u2018Synlig vid start\u2019 avg\u00f6r om ett inkluderat lager visas n\u00e4r kartan \u00f6ppnas. Vektorlager kan valfritt publiceras som WFS f\u00f6r att m\u00f6jligg\u00f6ra attributtabell och redigering \u2014 lager utan WFS serveras som WMS och visas med ett miniatyrbildsutsnitt av lagret.',
+    'Qtiler2Origo.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med genererad thumbnail eller en valfri manuell SVG/PNG-legendikon.',
     'Qtiler2Origo.layer_include': 'Inkludera',
     'Qtiler2Origo.layer_initial_visibility': 'Synlig vid start',
     'Qtiler2Origo.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
     'Qtiler2Origo.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
+    'Qtiler2Origo.wms_legend_auto': 'WMS-thumbnail',
+    'Qtiler2Origo.wms_legend_manual': 'Manuell ikon',
+    'Qtiler2Origo.wms_legend_pick': 'Välj SVG',
+    'Qtiler2Origo.wms_legend_clear': 'Rensa',
+    'Qtiler2Origo.wms_legend_url': 'SVG/PNG-URL eller sökväg',
+    'Qtiler2Origo.wms_legend_help': 'WMS-lager använder en genererad thumbnail som standard. Välj en QGIS-SVG eller klistra in en SVG/PNG-URL för att ersätta legendikonen.',
     'Qtiler2Origo.bg_project': 'Bakgrundsprojekt (valfritt)',
     'Qtiler2Origo.bg_layers': 'Bakgrundslager',
     'Qtiler2Origo.default_bg': 'Standardbakgrund',
@@ -4899,6 +4917,27 @@ function renderLayerChecklist(container, layers, rules = {}) {
       `;
     }
 
+    let wmsLegendControls = '';
+    if (isMainLayerList && !layer.isTheme && !rule.serveAsWfs) {
+      const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
+      const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
+      const preview = manualLegend
+        ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Origo-wms-legend-preview" />`
+        : `<span class="Qtiler2Origo-wms-legend-empty">${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</span>`;
+      wmsLegendControls = `
+        <div class="Qtiler2Origo-wms-legend-controls" title="${escapeHtml(t('Qtiler2Origo.wms_legend_help'))}">
+          <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
+            <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</option>
+            <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_manual'))}</option>
+          </select>
+          <button type="button" class="button is-small is-light" data-wms-legend-pick="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_pick'))}</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_clear'))}</button>
+          <input class="input is-small" type="text" data-wms-legend-url="${escapeHtml(layerKey)}" value="${escapeHtml(manualLegend)}" placeholder="${escapeHtml(t('Qtiler2Origo.wms_legend_url'))}" />
+          ${preview}
+        </div>
+      `;
+    }
+
     let bgThumb = '';
     if (isBackgroundList && bgProjectId) {
       const tUrl = `/plugins/Qtiler2Origo/api/thumbnail/${encodeURIComponent(bgProjectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
@@ -4930,7 +4969,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${styleButton}</div>` : styleButton}
+        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
       </div>
     `;
   }).join('');
@@ -4953,6 +4992,10 @@ function syncProjectLayerOptionState() {
     row.querySelectorAll('button[data-style-layer]').forEach((button) => {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url]').forEach((el) => {
+      el.disabled = !included;
+      el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
   });
 }
@@ -5918,6 +5961,9 @@ async function preparePublishModal(editProfileId = null) {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
           wfsStyle: layer?.wfsStyle || null,
+          wmsLegendMode: String(layer?.wmsLegendMode || publishState.mainRules[key]?.wmsLegendMode || 'auto').trim() || 'auto',
+          wmsLegendIcon: String(layer?.wmsLegendIcon || layer?.legendIcon || publishState.mainRules[key]?.wmsLegendIcon || '').trim(),
+          wmsLegendUrl: String(layer?.wmsLegendUrl || layer?.legend || publishState.mainRules[key]?.wmsLegendUrl || '').trim(),
           designerOptions: layer?.designerOptions && typeof layer.designerOptions === 'object'
             ? JSON.parse(JSON.stringify(layer.designerOptions))
             : (publishState.mainRules[key]?.designerOptions || {}),
@@ -6566,6 +6612,25 @@ backgroundLayersList?.addEventListener('change', () => {
 
 projectLayersList?.addEventListener('change', (event) => {
   const target = event.target;
+  if (target instanceof HTMLSelectElement && target.hasAttribute('data-wms-legend-mode')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-mode') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = target.value === 'manual' ? 'manual' : 'auto';
+    schedulePreviewRefresh();
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-wms-legend-url')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+    if (!layerKey) return;
+    const value = String(target.value || '').trim();
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = value ? 'manual' : (publishState.mainRules[layerKey].wmsLegendMode || 'auto');
+    publishState.mainRules[layerKey].wmsLegendUrl = value;
+    publishState.mainRules[layerKey].wmsLegendIcon = value;
+    schedulePreviewRefresh();
+    return;
+  }
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
 
   if (target.hasAttribute('data-wfs-toggle')) {
@@ -6599,6 +6664,17 @@ projectLayersList?.addEventListener('change', (event) => {
   schedulePreviewRefresh();
 });
 
+projectLayersList?.addEventListener('input', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.hasAttribute('data-wms-legend-url')) return;
+  const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+  if (!layerKey) return;
+  const value = String(target.value || '').trim();
+  publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+  publishState.mainRules[layerKey].wmsLegendUrl = value;
+  publishState.mainRules[layerKey].wmsLegendIcon = value;
+});
+
 selectAllProjectLayersBtn?.addEventListener('click', () => {
   setAllProjectLayersIncluded(true);
 });
@@ -6610,6 +6686,36 @@ selectNoneProjectLayersBtn?.addEventListener('click', () => {
 projectLayersList?.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const pickButton = target.closest('button[data-wms-legend-pick]');
+  if (pickButton) {
+    const layerKey = String(pickButton.getAttribute('data-wms-legend-pick') || '').trim();
+    if (!layerKey) return;
+    openSvgPicker((url) => {
+      publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+      publishState.mainRules[layerKey].wmsLegendMode = 'manual';
+      publishState.mainRules[layerKey].wmsLegendIcon = url;
+      publishState.mainRules[layerKey].wmsLegendUrl = url;
+      const checkedNames = getCheckedLayerNames(projectLayersList);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      schedulePreviewRefresh();
+    });
+    return;
+  }
+  const clearButton = target.closest('button[data-wms-legend-clear]');
+  if (clearButton) {
+    const layerKey = String(clearButton.getAttribute('data-wms-legend-clear') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = 'auto';
+    publishState.mainRules[layerKey].wmsLegendIcon = '';
+    publishState.mainRules[layerKey].wmsLegendUrl = '';
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    schedulePreviewRefresh();
+    return;
+  }
   const button = target.closest('button[data-style-layer]');
   if (!button) return;
   const layerName = String(button.getAttribute('data-style-layer') || '').trim();
@@ -8587,6 +8693,9 @@ function rulesToOrigoStyle(rules) {
           anchor: r.point.icon.anchor || [0.5, 0.5],
           opacity: r.point.icon.opacity != null ? r.point.icon.opacity : 1
         };
+        if (/\.svg(?:\?|$)/i.test(String(geomEntry.icon.src || ''))) {
+          geomEntry.icon.imgSize = [480, 480];
+        }
         if (r.point.icon.useColor && r.point.icon.color) {
           geomEntry.icon.color = r.point.icon.color;
         }

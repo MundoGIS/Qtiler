@@ -690,6 +690,29 @@ export const registerWmsRoutes = ({
           await fs.promises.mkdir(legendCacheDir, { recursive: true });
         } catch { /* ignore */ }
 
+        const waitForLegend = toBool(getQueryCI(req, "QTILER_WAIT_LEGEND") || getQueryCI(req, "WAIT_LEGEND"), false);
+        if (waitForLegend) {
+          try {
+            const renderPromise = tileRendererPool.renderTile({
+              action: "legend",
+              project_path: project.file,
+              output_file: cachedFile,
+              layer: layerName,
+              format: "image/png",
+              transparent: true
+            });
+            await Promise.race([
+              renderPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('legend_wait_timeout')), 12000))
+            ]);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.type('image/png');
+            return res.sendFile(cachedFile);
+          } catch (err) {
+            console.error(`[WMS] GetLegendGraphic render failed for ${projectId}/${layerName}:`, err?.message || err);
+          }
+        }
+
         // Cache miss: respond IMMEDIATELY with a placeholder PNG so the
         // browser doesn't keep 20 connections pending (which would block
         // every other request — map tiles, background, etc.). Kick off a
