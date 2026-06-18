@@ -1425,15 +1425,14 @@ def process_task(params):
                     pass
             if rect is not None:
                 req = req.setFilterRect(rect)
-            if max_features is not None:
+            request_limit = max_features
+            if max_features is not None and start_index > 0:
+                request_limit = start_index + max_features
+            if request_limit is not None:
                 try:
-                    req = req.setLimit(max_features)
+                    req = req.setLimit(request_limit)
                 except Exception:
                     pass
-            try:
-                req = req.setOffset(start_index)
-            except Exception:
-                pass
 
             fields = lyr.fields()
             field_names = []
@@ -1447,7 +1446,14 @@ def process_task(params):
 
             if as_json:
                 features = []
+                seen_count = 0
                 for feat in lyr.getFeatures(req):
+                    if seen_count < start_index:
+                        seen_count += 1
+                        continue
+                    if max_features is not None and len(features) >= max_features:
+                        break
+                    seen_count += 1
                     props = {}
                     try:
                         attrs = feat.attributes()
@@ -1514,7 +1520,14 @@ def process_task(params):
                 parts.append(' numberMatched="unknown"')
             parts.append('>')
             feature_count = 0
+            seen_count = 0
             for feat in lyr.getFeatures(req):
+                if seen_count < start_index:
+                    seen_count += 1
+                    continue
+                if max_features is not None and feature_count >= max_features:
+                    break
+                seen_count += 1
                 try:
                     fid = None
                     try:

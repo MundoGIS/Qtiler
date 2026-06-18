@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>Qtiler 3D Eye</title>
+  <link href="https://unpkg.com/boxicons@latest/css/boxicons.min.css" rel="stylesheet">
+  <style>
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #05070a; color: #fff; }
+    #cesiumContainer { position: absolute; inset: 0; }
+    .viewer-shell { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+    .top-panel {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      min-width: min(420px, calc(100vw - 24px));
+      max-width: 520px;
+      background: rgba(12, 18, 28, .86);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 8px;
+      padding: 12px 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  pointer-events: auto;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.05rem; }
+    .viewer-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    #viewerLogo { width: 38px; height: 38px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,.08); padding: 4px; flex: 0 0 auto; }
+    #viewerLogo[hidden] { display: none; }
+    #viewerStatus { margin: 0; color: #d7e3f4; font-size: .9rem; }
+    #viewerStatus[data-tone="error"] { color: #ffb4ab; }
+    #moduleBar { display: none; }
+    #moduleBar span { background: rgba(12,18,28,.82); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 5px 9px; font-size: .78rem; pointer-events: auto; }
+    .sidebar-buttons { position: absolute; left: 18px; top: 108px; display: flex; flex-direction: column; gap: 6px; z-index: 30; pointer-events: auto; }
+    .sidebar-buttons button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; background: rgba(42,42,42,.86); color: #fff; display: grid; place-items: center; cursor: pointer; font-size: 20px; }
+    .sidebar-buttons button.active, .sidebar-buttons button:hover { background: rgba(255,255,255,.18); }
+    .tool-panel { position: absolute; right: 12px; top: 12px; width: 340px; max-width: calc(100vw - 104px); max-height: calc(100vh - 24px); box-sizing: border-box; overflow: auto; background: rgba(12,18,28,.9); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 12px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .tool-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .tool-panel h2 { margin: 0; font-size: .95rem; }
+    .panel-close { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+    .tool-popup { position: absolute; left: 58px; top: 108px; width: 260px; background: rgba(12,18,28,.92); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 10px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .tool-popup[hidden] { display: none; }
+    .tool-popup header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .tool-popup header button { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+    .tool-popup-actions { display: grid; gap: 6px; }
+    .tool-popup-actions .viewer-button { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+    .tool-popup-actions .viewer-button i { font-size: 18px; }
+    .layer-group { margin: 0 0 12px; }
+    .layer-group h3 { margin: 0; padding: 7px 8px; background: rgba(255,255,255,.09); border-radius: 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: 0; color: #dbe7f7; }
+    .layer-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px 2px; border-top: 1px solid rgba(255,255,255,.11); font-size: .86rem; user-select: none; }
+    .layer-row input { margin: 0; }
+    .layer-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .legend-icon { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; background: rgba(255,255,255,.08); }
+    .warning { color: #ffd6a5; margin: 8px 0 0; font-size: .86rem; }
+    .viewer-button { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+    body.terrain-preview-mode .top-panel,
+    body.terrain-preview-mode #moduleBar,
+    body.terrain-preview-mode #toolButtons,
+    body.terrain-preview-mode #toolPopup,
+    body.terrain-preview-mode #layerPanel { display: none !important; }
+    @media (max-width: 760px) {
+      .top-panel { min-width: 0; width: calc(100vw - 24px); box-sizing: border-box; }
+      .tool-panel { left: auto; right: 8px; width: min(300px, calc(100vw - 84px)); max-width: none; max-height: calc(100vh - 16px); }
+      .tool-popup { left: 54px; top: 128px; width: min(250px, calc(100vw - 72px)); }
+      .sidebar-buttons { left: 12px; top: 128px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div class="viewer-shell">
+    <section class="top-panel">
+      <div class="viewer-brand">
+        <img id="viewerLogo" alt="" hidden>
+        <div>
+          <h1 id="viewerTitle">Qtiler 3D Eye</h1>
+          <p id="viewerSubtitle" class="viewer-subtitle" hidden></p>
+        </div>
+      </div>
+      <p id="viewerStatus">Initializing...</p>
+      <p id="terrainWarning" class="warning" hidden></p>
+    </section>
+    <aside id="layerPanel" class="tool-panel" hidden>
+      <div class="tool-panel-head">
+        <h2>Layer dialog</h2>
+        <button class="panel-close" type="button" aria-label="Close" onclick="document.getElementById('layerPanel').hidden = true">x</button>
+      </div>
+      <div id="layerList"></div>
+      <button id="saveViewBtn" class="viewer-button" type="button">Save view</button>
+    </aside>
+    <nav id="toolButtons" class="sidebar-buttons"></nav>
+    <aside id="toolPopup" class="tool-popup" hidden></aside>
+    <div id="moduleBar"></div>
+  </div>
+  <script>
+    (function loadCesiumRuntime() {
+      var localBase = '/plugins/Qtiler-3D-eye/cesium/';
+      function showRuntimeRequired(message) {
+        var status = document.getElementById('viewerStatus');
+        if (status) {
+          status.textContent = message || 'Error: Cesium runtime is not installed. Install Cesium from the Qtiler 3D Eye admin before opening 3D maps.';
+          status.dataset.tone = 'error';
+        }
+      }
+      function addCss(base) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = base + 'Widgets/widgets.css';
+        document.head.appendChild(css);
+      }
+      function addScript(base) {
+        window.CESIUM_BASE_URL = base;
+        var script = document.createElement('script');
+        script.src = base + 'Cesium.js';
+        script.onload = function() {
+          if (!window.Cesium) {
+            try { script.remove(); } catch (e) {}
+            showRuntimeRequired('Error: Cesium runtime loaded but did not initialize. Reinstall Cesium from the Qtiler 3D Eye admin.');
+            return;
+          }
+          addCss(base);
+          var viewer = document.createElement('script');
+          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20260617-cesium-required';
+          document.body.appendChild(viewer);
+        };
+        script.onerror = function() {
+          try { script.remove(); } catch (e) {}
+          showRuntimeRequired();
+        };
+        document.head.appendChild(script);
+      }
+      addScript(localBase);
+    })();
+  </script>
+</body>
+</html>

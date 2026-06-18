@@ -623,7 +623,10 @@ export const registerPluginRoutes = ({
           meta[name] = {
             displayName: String(parsed.displayName || name),
             description: String(parsed.description || ''),
-            docs: parsed.docs && typeof parsed.docs === 'object' ? parsed.docs : null
+            docs: parsed.docs && typeof parsed.docs === 'object' ? parsed.docs : null,
+            license: parsed.license ? String(parsed.license) : null,
+            licenseFile: parsed.licenseFile ? String(parsed.licenseFile) : null,
+            supportContact: parsed.supportContact ? String(parsed.supportContact) : null
           };
         } catch {
           // Non-fatal: plugin list should still load even if one manifest is malformed.

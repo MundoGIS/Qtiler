@@ -153,3 +153,4 @@ tools/generate-license.mjs
 tools/package-Qtiler2Origo-plugin.mjs
 tools/sync-plugin-staging.mjs
 tools/deploy-Qtiler-3D-eye.bat
+tools/package-Qtiler-3D-eye-plugin.mjs

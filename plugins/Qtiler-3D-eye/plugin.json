@@ -1,0 +1,79 @@
+{
+  "name": "Qtiler-3D-eye",
+  "version": "0.1.0",
+  "displayName": "Qtiler 3D Eye (Cesium)",
+  "description": "Publish Cesium 3D maps from Qtiler projects with terrain, WMS/WFS layers, 3D Tiles, models, galleries and QtilerAuth-aware project access.",
+  "docs": {
+    "en": {
+      "description": "Cesium-based 3D publishing platform for Qtiler projects, terrain, operational GIS layers, reusable 3D assets and public galleries.",
+      "readme": [
+        "Create production 3D maps from Qtiler/QGIS projects with a guided editor for main project layers, backgrounds, terrain, Cesium tools and reusable assets.",
+        "Use WMS for fast project layers and WFS for editable/stylable vector layers with attribute rules, zoom rules, SVG symbols, GLTF models and extrusion settings.",
+        "Build reusable Cesium terrain from DEM/DTM layers and select terrain assets per map.",
+        "Generate Cesium 3D Tiles caches for heavy QGIS 3D or WFS building layers, including face-shaded buildings and flat roofs over DEM terrain.",
+        "Upload or register GLTF/GLB models, 3D Tiles ZIPs and terrain ZIPs, then reuse them across maps and previews.",
+        "Publish public 3D galleries while QtilerAuth keeps project visibility aligned with user access. Open source under MPL-2.0; no runtime telemetry."
+      ]
+    },
+    "es": {
+      "description": "Plataforma de publicación 3D con Cesium para proyectos Qtiler, terreno, capas GIS operativas, activos 3D reutilizables y galerías públicas.",
+      "readme": [
+        "Crea mapas 3D de producción desde proyectos Qtiler/QGIS con un editor guiado para capas del proyecto principal, fondos, terreno, herramientas Cesium y activos reutilizables.",
+        "Usa WMS para capas rápidas del proyecto y WFS para vectores editables/estilizables con reglas por atributo, reglas de zoom, símbolos SVG, modelos GLTF y extrusión.",
+        "Construye terreno Cesium reutilizable desde capas DEM/DTM y selecciona activos de terreno por mapa.",
+        "Genera cachés Cesium 3D Tiles para capas QGIS 3D o WFS pesadas, incluyendo edificios sombreados por caras y techos planos sobre el terreno DEM.",
+        "Sube o registra modelos GLTF/GLB, ZIPs de 3D Tiles y ZIPs de terreno para reutilizarlos en mapas y previsualizaciones.",
+        "Publica galerías 3D mientras QtilerAuth mantiene la visibilidad de proyectos alineada con el acceso de cada usuario. Open source bajo MPL-2.0; sin telemetría en tiempo de ejecución."
+      ]
+    },
+    "sv": {
+      "description": "Cesium-baserad 3D-publiceringsplattform för Qtiler-projekt, terräng, operativa GIS-lager, återanvändbara 3D-resurser och publika gallerier.",
+      "readme": [
+        "Skapa produktionsklara 3D-kartor från Qtiler/QGIS-projekt med en guidad editor för huvudprojektets lager, bakgrunder, terräng, Cesium-verktyg och återanvändbara resurser.",
+        "Använd WMS för snabba projektlager och WFS för redigerbara/stilsatta vektorlager med attributregler, zoomregler, SVG-symboler, GLTF-modeller och extrudering.",
+        "Bygg återanvändbar Cesium-terräng från DEM/DTM-lager och välj terrängresurser per karta.",
+        "Generera Cesium 3D Tiles-cache för tunga QGIS 3D- eller WFS-byggnadslager, inklusive fas-skuggade byggnader och plana tak över DEM-terräng.",
+        "Ladda upp eller registrera GLTF/GLB-modeller, 3D Tiles-ZIP och terräng-ZIP och återanvänd dem i kartor och förhandsvisningar.",
+        "Publicera publika 3D-gallerier medan QtilerAuth håller projektsynlighet synkad med användaråtkomst. Öppen källkod under MPL-2.0; ingen runtime-telemetri."
+      ]
+    },
+    "no": {
+      "description": "Cesium-basert 3D-publiseringsplattform for Qtiler-prosjekter, terreng, operative GIS-lag, gjenbrukbare 3D-ressurser og offentlige gallerier.",
+      "readme": [
+        "Lag produksjonsklare 3D-kart fra Qtiler/QGIS-prosjekter med en veiledet editor for hovedprosjektlag, bakgrunner, terreng, Cesium-verktøy og gjenbrukbare ressurser.",
+        "Bruk WMS for raske prosjektlag og WFS for redigerbare/stilbare vektorlag med attributtregler, zoomregler, SVG-symboler, GLTF-modeller og ekstrudering.",
+        "Bygg gjenbrukbart Cesium-terreng fra DEM/DTM-lag og velg terrengressurser per kart.",
+        "Generer Cesium 3D Tiles-cache for tunge QGIS 3D- eller WFS-bygningslag, inkludert flateskyggede bygninger og flate tak over DEM-terreng.",
+        "Last opp eller registrer GLTF/GLB-modeller, 3D Tiles-ZIP-er og terreng-ZIP-er, og gjenbruk dem i kart og forhåndsvisninger.",
+        "Publiser offentlige 3D-gallerier mens QtilerAuth holder prosjektsynlighet synkronisert med brukertilgang. Åpen kildekode under MPL-2.0; ingen runtime-telemetri."
+      ]
+    },
+    "da": {
+      "description": "Cesium-baseret 3D-publiceringsplatform til Qtiler-projekter, terræn, operationelle GIS-lag, genanvendelige 3D-ressourcer og offentlige gallerier.",
+      "readme": [
+        "Opret produktionsklare 3D-kort fra Qtiler/QGIS-projekter med en guidet editor til hovedprojektets lag, baggrunde, terræn, Cesium-værktøjer og genanvendelige ressourcer.",
+        "Brug WMS til hurtige projektlag og WFS til redigerbare/stilbare vektorlag med attributregler, zoomregler, SVG-symboler, GLTF-modeller og ekstrudering.",
+        "Byg genanvendeligt Cesium-terræn fra DEM/DTM-lag, og vælg terrænressourcer pr. kort.",
+        "Generér Cesium 3D Tiles-cache til tunge QGIS 3D- eller WFS-bygningslag, inklusive fladeskyggede bygninger og flade tage over DEM-terræn.",
+        "Upload eller registrér GLTF/GLB-modeller, 3D Tiles-ZIP'er og terræn-ZIP'er, og genbrug dem i kort og forhåndsvisninger.",
+        "Publicér offentlige 3D-gallerier, mens QtilerAuth holder projektsynlighed synkroniseret med brugeradgang. Open source under MPL-2.0; ingen runtime-telemetri."
+      ]
+    },
+    "fi": {
+      "description": "Cesium-pohjainen 3D-julkaisualusta Qtiler-projekteille, maastolle, operatiivisille GIS-tasoille, uudelleenkäytettäville 3D-aineistoille ja julkisille gallerioille.",
+      "readme": [
+        "Luo tuotantokelpoisia 3D-karttoja Qtiler/QGIS-projekteista ohjatulla editorilla, jossa hallitaan pääprojektin tasoja, taustoja, maastoa, Cesium-työkaluja ja uudelleenkäytettäviä aineistoja.",
+        "Käytä WMS:ää nopeisiin projektitasoihin ja WFS:ää muokattaviin/tyylitettäviin vektoritasoihin, joissa on attribuuttisäännöt, zoomaussäännöt, SVG-symbolit, GLTF-mallit ja ekstrudointi.",
+        "Rakenna uudelleenkäytettävä Cesium-maasto DEM/DTM-tasoista ja valitse maastoaineistot karttakohtaisesti.",
+        "Luo Cesium 3D Tiles -välimuisteja raskaille QGIS 3D- tai WFS-rakennustasoille, mukaan lukien pintavarjostetut rakennukset ja tasaiset katot DEM-maaston päällä.",
+        "Lataa tai rekisteröi GLTF/GLB-malleja, 3D Tiles -ZIP-paketteja ja maasto-ZIP-paketteja ja käytä niitä uudelleen kartoissa ja esikatseluissa.",
+        "Julkaise julkisia 3D-gallerioita samalla kun QtilerAuth pitää projektien näkyvyyden käyttäjäoikeuksien mukaisena. Avoin lähdekoodi MPL-2.0-lisenssillä; ei runtime-telemetriaa."
+      ]
+    }
+  },
+  "autoEnable": false,
+  "author": "MundoGIS",
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "supportContact": "support@mundogis.se"
+}

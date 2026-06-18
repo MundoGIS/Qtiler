@@ -9,6 +9,23 @@ import path from "path";
 import crypto from "crypto";
 import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 import express from "express";
+import proj4 from "proj4";
+
+// Register proj4 presets from config if available so server-side reprojection works
+try {
+  const presetsPath = path.join(process.cwd(), 'config', 'proj4-presets.json');
+  if (fs.existsSync(presetsPath)) {
+    const raw = fs.readFileSync(presetsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        try { proj4.defs(k, String(v)); } catch { /* ignore bad defs */ }
+      }
+    }
+  }
+} catch (e) {
+  // ignore
+}
 
 const getQueryCI = (req, key) => {
   if (!req) return null;
@@ -387,38 +404,134 @@ const featureInfoDataToXml = (payload) => {
   );
 };
 
+const transformWgs84BboxToCrs = (bbox, targetCrs) => {
+  if (!Array.isArray(bbox) || bbox.length !== 4) return null;
+  const target = normalizeCrs(targetCrs) || String(targetCrs || '').trim();
+  if (!target) return null;
+  const nums = bbox.map((n) => Number(n));
+  if (!nums.every(Number.isFinite)) return null;
+
+  if (target.toUpperCase() === 'CRS:84' || target.toUpperCase() === 'EPSG:4326') {
+    return nums;
+  }
+
+  try {
+    const [minLon, minLat, maxLon, maxLat] = nums;
+    const corners = [
+      [minLon, minLat],
+      [minLon, maxLat],
+      [maxLon, minLat],
+      [maxLon, maxLat]
+    ].map((point) => proj4('EPSG:4326', target, point));
+    const xs = corners.map((point) => Number(point?.[0])).filter(Number.isFinite);
+    const ys = corners.map((point) => Number(point?.[1])).filter(Number.isFinite);
+    if (xs.length !== 4 || ys.length !== 4) return null;
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  } catch {
+    return null;
+  }
+};
+
+const numericBbox = (value) => {
+  if (!Array.isArray(value) || value.length !== 4) return null;
+  const out = value.map((n) => Number(n));
+  return out.every(Number.isFinite) ? out : null;
+};
+
+const unionBboxes = (bboxes) => {
+  const valid = (Array.isArray(bboxes) ? bboxes : []).map(numericBbox).filter(Boolean);
+  if (!valid.length) return null;
+  return [
+    Math.min(...valid.map((b) => b[0])),
+    Math.min(...valid.map((b) => b[1])),
+    Math.max(...valid.map((b) => b[2])),
+    Math.max(...valid.map((b) => b[3]))
+  ];
+};
+
+const usesNorthEastAxisOrderForWms13 = (crs) => {
+  const normalized = String(normalizeCrs(crs) || crs || '').toUpperCase();
+  return normalized === 'EPSG:3006' || normalized === 'EPSG:4326';
+};
+
+const axisOrderedBboxForCapabilities = ({ bbox, crs, wmsVersion }) => {
+  const nums = numericBbox(bbox);
+  if (!nums) return null;
+  if (wmsVersion === '1.3.0' && usesNorthEastAxisOrderForWms13(crs)) {
+    return [nums[1], nums[0], nums[3], nums[2]];
+  }
+  return nums;
+};
+
+const buildBboxNodes = ({ bboxWgs84, nativeBboxesByCrs = {}, crsList = [], wmsVersion = '1.3.0', esc }) => {
+  const bbox = numericBbox(bboxWgs84);
+  if (!bbox) return '';
+  const is111 = wmsVersion === '1.1.1';
+  let xml = is111
+    ? `<LatLonBoundingBox minx="${bbox[0]}" miny="${bbox[1]}" maxx="${bbox[2]}" maxy="${bbox[3]}"/>`
+    : `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`;
+
+  const bboxAttr = is111 ? 'SRS' : 'CRS';
+  const bboxCrsList = is111 ? crsList : Array.from(new Set(['CRS:84', ...crsList]));
+  for (const rawCrs of bboxCrsList) {
+    const target = normalizeCrs(rawCrs) || rawCrs;
+    const key = String(target || '').toUpperCase();
+    let projectedBbox = null;
+    if (key === 'CRS:84') {
+      projectedBbox = bbox;
+    } else {
+      projectedBbox = numericBbox(nativeBboxesByCrs?.[key]) || transformWgs84BboxToCrs(bbox, target);
+      projectedBbox = axisOrderedBboxForCapabilities({ bbox: projectedBbox, crs: target, wmsVersion });
+    }
+    if (!projectedBbox) continue;
+    xml += `<BoundingBox ${bboxAttr}="${esc(target)}" minx="${projectedBbox[0]}" miny="${projectedBbox[1]}" maxx="${projectedBbox[2]}" maxy="${projectedBbox[3]}"/>`;
+  }
+  return xml;
+};
+
 const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [], wmsVersion = "1.3.0" }) => {
   const now = new Date().toISOString();
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   
   const is111 = wmsVersion === "1.1.1";
+  const updateSequence = Number.parseInt(sha1Hex(projectId).slice(0, 8), 16);
   const rootOpenTag = is111 
     ? `<WMT_MS_Capabilities version="1.1.1">` 
-    : `<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">`;
+    : `<WMS_Capabilities version="1.3.0" updateSequence="${updateSequence}" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd">`;
   const rootCloseTag = is111 ? `</WMT_MS_Capabilities>` : `</WMS_Capabilities>`;
   const srsTag = is111 ? "SRS" : "CRS";
 
-  const rootCrs = Array.isArray(supportedCrs) && supportedCrs.length
-    ? supportedCrs
-    : ["EPSG:3857", "EPSG:4326"];
+  const rootCrs = Array.from(new Set([
+    ...(Array.isArray(supportedCrs) && supportedCrs.length ? supportedCrs : ["EPSG:3857", "EPSG:4326"]),
+    ...(is111 ? [] : ['CRS:84'])
+  ].map((c) => normalizeCrs(c) || c).filter(Boolean)));
   const rootCrsNodes = rootCrs.map((c) => `<${srsTag}>${esc(c)}</${srsTag}>`).join("");
+  const rootBboxWgs84 = unionBboxes(layers.map((layer) => layer?.bbox));
+  const rootNativeBboxesByCrs = {};
+  for (const crs of rootCrs) {
+    const key = String(normalizeCrs(crs) || crs).toUpperCase();
+    const unionNative = unionBboxes(layers.map((layer) => layer?.nativeBboxesByCrs?.[key]));
+    if (unionNative) rootNativeBboxesByCrs[key] = unionNative;
+  }
+  const rootBboxNodes = buildBboxNodes({ bboxWgs84: rootBboxWgs84, nativeBboxesByCrs: rootNativeBboxesByCrs, crsList: rootCrs, wmsVersion, esc });
   const layerNodes = layers
     .map((l) => {
-      const name = esc(l.name);
-      const title = esc(l.title || l.name);
-      const crsList = Array.isArray(l.crs) ? l.crs : [];
+      const rawName = String(l.name || '').trim();
+      const rawTitle = String(l.title || rawName).trim();
+      const name = esc(rawName);
+      const title = esc(rawTitle || rawName);
+      const crsList = Array.from(new Set([
+        ...(Array.isArray(l.crs) ? l.crs : []),
+        ...(is111 ? [] : ['CRS:84'])
+      ].map((c) => normalizeCrs(c) || c).filter(Boolean)));
       const crsNodes = crsList.map((c) => `<${srsTag}>${esc(c)}</${srsTag}>`).join("");
-      const bbox = Array.isArray(l.bbox) && l.bbox.length === 4 ? l.bbox.map((n) => Number(n)) : null;
-      let bboxNode = "";
-      if (bbox && bbox.every(Number.isFinite)) {
-        if (is111) {
-          bboxNode = `<LatLonBoundingBox minx="${bbox[0]}" miny="${bbox[1]}" maxx="${bbox[2]}" maxy="${bbox[3]}"/>`;
-        } else {
-          bboxNode = `<EX_GeographicBoundingBox><westBoundLongitude>${bbox[0]}</westBoundLongitude><southBoundLatitude>${bbox[1]}</southBoundLatitude><eastBoundLongitude>${bbox[2]}</eastBoundLongitude><northBoundLatitude>${bbox[3]}</northBoundLatitude></EX_GeographicBoundingBox>`;
-        }
-      }
-      const queryable = l.queryable === false ? "0" : "1";
-      return `<Layer queryable="${queryable}"><Name>${name}</Name><Title>${title}</Title>${crsNodes}${bboxNode}</Layer>`;
+      const bboxNode = buildBboxNodes({ bboxWgs84: l.bbox, nativeBboxesByCrs: l.nativeBboxesByCrs, crsList, wmsVersion, esc });
+      const queryable = l.queryable === true ? "1" : "0";
+      const abstractNode = `<Abstract/>`;
+      const keywordsNode = `<KeywordList/>`;
+      const legendUrl = `${serviceUrl}&service=WMS&version=${encodeURIComponent(wmsVersion)}&request=GetLegendGraphic&format=image%2Fpng&width=20&height=20&layer=${encodeURIComponent(rawName)}`;
+      const styleNode = `<Style><Name>default-style-${name}</Name><Title>${esc(`${rawTitle || rawName} style`)}</Title><Abstract>Default style for ${name} layer</Abstract><LegendURL width="20" height="20"><Format>image/png</Format><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(legendUrl)}"/></LegendURL></Style>`;
+      return `<Layer queryable="${queryable}"><Name>${name}</Name><Title>${title}</Title>${abstractNode}${keywordsNode}${crsNodes}${bboxNode}${styleNode}</Layer>`;
     })
     .join("");
 
@@ -426,22 +539,26 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `${rootOpenTag}\n` +
     `<Service>` +
-    `<Name>OGC:WMS</Name>` +
+    `<Name>WMS</Name>` +
     `<Title>${esc(`Qtiler WMS (${projectId})`)}</Title>` +
     `<Abstract>${esc("WMS endpoint powered by QGIS Core (no QGIS Server)")}</Abstract>` +
+    `<KeywordList><Keyword>WMS</Keyword><Keyword>QTILER</Keyword></KeywordList>` +
     `<OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/>` +
+    `<Fees>NONE</Fees><AccessConstraints>NONE</AccessConstraints>` +
     `</Service>` +
     `<Capability>` +
     `<Request>` +
-    `<GetCapabilities><Format>application/vnd.ogc.wms_xml</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetCapabilities>` +
-    `<GetMap><Format>image/png</Format><Format>image/jpeg</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetMap>` +
-    `<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format><Format>text/xml</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
+    `<GetCapabilities><Format>text/xml</Format><Format>application/vnd.ogc.wms_xml</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get><Post><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Post></HTTP></DCPType></GetCapabilities>` +
+    `<GetMap><Format>image/png</Format><Format>image/jpeg</Format><Format>image/png; mode=8bit</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetMap>` +
+    `<GetFeatureInfo><Format>text/plain</Format><Format>application/vnd.ogc.gml</Format><Format>text/xml</Format><Format>application/vnd.ogc.gml/3.1.1</Format><Format>application/json</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetFeatureInfo>` +
     `<GetLegendGraphic><Format>image/png</Format><DCPType><HTTP><Get><OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/></Get></HTTP></DCPType></GetLegendGraphic>` +
     `</Request>` +
-    `<Exception><Format>application/vnd.ogc.se_xml</Format></Exception>` +
+    `<Exception><Format>XML</Format><Format>INIMAGE</Format><Format>BLANK</Format><Format>JSON</Format><Format>application/vnd.ogc.se_xml</Format></Exception>` +
     `<Layer>` +
     `<Title>${esc(`Qtiler project ${projectId}`)}</Title>` +
+    `<Abstract>${esc("WMS endpoint powered by QGIS Core (no QGIS Server)")}</Abstract>` +
     `${rootCrsNodes}` +
+    `${rootBboxNodes}` +
     `${layerNodes}` +
     `</Layer>` +
     `</Capability>` +
@@ -452,7 +569,7 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
 
 const readSupportedCrsFromTileGrids = ({ tileGridDir }) => {
   try {
-    const set = new Set(["EPSG:3857", "EPSG:4326"]);
+    const set = new Set(["EPSG:3857", "EPSG:4326", "CRS:84"]);
     if (!tileGridDir || !fs.existsSync(tileGridDir)) return Array.from(set);
     const entries = fs.readdirSync(tileGridDir).filter((f) => f.toLowerCase().endsWith('.json'));
     for (const name of entries) {
@@ -476,7 +593,7 @@ const readSupportedCrsFromTileGrids = ({ tileGridDir }) => {
     }
     return Array.from(set);
   } catch {
-    return ["EPSG:3857", "EPSG:4326"];
+    return ["EPSG:3857", "EPSG:4326", "CRS:84"];
   }
 };
 
@@ -495,16 +612,26 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
         const title = String(e.title || name);
         const tileCrs = normalizeCrs(e.tile_crs || e.crs) || "EPSG:3857";
         const layerCrs = normalizeCrs(e.layer_crs) || null;
-        const supported = Array.from(new Set([tileCrs, layerCrs, "EPSG:4326", "EPSG:3857"].filter(Boolean)));
+        const supported = Array.from(new Set([tileCrs, layerCrs, "EPSG:3857", "CRS:84"].filter(Boolean)));
         const bbox = Array.isArray(e.extent_wgs84) && e.extent_wgs84.length === 4 ? e.extent_wgs84 : null;
-        return { name, title, crs: supported, bbox, queryable: true };
+        const nativeBboxesByCrs = {};
+        const nativeCrs = normalizeCrs(e.crs || e.tile_crs || e.layer_crs || e.project_crs);
+        if (nativeCrs && Array.isArray(e.extent) && e.extent.length === 4) {
+          nativeBboxesByCrs[nativeCrs] = e.extent;
+        }
+        const projectCrsForExtent = normalizeCrs(e.project_crs);
+        if (projectCrsForExtent && Array.isArray(e.project_extent) && e.project_extent.length === 4) {
+          nativeBboxesByCrs[projectCrsForExtent] = e.project_extent;
+        }
+        return { name, title, crs: supported, bbox, nativeBboxesByCrs, queryable: false };
       })
       .filter(Boolean);
     const projectCrs = Array.from(new Set([
       normalizeCrs(parsed?.tile_crs || parsed?.crs),
       normalizeCrs(parsed?.project_crs),
       "EPSG:4326",
-      "EPSG:3857"
+      "EPSG:3857",
+      "CRS:84"
     ].filter(Boolean)));
     const projectBbox = Array.isArray(parsed?.extent_wgs84) && parsed.extent_wgs84.length === 4
       ? parsed.extent_wgs84
@@ -525,8 +652,18 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
         const themeCrs = Array.from(new Set([
           normalizeCrs(theme?.tile_crs || theme?.crs),
           normalizeCrs(theme?.project_crs),
+          'CRS:84',
           ...projectCrs
         ].filter(Boolean)));
+        const nativeBboxesByCrs = {};
+        const nativeCrs = normalizeCrs(theme?.crs || theme?.tile_crs || theme?.project_crs);
+        if (nativeCrs && Array.isArray(theme?.extent) && theme.extent.length === 4) {
+          nativeBboxesByCrs[nativeCrs] = theme.extent;
+        }
+        const themeProjectCrs = normalizeCrs(theme?.project_crs);
+        if (themeProjectCrs && Array.isArray(theme?.project_extent) && theme.project_extent.length === 4) {
+          nativeBboxesByCrs[themeProjectCrs] = theme.project_extent;
+        }
         return {
           name,
           title,
@@ -534,6 +671,7 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
           bbox: Array.isArray(theme?.extent_wgs84) && theme.extent_wgs84.length === 4
             ? theme.extent_wgs84
             : (Array.isArray(theme?.project_extent_wgs84) && theme.project_extent_wgs84.length === 4 ? theme.project_extent_wgs84 : projectBbox),
+          nativeBboxesByCrs,
           queryable: false,
           isTheme: true,
           themeName
@@ -994,9 +1132,10 @@ export const registerWmsRoutes = ({
         return;
       }
 
-      // WMS 1.3.0 axis order: EPSG:4326 is (lat,lon). Convert to (x,y) for QGIS.
+      // WMS 1.3.0 axis order may be north/east for some CRS (e.g. EPSG:4326,
+      // EPSG:3006). Convert advertised WMS axis order back to QGIS x/y order.
       let bbox = bboxRaw;
-      if (String(version).trim() === "1.3.0" && String(crs).toUpperCase() === "EPSG:4326") {
+      if (String(version).trim() === "1.3.0" && usesNorthEastAxisOrderForWms13(crs)) {
         bbox = [bboxRaw[1], bboxRaw[0], bboxRaw[3], bboxRaw[2]];
       }
 
