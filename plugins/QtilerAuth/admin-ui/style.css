@@ -336,16 +336,82 @@ label {
 .permission-card {
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 16px;
+  padding: 10px;
   background: color-mix(in srgb, var(--card) 92%, var(--primary) 8%);
 }
 
-.permission-card header {
+.permission-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 0 0 12px;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.permission-card-toggle {
+  flex: 1 1 260px;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--fg);
+  padding: 10px 14px 10px 16px;
+  box-shadow: none;
+  text-align: left;
+}
+
+.permission-card-toggle:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--card) 94%, var(--primary) 6%);
+}
+
+.permission-card-toggle .help {
+  margin: 2px 0 0;
+}
+
+.permission-card-chevron {
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.permission-card.is-collapsed .permission-card-chevron {
+  transform: rotate(0deg);
+}
+
+.permission-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.permission-bulk-button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--primary);
+  padding: 8px 11px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.permission-bulk-button:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .permission-card h3 {
@@ -355,11 +421,12 @@ label {
 .layer-permission-list {
   display: grid;
   gap: 10px;
+  margin-top: 12px;
 }
 
 .layer-permission-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -411,6 +478,25 @@ label {
   margin: 0;
   width: 16px;
   height: 16px;
+}
+
+@media (max-width: 860px) {
+  .permission-card-header {
+    align-items: stretch;
+  }
+
+  .permission-card-toggle,
+  .permission-bulk-actions {
+    flex-basis: 100%;
+  }
+
+  .permission-bulk-actions {
+    justify-content: flex-start;
+  }
+
+  .layer-permission-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 input[type="text"],

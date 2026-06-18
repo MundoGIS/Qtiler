@@ -13,6 +13,9 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
   const origoIndex = path.join(origoDir, "index.html");
   const origoIndexJson = path.join(origoDir, "index.json");
   const ensureAdmin = typeof requireAdmin === "function" ? requireAdmin : (_req, _res, next) => next();
+  const wfsAttributesCacheTtlMs = Number(process.env.QTILER_ORIGO_WFS_ATTRIBUTES_CACHE_TTL_MS || 10 * 60 * 1000);
+  const wfsAttributesCache = new Map();
+  const wfsAttributesInflight = new Map();
 
   const ensureOrigoInstalled = (_req, res, next) => {
     try {
@@ -45,21 +48,39 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
       if (!proj || !proj.file) {
         return res.status(404).json({ error: 'project_not_found' });
       }
-      const result = await tileRendererPool.renderTile({
-        action: 'wfs_attributes',
-        project_path: proj.file,
-        type_name: layerName
-      });
+      const cacheKey = `${projectId}\u0000${layerName}`;
+      const now = Date.now();
+      const cached = wfsAttributesCache.get(cacheKey);
+      if (cached && (now - cached.ts) < wfsAttributesCacheTtlMs) {
+        return res.json({ ok: true, cached: true, attributes: cached.attributes });
+      }
+
+      let pending = wfsAttributesInflight.get(cacheKey);
+      if (!pending) {
+        pending = tileRendererPool.renderTile({
+          action: 'wfs_attributes',
+          project_path: proj.file,
+          type_name: layerName
+        }).finally(() => {
+          wfsAttributesInflight.delete(cacheKey);
+        });
+        wfsAttributesInflight.set(cacheKey, pending);
+      }
+      const result = await pending;
       if (!result || result.status !== 'success') {
         const code = String(result?.code || result?.error || '').toLowerCase();
         if (code === 'notfound' || code === 'layer_not_found') {
           return res.json({ ok: true, attributes: [] });
         }
-        return res.status(500).json({ error: 'attributes_failed', details: result?.message || result?.error || 'unknown' });
+        console.warn('[Origo] wfs-attributes failed', { projectId, layerName, error: result?.message || result?.error || 'unknown' });
+        return res.json({ ok: false, attributes: [], warning: 'attributes_unavailable' });
       }
-      return res.json({ ok: true, attributes: Array.isArray(result.attributes) ? result.attributes : [] });
+      const attributes = Array.isArray(result.attributes) ? result.attributes : [];
+      wfsAttributesCache.set(cacheKey, { ts: Date.now(), attributes });
+      return res.json({ ok: true, attributes });
     } catch (err) {
-      return res.status(500).json({ error: 'attributes_failed', details: String(err?.message || err) });
+      console.warn('[Origo] wfs-attributes exception', { error: String(err?.message || err) });
+      return res.json({ ok: false, attributes: [], warning: 'attributes_unavailable' });
     }
   });
 

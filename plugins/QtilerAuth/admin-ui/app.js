@@ -246,6 +246,65 @@ async function fetchLayerAttributes(projectId, layerName) {
   return { all: [], nonGeometry: [], geometry: [] };
 }
 
+function setSelectOptions(select, columns, selectedValue, fallbackLabel = 'No attributes detected') {
+  if (!select) return;
+  const safeColumns = Array.from(new Set((Array.isArray(columns) ? columns : []).map((col) => String(col || '').trim()).filter(Boolean)));
+  if (!safeColumns.length) {
+    select.innerHTML = `<option value="">${escapeHtml(fallbackLabel)}</option>`;
+    select.value = '';
+    return;
+  }
+  const selected = String(selectedValue || '').trim();
+  select.innerHTML = safeColumns.map((col) => {
+    const escaped = escapeHtml(col);
+    const sel = selected === col ? ' selected' : '';
+    return `<option value="${escaped}"${sel}>${escaped}</option>`;
+  }).join('');
+  if (selected && safeColumns.includes(selected)) select.value = selected;
+}
+
+function applyLayerAttributeMetadata(projectId, layerName, row, metadata) {
+  if (!row) return;
+  const projectKey = String(projectId || '').trim();
+  const layerKey = String(layerName || '').trim();
+  if (!state.layerAttributesByProject[projectKey]) state.layerAttributesByProject[projectKey] = {};
+  state.layerAttributesByProject[projectKey][layerKey] = metadata;
+
+  const permission = state.layerPermissionsByProject?.[projectKey]?.get(layerKey) || {};
+  const config = permission.search || {};
+  const availableColumns = Array.isArray(metadata?.nonGeometry) && metadata.nonGeometry.length
+    ? metadata.nonGeometry
+    : (Array.isArray(metadata?.all) ? metadata.all : []);
+  const selectedSearch = pickPreferredAttribute(
+    [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
+    availableColumns
+  );
+  const selectedId = pickPreferredAttribute(
+    [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
+    availableColumns
+  );
+  const layer = state.layersByProject?.[projectKey]?.find((entry) => String(entry?.name || '') === layerKey) || {};
+  const selectedGeom = detectGeometryAttribute(layer, metadata, config.geometryAttribute);
+  row.dataset.geometryAttribute = selectedGeom;
+  setSelectOptions(row.querySelector('.search-select'), availableColumns, selectedSearch);
+  setSelectOptions(row.querySelector('.id-select'), availableColumns, selectedId);
+}
+
+async function ensureLayerAttributes(projectId, layerName, row) {
+  const projectKey = String(projectId || '').trim();
+  const layerKey = String(layerName || '').trim();
+  if (!projectKey || !layerKey || !row) return;
+  const existing = state.layerAttributesByProject?.[projectKey]?.[layerKey];
+  if (existing && Array.isArray(existing.all) && existing.all.length) return;
+  row.classList.add('is-loading-attributes');
+  try {
+    const metadata = await fetchLayerAttributes(projectKey, layerKey);
+    applyLayerAttributeMetadata(projectKey, layerKey, row, metadata);
+  } finally {
+    row.classList.remove('is-loading-attributes');
+  }
+}
+
 async function loadSearchableCatalog() {
   const projects = Array.isArray(state.projects) ? state.projects : [];
   const results = await Promise.all(projects.map(async (project) => {
@@ -257,24 +316,16 @@ async function loadSearchableCatalog() {
         api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`)
       ]);
       const allLayers = Array.isArray(layersResponse?.layers) ? layersResponse.layers : [];
-      const vectorLayers = allLayers.filter((l) => {
-        const isThemeLayer = l?.isTheme === true || l?.kind === 'theme' || l?.type === 'THEME' || String(l?.name || '').startsWith('theme:');
-        return !isThemeLayer && (l?.type === 'WFS' || l?.kind === 'vector' || !!l?.geometry_type);
-      });
       const projectLayers = allLayers.filter((l) => l && l.name);
       const layerPermissions = Array.isArray(searchableResponse?.layers) ? searchableResponse.layers : [];
       const permissionByName = new Map(layerPermissions.map((entry) => [String(entry?.name || ''), entry]));
-      const attributeEntries = await Promise.all(vectorLayers.map(async (layer) => {
-        const metadata = await fetchLayerAttributes(projectId, layer.name);
-        return [layer.name, metadata];
-      }));
       return {
         projectId,
         layers: projectLayers,
         searchable: layerPermissions.map((entry) => entry?.search).filter(Boolean),
         layerPermissions,
         permissionByName,
-        attributes: Object.fromEntries(attributeEntries)
+        attributes: {}
       };
     } catch (_err) {
       return {
@@ -866,10 +917,17 @@ function renderLayerPermissions() {
     const layerPermissions = state.layerPermissionsByProject?.[projectId] || new Map();
 
     const card = document.createElement('article');
-    card.className = 'permission-card';
+    card.className = 'permission-card is-collapsed';
     card.dataset.projectId = projectId;
 
     const header = document.createElement('header');
+    header.className = 'permission-card-header';
+
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'permission-card-toggle';
+    toggleButton.setAttribute('aria-expanded', 'false');
+
     const titleWrap = document.createElement('div');
     const heading = document.createElement('h3');
     heading.textContent = project.name || projectId;
@@ -878,11 +936,54 @@ function renderLayerPermissions() {
     meta.textContent = `${projectLayers.length} layer${projectLayers.length === 1 ? '' : 's'}`;
     titleWrap.append(heading, meta);
 
-    header.appendChild(titleWrap);
+    const chevron = document.createElement('span');
+    chevron.className = 'permission-card-chevron';
+    chevron.textContent = '›';
+    toggleButton.append(titleWrap, chevron);
+
+    const bulkActions = document.createElement('div');
+    bulkActions.className = 'permission-bulk-actions';
+
+    const makeBulkButton = (label, action) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'permission-bulk-button';
+      button.textContent = label;
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        action();
+      });
+      return button;
+    };
+
+    const setBulkChecked = (selector, checked) => {
+      Array.from(list.querySelectorAll(selector)).forEach((input) => {
+        if (input.disabled) return;
+        input.checked = checked;
+      });
+      scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
+    };
+
+    bulkActions.append(
+      makeBulkButton('Exclude all', () => setBulkChecked('.exclude-check', true)),
+      makeBulkButton('Clear exclude', () => setBulkChecked('.exclude-check', false)),
+      makeBulkButton('Edit all', () => setBulkChecked('.edit-check', true)),
+      makeBulkButton('Clear edit', () => setBulkChecked('.edit-check', false))
+    );
+
+    header.append(toggleButton, bulkActions);
     card.appendChild(header);
 
     const list = document.createElement('div');
     list.className = 'layer-permission-list';
+    list.hidden = true;
+
+    toggleButton.addEventListener('click', () => {
+      const expanded = toggleButton.getAttribute('aria-expanded') === 'true';
+      toggleButton.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      list.hidden = expanded;
+      card.classList.toggle('is-collapsed', expanded);
+    });
 
     if (!projectLayers.length) {
       const empty = document.createElement('p');
@@ -896,9 +997,16 @@ function renderLayerPermissions() {
         const isThemeLayer = layer.isTheme === true || layer.kind === 'theme' || layer.type === 'THEME' || String(layer.name || '').startsWith('theme:');
         const isVectorLayer = !isThemeLayer && (layer.type === 'WFS' || layer.kind === 'vector' || !!layer.geometry_type);
         const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
-        const availableColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
+        const savedColumns = [
+          config.searchAttribute,
+          config.titleField,
+          config.idAttribute,
+          ...(Array.isArray(config.fields) ? config.fields : [])
+        ].map((col) => String(col || '').trim()).filter(Boolean);
+        const detectedColumns = Array.isArray(layerMeta.nonGeometry) && layerMeta.nonGeometry.length
           ? layerMeta.nonGeometry
           : (Array.isArray(layerMeta.all) ? layerMeta.all : []);
+        const availableColumns = Array.from(new Set([...savedColumns, ...detectedColumns]));
         const searchableEnabled = permission.wfsSearchable === true;
         const editableEnabled = permission.wfsEditable === true;
         const publicExcludedEnabled = permission.publicExcluded === true || permission.excluded === true;
@@ -990,15 +1098,22 @@ function renderLayerPermissions() {
         hintInput.placeholder = 'Search...';
         hintField.appendChild(hintInput);
 
+        editInput.addEventListener('change', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
+
         searchInput.addEventListener('change', () => {
           searchControls.classList.toggle('is-hidden', !searchInput.checked);
+          if (searchInput.checked) {
+            ensureLayerAttributes(projectId, layer.name, row).then(() => {
+              scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
+            });
+          }
           scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
         });
 
         searchControls.append(searchField, idField, hintField);
         row.append(layerName, excludeToggle, editToggle, searchToggle, searchControls);
         row.querySelectorAll('input, select').forEach((control) => {
-          if (control === searchInput) return;
+          if (control === searchInput || control === editInput) return;
           control.addEventListener('change', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
         });
         hintInput.addEventListener('input', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
