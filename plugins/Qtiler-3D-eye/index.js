@@ -42,9 +42,10 @@ const PLANNER_MODULES = [
     { key: 'timeline', label: 'Timeline / Clock', defaultEnabled: false },
     { key: 'shadows', label: 'Shadows', defaultEnabled: true },
     { key: 'skybox', label: 'Skybox / Clouds', defaultEnabled: false },
-    { key: 'simulation', label: 'Camera simulation', defaultEnabled: false },
+    { key: 'simulation', label: 'Camera simulation', defaultEnabled: true },
     { key: 'models', label: '3D models / GLTF', defaultEnabled: true },
-    { key: 'feedback', label: 'Map notes / comments', defaultEnabled: false }
+    { key: 'feedback', label: 'Map notes / comments', defaultEnabled: true },
+    { key: 'infoicons', label: 'Info icons', defaultEnabled: true }
 ];
 
 const normalizeProjectId = (value) => String(value || '').trim();
@@ -239,6 +240,8 @@ const normalizeSceneProfile = (input = {}) => {
         modules: normalizeModulesState(input.modules),
         ionToken: String(input.ionToken || '').trim(),
         logoConfig: input.logoConfig && typeof input.logoConfig === 'object' ? input.logoConfig : null,
+        talkMessages: Array.isArray(input.talkMessages) ? input.talkMessages : [],
+        infoIcons: Array.isArray(input.infoIcons) ? input.infoIcons : [],
         savedViews: Array.isArray(input.savedViews) ? input.savedViews : [],
         assetIds: uniqueStrings(input.assetIds),
         plannerConfig: input.plannerConfig && typeof input.plannerConfig === 'object' ? input.plannerConfig : {},
@@ -933,10 +936,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
                 layers.push({
                     key,
                     name: item.title || name,
-                    type: 'wms',
+                    type: 'wmts',
                     projectId,
                     layerName: name,
-                    url: `/wms?project=${encodeURIComponent(projectId)}`,
+                    url: `/wmts/${encodeURIComponent(projectId)}/${encodeURIComponent(name)}/{z}/{x}/{y}.png`,
+                    wmsUrl: `/wms?project=${encodeURIComponent(projectId)}`,
                     visible: item.visible !== false,
                     isBaseLayer: true,
                     isDefault: profile.defaultBackgroundKey ? profile.defaultBackgroundKey === key : item.isDefault === true,
@@ -948,9 +952,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
                 layers.push({
                     key: `background:${projectId}`,
                     name: `Background: ${projectId}`,
-                    type: 'wms',
+                    type: 'wmts',
                     projectId,
-                    url: `/wms?project=${encodeURIComponent(projectId)}`,
+                    url: `/wmts/${encodeURIComponent(projectId)}/{z}/{x}/{y}.png`,
+                    wmsUrl: `/wms?project=${encodeURIComponent(projectId)}`,
                     visible: true,
                     isBaseLayer: true
                 });
@@ -1077,7 +1082,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
                 terrains: allTerrains,
                 assets: sceneAssets,
                 warnings: allTerrains.length ? [] : ['no_terrain_scene_will_be_flat'],
-                savedViews: Array.isArray(profile.savedViews) ? profile.savedViews : []
+                savedViews: Array.isArray(profile.savedViews) ? profile.savedViews : [],
+                talkMessages: Array.isArray(profile.talkMessages) ? profile.talkMessages : [],
+                infoIcons: Array.isArray(profile.infoIcons) ? profile.infoIcons : []
             }
         };
     };
@@ -2087,6 +2094,168 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         if (!scene) return res.status(404).json({ error: 'scene_not_found' });
         if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
         res.json(buildViewerConfig(scene, req));
+    });
+
+    const writeSceneList = (sceneId, field, updater) => {
+        const maps = readMaps();
+        const idx = maps.findIndex((item) => item.id === sceneId || item.mainProjectId === sceneId);
+        if (idx < 0) return null;
+        const current = Array.isArray(maps[idx][field]) ? maps[idx][field].slice() : [];
+        const next = updater(current) || current;
+        maps[idx] = normalizeSceneProfile({ ...maps[idx], [field]: next, updatedAt: nowIso() });
+        writeMaps(maps);
+        return maps[idx][field] || [];
+    };
+
+    const writeSceneViews = (sceneId, updater) => writeSceneList(sceneId, 'savedViews', updater);
+
+    router.get('/api/scenes/:sceneId/views', (req, res) => {
+        const scene = readScene(String(req.params.sceneId || ''));
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        res.json({ views: Array.isArray(scene.savedViews) ? scene.savedViews : [] });
+    });
+
+    router.post('/api/scenes/:sceneId/views', express.json({ limit: '256kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const name = String(req.body?.name || '').trim();
+        const position = Array.isArray(req.body?.position) ? req.body.position.map(Number) : [];
+        const orientation = req.body?.orientation && typeof req.body.orientation === 'object' ? req.body.orientation : null;
+        if (!name || position.length < 3 || !orientation) return res.status(400).json({ error: 'view_payload_required' });
+        const views = writeSceneViews(sceneId, (current) => {
+            const next = current.filter((view) => String(view?.name || '') !== name);
+            next.push({
+                name,
+                position,
+                orientation: {
+                    heading: Number(orientation.heading),
+                    pitch: Number(orientation.pitch),
+                    roll: Number(orientation.roll)
+                },
+                isDefault: req.body?.isDefault === true
+            });
+            if (req.body?.isDefault === true) {
+                return next.map((view) => ({ ...view, isDefault: view.name === name }));
+            }
+            return next;
+        });
+        res.json({ status: 'saved', views });
+    });
+
+    router.post('/api/scenes/:sceneId/views/default', express.json({ limit: '64kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const name = String(req.body?.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'view_name_required' });
+        const views = writeSceneViews(sceneId, (current) => current.map((view) => ({ ...view, isDefault: String(view?.name || '') === name })));
+        res.json({ status: 'ok', views });
+    });
+
+    router.delete('/api/scenes/:sceneId/views', express.json({ limit: '64kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const name = String(req.body?.name || req.query?.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'view_name_required' });
+        const views = writeSceneViews(sceneId, (current) => current.filter((view) => String(view?.name || '') !== name));
+        res.json({ status: 'deleted', views });
+    });
+
+    router.get('/api/scenes/:sceneId/messages', (req, res) => {
+        const scene = readScene(String(req.params.sceneId || ''));
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        res.json({ messages: Array.isArray(scene.talkMessages) ? scene.talkMessages : [] });
+    });
+
+    router.post('/api/scenes/:sceneId/messages', express.json({ limit: '256kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const longitude = Number(req.body?.position?.longitude ?? req.body?.longitude);
+        const latitude = Number(req.body?.position?.latitude ?? req.body?.latitude);
+        const message = String(req.body?.message || '').trim();
+        const icon = String(req.body?.icon || 'happy').trim();
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude) || !message) return res.status(400).json({ error: 'message_payload_required' });
+        const messages = writeSceneList(sceneId, 'talkMessages', (current) => current.concat([{
+            position: { longitude, latitude },
+            message,
+            icon,
+            createdAt: nowIso()
+        }]));
+        if (!messages) return res.status(404).json({ error: 'scene_not_found' });
+        res.json({ status: 'saved', messages });
+    });
+
+    router.delete('/api/scenes/:sceneId/messages', express.json({ limit: '64kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const longitude = Number(req.body?.longitude ?? req.query?.longitude);
+        const latitude = Number(req.body?.latitude ?? req.query?.latitude);
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return res.status(400).json({ error: 'position_required' });
+        const messages = writeSceneList(sceneId, 'talkMessages', (current) => current.filter((item) => {
+            const lon = Number(item?.position?.longitude);
+            const lat = Number(item?.position?.latitude);
+            return Math.abs(lon - longitude) > 1e-8 || Math.abs(lat - latitude) > 1e-8;
+        }));
+        res.json({ status: 'deleted', messages });
+    });
+
+    router.get('/api/scenes/:sceneId/info-icons', (req, res) => {
+        const scene = readScene(String(req.params.sceneId || ''));
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        res.json({ icons: Array.isArray(scene.infoIcons) ? scene.infoIcons : [] });
+    });
+
+    router.post('/api/scenes/:sceneId/info-icons', express.json({ limit: '256kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const longitude = Number(req.body?.longitude ?? req.body?.position?.longitude);
+        const latitude = Number(req.body?.latitude ?? req.body?.position?.latitude);
+        const height = Number(req.body?.height ?? req.body?.position?.height ?? 60);
+        const name = String(req.body?.name || '').trim();
+        const description = String(req.body?.description || '').trim();
+        const color = String(req.body?.color || '#2563eb').trim();
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude) || !name) return res.status(400).json({ error: 'info_icon_payload_required' });
+        const icons = writeSceneList(sceneId, 'infoIcons', (current) => current.concat([{
+            name,
+            description,
+            color,
+            longitude,
+            latitude,
+            height: Number.isFinite(height) ? height : 60,
+            createdAt: nowIso()
+        }]));
+        res.json({ status: 'saved', icons });
+    });
+
+    router.delete('/api/scenes/:sceneId/info-icons', express.json({ limit: '64kb' }), (req, res) => {
+        const sceneId = String(req.params.sceneId || '').trim();
+        const scene = readScene(sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!userCanAccessProject(req, scene.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
+        const name = String(req.body?.name || req.query?.name || '').trim();
+        const longitude = Number(req.body?.longitude ?? req.query?.longitude);
+        const latitude = Number(req.body?.latitude ?? req.query?.latitude);
+        if (!name && (!Number.isFinite(longitude) || !Number.isFinite(latitude))) return res.status(400).json({ error: 'info_icon_required' });
+        const icons = writeSceneList(sceneId, 'infoIcons', (current) => current.filter((item) => {
+            if (name && String(item?.name || '') === name && (!Number.isFinite(longitude) || Math.abs(Number(item.longitude) - longitude) < 1e-6)) return false;
+            if (!name && Math.abs(Number(item.longitude) - longitude) < 1e-8 && Math.abs(Number(item.latitude) - latitude) < 1e-8) return false;
+            return true;
+        }));
+        res.json({ status: 'deleted', icons });
     });
 
     // 2. Client Viewer

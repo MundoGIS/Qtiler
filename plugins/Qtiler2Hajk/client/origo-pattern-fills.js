@@ -485,6 +485,54 @@
     });
   }
 
+  function getRealHajkMap() {
+    var publicApi = window.hajkPublicApi || null;
+    if (!publicApi) return null;
+    if (publicApi.olMap) return publicApi.olMap;
+    if (typeof publicApi.getMap === 'function') {
+      try {
+        var map = publicApi.getMap();
+        if (map) return map;
+      } catch (err) { /* not ready yet */ }
+    }
+    return null;
+  }
+
+  // The Lantmäteriet search control was built against Origo's control
+  // registry (window.Origo.controls) and is only ever activated inside
+  // bootOrigo(), which real Hajk never calls (Hajk boots its own React app).
+  // Without this, the control script loads but its button is never created,
+  // so the "click on map for info" tool silently does nothing in real Hajk.
+  // Mount it directly against the real Hajk map instead, bypassing Origo's
+  // toolbar/control system entirely.
+  function mountLantmateriForRealHajk() {
+    if (window.Origo) return; // Origo path (preview) handles registration itself
+    if (window.__qtilerLantmateriMounted) return;
+    if (window.LANTMATERI_ENABLED !== true || typeof window.LantmateriSearch !== 'function') return;
+    var map = getRealHajkMap();
+    if (!map || typeof map.getTargetElement !== 'function') return;
+    var container = map.getTargetElement();
+    if (!container) return;
+    try {
+      var control = window.LantmateriSearch(window.LANTMATERI_CONFIG || {});
+      var fakeViewer = {
+        getMap: function () { return map; },
+        getId: function () { return 'map'; }
+      };
+      var buttonEl = control && typeof control.onAdd === 'function' ? control.onAdd(fakeViewer) : null;
+      if (!buttonEl) return;
+      buttonEl.style.position = 'absolute';
+      buttonEl.style.top = '80px';
+      buttonEl.style.right = '8px';
+      buttonEl.style.zIndex = '20';
+      container.appendChild(buttonEl);
+      window.__qtilerLantmateriMounted = true;
+      console.log('[Qtiler2Hajk] Lantmäteriet search control mounted on the Hajk map');
+    } catch (err) {
+      console.warn('[Qtiler2Hajk] Failed to mount Lantmäteriet control for Hajk:', err);
+    }
+  }
+
   function scheduleAutoApply() {
     let attempts = 0;
     const tick = function () {
@@ -492,9 +540,52 @@
       try {
         applyRuntimePatternStyles(window.hajkApp || window.origoApp || null, window.__QTILER2HAJK_CONFIG || null);
       } catch (err) {}
+      try {
+        mountLantmateriForRealHajk();
+      } catch (err) {}
       if (attempts < 80) window.setTimeout(tick, 250);
     };
     tick();
+  }
+
+  // Real Hajk's layer details panel always starts with the legend collapsed
+  // (local `legendIsActive` state, hardcoded to `useState(false)` in
+  // LayerItemDetails.jsx, no config option exists for this). Auto-click the
+  // "toggle-legend-icon" button the moment it appears so the legend shows
+  // expanded by default when a layer's details are opened, without
+  // overriding the user if they choose to collapse it again afterwards.
+  var autoExpandedLegendButtons = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+  function autoExpandLayerLegend() {
+    var btn = document.getElementById('toggle-legend-icon');
+    if (!btn) return;
+    if (autoExpandedLegendButtons) {
+      if (autoExpandedLegendButtons.has(btn)) return;
+      autoExpandedLegendButtons.add(btn);
+    } else if (btn.__qtilerLegendAutoExpanded) {
+      return;
+    } else {
+      btn.__qtilerLegendAutoExpanded = true;
+    }
+    try { btn.click(); } catch (err) { /* ignore */ }
+  }
+
+  function setupLegendAutoExpandObserver() {
+    if (window.__qtilerLegendObserverStarted) return;
+    if (typeof MutationObserver === 'undefined') return;
+    if (!document.body) {
+      // document.body isn't parsed yet when this script runs eagerly in
+      // <head> - retry shortly instead of calling observe() on null, which
+      // throws and (since __qtilerLegendObserverStarted was set first) used
+      // to permanently disable the whole feature.
+      window.setTimeout(setupLegendAutoExpandObserver, 50);
+      return;
+    }
+    window.__qtilerLegendObserverStarted = true;
+    autoExpandLayerLegend();
+    var observer = new MutationObserver(function () {
+      autoExpandLayerLegend();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   function bootOrigo(configOrUrl) {
@@ -601,4 +692,6 @@
   };
   window.addEventListener('qtiler2hajk-config-loaded', scheduleAutoApply);
   window.addEventListener('load', scheduleAutoApply);
+  window.addEventListener('load', setupLegendAutoExpandObserver);
+  setupLegendAutoExpandObserver();
 })();

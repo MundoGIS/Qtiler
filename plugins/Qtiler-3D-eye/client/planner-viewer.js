@@ -1,4 +1,4 @@
-const API_BASE = '/plugins/Qtiler-3D-eye';
+﻿const API_BASE = '/plugins/Qtiler-3D-eye';
 
 const params = new URLSearchParams(window.location.search);
 const sceneId = params.get('scene') || params.get('project') || '';
@@ -16,13 +16,31 @@ const layerList = document.getElementById('layerList');
 const terrainWarning = document.getElementById('terrainWarning');
 const saveViewBtn = document.getElementById('saveViewBtn');
 const toolPopup = document.getElementById('toolPopup');
+const identifyCard = document.getElementById('identifyCard');
+const identifyTitle = document.getElementById('identifyTitle');
+const identifyBody = document.getElementById('identifyBody');
 
 let viewer;
+let sceneConfig = null;
 const runtimeItems = new Map();
 let activeToolHandler = null;
 let activeSketch = null;
 const measurementItems = [];
 const sketchItems = [];
+const sketchStyle = { color: '#f97316', width: 3, fillOpacity: 0.28, pointSize: 10 };
+const talkItems = [];
+const infoIconItems = [];
+const simulationState = {
+  handler: null,
+  focusPoint: null,
+  focusEntity: null,
+  pathPoints: [],
+  pathEntity: null,
+  paused: true,
+  speed: 0.005,
+  pitch: -20,
+  frame: 0
+};
 const lazyGltfState = { timer: null };
 const LAZY_GLTF_MAX_VISIBLE = 120;
 const LAZY_GLTF_BATCH_SIZE = 4;
@@ -92,6 +110,91 @@ function hideToolPopup() {
   if (toolPopup) toolPopup.hidden = true;
 }
 
+function hideIdentifyCard() {
+  if (identifyCard) identifyCard.hidden = true;
+}
+
+function showIdentifyCard(title, body) {
+  if (!identifyCard) return;
+  if (identifyTitle) identifyTitle.textContent = title || 'Identify';
+  if (identifyBody) identifyBody.textContent = body || '';
+  identifyCard.hidden = false;
+}
+
+function flyHome() {
+  const views = Array.isArray(sceneConfig?.config?.savedViews) ? sceneConfig.config.savedViews : [];
+  const defaultView = views.find((view) => view.isDefault) || null;
+  if (defaultView) {
+    flyToSavedView(defaultView);
+    return;
+  }
+  try {
+    if (viewer?.homeButton?.viewModel?.command) {
+      viewer.homeButton.viewModel.command();
+      return;
+    }
+  } catch {}
+  try { viewer?.camera?.flyHome?.(1.2); } catch {}
+}
+
+function startIdentifyTool() {
+  clearActiveTool();
+  hideToolPopup();
+  activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setStatus('Identify: click a feature or the globe.');
+  activeToolHandler.setInputAction((event) => {
+    const picked = viewer.scene.pick(event.position);
+    const cartesian = pickGlobePosition(event.position);
+    let title = 'Identify';
+    const lines = [];
+    if (Cesium.defined(picked)) {
+      const entity = picked.id && picked.id.name ? picked.id : (picked.primitive && picked.primitive.id ? picked.primitive : picked);
+      const name = entity?.name || entity?.id || picked?.id?.id || 'Feature';
+      title = String(name);
+      const props = entity?.properties || picked?.id?.properties || null;
+      if (props && typeof props === 'object') {
+        const keys = typeof props.getValue === 'function' ? [] : Object.keys(props);
+        if (typeof props.getValue === 'function') {
+          try {
+            const value = props.getValue(Cesium.JulianDate.now());
+            if (value && typeof value === 'object') {
+              for (const [key, raw] of Object.entries(value)) {
+                if (raw == null || typeof raw === 'function') continue;
+                lines.push(`${key}: ${typeof raw === 'object' ? JSON.stringify(raw) : raw}`);
+              }
+            }
+          } catch {}
+        } else {
+          for (const key of keys) {
+            const raw = props[key];
+            const value = raw && typeof raw.getValue === 'function' ? raw.getValue() : raw;
+            if (value == null || typeof value === 'function') continue;
+            lines.push(`${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
+          }
+        }
+      }
+      if (!lines.length) lines.push('Picked 3D object.');
+    }
+    if (cartesian) {
+      const carto = Cesium.Cartographic.fromCartesian(cartesian);
+      lines.push(`Lon: ${Cesium.Math.toDegrees(carto.longitude).toFixed(6)}`);
+      lines.push(`Lat: ${Cesium.Math.toDegrees(carto.latitude).toFixed(6)}`);
+      lines.push(`Height: ${carto.height.toFixed(1)} m`);
+    }
+    if (!lines.length) {
+      setStatus('Identify: nothing picked.', 'error');
+      hideIdentifyCard();
+      return;
+    }
+    showIdentifyCard(title, lines.join('\n'));
+    setStatus('Identify: feature selected.');
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  activeToolHandler.setInputAction(() => {
+    hideIdentifyCard();
+    clearActiveTool();
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
 function showToolPopup(title, actions = []) {
   if (!toolPopup) return;
   toolPopup.innerHTML = `
@@ -127,7 +230,8 @@ function initViewer(config) {
     fullscreenButton: isTerrainPreview ? false : true,
     infoBox: isTerrainPreview ? false : true,
     selectionIndicator: isTerrainPreview ? false : true,
-    baseLayerPicker: false
+    baseLayerPicker: false,
+    contextOptions: { webgl: { preserveDrawingBuffer: true } }
   });
 
   viewer.scene.globe.depthTestAgainstTerrain = true;
@@ -135,6 +239,10 @@ function initViewer(config) {
   viewer.scene.globe.enableLighting = config.config?.modules?.shadows !== false;
   if (isTerrainPreview) document.body.classList.add('terrain-preview-mode');
   try { viewer._cesiumWidget._creditContainer.style.display = 'none'; } catch {}
+  try { viewer.homeButton.container.style.display = 'none'; } catch {}
+  try { viewer.fullscreenButton.container.style.display = 'none'; } catch {}
+  try { if (viewer.geocoder) viewer.geocoder.container.style.display = 'none'; } catch {}
+  try { viewer.navigationHelpButton.container.style.display = 'none'; } catch {}
 }
 
 function normalizeTerrainBounds(bounds) {
@@ -178,10 +286,29 @@ function terrainPreviewCameraView(bounds) {
   };
 }
 
+function wmtsTileUrl(layer) {
+  if (layer.type === 'wmts' && layer.url) return layer.url;
+  if (layer.projectId && layer.layerName) {
+    return `/wmts/${encodeURIComponent(layer.projectId)}/${encodeURIComponent(layer.layerName)}/{z}/{x}/{y}.png`;
+  }
+  return '';
+}
+
 async function createImageryProvider(layer) {
-  if (layer.type === 'wms') {
+  if (layer.type === 'wmts' || (layer.isBaseLayer && layer.projectId && layer.layerName)) {
+    const url = wmtsTileUrl(layer);
+    if (url) {
+      return new Cesium.UrlTemplateImageryProvider({
+        url: new URL(url, window.location.origin).toString(),
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        credit: layer.name || layer.layerName || '',
+        maximumLevel: Number(layer.maximumLevel || 19)
+      });
+    }
+  }
+  if (layer.type === 'wms' || layer.wmsUrl) {
     return new Cesium.WebMapServiceImageryProvider({
-      url: new URL(layer.url, window.location.origin).toString(),
+      url: new URL(layer.wmsUrl || layer.url, window.location.origin).toString(),
       layers: layer.layerName || '',
       parameters: {
         service: 'WMS',
@@ -222,7 +349,7 @@ async function createImageryProvider(layer) {
 async function addWmsLayers(config) {
   const layers = config.config?.layers || [];
   const imageryLayers = layers
-    .filter((layer) => ['wms', 'osm', 'xyz'].includes(layer.type) && layer.url)
+    .filter((layer) => ['wms', 'wmts', 'osm', 'xyz'].includes(layer.type) && (layer.url || layer.wmsUrl || (layer.projectId && layer.layerName)))
     .sort((a, b) => Number(!!b.isBaseLayer) - Number(!!a.isBaseLayer));
   const defaultBackground = imageryLayers.find((layer) => layer.isBaseLayer && layer.isDefault) || imageryLayers.find((layer) => layer.isBaseLayer && layer.visible !== false);
   for (const layer of imageryLayers) {
@@ -886,31 +1013,40 @@ function setBackgroundVisible(key) {
   renderLayerPanel({ config: { modules: { layers: true, models: true, bookmarks: true } } });
 }
 
+function isItemVisible(item) {
+  if (item?.category === 'terrain') return item.selected !== false;
+  if (item?.object && 'show' in item.object) return item.object.show !== false;
+  return item?.layer?.visible !== false;
+}
+
 function renderLayerPanel(config) {
   const modules = config.config?.modules || {};
   if (modules.layers === false && modules.models === false) return;
   const groups = [
-    ['background', 'Background'],
-    ['terrain', 'Terrain'],
     ['layer', 'Layers'],
-    ['asset', '3D / Assets']
+    ['asset', '3D / Assets'],
+    ['terrain', 'Terrain'],
+    ['background', 'Background maps']
   ];
   layerList.innerHTML = groups.map(([category, title]) => {
     const entries = Array.from(runtimeItems.entries()).filter(([, item]) => item.category === category);
     if (!entries.length) return '';
-    return `<section class="layer-group"><h3>${title}</h3>${entries.map(([key, item]) => {
-      const checked = item.category === 'terrain' ? item.selected !== false : item.object?.show !== false;
+    return `<section class="layer-group hajk-layer-group"><button type="button" class="hajk-group-toggle" data-group="${category}"><span>${title}</span><i class="bx bx-chevron-down"></i></button><div class="hajk-group-body">${entries.map(([key, item]) => {
+      const checked = isItemVisible(item);
       const inputType = item.category === 'background' || item.category === 'terrain' ? 'radio' : 'checkbox';
       const inputName = item.category === 'background' ? 'backgroundLayer' : (item.category === 'terrain' ? 'terrainLayer' : 'runtimeLayer');
       return `
         <label class="layer-row">
           <input type="${inputType}" name="${inputName}" data-runtime-key="${key}" ${checked ? 'checked' : ''} ${item.category === 'terrain' ? 'disabled' : ''}>
-          <span>${item.label}</span>
-          ${item.asset && !item.asset.readonly && (item.type === 'model' || item.type === '3dtiles') ? `<button class="viewer-button" type="button" data-place-key="${key}">Posicionar</button>` : ''}
+          <span title="${item.label}">${item.label}</span>
+          ${item.asset && !item.asset.readonly && (item.type === 'model' || item.type === '3dtiles') ? `<button class="viewer-button" type="button" data-place-key="${key}">Place</button>` : ''}
           ${item.legendIcon ? `<img src="${item.legendIcon}" alt="" class="legend-icon">` : ''}
         </label>`;
-    }).join('')}</section>`;
+    }).join('')}</div></section>`;
   }).join('') || '<p>No layers or assets loaded.</p>';
+  layerList.querySelectorAll('.hajk-group-toggle').forEach((button) => {
+    button.addEventListener('click', () => button.parentElement.classList.toggle('is-collapsed'));
+  });
   layerList.querySelectorAll('[data-runtime-key]').forEach((input) => {
     input.addEventListener('change', () => {
       const item = runtimeItems.get(input.dataset.runtimeKey);
@@ -922,20 +1058,7 @@ function renderLayerPanel(config) {
     button.addEventListener('click', () => startPlacement(runtimeItems.get(button.dataset.placeKey)));
   });
   saveViewBtn.hidden = modules.bookmarks === false;
-  saveViewBtn.addEventListener('click', () => {
-    const position = viewer.camera.positionWC;
-    const payload = {
-      name: `View ${new Date().toLocaleString()}`,
-      position: [position.x, position.y, position.z],
-      orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: viewer.camera.roll }
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'qtiler-3d-view.json';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, { once: true });
+  saveViewBtn.onclick = () => showSavedViewsPopup(config);
 }
 
 function toggleLayerDialog(config) {
@@ -953,12 +1076,62 @@ function pickGlobePosition(position) {
   return ray ? viewer.scene.globe.pick(ray, viewer.scene) : null;
 }
 
+function measurePolygonArea(positions) {
+  if (!Array.isArray(positions) || positions.length < 3) return 0;
+  if (window.turf) {
+    const coords = positions.map((point) => {
+      const c = Cesium.Cartographic.fromCartesian(point);
+      return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
+    });
+    coords.push(coords[0]);
+    return turf.area(turf.polygon([coords]));
+  }
+  let area = 0;
+  const origin = positions[0];
+  for (let i = 1; i < positions.length - 1; i++) {
+    const v1 = Cesium.Cartesian3.subtract(positions[i], origin, new Cesium.Cartesian3());
+    const v2 = Cesium.Cartesian3.subtract(positions[i + 1], origin, new Cesium.Cartesian3());
+    area += Cesium.Cartesian3.magnitude(Cesium.Cartesian3.cross(v1, v2, new Cesium.Cartesian3())) * 0.5;
+  }
+  return area;
+}
+
+function formatDistance(meters) {
+  if (!Number.isFinite(meters)) return '-';
+  return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${meters.toFixed(1)} m`;
+}
+
+function formatArea(squareMeters) {
+  if (!Number.isFinite(squareMeters) || squareMeters <= 0) return '-';
+  return squareMeters >= 10000 ? `${(squareMeters / 10000).toFixed(2)} ha` : `${squareMeters.toFixed(0)} m²`;
+}
+
+function addMeasureLabel(position, text) {
+  const entity = viewer.entities.add({
+    position,
+    label: {
+      text,
+      font: '14px Manrope, sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -14),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+    }
+  });
+  measurementItems.push(entity);
+  return entity;
+}
+
 function startDistanceMeasure() {
   clearActiveTool();
   const positions = [];
   let line = null;
+  let totalLabel = null;
   activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  setStatus('Medicion: clic para puntos, clic derecho para terminar.');
+  setStatus('Distance: click points, right-click to finish.');
   activeToolHandler.setInputAction((event) => {
     const position = pickGlobePosition(event.position);
     if (!position) return;
@@ -970,7 +1143,11 @@ function startDistanceMeasure() {
       measurementItems.push(line);
       const meters = Cesium.Cartesian3.distance(positions[positions.length - 2], position);
       const total = positions.slice(1).reduce((sum, point, index) => sum + Cesium.Cartesian3.distance(positions[index], point), 0);
-      setStatus(`Segmento ${meters.toFixed(1)} m, total ${total.toFixed(1)} m.`);
+      const mid = Cesium.Cartesian3.midpoint(positions[positions.length - 2], position, new Cesium.Cartesian3());
+      addMeasureLabel(mid, formatDistance(meters));
+      if (totalLabel) viewer.entities.remove(totalLabel);
+      totalLabel = addMeasureLabel(position, `Total ${formatDistance(total)}`);
+      setStatus(`Segment ${formatDistance(meters)}, total ${formatDistance(total)}.`);
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   activeToolHandler.setInputAction(clearActiveTool, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
@@ -980,8 +1157,9 @@ function startAreaMeasure() {
   clearActiveTool();
   const positions = [];
   let polygon = null;
+  let areaLabel = null;
   activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  setStatus('Area: clic para vertices, clic derecho para terminar.');
+  setStatus('Area: click vertices, right-click to finish.');
   activeToolHandler.setInputAction((event) => {
     const position = pickGlobePosition(event.position);
     if (!position) return;
@@ -991,44 +1169,315 @@ function startAreaMeasure() {
       if (polygon) viewer.entities.remove(polygon);
       polygon = viewer.entities.add({ polygon: { hierarchy: new Cesium.PolygonHierarchy(positions.slice()), material: Cesium.Color.YELLOW.withAlpha(0.25), outline: true, outlineColor: Cesium.Color.YELLOW, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND } });
       measurementItems.push(polygon);
-      const coords = positions.map((point) => {
-        const c = Cesium.Cartographic.fromCartesian(point);
-        return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
-      });
-      if (coords.length > 2 && window.turf) {
-        coords.push(coords[0]);
-        const area = turf.area(turf.polygon([coords]));
-        setStatus(`Area ${area.toFixed(0)} m2.`);
-      }
+      const area = measurePolygonArea(positions);
+      const centroid = positions.reduce((sum, point) => Cesium.Cartesian3.add(sum, point, sum), new Cesium.Cartesian3());
+      Cesium.Cartesian3.divideByScalar(centroid, positions.length, centroid);
+      if (areaLabel) viewer.entities.remove(areaLabel);
+      areaLabel = addMeasureLabel(centroid, formatArea(area));
+      setStatus(area > 0 ? `Area ${formatArea(area)}.` : `Area: ${positions.length} vertices.`);
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   activeToolHandler.setInputAction(clearActiveTool, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 }
 
+function startHeightMeasure() {
+  clearActiveTool();
+  let startPosition = null;
+  let startCarto = null;
+  let previewLine = null;
+  let previewLabel = null;
+  activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setStatus('Height: click start, then click end. Right-click cancels.');
+  activeToolHandler.setInputAction((event) => {
+    const position = pickGlobePosition(event.position);
+    if (!position) return;
+    if (!startPosition) {
+      startPosition = position;
+      startCarto = Cesium.Cartographic.fromCartesian(position);
+      measurementItems.push(viewer.entities.add({
+        position,
+        point: { pixelSize: 8, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+      }));
+      setStatus('Height: click the second point.');
+      return;
+    }
+    const endCarto = Cesium.Cartographic.fromCartesian(position);
+    const endPosition = Cesium.Cartesian3.fromRadians(startCarto.longitude, startCarto.latitude, endCarto.height);
+    const height = Math.abs(endCarto.height - startCarto.height);
+    if (previewLine) viewer.entities.remove(previewLine);
+    if (previewLabel) viewer.entities.remove(previewLabel);
+    measurementItems.push(viewer.entities.add({
+      position: endPosition,
+      point: { pixelSize: 8, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+    }));
+    measurementItems.push(viewer.entities.add({
+      polyline: { positions: [startPosition, endPosition], width: 3, clampToGround: false, material: Cesium.Color.CYAN }
+    }));
+    measurementItems.push(viewer.entities.add({
+      position: endPosition,
+      label: {
+        text: `${height.toFixed(2)} m`,
+        font: '14px Manrope, sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -12),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      }
+    }));
+    setStatus(`Height ${height.toFixed(2)} m.`);
+    clearActiveTool();
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  activeToolHandler.setInputAction((movement) => {
+    if (!startPosition || !startCarto) return;
+    const hover = pickGlobePosition(movement.endPosition);
+    if (!hover) return;
+    const hoverCarto = Cesium.Cartographic.fromCartesian(hover);
+    const hoverEnd = Cesium.Cartesian3.fromRadians(startCarto.longitude, startCarto.latitude, hoverCarto.height);
+    const height = Math.abs(hoverCarto.height - startCarto.height);
+    if (previewLine) viewer.entities.remove(previewLine);
+    if (previewLabel) viewer.entities.remove(previewLabel);
+    previewLine = viewer.entities.add({
+      polyline: { positions: [startPosition, hoverEnd], width: 3, clampToGround: false, material: Cesium.Color.CYAN.withAlpha(0.7) }
+    });
+    previewLabel = viewer.entities.add({
+      position: hoverEnd,
+      label: {
+        text: `${height.toFixed(2)} m`,
+        font: '14px Manrope, sans-serif',
+        fillColor: Cesium.Color.CYAN,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -12),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      }
+    });
+    measurementItems.push(previewLine, previewLabel);
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  activeToolHandler.setInputAction(() => {
+    if (previewLine) viewer.entities.remove(previewLine);
+    if (previewLabel) viewer.entities.remove(previewLabel);
+    clearActiveTool();
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
+function currentCameraView(name) {
+  const position = viewer.camera.positionWC;
+  return {
+    name: name || `View ${new Date().toLocaleString()}`,
+    position: [position.x, position.y, position.z],
+    orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: viewer.camera.roll }
+  };
+}
+
+function flyToSavedView(view) {
+  if (!view?.position || !view?.orientation) return;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromArray(view.position),
+    orientation: view.orientation,
+    duration: 1.6
+  });
+}
+
+async function persistSavedView(sceneKey, view, isDefault = false) {
+  if (!sceneKey) throw new Error('scene_required');
+  const response = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneKey)}/views`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...view, isDefault })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'save_view_failed');
+  return Array.isArray(payload.views) ? payload.views : [];
+}
+
+function promptViewName(defaultName) {
+  const name = window.prompt('View name', defaultName || '');
+  return String(name || '').trim();
+}
+
+function sketchColor() {
+  return Cesium.Color.fromCssColorString(sketchStyle.color || '#f97316');
+}
+
 function startSketchTool(kind) {
   clearActiveTool();
-  activeSketch = { kind, positions: [], preview: null };
+  const positions = [];
+  let shape = null;
+  const color = sketchColor();
+  activeSketch = { kind, positions };
   activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  setStatus(kind === 'point' ? 'Sketch: click to create a point.' : 'Sketch: click to draw, right-click to finish.');
+  if (kind === 'point') setStatus('Sketch point: click the globe.');
+  else if (kind === 'line') setStatus('Sketch line: click points, right-click to finish.');
+  else setStatus('Sketch polygon: click vertices, right-click to finish.');
   activeToolHandler.setInputAction((event) => {
     const position = pickGlobePosition(event.position);
     if (!position) return;
     if (kind === 'point') {
-      sketchItems.push(viewer.entities.add({ position, point: { pixelSize: 10, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY } }));
+      sketchItems.push(viewer.entities.add({
+        position,
+        point: { pixelSize: Number(sketchStyle.pointSize || 10), color, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+      }));
+      setStatus('Point added.');
       return;
     }
-    activeSketch.positions.push(position);
-    if (activeSketch.preview) viewer.entities.remove(activeSketch.preview);
-    if (kind === 'line' && activeSketch.positions.length > 1) {
-      activeSketch.preview = viewer.entities.add({ polyline: { positions: activeSketch.positions.slice(), width: 3, clampToGround: true, material: Cesium.Color.CYAN } });
-    } else if (kind === 'polygon' && activeSketch.positions.length > 2) {
-      activeSketch.preview = viewer.entities.add({ polygon: { hierarchy: new Cesium.PolygonHierarchy(activeSketch.positions.slice()), material: Cesium.Color.CYAN.withAlpha(0.35), outline: true, outlineColor: Cesium.Color.WHITE, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND } });
+    positions.push(position);
+    sketchItems.push(viewer.entities.add({
+      position,
+      point: { pixelSize: 7, color, outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+    }));
+    if (kind === 'line' && positions.length > 1) {
+      if (shape) viewer.entities.remove(shape);
+      shape = viewer.entities.add({ polyline: { positions: positions.slice(), width: Number(sketchStyle.width || 3), clampToGround: true, material: color } });
+      sketchItems.push(shape);
+      setStatus(`Line: ${positions.length} points. Right-click to finish.`);
+    }
+    if (kind === 'polygon' && positions.length > 2) {
+      if (shape) viewer.entities.remove(shape);
+      shape = viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(positions.slice()),
+          material: color.withAlpha(Number(sketchStyle.fillOpacity || 0.28)),
+          outline: true,
+          outlineColor: color,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+        }
+      });
+      sketchItems.push(shape);
+      setStatus(`Polygon: ${positions.length} vertices. Right-click to finish.`);
     }
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   activeToolHandler.setInputAction(() => {
-    if (activeSketch?.preview) sketchItems.push(activeSketch.preview);
     clearActiveTool();
+    setStatus('Sketch ready.');
   }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
+function showSketchPopup() {
+  if (!toolPopup) return;
+  toolPopup.innerHTML = `
+    <header><strong>Sketch</strong><button type="button" data-tool-close aria-label="Close">x</button></header>
+    <form class="tool-form" id="sketchStyleForm">
+      <label>Color <input name="color" type="color" value="${sketchStyle.color}"></label>
+      <label>Width <input name="width" type="number" min="1" max="12" step="1" value="${sketchStyle.width}"></label>
+      <label>Fill opacity <input name="fillOpacity" type="number" min="0.05" max="0.9" step="0.05" value="${sketchStyle.fillOpacity}"></label>
+      <label>Point size <input name="pointSize" type="number" min="6" max="24" step="1" value="${sketchStyle.pointSize}"></label>
+    </form>
+    <div class="tool-popup-actions">
+      <button type="button" class="viewer-button" data-sketch="point"><i class="bx bx-map-pin"></i><span>Point</span></button>
+      <button type="button" class="viewer-button" data-sketch="line"><i class="bx bx-minus"></i><span>Line</span></button>
+      <button type="button" class="viewer-button" data-sketch="polygon"><i class="bx bx-shape-polygon"></i><span>Polygon</span></button>
+      <button type="button" class="viewer-button" data-sketch="clear"><i class="bx bx-trash"></i><span>Clear</span></button>
+    </div>
+  `;
+  toolPopup.hidden = false;
+  const form = toolPopup.querySelector('#sketchStyleForm');
+  const applyStyle = () => {
+    if (!form) return;
+    sketchStyle.color = form.color.value || '#f97316';
+    sketchStyle.width = Number(form.width.value) || 3;
+    sketchStyle.fillOpacity = Number(form.fillOpacity.value) || 0.28;
+    sketchStyle.pointSize = Number(form.pointSize.value) || 10;
+  };
+  form?.addEventListener('change', applyStyle);
+  toolPopup.querySelector('[data-tool-close]')?.addEventListener('click', hideToolPopup);
+  toolPopup.querySelectorAll('[data-sketch]').forEach((button) => {
+    button.addEventListener('click', () => {
+      applyStyle();
+      const kind = button.dataset.sketch;
+      if (kind === 'clear') clearDrawings();
+      else startSketchTool(kind);
+    });
+  });
+}
+
+async function setDefaultSavedView(sceneKey, name) {
+  const response = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneKey)}/views/default`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'default_view_failed');
+  return Array.isArray(payload.views) ? payload.views : [];
+}
+
+async function deleteSavedView(sceneKey, name) {
+  const response = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneKey)}/views?name=${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'delete_view_failed');
+  return Array.isArray(payload.views) ? payload.views : [];
+}
+
+function showSavedViewsPopup(config) {
+  if (!toolPopup) return;
+  const sceneKey = config?.scene?.id || sceneId;
+  const views = Array.isArray(config?.config?.savedViews) ? config.config.savedViews : [];
+  toolPopup.innerHTML = `
+    <header><strong>Saved views</strong><button type="button" data-tool-close aria-label="Close">x</button></header>
+    <div class="tool-popup-actions">
+      <button type="button" class="viewer-button" data-view-save><i class="bx bx-save"></i><span>Save current view</span></button>
+      ${views.length ? views.map((view, index) => `
+        <div class="saved-view-item">
+          <button type="button" class="viewer-button" data-view-go="${index}">
+            <i class="bx ${view.isDefault ? 'bxs-star' : 'bx-current-location'}"></i>
+            <span>${view.isDefault ? '* ' : ''}${view.name || `View ${index + 1}`}</span>
+          </button>
+          <button type="button" class="viewer-button icon-only" data-view-default="${index}" title="Make default"><i class="bx ${view.isDefault ? 'bxs-star' : 'bx-star'}"></i></button>
+          <button type="button" class="viewer-button icon-only" data-view-delete="${index}" title="Delete view"><i class="bx bx-trash"></i></button>
+        </div>
+      `).join('') : '<p class="saved-view-empty">No saved views yet.</p>'}
+    </div>
+  `;
+  toolPopup.hidden = false;
+  toolPopup.querySelector('[data-tool-close]')?.addEventListener('click', hideToolPopup);
+  toolPopup.querySelector('[data-view-save]')?.addEventListener('click', async () => {
+    const name = promptViewName(`View ${views.length + 1}`);
+    if (!name) return;
+    try {
+      config.config.savedViews = await persistSavedView(sceneKey, currentCameraView(name));
+      setStatus(`Saved view: ${name}`);
+      showSavedViewsPopup(config);
+    } catch (err) {
+      setStatus(`Could not save view: ${err.message || err}`, 'error');
+    }
+  });
+  toolPopup.querySelectorAll('[data-view-go]').forEach((button) => {
+    button.addEventListener('click', () => flyToSavedView(views[Number(button.dataset.viewGo)]));
+  });
+  toolPopup.querySelectorAll('[data-view-default]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const view = views[Number(button.dataset.viewDefault)];
+      if (!view?.name) return;
+      try {
+        config.config.savedViews = await setDefaultSavedView(sceneKey, view.name);
+        setStatus(`Default view: ${view.name}`);
+        showSavedViewsPopup(config);
+      } catch (err) {
+        setStatus(`Could not set default view: ${err.message || err}`, 'error');
+      }
+    });
+  });
+  toolPopup.querySelectorAll('[data-view-delete]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const view = views[Number(button.dataset.viewDelete)];
+      if (!view?.name || !window.confirm(`Delete view "${view.name}"?`)) return;
+      try {
+        config.config.savedViews = await deleteSavedView(sceneKey, view.name);
+        setStatus(`Deleted view: ${view.name}`);
+        showSavedViewsPopup(config);
+      } catch (err) {
+        setStatus(`Could not delete view: ${err.message || err}`, 'error');
+      }
+    });
+  });
 }
 
 function clearDrawings() {
@@ -1036,6 +1485,511 @@ function clearDrawings() {
   measurementItems.length = 0;
   sketchItems.length = 0;
   clearActiveTool();
+}
+
+function sceneKeyFrom(config) {
+  return config?.scene?.id || sceneId;
+}
+
+function captureViewerPng() {
+  viewer.render();
+  return viewer.scene.canvas.toDataURL('image/png');
+}
+
+function downloadPng() {
+  const link = document.createElement('a');
+  link.href = captureViewerPng();
+  link.download = `${sceneKeyFrom(sceneConfig) || 'qtiler-3d'}.png`;
+  link.click();
+  setStatus('PNG exported.');
+}
+
+function calculatePrintScale() {
+  const cameraHeight = viewer.camera.positionCartographic.height;
+  const dpi = 96;
+  const inchesPerMeter = 39.3701;
+  const metersPerPixel = (cameraHeight * Math.PI) / (dpi * viewer.scene.canvas.clientHeight);
+  return Math.round(metersPerPixel * inchesPerMeter * 1000);
+}
+
+function loadLogoDataUrl(logoUrl) {
+  if (!logoUrl) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null);
+    img.src = logoUrl;
+  });
+}
+
+async function exportMapPdf(options = {}) {
+  const jsPDF = window.jspdf?.jsPDF;
+  if (!jsPDF) {
+    setStatus('jsPDF is not loaded yet.', 'error');
+    return;
+  }
+  const title = options.title || sceneConfig?.scene?.title || 'Qtiler 3D Eye';
+  const description = options.description || '';
+  const paperSize = options.paperSize || 'a4';
+  const orientation = options.orientation || 'landscape';
+  const margin = Number(options.margin) || 10;
+  const logoData = await loadLogoDataUrl(sceneConfig?.config?.branding?.logoUrl || '');
+  const mapImageData = captureViewerPng();
+  const pdf = new jsPDF({ orientation, unit: 'mm', format: paperSize });
+  const contentWidth = pdf.internal.pageSize.getWidth() - margin * 2;
+  const contentHeight = pdf.internal.pageSize.getHeight() - margin * 2;
+  if (options.showBorder !== false) {
+    pdf.setLineWidth(0.5);
+    pdf.rect(margin, margin, contentWidth, contentHeight);
+  }
+  if (options.showDate !== false) {
+    pdf.setFontSize(10);
+    pdf.text(new Date().toLocaleDateString(), pdf.internal.pageSize.getWidth() - margin - 30, margin + 5);
+  }
+  if (logoData) {
+    const logoWidth = 20;
+    const logoHeight = 10;
+    let logoX = pdf.internal.pageSize.getWidth() - margin - logoWidth;
+    let logoY = margin + 5;
+    if (options.logoPosition === 'top-left') logoX = margin + 5;
+    if (options.logoPosition === 'top-center') logoX = (pdf.internal.pageSize.getWidth() - logoWidth) / 2;
+    pdf.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight);
+  }
+  pdf.setFont('helvetica', options.boldTitle ? 'bold' : 'normal');
+  pdf.setFontSize(Number(options.titleFontSize) || 16);
+  const titleY = margin + (logoData ? 25 : 12);
+  pdf.text(title, margin + 5, titleY);
+  let mapY = titleY + 10;
+  let availableMapHeight = contentHeight - mapY - (options.showScale !== false ? 25 : 0);
+  if (description && options.descriptionPosition === 'above') {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(Number(options.descriptionFontSize) || 10);
+    pdf.text(description, margin + 5, mapY, { maxWidth: contentWidth });
+    mapY += 10;
+    availableMapHeight -= 10;
+  }
+  const canvas = viewer.scene.canvas;
+  const aspectRatioMap = canvas.width / canvas.height;
+  const aspectRatioPage = contentWidth / availableMapHeight;
+  let mapWidth = contentWidth;
+  let mapHeight = availableMapHeight;
+  if (aspectRatioMap > aspectRatioPage) mapHeight = mapWidth / aspectRatioMap;
+  else mapWidth = mapHeight * aspectRatioMap;
+  const mapX = (pdf.internal.pageSize.getWidth() - mapWidth) / 2;
+  pdf.addImage(mapImageData, 'PNG', mapX, mapY, mapWidth, mapHeight);
+  if (description && options.descriptionPosition !== 'above') {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(Number(options.descriptionFontSize) || 10);
+    pdf.text(description, margin + 5, mapY + mapHeight + 10, { maxWidth: contentWidth });
+  }
+  if (options.showScale !== false) {
+    const scaleX = (pdf.internal.pageSize.getWidth() - 100) / 2;
+    const scaleY = mapY + mapHeight + 15;
+    pdf.setLineWidth(0.5);
+    pdf.line(scaleX, scaleY, scaleX + 100, scaleY);
+    pdf.text(`Scale: 1:${calculatePrintScale()}`, scaleX + 30, scaleY + 5);
+  }
+  pdf.save(`${sceneKeyFrom(sceneConfig) || 'map'}.pdf`);
+  setStatus('PDF exported.');
+}
+
+function showPrintPopup(config) {
+  if (!toolPopup) return;
+  toolPopup.innerHTML = `
+    <header><strong>Export</strong><button type="button" data-tool-close aria-label="Close">x</button></header>
+    <form class="tool-form" id="exportForm">
+      <label>Title <input name="title" value="${config?.scene?.title || 'Qtiler 3D Eye'}"></label>
+      <label>Description <textarea name="description"></textarea></label>
+      <label>Paper
+        <select name="paperSize">
+          <option value="a4">A4</option>
+          <option value="a3">A3</option>
+          <option value="letter">Letter</option>
+        </select>
+      </label>
+      <label>Orientation
+        <select name="orientation">
+          <option value="landscape">Landscape</option>
+          <option value="portrait">Portrait</option>
+        </select>
+      </label>
+      <label>Logo
+        <select name="logoPosition">
+          <option value="top-right">Top right</option>
+          <option value="top-left">Top left</option>
+          <option value="top-center">Top center</option>
+        </select>
+      </label>
+      <label class="check-row"><input type="checkbox" name="showDate" checked> Date</label>
+      <label class="check-row"><input type="checkbox" name="showScale" checked> Scale</label>
+      <label class="check-row"><input type="checkbox" name="showBorder" checked> Border</label>
+      <button class="viewer-button" type="submit"><i class="bx bx-file"></i><span>Export PDF</span></button>
+      <button class="viewer-button" type="button" id="exportPngBtn"><i class="bx bx-image"></i><span>Export PNG</span></button>
+    </form>
+  `;
+  toolPopup.hidden = false;
+  toolPopup.querySelector('[data-tool-close]')?.addEventListener('click', hideToolPopup);
+  toolPopup.querySelector('#exportPngBtn')?.addEventListener('click', downloadPng);
+  toolPopup.querySelector('#exportForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    exportMapPdf({
+      title: form.title.value,
+      description: form.description.value,
+      paperSize: form.paperSize.value,
+      orientation: form.orientation.value,
+      logoPosition: form.logoPosition.value,
+      showDate: form.showDate.checked,
+      showScale: form.showScale.checked,
+      showBorder: form.showBorder.checked,
+      descriptionPosition: 'below'
+    });
+  });
+}
+
+function talkIconUrl(icon) {
+  if (icon === 'semi-arg') return `${API_BASE}/view/icons/sad.png`;
+  if (icon === 'arg') return `${API_BASE}/view/icons/arg.png`;
+  return `${API_BASE}/view/icons/smile.png`;
+}
+
+function addTalkEntity(msg, visible = true) {
+  const lon = Number(msg?.position?.longitude);
+  const lat = Number(msg?.position?.latitude);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  const entity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, 50),
+    billboard: {
+      image: talkIconUrl(msg.icon),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      width: 32,
+      height: 32,
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      show: visible
+    },
+    label: {
+      text: String(msg.message || ''),
+      font: '14px Manrope, sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 2,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -60),
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      showBackground: true,
+      backgroundColor: Cesium.Color.BLACK.withAlpha(0.7),
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      show: visible
+    },
+    name: msg.message || 'Note',
+    description: `<p>${String(msg.message || '')}</p>`
+  });
+  talkItems.push({ entity, lon, lat });
+}
+
+function loadTalkMessages(config) {
+  for (const item of talkItems) viewer.entities.remove(item.entity);
+  talkItems.length = 0;
+  const messages = Array.isArray(config?.config?.talkMessages) ? config.config.talkMessages : [];
+  messages.forEach((msg) => addTalkEntity(msg, true));
+}
+
+function startTalkTool(config, icon = 'happy') {
+  clearActiveTool();
+  activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setStatus('Note: click the globe, then enter a message. Right-click cancels.');
+  activeToolHandler.setInputAction(async (event) => {
+    const position = pickGlobePosition(event.position);
+    if (!position) return;
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    const longitude = Cesium.Math.toDegrees(carto.longitude);
+    const latitude = Cesium.Math.toDegrees(carto.latitude);
+    const message = window.prompt('Enter your message:');
+    if (!message) return;
+    const payload = { position: { longitude, latitude }, message, icon };
+    try {
+      const response = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneKeyFrom(config))}/messages`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'save_message_failed');
+      config.config.talkMessages = data.messages || [];
+      addTalkEntity(payload, true);
+      setStatus('Note saved.');
+    } catch (err) {
+      setStatus(`Could not save note: ${err.message || err}`, 'error');
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  activeToolHandler.setInputAction(clearActiveTool, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
+function toggleTalkVisibility(show) {
+  talkItems.forEach((item) => {
+    if (item.entity.billboard) item.entity.billboard.show = show;
+    if (item.entity.label) item.entity.label.show = show;
+  });
+}
+
+function showTalkPopup(config) {
+  if (!toolPopup) return;
+  toolPopup.innerHTML = `
+    <header><strong>Notes</strong><button type="button" data-tool-close aria-label="Close">x</button></header>
+    <div class="tool-popup-actions">
+      <div class="icon-picker">
+        <button type="button" data-talk-icon="happy" class="active"><img src="${API_BASE}/view/icons/smile.png" alt="happy"></button>
+        <button type="button" data-talk-icon="semi-arg"><img src="${API_BASE}/view/icons/sad.png" alt="sad"></button>
+        <button type="button" data-talk-icon="arg"><img src="${API_BASE}/view/icons/arg.png" alt="arg"></button>
+      </div>
+      <button type="button" class="viewer-button" data-talk-add><i class="bx bx-plus"></i><span>Add note</span></button>
+      <button type="button" class="viewer-button" data-talk-toggle><i class="bx bx-hide"></i><span>Toggle notes</span></button>
+    </div>
+  `;
+  toolPopup.hidden = false;
+  let selected = 'happy';
+  toolPopup.querySelector('[data-tool-close]')?.addEventListener('click', hideToolPopup);
+  toolPopup.querySelectorAll('[data-talk-icon]').forEach((button) => {
+    button.addEventListener('click', () => {
+      selected = button.dataset.talkIcon;
+      toolPopup.querySelectorAll('[data-talk-icon]').forEach((item) => item.classList.toggle('active', item === button));
+    });
+  });
+  toolPopup.querySelector('[data-talk-add]')?.addEventListener('click', () => startTalkTool(config, selected));
+  let visible = true;
+  toolPopup.querySelector('[data-talk-toggle]')?.addEventListener('click', () => {
+    visible = !visible;
+    toggleTalkVisibility(visible);
+  });
+}
+
+function addInfoIconEntity(icon) {
+  const lon = Number(icon.longitude);
+  const lat = Number(icon.latitude);
+  const height = Number(icon.height);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  const color = Cesium.Color.fromCssColorString(icon.color || '#2563eb');
+  const entity = viewer.entities.add({
+    name: icon.name || 'Info',
+    description: icon.description || '',
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, Number.isFinite(height) ? height : 60),
+    billboard: {
+      image: new Cesium.PinBuilder().fromColor(color, 36),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+    }
+  });
+  infoIconItems.push({ entity, lon, lat, name: icon.name });
+}
+
+function loadInfoIcons(config) {
+  for (const item of infoIconItems) viewer.entities.remove(item.entity);
+  infoIconItems.length = 0;
+  const icons = Array.isArray(config?.config?.infoIcons) ? config.config.infoIcons : [];
+  icons.forEach(addInfoIconEntity);
+}
+
+function startInfoIconTool(config) {
+  clearActiveTool();
+  activeToolHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setStatus('Info icon: click the globe, then enter name and description.');
+  activeToolHandler.setInputAction(async (event) => {
+    const position = pickGlobePosition(event.position);
+    if (!position) return;
+    const carto = Cesium.Cartographic.fromCartesian(position);
+    const name = window.prompt('Icon name');
+    if (!name) return;
+    const description = window.prompt('Description / HTML (optional)', '') || '';
+    const payload = {
+      name,
+      description,
+      color: '#2563eb',
+      longitude: Cesium.Math.toDegrees(carto.longitude),
+      latitude: Cesium.Math.toDegrees(carto.latitude),
+      height: carto.height || 60
+    };
+    try {
+      const response = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneKeyFrom(config))}/info-icons`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'save_info_icon_failed');
+      config.config.infoIcons = data.icons || [];
+      addInfoIconEntity(payload);
+      setStatus(`Info icon saved: ${name}`);
+    } catch (err) {
+      setStatus(`Could not save info icon: ${err.message || err}`, 'error');
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  activeToolHandler.setInputAction(clearActiveTool, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
+function resetSimulation() {
+  simulationState.paused = true;
+  simulationState.frame = 0;
+  if (simulationState.handler) {
+    simulationState.handler.destroy();
+    simulationState.handler = null;
+  }
+  if (simulationState.pathEntity) viewer.entities.remove(simulationState.pathEntity);
+  if (simulationState.focusEntity) viewer.entities.remove(simulationState.focusEntity);
+  simulationState.pathEntity = null;
+  simulationState.focusEntity = null;
+  simulationState.focusPoint = null;
+  simulationState.pathPoints = [];
+  const play = document.getElementById('simulationPlayButton');
+  if (play) play.textContent = 'Play';
+}
+
+function createSimulationLine(positions) {
+  return viewer.entities.add({
+    polyline: { positions, width: 5, material: Cesium.Color.WHITE, clampToGround: true },
+    properties: { isSimulation: true }
+  });
+}
+
+function calculateHeading(fromPosition, toPosition) {
+  const fromCarto = Cesium.Cartographic.fromCartesian(fromPosition);
+  const toCarto = Cesium.Cartographic.fromCartesian(toPosition);
+  return Math.atan2(toCarto.longitude - fromCarto.longitude, toCarto.latitude - fromCarto.latitude);
+}
+
+async function adjustSimulationPositions(positions) {
+  const heightOffset = Number(document.getElementById('cameraHeight')?.value) || 10;
+  const cartos = positions.map((pos) => Cesium.Cartographic.fromCartesian(pos)).filter(Boolean);
+  if (!cartos.length) return [];
+  try {
+    const sampled = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, cartos);
+    return sampled.filter((pos) => pos && Cesium.defined(pos.height)).map((pos) => Cesium.Cartesian3.fromRadians(pos.longitude, pos.latitude, pos.height + heightOffset));
+  } catch {
+    return positions.map((pos) => {
+      const carto = Cesium.Cartographic.fromCartesian(pos);
+      return Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, (carto.height || 0) + heightOffset);
+    });
+  }
+}
+
+function startSimulationPlayback(positions) {
+  let index = 0;
+  let t = 0;
+  const step = () => {
+    if (simulationState.paused || index >= positions.length - 1) return;
+    const start = positions[index];
+    const end = positions[index + 1];
+    const current = Cesium.Cartesian3.lerp(start, end, t, new Cesium.Cartesian3());
+    viewer.camera.setView({
+      destination: current,
+      orientation: {
+        heading: calculateHeading(current, simulationState.focusPoint),
+        pitch: Cesium.Math.toRadians(simulationState.pitch),
+        roll: 0
+      }
+    });
+    t += simulationState.speed;
+    if (t >= 1) {
+      t = 0;
+      index++;
+    }
+    if (!simulationState.paused) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function startSimulationTool() {
+  clearActiveTool();
+  resetSimulation();
+  const panel = document.getElementById('simulationPanel');
+  if (panel) panel.hidden = false;
+  simulationState.handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  setStatus('Simulation: click a focus point.');
+  simulationState.handler.setInputAction((event) => {
+    const position = pickGlobePosition(event.position);
+    if (!position) return;
+    simulationState.focusPoint = Cesium.Cartesian3.clone(position);
+    if (simulationState.focusEntity) viewer.entities.remove(simulationState.focusEntity);
+    simulationState.focusEntity = viewer.entities.add({
+      position: simulationState.focusPoint,
+      point: { color: Cesium.Color.YELLOW, pixelSize: 10, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND }
+    });
+    simulationState.pathPoints = [];
+    setStatus('Focus selected. Click path points, double-click to finish.');
+    simulationState.handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    simulationState.handler.setInputAction((click) => {
+      const next = pickGlobePosition(click.position);
+      if (!next) return;
+      simulationState.pathPoints.push(next);
+      if (simulationState.pathEntity) viewer.entities.remove(simulationState.pathEntity);
+      if (simulationState.pathPoints.length > 1) simulationState.pathEntity = createSimulationLine(simulationState.pathPoints.slice());
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    simulationState.handler.setInputAction(() => {
+      if (simulationState.pathPoints.length < 2) {
+        setStatus('Need at least two path points.', 'error');
+        return;
+      }
+      if (simulationState.handler) {
+        simulationState.handler.destroy();
+        simulationState.handler = null;
+      }
+      setStatus('Path ready. Adjust controls and click Play.');
+    }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+function bindSimulationControls() {
+  const panel = document.getElementById('simulationPanel');
+  if (!panel || panel.dataset.bound === '1') return;
+  panel.dataset.bound = '1';
+  const height = document.getElementById('cameraHeight');
+  const speed = document.getElementById('simulationSpeed');
+  const pitch = document.getElementById('simulationPitch');
+  const play = document.getElementById('simulationPlayButton');
+  const reset = document.getElementById('simulationResetButton');
+  const close = document.getElementById('simulationClose');
+  height?.addEventListener('input', () => {
+    const value = document.getElementById('simHeightValue');
+    if (value) value.textContent = `${height.value} m`;
+  });
+  speed?.addEventListener('input', () => {
+    simulationState.speed = Number(speed.value) || 0.005;
+    const value = document.getElementById('speedValue');
+    if (value) value.textContent = simulationState.speed.toFixed(4);
+  });
+  pitch?.addEventListener('input', () => {
+    simulationState.pitch = Number(pitch.value) || -20;
+    const value = document.getElementById('pitchValue');
+    if (value) value.textContent = `${simulationState.pitch}°`;
+  });
+  play?.addEventListener('click', async () => {
+    if (!simulationState.focusPoint || simulationState.pathPoints.length < 2) {
+      setStatus('Select a focus point and draw a path first.', 'error');
+      return;
+    }
+    simulationState.paused = !simulationState.paused;
+    play.textContent = simulationState.paused ? 'Play' : 'Pause';
+    if (!simulationState.paused) {
+      const adjusted = await adjustSimulationPositions(simulationState.pathPoints);
+      startSimulationPlayback(adjusted);
+    }
+  });
+  reset?.addEventListener('click', () => {
+    resetSimulation();
+    setStatus('Simulation reset.');
+  });
+  close?.addEventListener('click', () => {
+    resetSimulation();
+    panel.hidden = true;
+  });
 }
 
 function startPlacement(item) {
@@ -1078,43 +2032,86 @@ function startPlacement(item) {
 }
 
 function renderModules(config) {
-  const modules = enabledModules(config.config?.modules || {});
+  const configured = enabledModules(config.config?.modules || {});
+  const modules = ['home', 'identify', ...configured.filter((key) => key !== 'home' && key !== 'identify')];
+  if (!modules.includes('layers')) modules.splice(2, 0, 'layers');
   modulesEl.innerHTML = modules.map((key) => `<span>${key}</span>`).join('');
   const iconByModule = {
-    layers: 'bx-layer', measurement: 'bx-ruler', redline: 'bx-pencil', bookmarks: 'bx-list-ul', print: 'bx-printer', timeline: 'bx-time-five', shadows: 'bx-moon', skybox: 'bx-cloud', simulation: 'bx-street-view', models: 'bx-cube-alt', feedback: 'bx-comment-dots'
+    home: 'bx-home',
+    identify: 'bx-info-circle',
+    layers: 'bx-layer',
+    measurement: 'bx-ruler',
+    redline: 'bx-pencil',
+    bookmarks: 'bx-list-ul',
+    print: 'bx-printer',
+    timeline: 'bx-time-five',
+    shadows: 'bx-moon',
+    skybox: 'bx-cloud',
+    simulation: 'bx-street-view',
+    models: 'bx-cube-alt',
+    feedback: 'bx-comment-dots',
+    infoicons: 'bx-map-pin'
   };
-  toolButtons.innerHTML = modules.map((key) => `<button type="button" data-tool="${key}" title="${key}"><i class="bx ${iconByModule[key] || 'bx-cog'}"></i></button>`).join('');
+  const titleByModule = {
+    home: 'Home',
+    identify: 'Identify',
+    layers: 'Layers',
+    measurement: 'Measure',
+    redline: 'Sketch',
+    bookmarks: 'Saved views',
+    print: 'Export',
+    shadows: 'Shadows',
+    models: 'Assets',
+    simulation: 'Simulation',
+    feedback: 'Notes',
+    infoicons: 'Info icons'
+  };
+  toolButtons.innerHTML = modules.map((key) => `<button type="button" data-tool="${key}" title="${titleByModule[key] || key}"><i class="bx ${iconByModule[key] || 'bx-cog'}"></i></button>`).join('');
   toolButtons.querySelectorAll('[data-tool]').forEach((button) => {
     button.addEventListener('click', () => {
       const tool = button.dataset.tool;
+      toolButtons.querySelectorAll('[data-tool]').forEach((item) => item.classList.toggle('active', item === button && tool !== 'home' && tool !== 'shadows'));
+      if (tool === 'home') {
+        hideIdentifyCard();
+        hideToolPopup();
+        flyHome();
+        return;
+      }
+      if (tool === 'identify') {
+        startIdentifyTool();
+        return;
+      }
       if (tool === 'layers' || tool === 'models') toggleLayerDialog(config);
-      if (tool === 'measurement') showToolPopup('Medicion', [
-        { key: 'distance', label: 'Distancia', icon: 'bx-ruler', run: startDistanceMeasure },
+      if (tool === 'measurement') showToolPopup('Measure', [
+        { key: 'distance', label: 'Distance', icon: 'bx-ruler', run: startDistanceMeasure },
         { key: 'area', label: 'Area', icon: 'bx-shape-polygon', run: startAreaMeasure },
-        { key: 'clear', label: 'Limpiar', icon: 'bx-trash', run: clearDrawings }
+        { key: 'height', label: 'Height', icon: 'bx-up-arrow-alt', run: startHeightMeasure },
+        { key: 'clear', label: 'Clear', icon: 'bx-trash', run: clearDrawings }
       ]);
-      if (tool === 'redline') showToolPopup('Sketch', [
-        { key: 'point', label: 'Punto', icon: 'bx-map-pin', run: () => startSketchTool('point') },
-        { key: 'line', label: 'Linea', icon: 'bx-minus', run: () => startSketchTool('line') },
-        { key: 'polygon', label: 'Poligono', icon: 'bx-shape-polygon', run: () => startSketchTool('polygon') },
-        { key: 'clear', label: 'Limpiar', icon: 'bx-trash', run: clearDrawings }
-      ]);
-      if (tool === 'print') showToolPopup('Exportar', [
-        { key: 'print', label: 'Imprimir', icon: 'bx-printer', run: () => window.print() },
-        { key: 'shot', label: 'PNG', icon: 'bx-image', run: () => viewer.render() }
-      ]);
-      if (tool === 'bookmarks') showToolPopup('Views', [
-        { key: 'save', label: 'Save view', icon: 'bx-save', run: () => saveViewBtn?.click() },
-        { key: 'home', label: 'Home', icon: 'bx-home', run: () => viewer.homeButton.viewModel.command() }
-      ]);
+      if (tool === 'redline') showSketchPopup();
+      if (tool === 'print') showPrintPopup(config);
+      if (tool === 'bookmarks') showSavedViewsPopup(config);
       if (tool === 'shadows') viewer.scene.globe.enableLighting = !viewer.scene.globe.enableLighting;
-      if (tool === 'feedback') clearDrawings();
-      button.classList.toggle('active');
+      if (tool === 'simulation') startSimulationTool();
+      if (tool === 'feedback') showTalkPopup(config);
+      if (tool === 'infoicons') startInfoIconTool(config);
     });
   });
 }
 
 async function flyToScene(config) {
+  const savedViews = Array.isArray(config.config?.savedViews) ? config.config.savedViews : [];
+  const defaultView = savedViews.find((view) => view.isDefault) || null;
+  if (defaultView) {
+    try {
+      viewer.homeButton.viewModel.command.beforeExecute.addEventListener((event) => {
+        event.cancel = true;
+        flyToSavedView(defaultView);
+      });
+    } catch {}
+    flyToSavedView(defaultView);
+    return;
+  }
   const previewTerrain = config.config?.terrains?.[0];
   const terrainBounds = normalizeTerrainBounds(previewTerrain?.bounds || previewTerrain?.rasterLayers?.[0]?.extent_wgs84);
   if (terrainBounds) {
@@ -1160,13 +2157,19 @@ async function boot() {
     : await fetch(`${API_BASE}/api/view-config/${encodeURIComponent(sceneId)}`, { credentials: 'include' });
   const config = await response.json();
   if (!response.ok) throw new Error(config.error || 'view_config_failed');
+  sceneConfig = config;
 
   const isTerrainPreview = config.config?.previewMode === 'terrain' || config.scene?.terrainPreview === true;
   const isAssetPreview = config.config?.previewMode === 'asset' || config.scene?.assetPreview === true;
   titleEl.textContent = config.scene?.title || 'Qtiler 3D Eye';
   initViewer(config);
   viewer.camera.moveEnd.addEventListener(updateZoomDependentItems);
-  if (!isTerrainPreview) renderModules(config);
+  if (!isTerrainPreview) {
+    renderModules(config);
+    bindSimulationControls();
+    loadTalkMessages(config);
+    loadInfoIcons(config);
+  }
   await addWmsLayers(config);
   await applyTerrain(config);
   if (!isTerrainPreview) renderLayerPanel(config);

@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('find', 'stop', 'start', 'exists', 'wait-removed')]
+  [ValidateSet('find', 'stop', 'start', 'restart', 'exists', 'wait-removed')]
   [string] $Action = 'find',
   [string] $ServiceName = 'QTiler'
 )
@@ -58,6 +58,22 @@ switch ($Action) {
     } else {
       Write-Host "  Service already running ($($svcInfo.Name))."
     }
+    exit 0
+  }
+  'restart' {
+    $svcInfo = Get-QtilerServiceInfo
+    if (-not $svcInfo) {
+      Write-Host 'ERROR: QTiler service is not installed.'
+      exit 1
+    }
+    $svc = Get-Service -Name $svcInfo.Name -ErrorAction Stop
+    if ($svc.Status -ne 'Stopped') {
+      Stop-Service -Name $svcInfo.Name -Force -ErrorAction Stop
+      $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45))
+      Write-Host "  Service stopped ($($svcInfo.Name))."
+    }
+    Start-Service -Name $svcInfo.Name -ErrorAction Stop
+    Write-Host "  Service restart requested ($($svcInfo.Name))."
     exit 0
   }
   'wait-removed' {

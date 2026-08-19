@@ -1415,6 +1415,18 @@ def process_task(params):
                     pass
 
             req = QgsFeatureRequest()
+            # Real Hajk Search always sends an ogc:Filter (PropertyIsLike/And/Or)
+            # which routes/wfs.js converts to a QGIS expression string server-side
+            # before reaching this worker - apply it here via the provider so
+            # GetFeature actually respects the searched text/attribute.
+            filter_expression = params.get('filter_expression')
+            if filter_expression and QgsExpression is not None:
+                try:
+                    expr_check = QgsExpression(str(filter_expression))
+                    if not expr_check.hasParserError():
+                        req = req.setFilterExpression(str(filter_expression))
+                except Exception:
+                    pass
             if feature_id is not None and str(feature_id).strip() != '':
                 fid_num = _fid_to_int(feature_id)
                 if fid_num is None:
@@ -3103,6 +3115,17 @@ def process_task(params):
         if dest_crs is None:
             dest_crs = proj.crs()
         settings.setDestinationCrs(dest_crs)
+        # PostGIS / on-the-fly reprojection needs the project datum transforms.
+        # Without this, vector layers often render as a blank PNG while WFS still works.
+        try:
+            if hasattr(settings, 'setTransformContext') and hasattr(proj, 'transformContext'):
+                settings.setTransformContext(proj.transformContext())
+        except Exception:
+            pass
+        try:
+            settings.setOutputDpi(96)
+        except Exception:
+            pass
         if transparent and save_fmt == "PNG":
             settings.setBackgroundColor(QColor(0, 0, 0, 0))
         else:

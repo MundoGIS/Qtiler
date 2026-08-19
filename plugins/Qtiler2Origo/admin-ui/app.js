@@ -1896,6 +1896,7 @@ const publishSection = document.getElementById('publishSection');
 const profilesBadge = document.getElementById('profilesBadge');
 const openPublishModalBtn = document.getElementById('openPublishModalBtn');
 const publishedProfilesList = document.getElementById('publishedProfilesList');
+const galleryBrandingSection = document.getElementById('galleryBrandingSection');
 const catalogLink = document.getElementById('catalogLink');
 const portalPagesBadge = document.getElementById('portalPagesBadge');
 const portalAddPageBtn = document.getElementById('portalAddPageBtn');
@@ -1914,6 +1915,10 @@ const portalGdprEnabled = document.getElementById('portalGdprEnabled');
 const portalSiteTitle = document.getElementById('portalSiteTitle');
 const portalSiteSubtitle = document.getElementById('portalSiteSubtitle');
 const portalSiteLogoUrl = document.getElementById('portalSiteLogoUrl');
+const portalGalleryTitle = document.getElementById('portalGalleryTitle');
+const portalGallerySubtitle = document.getElementById('portalGallerySubtitle');
+const portalGalleryLogoUrl = document.getElementById('portalGalleryLogoUrl');
+const galleryBrandingSaveBtn = document.getElementById('galleryBrandingSaveBtn');
 const portalSiteHeaderHeight = document.getElementById('portalSiteHeaderHeight');
 const portalSiteHeaderFont = document.getElementById('portalSiteHeaderFont');
 const portalSiteHeaderColor1 = document.getElementById('portalSiteHeaderColor1');
@@ -4354,6 +4359,9 @@ function renderPortalEditor() {
   setIfNotActive(portalSiteTitle, site.title || '');
   setIfNotActive(portalSiteSubtitle, site.subtitle || '');
   setIfNotActive(portalSiteLogoUrl, site.headerLogoUrl || '');
+  setIfNotActive(portalGalleryTitle, site.galleryTitle || '');
+  setIfNotActive(portalGallerySubtitle, site.gallerySubtitle || '');
+  setIfNotActive(portalGalleryLogoUrl, site.galleryHeaderLogoUrl || '');
   setIfNotActive(portalSiteHeaderHeight, site.headerHeight ? String(site.headerHeight) : '');
   setIfNotActive(portalSiteHeaderFont, site.headerFont || 'fraunces');
   setIfNotActive(portalSiteHeaderColor1, site.headerColor1 || '#0f766e');
@@ -4559,6 +4567,7 @@ function syncUI() {
 
   /* ── Logo card ── */
   if (logoSection) logoSection.classList.toggle('card--disabled', !installed);
+  if (galleryBrandingSection) galleryBrandingSection.classList.toggle('card--disabled', !installed);
   if (logoBadge) {
     logoBadge.textContent = t(hasLogo ? 'Qtiler2Origo.logo_active' : 'Qtiler2Origo.no_logo');
     logoBadge.className = `badge ${hasLogo ? 'badge--ok' : 'badge--muted'}`;
@@ -4938,7 +4947,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
     if (isVectorLayer) {
       const wfsColor = rule.serveAsWfs ? 'is-success' : 'is-light';
       styleButton = `
-        <div style="display:flex; gap:4px">
+        <div class="Qtiler2Origo-layer-row__styletools">
           <label class="button is-small ${wfsColor}" style="margin-bottom:0">
             <input type="checkbox" style="margin-right:6px" data-wfs-toggle="${escapeHtml(layerKey)}" ${rule.serveAsWfs ? 'checked' : ''} />
             WFS
@@ -4949,14 +4958,17 @@ function renderLayerChecklist(container, layers, rules = {}) {
     }
 
     let wmsLegendControls = '';
-    if (isMainLayerList && !layer.isTheme && !rule.serveAsWfs) {
+    if (isMainLayerList && !layer.isTheme) {
+      // Keep this block in the DOM (hidden, not removed) when WFS is selected
+      // so toggling WMS/WFS doesn't change the row's flex width and shift
+      // the other action buttons left/right.
       const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
       const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
       const preview = manualLegend
         ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Origo-wms-legend-preview" />`
         : `<span class="Qtiler2Origo-wms-legend-empty">${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</span>`;
       wmsLegendControls = `
-        <div class="Qtiler2Origo-wms-legend-controls" title="${escapeHtml(t('Qtiler2Origo.wms_legend_help'))}">
+        <div class="Qtiler2Origo-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Origo.wms_legend_help'))}">
           <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
             <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</option>
             <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_manual'))}</option>
@@ -4993,22 +5005,31 @@ function renderLayerChecklist(container, layers, rules = {}) {
       : '';
     const titleControl = isMainLayerList
       ? `
-        <label class="field" style="margin:0;min-width:180px;max-width:260px">
+        <label class="field Qtiler2Origo-layer-row__titlefield" style="margin:0;min-width:180px;max-width:260px">
           <span class="label" style="font-size:11px;margin-bottom:2px">${escapeHtml(t('Qtiler2Origo.layer_title'))}</span>
           <input class="input is-small" type="text" data-layer-title="${escapeHtml(layerKey)}" value="${escapeHtml(displayTitle)}" placeholder="${escapeHtml(t('Qtiler2Origo.layer_title_placeholder'))}" />
         </label>
       `
       : '';
+    const actionCells = isMainLayerList
+      ? `
+        <div class="Qtiler2Origo-layer-row__actions">
+          <div class="Qtiler2Origo-layer-row__toggles">${includeControl}${visibleControl}</div>
+          <div class="Qtiler2Origo-layer-row__title">${titleControl}</div>
+          <div class="Qtiler2Origo-layer-row__mode">${styleButton}${wmsLegendControls}</div>
+        </div>
+      `
+      : styleButton;
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
-      <div class="Qtiler2Origo-layer-row" data-layer-row="${escapeHtml(layerKey)}">
+      <div class="Qtiler2Origo-layer-row${isMainLayerList ? ' Qtiler2Origo-layer-row--main' : ''}" data-layer-row="${escapeHtml(layerKey)}">
         ${!isMainLayerList ? includeControl : ''}
         ${bgThumb}
         <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Origo-layer-row__main">
           <div class="Qtiler2Origo-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Origo-layer-row__actions">${includeControl}${visibleControl}${titleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
+        ${actionCells}
       </div>
     `;
   }).join('');
@@ -6300,6 +6321,9 @@ portalGdprEnabled?.addEventListener('change', () => updatePortalGdprField('enabl
 portalSiteTitle?.addEventListener('input', () => updatePortalSiteField('title', portalSiteTitle.value));
 portalSiteSubtitle?.addEventListener('input', () => updatePortalSiteField('subtitle', portalSiteSubtitle.value));
 portalSiteLogoUrl?.addEventListener('input', () => updatePortalSiteField('headerLogoUrl', portalSiteLogoUrl.value));
+portalGalleryTitle?.addEventListener('input', () => updatePortalSiteField('galleryTitle', portalGalleryTitle.value));
+portalGallerySubtitle?.addEventListener('input', () => updatePortalSiteField('gallerySubtitle', portalGallerySubtitle.value));
+portalGalleryLogoUrl?.addEventListener('input', () => updatePortalSiteField('galleryHeaderLogoUrl', portalGalleryLogoUrl.value));
 portalSiteHeaderHeight?.addEventListener('input', () => updatePortalSiteField('headerHeight', portalSiteHeaderHeight.value));
 portalSiteHeaderFont?.addEventListener('change', () => updatePortalSiteField('headerFont', portalSiteHeaderFont.value));
 portalSiteHeaderColor1?.addEventListener('input', () => updatePortalSiteField('headerColor1', portalSiteHeaderColor1.value));
@@ -6312,6 +6336,16 @@ portalSiteFooterLink?.addEventListener('input', () => updatePortalSiteField('foo
 portalSiteFooterBackgroundColor?.addEventListener('input', () => updatePortalSiteField('footerBackgroundColor', portalSiteFooterBackgroundColor.value));
 portalSiteFooterTextColor?.addEventListener('input', () => updatePortalSiteField('footerTextColor', portalSiteFooterTextColor.value));
 portalSiteFooterLinkColor?.addEventListener('input', () => updatePortalSiteField('footerLinkColor', portalSiteFooterLinkColor.value));
+galleryBrandingSaveBtn?.addEventListener('click', async () => {
+  galleryBrandingSaveBtn.disabled = true;
+  try {
+    await savePortalPages();
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  } finally {
+    galleryBrandingSaveBtn.disabled = false;
+  }
+});
 
 [portalGdprCompany, portalGdprPrivacyUrl, portalGdprCookieUrl, portalGdprContactUrl, portalGdprTitle, portalGdprText]
   .filter(Boolean)

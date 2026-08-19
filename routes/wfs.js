@@ -907,6 +907,12 @@ export const registerWfsRoutes = ({
       const featureIdRaw = getQueryCI(req, 'FEATUREID') || getQueryCI(req, 'featureId');
       const outputFormatRaw = String(getQueryCI(req, 'OUTPUTFORMAT') || '').trim();
       const outputFormat = outputFormatRaw ? outputFormatRaw.split(';')[0].trim().toLowerCase() : '';
+      // Precomputed by parseWfsXmlToQuery from a POST ogc:Filter, or (as a
+      // fallback for direct KVP GET/POST calls) translated here from a raw
+      // FILTER=<xml> KVP param.
+      const filterExprFromXmlBody = getQueryCI(req, 'QTILER_FILTER_EXPR');
+      const filterKvpXml = getQueryCI(req, 'FILTER');
+      const filterExpr = filterExprFromXmlBody || (filterKvpXml ? ogcFilterXmlToQgisExpression(String(filterKvpXml)) : null);
 
       const asJson = outputFormat.includes('json') || outputFormat === 'application/json' || outputFormat === 'geojson';
       const contentType = asJson ? 'application/json' : 'application/xml';
@@ -923,6 +929,7 @@ export const registerWfsRoutes = ({
           type_name: typeName,
           output_file: outFile,
           version: requestedVersion || null,
+          filter_expression: filterExpr || null,
           feature_id: featureIdRaw ? String(featureIdRaw).trim() : null,
           bbox,
           srs_name: srsName,
@@ -1015,6 +1022,138 @@ export const registerWfsRoutes = ({
     return out;
   };
 
+  // Minimal recursive-descent XML element parser - just enough to walk the
+  // predictable ogc:Filter trees that OpenLayers' WFS format writer produces
+  // (Filter > And/Or > PropertyIsLike > PropertyName/Literal). Avoids adding
+  // a full XML/DOM dependency for this narrow, trusted-input use case.
+  const parseXmlElement = (xml, startIndex) => {
+    let i = startIndex;
+    while (i < xml.length && /\s/.test(xml[i])) i++;
+    if (xml[i] !== '<') return null;
+    const tagMatch = xml.slice(i).match(/^<\s*([A-Za-z_][\w:.-]*)\b/);
+    if (!tagMatch) return null;
+    const tagName = tagMatch[1];
+    const localName = tagName.split(':').pop();
+    let j = i + tagMatch[0].length;
+    let attrsStr = '';
+    let selfClosing = false;
+    while (j < xml.length) {
+      if (xml[j] === '>') { j++; break; }
+      if (xml[j] === '/' && xml[j + 1] === '>') { selfClosing = true; j += 2; break; }
+      attrsStr += xml[j];
+      j++;
+    }
+    const attrs = {};
+    const attrRe = /([A-Za-z_:][\w:.-]*)\s*=\s*"([^"]*)"|([A-Za-z_:][\w:.-]*)\s*=\s*'([^']*)'/g;
+    let am;
+    while ((am = attrRe.exec(attrsStr))) {
+      const name = am[1] || am[3];
+      const value = am[2] !== undefined ? am[2] : am[4];
+      attrs[name] = value;
+    }
+    if (selfClosing) return { tagName: localName, attrs, children: [], text: '', endIndex: j };
+    const children = [];
+    const textParts = [];
+    let pos = j;
+    const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const closeTagRe = new RegExp(`^</\\s*${escapedTag}\\s*>`);
+    let guard = 0;
+    while (pos < xml.length && guard < 100000) {
+      guard++;
+      const remaining = xml.slice(pos);
+      const closeMatch = remaining.match(closeTagRe);
+      if (closeMatch) { pos += closeMatch[0].length; break; }
+      if (remaining[0] === '<') {
+        if (remaining.startsWith('<!--')) {
+          const endComment = remaining.indexOf('-->');
+          pos += endComment >= 0 ? endComment + 3 : remaining.length;
+          continue;
+        }
+        const child = parseXmlElement(xml, pos);
+        if (!child) { pos++; continue; }
+        children.push(child);
+        pos = child.endIndex;
+      } else {
+        const nextTag = remaining.indexOf('<');
+        const chunk = nextTag >= 0 ? remaining.slice(0, nextTag) : remaining;
+        textParts.push(chunk);
+        pos += chunk.length || 1;
+      }
+    }
+    return { tagName: localName, attrs, children, text: textParts.join('').trim(), endIndex: pos };
+  };
+
+  const findFirstElementByLocalName = (xml, localName) => {
+    const re = new RegExp(`<\\s*(?:\\w+:)?${localName}\\b`, 'i');
+    const m = xml.match(re);
+    if (!m) return null;
+    return parseXmlElement(xml, xml.indexOf(m[0]));
+  };
+
+  // Translates an OGC PropertyIsLike literal (wildcards per Hajk's
+  // SearchModel defaults: '*' any-chars, '.' single-char, '!' escape) into a
+  // SQL/QGIS-expression LIKE pattern ('%'/'_').
+  const ogcLikeToSqlPattern = (literal, wildCard, singleChar, escapeChar) => {
+    const text = String(literal || '');
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (escapeChar && ch === escapeChar && i + 1 < text.length) {
+        result += text[i + 1];
+        i++;
+        continue;
+      }
+      if (wildCard && ch === wildCard) { result += '%'; continue; }
+      if (singleChar && ch === singleChar) { result += '_'; continue; }
+      result += ch;
+    }
+    return result;
+  };
+
+  const filterNodeToQgisExpression = (node) => {
+    if (!node) return null;
+    const tag = node.tagName;
+    if (tag === 'And' || tag === 'Or') {
+      const parts = node.children.map(filterNodeToQgisExpression).filter(Boolean);
+      if (!parts.length) return null;
+      return `(${parts.join(tag === 'And' ? ' AND ' : ' OR ')})`;
+    }
+    if (tag === 'PropertyIsLike') {
+      const propNode = node.children.find((c) => c.tagName === 'PropertyName');
+      const literalNode = node.children.find((c) => c.tagName === 'Literal');
+      if (!propNode || !literalNode || !propNode.text) return null;
+      const wildCard = node.attrs.wildCard || node.attrs.wildcard || '*';
+      const singleChar = node.attrs.singleChar || node.attrs.singlechar || '.';
+      const escapeChar = node.attrs.escape || '!';
+      const matchCase = String(node.attrs.matchCase || node.attrs.matchcase || 'true').toLowerCase() === 'true';
+      const pattern = ogcLikeToSqlPattern(literalNode.text, wildCard, singleChar, escapeChar).replace(/'/g, "''");
+      const fieldName = String(propNode.text).replace(/"/g, '""');
+      return matchCase ? `"${fieldName}" LIKE '${pattern}'` : `lower("${fieldName}") LIKE lower('${pattern}')`;
+    }
+    if (tag === 'PropertyIsEqualTo') {
+      const propNode = node.children.find((c) => c.tagName === 'PropertyName');
+      const literalNode = node.children.find((c) => c.tagName === 'Literal');
+      if (!propNode || !literalNode || !propNode.text) return null;
+      const fieldName = String(propNode.text).replace(/"/g, '""');
+      const literal = String(literalNode.text || '').replace(/'/g, "''");
+      return `"${fieldName}" = '${literal}'`;
+    }
+    return null;
+  };
+
+  // Converts a full ogc:Filter XML fragment (as produced by OpenLayers' WFS
+  // writer for Hajk's Search text/PropertyIsLike queries) into a QGIS
+  // expression string, or null if none found / nothing translatable.
+  const ogcFilterXmlToQgisExpression = (xml) => {
+    try {
+      const filterNode = findFirstElementByLocalName(xml, 'Filter');
+      if (!filterNode || !filterNode.children.length) return null;
+      return filterNodeToQgisExpression(filterNode.children[0]);
+    } catch {
+      return null;
+    }
+  };
+
   const parseWfsXmlToQuery = (xmlText) => {
     const xml = String(xmlText || '').trim();
     if (!xml || !xml.startsWith('<')) return null;
@@ -1058,6 +1197,12 @@ export const registerWfsRoutes = ({
       if (fidMatch && fidMatch[1]) {
         bodyQuery.FEATUREID = fidMatch[1];
       }
+
+      // Real Hajk Search always sends a PropertyIsLike/And/Or ogc:Filter for
+      // text search - without translating it, GetFeature ignored the search
+      // text entirely and returned the whole (unfiltered) layer.
+      const filterExpr = ogcFilterXmlToQgisExpression(xml);
+      if (filterExpr) bodyQuery.QTILER_FILTER_EXPR = filterExpr;
 
       // Best-effort BBOX support via gml:Envelope
       try {

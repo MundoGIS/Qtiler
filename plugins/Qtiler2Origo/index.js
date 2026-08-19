@@ -1043,7 +1043,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const state = await readState();
     if (!state.logoFile) return null;
     const stamp = encodeURIComponent(String(state.logoUpdatedAt || '0'));
-    return `/qtiler/branding/logo?v=${stamp}`;
+    return `/plugins/${pluginSlug}/public/branding/logo?v=${stamp}`;
   };
 
   const getBrandingStatus = async () => {
@@ -1426,7 +1426,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const defaultPortalPagesState = () => ({
     homePageSlug: '',
     gdpr: defaultPortalGdprSettings(),
-    site: { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
+    site: { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
     pages: []
   });
 
@@ -1571,6 +1571,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         title: String(source.site.title || '').trim(),
         subtitle: String(source.site.subtitle || '').trim(),
         headerLogoUrl: String(source.site.headerLogoUrl || '').trim(),
+        galleryTitle: String(source.site.galleryTitle || '').trim(),
+        gallerySubtitle: String(source.site.gallerySubtitle || '').trim(),
+        galleryHeaderLogoUrl: String(source.site.galleryHeaderLogoUrl || '').trim(),
         headerHeight: String(source.site.headerHeight || '').trim(),
         headerFont: String(source.site.headerFont || '').trim(),
         headerColor1: String(source.site.headerColor1 || '').trim(),
@@ -1583,7 +1586,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         footerBackgroundColor: String(source.site.footerBackgroundColor || '').trim(),
         footerTextColor: String(source.site.footerTextColor || '').trim(),
         footerLinkColor: String(source.site.footerLinkColor || '').trim()
-      } : { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
+      } : { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
       pages: dedupedPages
     };
   };
@@ -2406,6 +2409,20 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         if (features[featureKey] === false) {
           pluginNames.forEach((name) => disabledPlugins.add(name));
         }
+      }
+    }
+
+    // Routing and DXF export need explicit backend service URLs in our
+    // deployment. If left empty, keeping the plugins visible creates a
+    // production-ready-looking UI that cannot actually complete the action.
+    if (!String(tc.routingServiceUrl || '').trim()) {
+      for (const name of (FEATURE_PLUGIN_MAP.routing || [])) {
+        disabledPlugins.add(name);
+      }
+    }
+    if (!String(tc.dxfExportServiceUrl || '').trim()) {
+      for (const name of (FEATURE_PLUGIN_MAP.dxfExport || [])) {
+        disabledPlugins.add(name);
       }
     }
 
@@ -4289,12 +4306,17 @@ ${mapIcon}
       'externalurl', 'fullscreen', 'geoposition', 'home', 'legend', 'link',
       'localization', 'mapmenu', 'measure', 'position', 'print', 'progressbar',
       'rotate', 'scale', 'scaleline', 'scalepicker', 'search', 'sharemap',
-      'splash', 'zoom', 'mouseposition', 'exportmap', 'lantmaterisearch'
+      'splash', 'zoom', 'lantmaterisearch'
     ]);
     const userProvidedControls = Array.isArray(profile.controls);
-    const controls = userProvidedControls
-      ? profile.controls.map((c) => normalizeOrigoControlEntry(c)).filter((c) => c && VALID_ORIGO_CONTROL_NAMES.has(c.name))
+    const normalizedControls = userProvidedControls
+      ? profile.controls.map((c) => normalizeOrigoControlEntry(c)).filter(Boolean)
       : [];
+    const droppedControls = normalizedControls.filter((c) => !VALID_ORIGO_CONTROL_NAMES.has(c.name)).map((c) => c.name);
+    if (droppedControls.length) {
+      console.warn(`[Qtiler2Origo] Profile "${profile.profileKey || profile.projectId || 'unknown'}" dropped unsupported Origo control(s): ${droppedControls.join(', ')}`);
+    }
+    const controls = normalizedControls.filter((c) => VALID_ORIGO_CONTROL_NAMES.has(c.name));
 
     // Origo already renders zoom buttons by default; keeping an explicit
     // `zoom` control duplicates the + / - UI in both preview and published maps.
@@ -5072,7 +5094,7 @@ ${mapIcon}
     return res.json(config);
   });
 
-  app.get('/qtiler/branding/logo', async (_req, res) => {
+  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (_req, res) => {
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
     return res.sendFile(logoPath);
@@ -6236,6 +6258,7 @@ ${mapIcon}
     try {
       const baseUrl = getRequestBaseUrl(req);
       const all = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
+      const state = await readPortalPagesState();
       const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
       let items = all;
       if (authActive) {
@@ -6251,6 +6274,8 @@ ${mapIcon}
         authActive,
         user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
         logoUrl,
+        gdpr: state.gdpr,
+        site: state.site || {},
         items
       });
     } catch (err) {

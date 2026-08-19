@@ -317,6 +317,11 @@
         footerYearEl.textContent = String(new Date().getFullYear());
       }
 
+      const canDownloadQgisProject = () => {
+        const authEnabled = !!(window.appState && window.appState.authEnabled);
+        return authEnabled && !!(window.appState.user && window.appState.user.role === 'admin');
+      };
+
       const qtilerPluginHooks = window.qtilerPluginHooks || { layerInfoTabs: [], layerActionButtons: [] };
       window.qtilerPluginHooks = qtilerPluginHooks;
       if (!Array.isArray(qtilerPluginHooks.layerActionButtons)) qtilerPluginHooks.layerActionButtons = [];
@@ -4565,17 +4570,22 @@
             });
             heading.appendChild(toggleBtn);
 
-            if (isAdmin) {
+            const canDownload = canDownloadQgisProject();
+            if (isAdmin || canDownload) {
               const headingActions = document.createElement('div');
               headingActions.style.marginLeft = 'auto';
               headingActions.style.display = 'flex';
               headingActions.style.gap = '8px';
-              const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
-              downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, p));
-              headingActions.appendChild(downloadProjectBtn);
-              const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
-              deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
-              headingActions.appendChild(deleteProjectBtn);
+              if (canDownload) {
+                const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
+                downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, p));
+                headingActions.appendChild(downloadProjectBtn);
+              }
+              if (isAdmin) {
+                const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+                deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, p));
+                headingActions.appendChild(deleteProjectBtn);
+              }
               heading.appendChild(headingActions);
             }
 
@@ -4693,17 +4703,22 @@
           });
           heading.appendChild(toggleBtn);
 
-          if (isAdmin) {
+          const canDownload = canDownloadQgisProject();
+          if (isAdmin || canDownload) {
             const headingActions = document.createElement('div');
             headingActions.style.marginLeft = 'auto';
             headingActions.style.display = 'flex';
             headingActions.style.gap = '8px';
-            const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
-            downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, project));
-            headingActions.appendChild(downloadProjectBtn);
-            const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
-            deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, project));
-            headingActions.appendChild(deleteProjectBtn);
+            if (canDownload) {
+              const downloadProjectBtn = makeIconButton(tr('Download project'), 'download');
+              downloadProjectBtn.addEventListener('click', () => downloadProjectBundle(downloadProjectBtn, project));
+              headingActions.appendChild(downloadProjectBtn);
+            }
+            if (isAdmin) {
+              const deleteProjectBtn = makeIconButton('Delete project', 'trash', null, 'btn-danger');
+              deleteProjectBtn.addEventListener('click', () => deleteProject(deleteProjectBtn, project));
+              headingActions.appendChild(deleteProjectBtn);
+            }
             heading.appendChild(headingActions);
           }
 
@@ -7585,6 +7600,10 @@
       }
 
       async function downloadProjectBundle(btn, project) {
+        if (!canDownloadQgisProject()) {
+          showStatus(tr('Project download is only available to authenticated admins'), true);
+          return;
+        }
         if (!project || !project.id) return;
         const initialDisabled = btn.disabled;
         const originalHtml = btn.innerHTML;

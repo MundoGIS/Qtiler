@@ -454,6 +454,27 @@ const usesNorthEastAxisOrderForWms13 = (crs) => {
   return normalized === 'EPSG:3006' || normalized === 'EPSG:4326';
 };
 
+const looksLikeNorthEastProjectedBbox = (bbox) => {
+  const nums = numericBbox(bbox);
+  if (!nums) return false;
+  const abs = nums.map((v) => Math.abs(v));
+  const [a, b, c, d] = abs;
+  return a > 2000000 && c > 2000000 && b < 2000000 && d < 2000000;
+};
+
+const toQgisXyBboxFromWms13 = (bbox, crs) => {
+  const nums = numericBbox(bbox);
+  if (!nums) return bbox;
+  const normalized = String(normalizeCrs(crs) || crs || '').toUpperCase();
+  if (normalized === 'EPSG:4326') {
+    return [nums[1], nums[0], nums[3], nums[2]];
+  }
+  if (normalized === 'EPSG:3006' && looksLikeNorthEastProjectedBbox(nums)) {
+    return [nums[1], nums[0], nums[3], nums[2]];
+  }
+  return nums;
+};
+
 const axisOrderedBboxForCapabilities = ({ bbox, crs, wmsVersion }) => {
   const nums = numericBbox(bbox);
   if (!nums) return null;
@@ -1134,9 +1155,11 @@ export const registerWmsRoutes = ({
 
       // WMS 1.3.0 axis order may be north/east for some CRS (e.g. EPSG:4326,
       // EPSG:3006). Convert advertised WMS axis order back to QGIS x/y order.
+      // OpenLayers TileWMS with Qtiler proj4 defs (no +axis=neu) already sends
+      // XY for EPSG:3006; only swap when the incoming BBOX looks north/east.
       let bbox = bboxRaw;
       if (String(version).trim() === "1.3.0" && usesNorthEastAxisOrderForWms13(crs)) {
-        bbox = [bboxRaw[1], bboxRaw[0], bboxRaw[3], bboxRaw[2]];
+        bbox = toQgisXyBboxFromWms13(bboxRaw, crs);
       }
 
       // GeoWebCache-like caching: only cache tile-aligned WMS requests.

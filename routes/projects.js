@@ -1570,7 +1570,12 @@ export const registerProjectRoutes = ({
     }
   });
 
-  app.get("/projects/:id/download", requireAdmin, async (req, res) => {
+  app.get("/projects/:id/download", (req, res, next) => {
+    if (!(typeof security?.isEnabled === "function" && security.isEnabled())) {
+      return res.status(403).json({ error: "download_unavailable" });
+    }
+    return requireAdmin(req, res, next);
+  }, async (req, res) => {
     const projectId = String(req.params?.id || "").trim();
     if (!projectId) {
       return res.status(400).json({ error: "project_id_required" });

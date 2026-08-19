@@ -505,10 +505,13 @@
 
     function applyPortalHeader(currentPage, payload) {
       const page = currentPage || null;
+      const mapsOnly = payload?.viewMode === 'maps';
       const showHeader = page ? page.showHeader !== false : true;
       const site = payload?.site || {};
       const headerHeight = Math.max(72, Math.min(360, Number(site.headerHeight) || (page ? Number(page.headerHeight) : 0) || 120));
-      const logoUrl = site.headerLogoUrl || ((page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : ''));
+      const logoUrl = mapsOnly
+        ? (site.galleryHeaderLogoUrl || payload?.logoUrl || '')
+        : (site.headerLogoUrl || ((page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : '')));
       const headerColor1 = isSafeCssColor(site.headerColor1) ? site.headerColor1 : '#0f766e';
       const headerColor2 = isSafeCssColor(site.headerColor2) ? site.headerColor2 : '#2563eb';
       const headerTextColor = isSafeCssColor(site.headerTextColor) ? site.headerTextColor : '#ffffff';
@@ -526,19 +529,21 @@
       
       const brandTextH1 = document.querySelector('.brand-text h1.title');
       const brandTextP = document.querySelector('.brand-text p.subtitle');
+      const effectiveTitle = mapsOnly ? (site.galleryTitle || '') : (site.title || '');
+      const effectiveSubtitle = mapsOnly ? (site.gallerySubtitle || '') : (site.subtitle || '');
       if (brandTextH1) {
-        if (payload?.site?.title) {
+        if (effectiveTitle) {
           brandTextH1.removeAttribute('data-i18n');
-          brandTextH1.textContent = payload.site.title;
+          brandTextH1.textContent = effectiveTitle;
         } else {
           brandTextH1.setAttribute('data-i18n', 'qtiler2origo.maps.heading');
           brandTextH1.textContent = typeof t === 'function' ? t('qtiler2origo.maps.heading') : 'Map Portal';
         }
       }
       if (brandTextP) {
-        if (payload?.site?.subtitle) {
+        if (effectiveSubtitle) {
           brandTextP.removeAttribute('data-i18n');
-          brandTextP.textContent = payload.site.subtitle;
+          brandTextP.textContent = effectiveSubtitle;
         } else {
           brandTextP.setAttribute('data-i18n', 'qtiler2origo.maps.subtitle');
           brandTextP.textContent = typeof t === 'function' ? t('qtiler2origo.maps.subtitle') : 'Interactive maps published via Hajk Bridge';
@@ -563,8 +568,9 @@
 
     const isMapsOnlyMode = () => {
       const path = (window.location.pathname || '').toLowerCase();
-      // If it's specifically the maps endpoint, we ignore portal rendering.
-      return path === '/qtiler2origo/maps' || path === '/qtiler2origo/maps/';
+      // /maps is the plain gallery of published maps. Portal pages live only
+      // under /portal/* and must not leak into the gallery.
+      return path === '/qtiler2hajk/maps' || path === '/qtiler2hajk/maps/';
     };
 
     const getSocialIcon = (icon) => {
@@ -594,18 +600,19 @@
       let payload;
       try {
         const slug = getCurrentPortalSlug();
-        const modeFlag = isMapsOnlyMode() ? 'mode=maps' : '';
+        const mapsOnly = isMapsOnlyMode();
         const qsParams = [];
         if (slug) qsParams.push('slug=' + encodeURIComponent(slug));
-        if (modeFlag) qsParams.push(modeFlag);
-
-        const url = '/plugins/Qtiler2Hajk/api/portal-content' + (qsParams.length ? ('?' + qsParams.join('&')) : '');
+        const url = mapsOnly
+          ? '/plugins/Qtiler2Hajk/api/public-maps'
+          : '/plugins/Qtiler2Hajk/api/portal-content' + (qsParams.length ? ('?' + qsParams.join('&')) : '');
         const res = await fetch(url, { credentials: 'same-origin' });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           throw new Error(data.error || ('HTTP ' + res.status));
         }
         payload = await res.json();
+        if (mapsOnly) payload.viewMode = 'maps';
       } catch (err) {
         grid.innerHTML = '<div class="notification is-danger">' + escapeHtml(t('qtiler2origo.maps.failed')) + '</div>';
         if (portalNav) {
@@ -626,6 +633,11 @@
 
     function renderPortalNav(payload) {
       if (!portalNav) return;
+      if (payload?.viewMode === 'maps') {
+        portalNav.hidden = true;
+        portalNav.innerHTML = '';
+        return;
+      }
       const pages = (payload?.portal?.pages || []).filter((page) => page && page.showInNav !== false);
       if (!pages.length) {
         portalNav.hidden = true;
@@ -641,6 +653,12 @@
     }
 
     function renderMainContent(payload) {
+      if (payload?.viewMode === 'maps') {
+        applyPortalHeader(null, payload);
+        document.title = escapeHtml((typeof t === 'function' ? t('qtiler2origo.maps.heading') : 'Map Gallery') + ' - Qtiler2Hajk');
+        renderGrid(payload);
+        return;
+      }
       const currentPage = payload?.portal?.currentPage || null;
       applyPortalHeader(currentPage, payload);
       if (!currentPage) {

@@ -4,65 +4,101 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
   <title>Qtiler 3D Eye</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/boxicons@latest/css/boxicons.min.css" rel="stylesheet">
   <style>
+    :root {
+      --hajk-ink: #0f172a;
+      --hajk-muted: #475569;
+      --hajk-line: #d7e2ee;
+      --hajk-teal: #0f766e;
+      --hajk-blue: #2563eb;
+      --hajk-panel: rgba(255,255,255,.94);
+    }
     html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #05070a; color: #fff; }
+    body { font-family: "Manrope", "Segoe UI", sans-serif; background: #0f172a; color: var(--hajk-ink); }
     #cesiumContainer { position: absolute; inset: 0; }
     .viewer-shell { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
     .top-panel {
-      position: absolute;
-      left: 12px;
-      top: 12px;
-      min-width: min(420px, calc(100vw - 24px));
-      max-width: 520px;
-      background: rgba(12, 18, 28, .86);
-      border: 1px solid rgba(255,255,255,.16);
-      border-radius: 8px;
-      padding: 12px 14px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
-  pointer-events: auto;
+      position: absolute; left: 12px; top: 12px; right: 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      min-height: 64px; padding: 10px 16px;
+      background: linear-gradient(135deg, var(--hajk-teal), var(--hajk-blue) 56%, #0f172a);
+      color: #fff; border-radius: 16px;
+      box-shadow: 0 16px 36px rgba(15,23,42,.28);
+      pointer-events: auto;
     }
-    h1 { margin: 0 0 4px; font-size: 1.05rem; }
+    h1 { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: 1.2rem; letter-spacing: -.02em; }
     .viewer-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    #viewerLogo { width: 38px; height: 38px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,.08); padding: 4px; flex: 0 0 auto; }
+    #viewerLogo { width: 42px; height: 42px; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,.92); padding: 4px; flex: 0 0 auto; }
     #viewerLogo[hidden] { display: none; }
-    #viewerStatus { margin: 0; color: #d7e3f4; font-size: .9rem; }
-    #viewerStatus[data-tone="error"] { color: #ffb4ab; }
+    .viewer-subtitle { margin: 2px 0 0; color: rgba(255,255,255,.84); font-size: .82rem; }
+    #viewerStatus { margin: 0; color: rgba(255,255,255,.9); font-size: .84rem; max-width: 42vw; }
+    #viewerStatus[data-tone="error"] { color: #fecaca; }
     #moduleBar { display: none; }
-    #moduleBar span { background: rgba(12,18,28,.82); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 5px 9px; font-size: .78rem; pointer-events: auto; }
-    .sidebar-buttons { position: absolute; left: 18px; top: 108px; display: flex; flex-direction: column; gap: 6px; z-index: 30; pointer-events: auto; }
-    .sidebar-buttons button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; background: rgba(42,42,42,.86); color: #fff; display: grid; place-items: center; cursor: pointer; font-size: 20px; }
-    .sidebar-buttons button.active, .sidebar-buttons button:hover { background: rgba(255,255,255,.18); }
-    .tool-panel { position: absolute; right: 12px; top: 12px; width: 340px; max-width: calc(100vw - 104px); max-height: calc(100vh - 24px); box-sizing: border-box; overflow: auto; background: rgba(12,18,28,.9); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 12px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .sidebar-buttons { position: absolute; left: 16px; top: 92px; display: flex; flex-direction: column; gap: 8px; z-index: 30; pointer-events: auto; }
+    .sidebar-buttons button { width: 42px; height: 42px; border: 1px solid var(--hajk-line); border-radius: 12px; background: var(--hajk-panel); color: var(--hajk-ink); display: grid; place-items: center; cursor: pointer; font-size: 20px; box-shadow: 0 10px 24px rgba(15,23,42,.12); }
+    .sidebar-buttons button.active, .sidebar-buttons button:hover { background: #0f172a; color: #fff; }
+    .tool-panel { position: absolute; left: 68px; top: 92px; width: 320px; max-width: calc(100vw - 84px); max-height: calc(100vh - 108px); box-sizing: border-box; overflow: auto; background: var(--hajk-panel); color: var(--hajk-ink); border: 1px solid var(--hajk-line); border-radius: 6px 16px 16px 6px; padding: 0 0 12px; pointer-events: auto; box-shadow: 0 18px 40px rgba(15,23,42,.18); }
+    .tool-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 8px; border-bottom: 1px solid var(--hajk-line); background: #eff6ff; }
+    .hajk-group-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; background: #eff6ff; color: #1d4ed8; padding: 8px 12px; font: inherit; font-weight: 800; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; cursor: pointer; }
+    .hajk-layer-group.is-collapsed .hajk-group-body { display: none; }
+    .hajk-layer-group.is-collapsed .hajk-group-toggle i { transform: rotate(-90deg); }
+    #layerList { padding: 0 10px 8px; }
+    .cesium-viewer-toolbar, .cesium-viewer-bottom, .cesium-viewer-animationContainer, .cesium-viewer-timelineContainer { display: none !important; }
     .tool-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .tool-panel h2 { margin: 0; font-size: .95rem; }
-    .panel-close { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
-    .tool-popup { position: absolute; left: 58px; top: 108px; width: 260px; background: rgba(12,18,28,.92); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 10px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .tool-panel h2 { margin: 0; font-size: 1rem; font-family: "Fraunces", Georgia, serif; }
+    .panel-close { border: 0; background: transparent; color: var(--hajk-muted); cursor: pointer; font-size: 22px; line-height: 1; }
+    .tool-popup { position: absolute; left: 68px; top: 92px; width: 250px; background: var(--hajk-panel); color: var(--hajk-ink); border: 1px solid var(--hajk-line); border-radius: 16px; padding: 12px; pointer-events: auto; box-shadow: 0 16px 36px rgba(15,23,42,.16); }
     .tool-popup[hidden] { display: none; }
     .tool-popup header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .tool-popup header button { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+    .tool-popup header button { border: 0; background: transparent; color: var(--hajk-muted); cursor: pointer; font-size: 18px; line-height: 1; }
     .tool-popup-actions { display: grid; gap: 6px; }
     .tool-popup-actions .viewer-button { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
-    .tool-popup-actions .viewer-button i { font-size: 18px; }
+    .saved-view-item { display: grid; grid-template-columns: minmax(0, 1fr) 36px 36px; gap: 4px; align-items: center; }
+    .saved-view-item .viewer-button { min-width: 0; }
+    .viewer-button.icon-only { justify-content: center; padding: 7px 0; }
+    .saved-view-empty { margin: 4px 0 0; color: var(--hajk-muted); font-size: .82rem; }
+    .tool-form { display: grid; gap: 8px; }
+    .tool-form label { display: grid; gap: 4px; font-size: .78rem; color: var(--hajk-muted); font-weight: 600; }
+    .tool-form input, .tool-form select, .tool-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--hajk-line); border-radius: 8px; padding: 6px 8px; font: inherit; color: var(--hajk-ink); }
+    .tool-form textarea { min-height: 64px; resize: vertical; }
+    .tool-form .check-row { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+    .icon-picker { display: flex; gap: 8px; }
+    .icon-picker button { width: 42px; height: 42px; border: 1px solid var(--hajk-line); border-radius: 10px; background: #fff; cursor: pointer; display: grid; place-items: center; padding: 0; }
+    .icon-picker button.active { border-color: var(--hajk-blue); box-shadow: 0 0 0 2px rgba(37,99,235,.2); }
+    .icon-picker img { width: 26px; height: 26px; }
+    #simulationPanel { position: absolute; left: 68px; bottom: 16px; width: 280px; background: var(--hajk-panel); color: var(--hajk-ink); border: 1px solid var(--hajk-line); border-radius: 16px; padding: 12px; pointer-events: auto; box-shadow: 0 16px 36px rgba(15,23,42,.16); }
+    #simulationPanel[hidden] { display: none; }
+    .sim-row { display: grid; gap: 4px; margin: 8px 0; font-size: .8rem; color: var(--hajk-muted); }
+    .sim-actions { display: flex; gap: 6px; }
     .layer-group { margin: 0 0 12px; }
-    .layer-group h3 { margin: 0; padding: 7px 8px; background: rgba(255,255,255,.09); border-radius: 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: 0; color: #dbe7f7; }
-    .layer-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px 2px; border-top: 1px solid rgba(255,255,255,.11); font-size: .86rem; user-select: none; }
+    .layer-group h3 { margin: 0; padding: 7px 8px; background: #eff6ff; border-radius: 8px; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: #1d4ed8; }
+    .layer-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px 2px; border-top: 1px solid #e2e8f0; font-size: .86rem; user-select: none; }
     .layer-row input { margin: 0; }
     .layer-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .legend-icon { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; background: rgba(255,255,255,.08); }
-    .warning { color: #ffd6a5; margin: 8px 0 0; font-size: .86rem; }
-    .viewer-button { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+    .legend-icon { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; background: #f8fafc; }
+    .warning { color: #b45309; margin: 8px 0 0; font-size: .86rem; }
+    .viewer-button { background: #fff; color: var(--hajk-ink); border: 1px solid var(--hajk-line); border-radius: 10px; padding: 7px 10px; cursor: pointer; font-weight: 600; }
+    .viewer-button:hover { background: #f8fafc; }
+    #identifyCard { position: absolute; left: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px)); max-height: 42vh; overflow: auto; background: var(--hajk-panel); color: var(--hajk-ink); border: 1px solid var(--hajk-line); border-radius: 16px; padding: 12px 14px; pointer-events: auto; box-shadow: 0 16px 36px rgba(15,23,42,.18); }
+    #identifyCard[hidden] { display: none; }
+    #identifyCard h3 { margin: 0 0 6px; font-size: .95rem; }
+    #identifyCard pre { margin: 0; white-space: pre-wrap; font-size: .78rem; color: var(--hajk-muted); }
     body.terrain-preview-mode .top-panel,
     body.terrain-preview-mode #moduleBar,
     body.terrain-preview-mode #toolButtons,
     body.terrain-preview-mode #toolPopup,
-    body.terrain-preview-mode #layerPanel { display: none !important; }
+    body.terrain-preview-mode #layerPanel,
+    body.terrain-preview-mode #identifyCard { display: none !important; }
     @media (max-width: 760px) {
-      .top-panel { min-width: 0; width: calc(100vw - 24px); box-sizing: border-box; }
-      .tool-panel { left: auto; right: 8px; width: min(300px, calc(100vw - 84px)); max-width: none; max-height: calc(100vh - 16px); }
-      .tool-popup { left: 54px; top: 128px; width: min(250px, calc(100vw - 72px)); }
-      .sidebar-buttons { left: 12px; top: 128px; }
+      .top-panel { flex-wrap: wrap; }
+      #viewerStatus { max-width: none; }
+      .tool-panel { left: auto; right: 8px; width: min(320px, calc(100vw - 84px)); }
+      .tool-popup { left: 62px; }
+      .sidebar-buttons { left: 12px; }
     }
   </style>
 </head>
@@ -82,7 +118,7 @@
     </section>
     <aside id="layerPanel" class="tool-panel" hidden>
       <div class="tool-panel-head">
-        <h2>Layer dialog</h2>
+        <h2>Layers</h2>
         <button class="panel-close" type="button" aria-label="Close" onclick="document.getElementById('layerPanel').hidden = true">x</button>
       </div>
       <div id="layerList"></div>
@@ -90,6 +126,32 @@
     </aside>
     <nav id="toolButtons" class="sidebar-buttons"></nav>
     <aside id="toolPopup" class="tool-popup" hidden></aside>
+    <aside id="identifyCard" hidden>
+      <div class="tool-panel-head">
+        <h3 id="identifyTitle">Identify</h3>
+        <button class="panel-close" type="button" aria-label="Close" onclick="document.getElementById('identifyCard').hidden = true">x</button>
+      </div>
+      <pre id="identifyBody"></pre>
+    </aside>
+    <aside id="simulationPanel" hidden>
+      <div class="tool-panel-head">
+        <h3>Simulation</h3>
+        <button class="panel-close" type="button" aria-label="Close" id="simulationClose">x</button>
+      </div>
+      <label class="sim-row">Height <span id="simHeightValue">10 m</span>
+        <input id="cameraHeight" type="range" min="2" max="120" step="1" value="10">
+      </label>
+      <label class="sim-row">Speed <span id="speedValue">0.0050</span>
+        <input id="simulationSpeed" type="range" min="0.0005" max="0.03" step="0.0005" value="0.005">
+      </label>
+      <label class="sim-row">Pitch <span id="pitchValue">-20°</span>
+        <input id="simulationPitch" type="range" min="-80" max="10" step="1" value="-20">
+      </label>
+      <div class="sim-actions">
+        <button id="simulationPlayButton" class="viewer-button" type="button">Play</button>
+        <button id="simulationResetButton" class="viewer-button" type="button">Reset</button>
+      </div>
+    </aside>
     <div id="moduleBar"></div>
   </div>
   <script>
@@ -119,8 +181,11 @@
             return;
           }
           addCss(base);
+          var jspdf = document.createElement('script');
+          jspdf.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          document.body.appendChild(jspdf);
           var viewer = document.createElement('script');
-          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20260617-cesium-required';
+          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20260817-hajk-wmts';
           document.body.appendChild(viewer);
         };
         script.onerror = function() {

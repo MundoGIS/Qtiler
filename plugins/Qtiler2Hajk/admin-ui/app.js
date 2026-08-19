@@ -1896,6 +1896,7 @@ const publishSection = document.getElementById('publishSection');
 const profilesBadge = document.getElementById('profilesBadge');
 const openPublishModalBtn = document.getElementById('openPublishModalBtn');
 const publishedProfilesList = document.getElementById('publishedProfilesList');
+const galleryBrandingSection = document.getElementById('galleryBrandingSection');
 const catalogLink = document.getElementById('catalogLink');
 const portalPagesBadge = document.getElementById('portalPagesBadge');
 const portalAddPageBtn = document.getElementById('portalAddPageBtn');
@@ -1914,6 +1915,10 @@ const portalGdprEnabled = document.getElementById('portalGdprEnabled');
 const portalSiteTitle = document.getElementById('portalSiteTitle');
 const portalSiteSubtitle = document.getElementById('portalSiteSubtitle');
 const portalSiteLogoUrl = document.getElementById('portalSiteLogoUrl');
+const portalGalleryTitle = document.getElementById('portalGalleryTitle');
+const portalGallerySubtitle = document.getElementById('portalGallerySubtitle');
+const portalGalleryLogoUrl = document.getElementById('portalGalleryLogoUrl');
+const galleryBrandingSaveBtn = document.getElementById('galleryBrandingSaveBtn');
 const portalSiteHeaderHeight = document.getElementById('portalSiteHeaderHeight');
 const portalSiteHeaderFont = document.getElementById('portalSiteHeaderFont');
 const portalSiteHeaderColor1 = document.getElementById('portalSiteHeaderColor1');
@@ -2186,7 +2191,7 @@ const HAJK_TOOL_DEFS = [
   { id: 'ctrl-print',    name: 'print',         options: null, label: 'Print', defaultChecked: false },
   { id: 'ctrl-draw',     name: 'sketch',        options: null, label: 'Sketch', defaultChecked: true },
   { id: 'ctrl-bookmarks', name: 'bookmarks',    options: null, label: 'Bookmarks', defaultChecked: false },
-  { id: 'ctrl-propertychecker', name: 'propertychecker', options: null, label: 'Property checker', defaultChecked: false },
+  { id: 'ctrl-propertychecker', name: 'propertychecker', options: null, label: 'Property checker (Fastighetskontroll - requires manual WMS layer config, see gear icon)', defaultChecked: false },
   { id: 'ctrl-lantmaterisearch', name: 'lantmaterisearch', options: {
     proxyUrl: '/plugins/Qtiler2Hajk/api/lantmateri-proxy',
     searchTypes: ['fastighet', 'taxering', 'adress', 'ort'],
@@ -2201,7 +2206,6 @@ const HAJK_TOOL_DEFS = [
   { id: 'ctrl-buffer',   name: 'buffer',        options: null, label: 'Buffer', defaultChecked: false },
   { id: 'ctrl-documenthandler', name: 'documenthandler', options: null, label: 'Document handler', defaultChecked: false },
   { id: 'ctrl-informative', name: 'informative', options: null, label: 'Informative', defaultChecked: false },
-  { id: 'ctrl-template', name: 'template',      options: null, label: 'Template', defaultChecked: false },
   { id: 'ctrl-export',   name: 'export',        options: null, label: 'Advanced export', defaultChecked: false },
   { id: 'ctrl-timeslider', name: 'timeslider',  options: null, label: 'Time slider', defaultChecked: false }
 ];
@@ -2662,6 +2666,23 @@ const HAJK_CTRL_SCHEMAS = {
     { key: 'useLevel1FeatureHighlight', type: 'bool', label: 'Highlight clicked feature', defaultValue: true },
     { key: 'transformLinkUri', type: 'bool', label: 'Transform link URLs', defaultValue: true }
   ],
+  // Swedish "Fastighetskontroll" tool. All fields below are required (no
+  // generic default makes sense) - they must reference WMS layer IDs that
+  // already exist in this map's layer list, with attribute names matching
+  // your own WMS schema. The control is skipped entirely if any is empty.
+  propertychecker: [
+    { key: 'checkLayerId', type: 'text', label: 'Check layer ID (required)' },
+    { key: 'checkLayerPropertyAttribute', type: 'text', label: 'Check layer property attribute (required)' },
+    { key: 'digitalPlansLayerId', type: 'text', label: 'Digital plans layer ID (required)' },
+    { key: 'groupDigitalPlansLayerByAttribute', type: 'text', label: 'Digital plans grouping attribute (required)' },
+    { key: 'groupDigitalPlansLayerSecondLevelByAttribute', type: 'text', label: 'Digital plans 2nd-level grouping attribute (required)' },
+    { key: 'buildingsLayerIds', type: 'text', label: 'Buildings layer IDs, comma-separated (required)' },
+    { key: 'bordersLayerIds', type: 'text', label: 'Borders layer IDs, comma-separated (required)' },
+    { key: 'plansLayerIds', type: 'text', label: 'Plans layer IDs, comma-separated (required)' },
+    { key: 'enableCheckLayerReport', type: 'bool', label: 'Enable check-layer report', defaultValue: true },
+    { key: 'enableDigitalPlansReport', type: 'bool', label: 'Enable digital-plans report', defaultValue: true },
+    { key: 'target', type: 'select', label: 'Target', options: [['right', 'right'], ['left', 'left'], ['toolbar', 'toolbar'], ['control', 'control']] }
+  ],
   search: [
     { key: 'searchBarPlaceholder', type: 'text', label: 'Placeholder text', placeholder: 'Search...' },
     { key: 'maxResultsPerDataset', type: 'number', label: 'Max results per layer', placeholder: '100' },
@@ -2686,7 +2707,7 @@ const HAJK_CTRL_SCHEMAS = {
     { key: 'tracking', type: 'bool', label: 'Tracking mode', defaultValue: false }
   ],
   streetview: [
-    { key: 'apiKey', type: 'text', label: 'Google API key' },
+    { key: 'apiKey', type: 'text', label: 'Google API key (required, control is skipped if empty)' },
     { key: 'target', type: 'select', label: 'Target', options: [['toolbar', 'toolbar'], ['control', 'control'], ['left', 'left'], ['right', 'right']] },
     { key: 'position', type: 'select', label: 'Position', options: [['right', 'right'], ['left', 'left']] },
     { key: 'instruction', type: 'textarea', label: 'Instruction text' }
@@ -2712,8 +2733,8 @@ const HAJK_CTRL_SCHEMAS = {
   documenthandler: [
     { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] },
     { key: 'title', type: 'text', label: 'Title', placeholder: 'Documents' },
-    { key: 'mapServiceUrl', type: 'text', label: 'Document service URL' },
-    { key: 'customThemeUrl', type: 'text', label: 'Custom theme JSON URL' },
+    { key: 'mapServiceUrl', type: 'text', label: 'Document service URL (required unless Custom theme URL is set)' },
+    { key: 'customThemeUrl', type: 'text', label: 'Custom theme JSON URL (required unless Document service URL is set)' },
     { path: 'tableOfContents.expanded', type: 'bool', label: 'Expanded table of contents', defaultValue: true },
     { path: 'settings.menu', type: 'json', label: 'Menu JSON', placeholder: '[]' }
   ],
@@ -2728,7 +2749,7 @@ const HAJK_CTRL_SCHEMAS = {
   template: [
     { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] },
     { key: 'title', type: 'text', label: 'Title' },
-    { key: 'url', type: 'text', label: 'Template URL' },
+    { key: 'url', type: 'text', label: 'Template URL (required, control is skipped if empty)' },
     { key: 'visibleAtStart', type: 'bool', label: 'Open on load', defaultValue: false }
   ],
   export: [
@@ -4440,6 +4461,9 @@ function renderPortalEditor() {
   setIfNotActive(portalSiteTitle, site.title || '');
   setIfNotActive(portalSiteSubtitle, site.subtitle || '');
   setIfNotActive(portalSiteLogoUrl, site.headerLogoUrl || '');
+  setIfNotActive(portalGalleryTitle, site.galleryTitle || '');
+  setIfNotActive(portalGallerySubtitle, site.gallerySubtitle || '');
+  setIfNotActive(portalGalleryLogoUrl, site.galleryHeaderLogoUrl || '');
   setIfNotActive(portalSiteHeaderHeight, site.headerHeight ? String(site.headerHeight) : '');
   setIfNotActive(portalSiteHeaderFont, site.headerFont || 'fraunces');
   setIfNotActive(portalSiteHeaderColor1, site.headerColor1 || '#0f766e');
@@ -4645,6 +4669,7 @@ function syncUI() {
 
   /* ── Logo card ── */
   if (logoSection) logoSection.classList.toggle('card--disabled', !installed);
+  if (galleryBrandingSection) galleryBrandingSection.classList.toggle('card--disabled', !installed);
   if (logoBadge) {
     logoBadge.textContent = t(hasLogo ? 'Qtiler2Hajk.logo_active' : 'Qtiler2Hajk.no_logo');
     logoBadge.className = `badge ${hasLogo ? 'badge--ok' : 'badge--muted'}`;
@@ -5026,7 +5051,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
     if (isVectorLayer) {
       const wfsColor = rule.serveAsWfs ? 'is-success' : 'is-light';
       styleButton = `
-        <div style="display:flex; gap:4px">
+        <div class="Qtiler2Hajk-layer-row__styletools">
           <label class="button is-small ${wfsColor}" style="margin-bottom:0">
             <input type="checkbox" style="margin-right:6px" data-wfs-toggle="${escapeHtml(layerKey)}" ${rule.serveAsWfs ? 'checked' : ''} />
             WFS
@@ -5037,19 +5062,23 @@ function renderLayerChecklist(container, layers, rules = {}) {
     }
 
     let wmsLegendControls = '';
-    if (isMainLayerList && !layer.isTheme && !rule.serveAsWfs) {
+    if (isMainLayerList && !layer.isTheme) {
+      // Keep this block in the DOM (hidden, not removed) when WFS is selected
+      // so toggling WMS/WFS doesn't change the row's flex width and shift
+      // the other action buttons left/right.
       const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
       const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
       const preview = manualLegend
         ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Hajk-wms-legend-preview" />`
         : `<span class="Qtiler2Hajk-wms-legend-empty">${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</span>`;
       wmsLegendControls = `
-        <div class="Qtiler2Hajk-wms-legend-controls" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_help'))}">
+        <div class="Qtiler2Hajk-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_help'))}">
           <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
             <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</option>
             <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_manual'))}</option>
           </select>
           <button type="button" class="button is-small is-light" data-wms-legend-pick="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_pick'))}</button>
+
           <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_clear'))}</button>
           <input class="input is-small" type="text" data-wms-legend-url="${escapeHtml(layerKey)}" value="${escapeHtml(manualLegend)}" placeholder="${escapeHtml(t('Qtiler2Hajk.wms_legend_url'))}" />
           ${preview}
@@ -5081,22 +5110,31 @@ function renderLayerChecklist(container, layers, rules = {}) {
       : '';
     const titleControl = isMainLayerList
       ? `
-        <label class="field" style="margin:0;min-width:180px;max-width:260px">
+        <label class="field Qtiler2Hajk-layer-row__titlefield" style="margin:0;min-width:180px;max-width:260px">
           <span class="label" style="font-size:11px;margin-bottom:2px">${escapeHtml(t('Qtiler2Hajk.layer_title'))}</span>
           <input class="input is-small" type="text" data-layer-title="${escapeHtml(layerKey)}" value="${escapeHtml(layerTitle)}" placeholder="${escapeHtml(defaultTitle || t('Qtiler2Hajk.layer_title_placeholder'))}" />
         </label>
       `
       : '';
+    const actionCells = isMainLayerList
+      ? `
+        <div class="Qtiler2Hajk-layer-row__actions">
+          <div class="Qtiler2Hajk-layer-row__toggles">${includeControl}${visibleControl}</div>
+          <div class="Qtiler2Hajk-layer-row__title">${titleControl}</div>
+          <div class="Qtiler2Hajk-layer-row__mode">${styleButton}${wmsLegendControls}</div>
+        </div>
+      `
+      : styleButton;
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
-      <div class="Qtiler2Hajk-layer-row" data-layer-row="${escapeHtml(layerKey)}">
+      <div class="Qtiler2Hajk-layer-row${isMainLayerList ? ' Qtiler2Hajk-layer-row--main' : ''}" data-layer-row="${escapeHtml(layerKey)}">
         ${!isMainLayerList ? includeControl : ''}
         ${bgThumb}
         <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Hajk-layer-row__main">
           <div class="Qtiler2Hajk-layer-row__name">${escapeHtml(layer.name)}</div>
           ${tagText}
         </${mainContentTag}>
-        ${isMainLayerList ? `<div class="Qtiler2Hajk-layer-row__actions">${includeControl}${visibleControl}${titleControl}${styleButton}${wmsLegendControls}</div>` : styleButton}
+        ${actionCells}
       </div>
     `;
   }).join('');
@@ -6386,6 +6424,9 @@ portalGdprEnabled?.addEventListener('change', () => updatePortalGdprField('enabl
 portalSiteTitle?.addEventListener('input', () => updatePortalSiteField('title', portalSiteTitle.value));
 portalSiteSubtitle?.addEventListener('input', () => updatePortalSiteField('subtitle', portalSiteSubtitle.value));
 portalSiteLogoUrl?.addEventListener('input', () => updatePortalSiteField('headerLogoUrl', portalSiteLogoUrl.value));
+portalGalleryTitle?.addEventListener('input', () => updatePortalSiteField('galleryTitle', portalGalleryTitle.value));
+portalGallerySubtitle?.addEventListener('input', () => updatePortalSiteField('gallerySubtitle', portalGallerySubtitle.value));
+portalGalleryLogoUrl?.addEventListener('input', () => updatePortalSiteField('galleryHeaderLogoUrl', portalGalleryLogoUrl.value));
 portalSiteHeaderHeight?.addEventListener('input', () => updatePortalSiteField('headerHeight', portalSiteHeaderHeight.value));
 portalSiteHeaderFont?.addEventListener('change', () => updatePortalSiteField('headerFont', portalSiteHeaderFont.value));
 portalSiteHeaderColor1?.addEventListener('input', () => updatePortalSiteField('headerColor1', portalSiteHeaderColor1.value));
@@ -6398,6 +6439,16 @@ portalSiteFooterLink?.addEventListener('input', () => updatePortalSiteField('foo
 portalSiteFooterBackgroundColor?.addEventListener('input', () => updatePortalSiteField('footerBackgroundColor', portalSiteFooterBackgroundColor.value));
 portalSiteFooterTextColor?.addEventListener('input', () => updatePortalSiteField('footerTextColor', portalSiteFooterTextColor.value));
 portalSiteFooterLinkColor?.addEventListener('input', () => updatePortalSiteField('footerLinkColor', portalSiteFooterLinkColor.value));
+galleryBrandingSaveBtn?.addEventListener('click', async () => {
+  galleryBrandingSaveBtn.disabled = true;
+  try {
+    await savePortalPages();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    galleryBrandingSaveBtn.disabled = false;
+  }
+});
 
 [portalGdprCompany, portalGdprPrivacyUrl, portalGdprCookieUrl, portalGdprContactUrl, portalGdprTitle, portalGdprText]
   .filter(Boolean)

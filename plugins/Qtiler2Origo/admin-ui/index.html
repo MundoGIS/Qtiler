@@ -151,6 +151,30 @@
       </div>
 
       <div class="tab-panel tab-panel--active" data-panel="maps">
+        <section id="galleryBrandingSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2>Gallery header</h2>
+          </div>
+          <p class="help">These fields affect only the public maps gallery at /Qtiler2Origo/maps. Leave the logo URL empty to use the uploaded branding logo from Setup.</p>
+          <div class="portal-meta-grid">
+            <div class="field">
+              <label class="label">Gallery header title</label>
+              <div class="control"><input id="portalGalleryTitle" class="input" type="text" maxlength="80" placeholder="Map Portal" /></div>
+            </div>
+            <div class="field">
+              <label class="label">Gallery header subtitle</label>
+              <div class="control"><input id="portalGallerySubtitle" class="input" type="text" maxlength="200" placeholder="Interactive maps published via Origo Bridge" /></div>
+            </div>
+            <div class="field">
+              <label class="label">Gallery logo URL</label>
+              <div class="control"><input id="portalGalleryLogoUrl" class="input" type="text" maxlength="500" placeholder="Leave empty to use uploaded branding logo" /></div>
+            </div>
+          </div>
+            <div class="actions" style="margin-top:1rem">
+              <button id="galleryBrandingSaveBtn" class="button primary">Save gallery header</button>
+            </div>
+        </section>
+
         <section id="publishSection" class="card card--disabled">
           <div class="card-header-row">
             <h2 data-i18n="Qtiler2Origo.profiles_section">Published profiles</h2>
@@ -655,16 +679,16 @@
             <p class="help" style="margin-bottom:1rem;">These fields change the public header next to the login button on the maps portal.</p>
             <div class="portal-meta-grid">
               <div class="field">
-                <label class="label">Header title</label>
+                <label class="label">Portal header title</label>
                 <div class="control"><input id="portalSiteTitle" class="input" type="text" maxlength="80" placeholder="Kartportal" /></div>
               </div>
               <div class="field">
-                <label class="label">Header subtitle</label>
+                <label class="label">Portal header subtitle</label>
                 <div class="control"><input id="portalSiteSubtitle" class="input" type="text" maxlength="200" placeholder="Interaktiva kartor publicerade via Origo Bridge" /></div>
               </div>
               <div class="field">
                 <label class="label">Portal logo URL</label>
-                <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="/plugins/Qtiler2Origo/api/branding/logo-file" /></div>
+                <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="Leave empty to use uploaded branding logo" /></div>
               </div>
               <div class="field">
                 <label class="label" data-i18n="Qtiler2Origo.portal_site_header_height">Header height</label>

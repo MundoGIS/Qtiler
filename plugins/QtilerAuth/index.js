@@ -420,6 +420,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     deleteUser: db.prepare('DELETE FROM users WHERE id = ? AND username != ?'),
     getConfig: db.prepare('SELECT key, value FROM config'),
     upsertConfig: db.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)'),
+    insertConfigIgnore: db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)'),
     getProject: db.prepare('SELECT * FROM projects WHERE project_id = ?'),
     upsertProject: db.prepare(`
       INSERT OR REPLACE INTO projects (project_id, is_public, allowed_users, allowed_roles, edit_users, edit_roles)
@@ -626,10 +627,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   };
 
   const ensureSecret = () => {
+    // Cluster workers start in parallel on first install. INSERT OR REPLACE
+    // would let the last writer overwrite jwtSecret while earlier workers
+    // keep the old value in memory — login then loops until a service restart.
+    stmts.insertConfigIgnore.run('jwtSecret', crypto.randomBytes(32).toString('hex'));
     const cfg = readConfigMap();
-    if (!cfg.jwtSecret) {
-      stmts.upsertConfig.run('jwtSecret', crypto.randomBytes(32).toString('hex'));
-    }
     const currentTtl = Number(cfg.tokenTtlSeconds);
     if (!Number.isFinite(currentTtl) || currentTtl <= 0) {
       stmts.upsertConfig.run('tokenTtlSeconds', String(idleTimeoutSeconds));
@@ -638,7 +640,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       stmts.upsertConfig.run('tokenTtlSeconds', String(clamped));
     }
     if (!cfg.refreshTtlSeconds) {
-      stmts.upsertConfig.run('refreshTtlSeconds', '1209600');
+      stmts.insertConfigIgnore.run('refreshTtlSeconds', '1209600');
     }
   };
 

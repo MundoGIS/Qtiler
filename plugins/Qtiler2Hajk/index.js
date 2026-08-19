@@ -1325,6 +1325,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return null;
     }
   };
+  const resolvePublishedThumbnailTarget = (profile) => {
+    const fallbackProjectId = normalizeProjectId(profile?.projectId || '');
+    const mainLayers = (Array.isArray(profile?.layers) ? profile.layers : [])
+      .filter((layer) => layer?.role === 'main')
+      .map((layer) => ({
+        projectId: normalizeProjectId(layer?.sourceProjectId || fallbackProjectId) || fallbackProjectId,
+        name: String(layer?.name || '').trim()
+      }))
+      .filter((entry) => entry.projectId && entry.name);
+    if (!mainLayers.length) {
+      return { projectId: fallbackProjectId, mainLayerNames: [] };
+    }
+    const primaryProjectId = mainLayers[0].projectId;
+    return {
+      projectId: primaryProjectId,
+      mainLayerNames: mainLayers
+        .filter((entry) => entry.projectId === primaryProjectId)
+        .map((entry) => entry.name)
+    };
+  };
   const resolvePublishedProfileRecord = async (profileToken) => {
     const directKey = sanitizeFileToken(profileToken);
     if (directKey) {
@@ -1340,11 +1360,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   };
   const regeneratePublishedThumbnail = async ({ profileKey, profile, baseUrl, cookieHeader, apiKey = '', authorization = '', clearCaches = true }) => {
     const safeProfileKey = sanitizeFileToken(profileKey || profile?.profileKey || profile?.name || '');
-    const projectId = normalizeProjectId(profile?.projectId || '');
-    const mainLayerNames = (Array.isArray(profile?.layers) ? profile.layers : [])
-      .filter((layer) => layer?.role === 'main')
-      .map((layer) => String(layer?.name || '').trim())
-      .filter(Boolean);
+    const thumbnailTarget = resolvePublishedThumbnailTarget(profile);
+    const projectId = thumbnailTarget.projectId;
+    const mainLayerNames = thumbnailTarget.mainLayerNames;
     if (!safeProfileKey || !projectId || !mainLayerNames.length) return null;
     const background = getDefaultPublishedBackground(profile);
     await fs.promises.unlink(publishedThumbnailPath(safeProfileKey)).catch(() => {});
@@ -1542,7 +1560,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const defaultPortalPagesState = () => ({
     homePageSlug: '',
     gdpr: defaultPortalGdprSettings(),
-    site: { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
+    site: { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
     pages: []
   });
 
@@ -1687,6 +1705,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         title: String(source.site.title || '').trim(),
         subtitle: String(source.site.subtitle || '').trim(),
         headerLogoUrl: String(source.site.headerLogoUrl || '').trim(),
+        galleryTitle: String(source.site.galleryTitle || '').trim(),
+        gallerySubtitle: String(source.site.gallerySubtitle || '').trim(),
+        galleryHeaderLogoUrl: String(source.site.galleryHeaderLogoUrl || '').trim(),
         headerHeight: String(source.site.headerHeight || '').trim(),
         headerFont: String(source.site.headerFont || '').trim(),
         headerColor1: String(source.site.headerColor1 || '').trim(),
@@ -1699,7 +1720,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         footerBackgroundColor: String(source.site.footerBackgroundColor || '').trim(),
         footerTextColor: String(source.site.footerTextColor || '').trim(),
         footerLinkColor: String(source.site.footerLinkColor || '').trim()
-      } : { title: '', subtitle: '', headerLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
+      } : { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
       pages: dedupedPages
     };
   };
@@ -2089,22 +2110,31 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return issues;
   };
 
-  const getLantmateriOptionsFromControls = (controlsInput) => {
+  const findLantmateriControlEntry = (controlsInput) => {
     let controls = controlsInput;
     if (typeof controlsInput === 'string' && controlsInput.trim()) {
       try { controls = JSON.parse(controlsInput); } catch { controls = []; }
     }
     const list = Array.isArray(controls) ? controls : [];
-    const ctrl = list.find((item) => item && item.name === 'lantmaterisearch');
+    return list.find((item) => item && item.name === 'lantmaterisearch') || null;
+  };
+
+  const getLantmateriOptionsFromControls = (controlsInput) => {
+    const ctrl = findLantmateriControlEntry(controlsInput);
     return ctrl?.options && typeof ctrl.options === 'object' ? ctrl.options : {};
   };
 
   const buildLantmateriControlBootstrap = async (controlsInput) => {
     try {
+      // Only inject the control script when the admin actually enabled it for
+      // this map. The frontend uses window.LANTMATERI_ENABLED to decide
+      // whether to mount the button against the real Hajk map.
+      const ctrl = findLantmateriControlEntry(controlsInput);
+      if (!ctrl) return '';
       const controlPath = path.join(baseDir, 'origo-controls', 'lantmateri-search.js');
       const controlJs = await fs.promises.readFile(controlPath, 'utf8');
-      const options = getLantmateriOptionsFromControls(controlsInput);
-      return `<script>window.LANTMATERI_CONFIG = ${JSON.stringify(options)};</script>\n<script>\n${controlJs}\n</script>`;
+      const options = ctrl.options && typeof ctrl.options === 'object' ? ctrl.options : {};
+      return `<script>window.LANTMATERI_CONFIG = ${JSON.stringify(options)}; window.LANTMATERI_ENABLED = true;</script>\n<script>\n${controlJs}\n</script>`;
     } catch (err) {
       console.error('[Qtiler2Hajk] Failed to inject Lantmateriet control:', err);
       return '';
@@ -2126,6 +2156,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return layers;
     } catch {
       return {};
+    }
+  };
+
+  /**
+   * Read per-layer search config (searchAttribute/idAttribute/hintText) saved
+   * by QtilerAuth's "Layer permissions" editor at
+   * data/searchable-layers/<projectId>.json. This is the ONLY place that
+   * carries the actual chosen search attribute - the wfsSearchable boolean
+   * alone (from readProjectLayerFlags) doesn't say which field to search.
+   */
+  const readSearchableLayerConfig = async (projectId) => {
+    const safeName = sanitizeFileToken(projectId);
+    if (!safeName) return [];
+    const cfgPath = path.join(dataRoot, 'searchable-layers', `${safeName}.json`);
+    try {
+      const raw = await fs.promises.readFile(cfgPath, 'utf8');
+      const parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
   };
 
@@ -3080,7 +3130,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       tiled: true,
       // QWC2 prepends /Qtiler2Hajk/webmap/assets to thumbnail paths.
       // Use an assets-relative path that resolves to /plugins/...
-      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${buildPublishedThumbnailQuery({ mainLayerNames: mainLayers.map((l) => String(l.name || '').trim()).filter(Boolean), background: getDefaultPublishedBackground(profile) })}`
+      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(resolvePublishedThumbnailTarget(profile).projectId || projectId)}${buildPublishedThumbnailQuery({ mainLayerNames: resolvePublishedThumbnailTarget(profile).mainLayerNames, background: getDefaultPublishedBackground(profile) })}`
     };
 
     // If this profile has view3d enabled, add map3d so QWC2 shows the 3D button.
@@ -3708,7 +3758,7 @@ ${mapIcon}
       return jsonResponse({
         mapserviceBase: '',
         defaultMap: 'simpleMapAndLayersConfig',
-        availableTools: ['LayerSwitcher', 'Search', 'Print', 'Measurer', 'InfoDialog', 'Coordinates', 'Sketch', 'Edit', 'PropertyChecker', 'Routing', 'Bookmarks'],
+        availableTools: ['LayerSwitcher', 'Search', 'Print', 'Measurer', 'InfoDialog', 'Coordinates', 'Sketch', 'Edit', 'PropertyChecker', 'Routing', 'Bookmarks', 'Anchor', 'Location', 'StreetView', 'LayerComparer', 'Buffer', 'DocumentHandler', 'Informative', 'Export', 'TimeSlider'],
         loadErrorTitle: 'Error',
         loadErrorMessage: 'Map could not be loaded.'
       });
@@ -3939,9 +3989,13 @@ ${mapIcon}
 
   const shouldUseWfsForPublishedLayer = (layerLike, fallbackEditable = false) => {
     if (!layerLike || typeof layerLike !== 'object') return fallbackEditable === true;
+    // Hajk search sources are built from the same WFS/vector path as editable
+    // layers. If a layer is marked searchable but stays on the WMS path,
+    // layersConfig.wfslayers stays empty and the search tool never appears.
+    if (layerLike.editable === true || layerLike.searchable === true || fallbackEditable === true) return true;
     if (layerLike.serveAsWfs === true) return true;
     if (layerLike.serveAsWfs === false) return false;
-    return layerLike.editable === true || fallbackEditable === true;
+    return false;
   };
 
   // Fetch WFS DescribeFeatureType and parse attributes, geometry column and
@@ -4735,7 +4789,8 @@ ${mapIcon}
       }
       return cacheLayersByProject.get(normalizedProjectId) || [];
     };
-    // Main map layers — WMS by default, WFS when serveAsWfs===true or editable===true.
+    // Main map layers — WMS by default, WFS when serveAsWfs===true, editable===true,
+    // or searchable===true (Hajk's search sources come from wfslayers).
     const mainLayers = (profile.layers || []).filter((l) => String(l?.role || 'main') !== 'background');
     const wfsSourceKeys = new Set();
     for (const layer of mainLayers) {
@@ -4831,6 +4886,10 @@ ${mapIcon}
           type: 'WFS',
           queryable: true,
           visible: layer.visible !== false,
+          searchable: layer.searchable === true,
+          searchAttribute: String(layer.searchAttribute || '').trim() || null,
+          idAttribute: String(layer.idAttribute || '').trim() || null,
+          hintText: String(layer.hintText || '').trim() || null,
           style: styleName,
           featureType: layer.name,
           attributes: resolvedAttrs,
@@ -5260,9 +5319,17 @@ ${mapIcon}
              vectorLegend = vectorLegendIcon;
            }
            const searchId = `${hajkLayerId}_search`;
-           const displayFields = Array.isArray(l.attributes) && l.attributes.length
+           const displayFieldNames = Array.isArray(l.attributes) && l.attributes.length
              ? l.attributes.map((a) => a.name || a).filter(Boolean)
              : [];
+           // Hajk's infoclick calls `.split(',')` on displayFields, so it must
+           // be a comma-separated string, not an array. displayFields also
+           // drives the short "primary label" shown in the breadcrumb/list
+           // header (prepareLabelFromFields in MapClickModel), so it must stay
+           // short - using every attribute here produces a garbled comma-dump
+           // title (e.g. "-28, NULL, NULL, KAVLÅS, ..."). The full attribute
+           // list is still shown in the infobox table below, unaffected.
+           const displayFields = displayFieldNames.slice(0, 3).join(',');
            const infobox = Array.isArray(l.attributes) && l.attributes.length
              ? l.attributes.map((a) => `**${a.title || a.name}:** {${a.name}}`).join('  \n')
              : '';
@@ -5294,33 +5361,73 @@ ${mapIcon}
              ...styleOptions
            });
            layerLegendIcon = vectorLegendIcon || vectorLegend || layerLegendIcon;
-           wfslayers.push({
-               id: searchId,
-               caption: l.title,
-               url: lSource.url,
-               layers: [l.name],
-               searchFields: displayFields,
-               displayFields: displayFields.slice(0, 3).join(','),
-               geometryField: l.geometryName || 'geometry',
-               outputFormat: 'GML2',
-               infobox,
-               zIndex: null
-           });
-           searchLayerRefs.push({ id: searchId, visibleForGroups: [] });
+           // Only publish this layer as a Search source when the admin
+           // explicitly marked it searchable (l.searchable) - previously
+           // EVERY WFS/vector layer was added unconditionally, so Search
+           // matched layers the admin never enabled search for. Restrict
+           // searchFields to the admin-picked l.searchAttribute (e.g. "name")
+           // when set, instead of matching against every attribute.
+           const searchAttributeName = String(l.searchAttribute || '').trim();
+           const searchFieldNames = searchAttributeName ? [searchAttributeName] : displayFieldNames;
+           if (l.searchable === true) {
+             // Hajk's real Search tool (SearchModel.getFeatureLabels) calls
+             // `source.displayFields.reduce(...)` directly on the entries of
+             // layersConfig.wfslayers (the client copies them verbatim into
+             // tools[search].options.sources) - it must be an ARRAY, not a
+             // joined string (that shape is only correct for vectorlayers,
+             // which real Hajk's infoclick reads with `.split(',')`).
+             wfslayers.push({
+                 id: searchId,
+                 caption: l.title,
+                 url: lSource.url,
+                 layers: [l.name],
+                 searchFields: searchFieldNames,
+                 displayFields: displayFieldNames.slice(0, 3),
+                 geometryField: l.geometryName || 'geometry',
+               outputFormat: 'GML3',
+                 infobox,
+                 zIndex: null
+             });
+             searchLayerRefs.push({ id: searchId, visibleForGroups: [] });
+           }
 
            if (l.editable === true) {
              const editId = `${hajkLayerId}_edit`;
+             // Hajk's real Edit tool (EditModel) does NOT use the `sources`
+             // we set on tools[edit].options directly - the client's
+             // AppModel.translateConfig() rebuilds it from these very
+             // layersConfig.wfstlayers entries (filtered by activeServices
+             // ids), so the fix must live here. EditModel's constructor
+             // unconditionally calls `s.uri.trim()` (WFS namespace, crashes
+             // if missing) and AttributeEditor needs `editableFields` in
+             // Hajk's own shape (name/alias/textType), not our internal
+             // `attributes` array.
+             const editableFields = (Array.isArray(l.attributes) ? l.attributes : [])
+               .map((a) => {
+                 const fieldName = String((a && (a.name || a)) || '').trim();
+                 if (!fieldName) return null;
+                 return {
+                   name: fieldName,
+                   alias: String((a && a.title) || fieldName),
+                   textType: 'fritext',
+                   hidden: false
+                 };
+               })
+               .filter(Boolean);
              wfstlayers.push({
                id: editId,
                caption: l.title,
                url: lSource.url,
+               uri: `http://qtiler.local/${encodeURIComponent(layerProjectId)}`,
                layers: [l.name],
                searchFields: Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean) : [],
-               displayFields: (Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean).slice(0, 3) : []).join(','),
-               geometryField: l.geometryName || 'geometry',
-               outputFormat: 'GML2',
+               displayFields: (Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean).slice(0, 3) : []),
+               geometryField: l.geometryName || 'geom',
+               outputFormat: 'GML3',
                projection: projCode,
                style: l.style,
+               editableFields,
+               nonEditableFields: [],
                attributes: l.attributes,
                geometryType: l.geometryType,
                visibleAtStart,
@@ -5367,13 +5474,25 @@ ${mapIcon}
            const wmsLegendUrl = String(l.wmsLegendMode || '').toLowerCase() === 'manual' && manualWmsLegendUrl
              ? manualWmsLegendUrl
              : automaticWmsLegendUrl;
+           // Real Hajk's infoclick (getInfoClickInfoFromLayerConfig) reads the popup
+           // template from layersInfo[subLayer].infobox and the field list from
+           // layersInfo[subLayer].searchDisplayName (a comma STRING, NOT the vector
+           // layer's `displayFields` key name) - without these, WMS features fell back
+           // to Hajk's generic raw-attribute table (looks inconsistent/"wrong" next to
+           // a properly configured vector layer's popup).
+           const wmsDisplayFieldNames = Array.isArray(l.attributes) && l.attributes.length
+             ? l.attributes.map((a) => a.name || a).filter(Boolean)
+             : [];
+           const wmsInfobox = Array.isArray(l.attributes) && l.attributes.length
+             ? l.attributes.map((a) => `**${a.title || a.name}:** {${a.name}}`).join('  \n')
+             : '';
            wmslayers.push({
                id: hajkLayerId,
                caption: l.title,
                url: lSource ? lSource.url : '',
                  projection: projCode,
                  layers: [l.id || l.name],
-                 layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: '', style: '', queryable: l.queryable !== false }],
+                 layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: wmsInfobox, searchDisplayName: wmsDisplayFieldNames.join(','), style: '', queryable: l.queryable !== false }],
                serverType: "qgis",
                  visibleAtStart,
                  crossOrigin: 'use-credentials',
@@ -5459,6 +5578,50 @@ ${mapIcon}
     });
     const isToolEnabled = (name) => !userProvidedTools || profileToolEntries.some((entry) => entry.name === name);
     const mergeToolOptions = (name, defaults) => ({ ...(defaults || {}), ...(toolOptions.get(name) || {}) });
+    // Some Hajk tools actively fetch an external service (or initialize a 3rd-party
+    // SDK) as soon as they mount. If the admin enables the control but leaves the
+    // required URL/API key empty, the real Hajk client can throw during mount and
+    // take the whole map down. Skip adding these tools until they are configured,
+    // instead of pushing them with empty defaults.
+    const TOOL_REQUIRED_ALL_FIELDS = {
+      streetview: ['apiKey'],
+      routing: ['apiKey'],
+      export: ['exportUrl'],
+      // PropertyChecker ('Fastighetskontroll') is a Swedish municipal plugin
+      // that always calls .split(',') on these three fields and always looks
+      // up checkLayerId/digitalPlansLayerId, with no safe generic default —
+      // it requires pre-existing WMS layers with municipality-specific
+      // attribute names that Qtiler cannot auto-generate.
+      propertychecker: [
+        'checkLayerId',
+        'checkLayerPropertyAttribute',
+        'digitalPlansLayerId',
+        'groupDigitalPlansLayerByAttribute',
+        'groupDigitalPlansLayerSecondLevelByAttribute',
+        'buildingsLayerIds',
+        'bordersLayerIds',
+        'plansLayerIds'
+      ]
+    };
+    const TOOL_REQUIRED_ANY_FIELDS = {
+      documenthandler: ['mapServiceUrl', 'customThemeUrl']
+    };
+    const toolOptionsAreSufficient = (name, options) => {
+      const opts = options || {};
+      const anyFields = TOOL_REQUIRED_ANY_FIELDS[name];
+      if (anyFields && !anyFields.some((key) => String(opts[key] || '').trim())) return false;
+      const allFields = TOOL_REQUIRED_ALL_FIELDS[name];
+      if (allFields && !allFields.every((key) => String(opts[key] || '').trim())) return false;
+      return true;
+    };
+    const pushToolIfConfigured = (name, defaults) => {
+      const options = mergeToolOptions(name, defaults);
+      if (!toolOptionsAreSufficient(name, options)) {
+        console.warn(`[Qtiler2Hajk] Skipping tool "${name}": required option(s) not configured (${JSON.stringify(TOOL_REQUIRED_ALL_FIELDS[name] || TOOL_REQUIRED_ANY_FIELDS[name])}).`);
+        return;
+      }
+      tools.push({ type: name, options });
+    };
     const tools = [];
     if (isToolEnabled('layerswitcher')) {
       tools.push({
@@ -5499,6 +5662,10 @@ ${mapIcon}
       tools.push({
         type: 'search',
         options: mergeToolOptions('search', {
+          // The client's AppModel.translateConfig() rebuilds options.sources
+          // from layersConfig.wfslayers (filtered by options.layers ids) on
+          // every load, but we also set it here as a harmless fallback.
+          sources: wfslayers,
           layers: searchLayerRefs,
           visibleForGroups: [],
           maxResultsPerDataset: 100,
@@ -5515,6 +5682,10 @@ ${mapIcon}
       tools.push({
         type: 'edit',
         options: mergeToolOptions('edit', {
+          // The client's AppModel.translateConfig() rebuilds options.sources
+          // from layersConfig.wfstlayers (filtered by activeServices ids) on
+          // every load, but we also set it here as a harmless fallback.
+          sources: wfstlayers,
           activeServices: editServiceRefs,
           visibleForGroups: [],
           target: 'left'
@@ -5526,17 +5697,22 @@ ${mapIcon}
     if (isToolEnabled('print')) tools.push({ type: 'print', options: mergeToolOptions('print', { target: 'toolbar', position: 'left', visibleAtStart: false }) });
     if (isToolEnabled('sketch')) tools.push({ type: 'sketch', options: mergeToolOptions('sketch', { target: 'left', position: 'left', visibleForGroups: [] }) });
     if (isToolEnabled('bookmarks')) tools.push({ type: 'bookmarks', options: mergeToolOptions('bookmarks', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] }) });
-    if (isToolEnabled('propertychecker')) tools.push({ type: 'propertychecker', options: mergeToolOptions('propertychecker', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] }) });
-    if (isToolEnabled('routing')) tools.push({ type: 'routing', options: mergeToolOptions('routing', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] }) });
+    if (isToolEnabled('propertychecker')) pushToolIfConfigured('propertychecker', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] });
+    if (isToolEnabled('routing')) pushToolIfConfigured('routing', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] });
     if (isToolEnabled('anchor')) tools.push({ type: 'anchor', options: mergeToolOptions('anchor', { target: 'control', position: 'right', instruction: '', visibleForGroups: [] }) });
     if (isToolEnabled('location')) tools.push({ type: 'location', options: mergeToolOptions('location', { target: 'control', position: 'right', visibleForGroups: [] }) });
-    if (isToolEnabled('streetview')) tools.push({ type: 'streetview', options: mergeToolOptions('streetview', { target: 'toolbar', position: 'right', apiKey: '', instruction: '', visibleForGroups: [] }) });
+    if (isToolEnabled('streetview')) pushToolIfConfigured('streetview', { target: 'toolbar', position: 'right', apiKey: '', instruction: '', visibleForGroups: [] });
     if (isToolEnabled('layercomparer')) tools.push({ type: 'layercomparer', options: mergeToolOptions('layercomparer', { target: 'left', showNonBaseLayersInSelect: false, instruction: '', visibleAtStart: false, chosenLayers: [], visibleForGroups: [] }) });
     if (isToolEnabled('buffer')) tools.push({ type: 'buffer', options: mergeToolOptions('buffer', { target: 'toolbar', instruction: '', varbergVer: false, geoserverUrl: '', notFeatureLayers: [], visibleForGroups: [] }) });
-    if (isToolEnabled('documenthandler')) tools.push({ type: 'documenthandler', options: mergeToolOptions('documenthandler', { target: 'left', title: 'Documents', mapServiceUrl: '', customThemeUrl: '', tableOfContents: { expanded: true }, settings: { menu: [] }, visibleForGroups: [] }) });
+    if (isToolEnabled('documenthandler')) pushToolIfConfigured('documenthandler', { target: 'left', title: 'Documents', mapServiceUrl: '', customThemeUrl: '', tableOfContents: { expanded: true }, settings: { menu: [] }, visibleForGroups: [] });
     if (isToolEnabled('informative')) tools.push({ type: 'informative', options: mergeToolOptions('informative', { caption: 'Information', html: '', serviceUrl: '', document: '', tocExpanded: true, visibleForGroups: [] }) });
-    if (isToolEnabled('template')) tools.push({ type: 'template', options: mergeToolOptions('template', { target: 'left', position: 'left', title: 'Template', url: '', visibleAtStart: false, visibleForGroups: [] }) });
-    if (isToolEnabled('export')) tools.push({ type: 'export', options: mergeToolOptions('export', { target: 'left', exportUrl: '', scales: '250,500,1000,2500,5000,10000,25000,50000,100000' }) });
+    // Template is not part of the official Hajk build we ship against.
+    // Keep any legacy profile data inert instead of emitting an unavailable
+    // plugin that the client can only warn about.
+    if (isToolEnabled('template')) {
+      console.warn('[Qtiler2Hajk] Skipping unsupported official Hajk tool "template". Remove it from the profile or ship a custom Hajk build that includes it.');
+    }
+    if (isToolEnabled('export')) pushToolIfConfigured('export', { target: 'left', exportUrl: '', scales: '250,500,1000,2500,5000,10000,25000,50000,100000' });
     if (isToolEnabled('timeslider')) tools.push({ type: 'timeslider', options: mergeToolOptions('timeslider', { visibleAtStart: false, start: '', end: '', step: '', layers: [], visibleForGroups: [] }) });
     let referenceProjections = [];
     try {
@@ -5656,7 +5832,17 @@ ${mapIcon}
   app.get(['/plugins/'+pluginSlug+'/hajk/appConfig.json'], async (req, res) => {
     res.json({
       "mapserviceBase": "",
+      // Hajk's SearchModel does `this.#app.config.appConfig.searchProxy + searchSource.url`
+      // with no guard - an undefined searchProxy turns every search fetch into an
+      // invalid "undefinedhttp://..." URL, which fails silently (no crash, zero results).
+      "searchProxy": "",
       "defaultMap": "simpleMapAndLayersConfig",
+      // This list gates which Hajk plugins actually get dynamically loaded
+      // (AppModel.loadPlugins(activeTools) in the real client) - any tool
+      // type missing here will silently never mount, even if it's present
+      // and fully configured in mapConfig.tools. Must list every real Hajk
+      // plugin folder name (PascalCase, matches apps/client/src/plugins/*)
+      // that our admin UI lets users enable.
       "availableTools": [ 
         "Anchor",
         "Bookmarks",
@@ -5670,7 +5856,14 @@ ${mapIcon}
         "Edit", 
         "PropertyChecker", 
         "Routing",
-        "Location"
+        "Location",
+        "StreetView",
+        "LayerComparer",
+        "Buffer",
+        "DocumentHandler",
+        "Informative",
+        "Export",
+        "TimeSlider"
       ],
       "loadErrorTitle": "Error",
       "loadErrorMessage": "Map could not be loaded."
@@ -6126,6 +6319,10 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           type: 'WFS',
           queryable: true,
           visible: layerSpec.visible !== false,
+          searchable: layerSpec.searchable === true,
+          searchAttribute: String(rule?.searchAttribute || layerSpec.searchAttribute || '').trim() || null,
+          idAttribute: String(rule?.idAttribute || layerSpec.idAttribute || '').trim() || null,
+          hintText: String(rule?.hintText || layerSpec.hintText || '').trim() || null,
           style: styleName,
           featureType: layerName,
           attributes: resolvedAttrs,
@@ -6309,7 +6506,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     return res.json(config);
   });
 
-  app.get('/qtiler/branding/logo', async (_req, res) => {
+  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (_req, res) => {
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
     return res.sendFile(logoPath);
@@ -7061,6 +7258,34 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       if (req.body?.dryRun === true) {
         return res.json({ ok: true, dryRun: true, issues: [] });
       }
+      // QtilerAuth's "Layer permissions" editor is where admins actually mark
+      // a layer searchable + pick its search attribute (wfsSearchable in
+      // cache/<project>/project-config.json, searchAttribute in
+      // data/searchable-layers/<project>.json) - previously neither was ever
+      // read here, so `searchable`/`searchAttribute` on published layers came
+      // ONLY from sourceLayer/rule fields the admin UI never actually sends,
+      // meaning Search silently never had any layers to work with.
+      const involvedProjectIds = Array.from(new Set(
+        layerEntries
+          .map((l) => normalizeProjectId(l?.sourceProjectId || projectId) || projectId)
+          .concat([projectId])
+      ));
+      const projectFlagsByPid = new Map();
+      const searchableConfigByPid = new Map();
+      await Promise.all(involvedProjectIds.map(async (pid) => {
+        const [flags, searchableRows] = await Promise.all([
+          readProjectLayerFlags(pid),
+          readSearchableLayerConfig(pid)
+        ]);
+        projectFlagsByPid.set(pid, flags || {});
+        searchableConfigByPid.set(pid, Array.isArray(searchableRows) ? searchableRows : []);
+      }));
+      const findByNameLoose = (map, name) => {
+        if (!map) return null;
+        if (map[name]) return map[name];
+        const key = Object.keys(map).find((k) => safeLayerNameForWfs(k) === safeLayerNameForWfs(name));
+        return key ? map[key] : null;
+      };
       const layers = layerEntries.map((sourceLayer) => {
         const name = String(sourceLayer?.name || '').trim();
         const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
@@ -7070,13 +7295,15 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const rule = layerRulesInput[layerRuleKey] && typeof layerRulesInput[layerRuleKey] === 'object'
           ? layerRulesInput[layerRuleKey]
           : ((layerRulesInput[name] && typeof layerRulesInput[name] === 'object') ? layerRulesInput[name] : {});
-        const fallbackSearchable = sourceLayer?.searchable === true;
-        const fallbackEditable = sourceLayer?.editable === true;
+        const qtilerAuthFlags = findByNameLoose(projectFlagsByPid.get(sourceProjectId), name) || {};
+        const qtilerAuthSearchable = (searchableConfigByPid.get(sourceProjectId) || []).find((e) => e && String(e.name || '') === name) || null;
+        const fallbackSearchable = sourceLayer?.searchable === true || qtilerAuthFlags?.wfsSearchable === true;
+        const fallbackEditable = sourceLayer?.editable === true || qtilerAuthFlags?.wfsEditable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
-        const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || '').trim() || null;
-        const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
+        const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || qtilerAuthSearchable?.searchAttribute || '').trim() || null;
+        const fallbackIdAttribute = String(sourceLayer?.idAttribute || qtilerAuthSearchable?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
-        const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
+        const fallbackHintText = String(sourceLayer?.hintText || qtilerAuthSearchable?.hintText || '').trim() || null;
         // Preserve wfsStyle from the style editor without implicitly forcing
         // the layer onto the WFS path. WFS stays explicit via serveAsWfs/editable.
         const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
@@ -7218,7 +7445,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-      const thumbnailUrl = `/plugins/${pluginSlug}/published/thumbs/${encodeURIComponent(profileKey)}.png`;
+      const thumbnailUrl = `/plugins/${pluginSlug}/published/thumbs/${encodeURIComponent(profileKey)}.jpg`;
       void regeneratePublishedThumbnail({
         profileKey,
         profile: payload,
@@ -7373,6 +7600,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
       const all = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
+      const state = await readPortalPagesState();
       const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
       let items = all;
       if (authActive) {
@@ -7388,6 +7616,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         authActive,
         user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
         logoUrl,
+        gdpr: state.gdpr,
+        site: state.site || {},
         items
       });
     } catch (err) {

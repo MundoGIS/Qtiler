@@ -805,6 +805,63 @@ if errorlevel 1 (
 >>"%QTILER_INSTALL_LOG%" echo Qtiler HTTP readiness passed. QtilerAuth expected=%QTILERAUTH_EXPECTED%, status=%QTILERAUTH_INSTALL_STATUS%.
 echo.
 
+if /i "%QTILERAUTH_EXPECTED%"=="1" (
+    echo [Qtiler] Restarting Windows service so every worker shares the same QtilerAuth session secret...
+    >>"%QTILER_INSTALL_LOG%" echo Step 5c: restarting Qtiler Windows service after first QtilerAuth readiness.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action restart -ServiceName "%QTILER_SERVICE_NAME%"
+    if errorlevel 1 (
+        echo ERROR: Could not restart Qtiler Windows service after first QtilerAuth readiness: %QTILER_SERVICE_NAME%
+        >>"%QTILER_INSTALL_LOG%" echo ERROR: could not restart Qtiler Windows service after first QtilerAuth readiness.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth became ready, but the Windows service could not be restarted.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Restart the service once from Windows Services before the first login.', 'Qtiler Installer - Service Restart Failed', 'OK', 'Error')" >nul
+        pause
+        exit /b 1
+    )
+    echo [Qtiler] Waiting for Qtiler to become ready again on port %QTILER_PORT%...
+    >>"%QTILER_INSTALL_LOG%" echo Step 5c: waiting for HTTP readiness after service restart.
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "$rootUrl = 'http://127.0.0.1:%QTILER_PORT%/';" ^
+        "$authUrl = 'http://127.0.0.1:%QTILER_PORT%/auth/login-status';" ^
+        "$deadline = (Get-Date).AddMinutes(2);" ^
+        "$rootReady = $false;" ^
+        "$authReady = $false;" ^
+        "$authBody = '{\"username\":\"__bootstrap_probe__\"}';" ^
+        "while ((Get-Date) -lt $deadline) {" ^
+        "  if (-not $rootReady) {" ^
+        "    try {" ^
+        "      $resp = Invoke-WebRequest -Uri $rootUrl -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0 -ErrorAction Stop;" ^
+        "      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $rootReady = $true }" ^
+        "    } catch {" ^
+        "      $status = $null;" ^
+        "      try { $status = [int]$_.Exception.Response.StatusCode } catch {}" ^
+        "      if ($status -and $status -ge 200 -and $status -lt 500) { $rootReady = $true }" ^
+        "    }" ^
+        "  }" ^
+        "  if ($rootReady -and -not $authReady) {" ^
+        "    try {" ^
+        "      $authResp = Invoke-RestMethod -Uri $authUrl -Method Post -UseBasicParsing -TimeoutSec 5 -ContentType 'application/json' -Body $authBody -ErrorAction Stop;" ^
+        "      if ($null -ne $authResp -and $authResp.PSObject.Properties.Name -contains 'requireCaptcha') { $authReady = $true }" ^
+        "    } catch {" ^
+        "      $authStatus = $null;" ^
+        "      try { $authStatus = [int]$_.Exception.Response.StatusCode } catch {}" ^
+        "      if ($authStatus -eq 200) { $authReady = $true }" ^
+        "    }" ^
+        "  }" ^
+        "  if ($rootReady -and $authReady) { break }" ^
+        "  Start-Sleep -Milliseconds 2000;" ^
+        "}" ^
+        "if (-not $rootReady -or -not $authReady) { Write-Host 'ERROR: Qtiler did not become ready again after the service restart.'; exit 1 }" ^
+        "Write-Host ('  Qtiler and QtilerAuth are ready after restart at ' + $rootUrl)"
+    if errorlevel 1 (
+        echo ERROR: Qtiler service restarted but did not become ready again in time.
+        >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service restarted but HTTP/QtilerAuth readiness failed.
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service was restarted, but Qtiler did not become ready again in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Restart Readiness Failed', 'OK', 'Error')" >nul
+        pause
+        exit /b 1
+    )
+    >>"%QTILER_INSTALL_LOG%" echo Qtiler HTTP readiness after restart passed.
+    echo.
+)
+
 REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
