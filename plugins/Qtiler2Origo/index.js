@@ -1057,14 +1057,24 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
   };
 
+  const requestMatchesPluginBrandingAlias = (req, slug) => {
+    const referer = String(req?.get?.('referer') || '').toLowerCase();
+    if (!referer) return false;
+    return referer.includes(`/plugins/${String(slug || '').toLowerCase()}/`)
+      || referer.includes(`/${String(slug || '').toLowerCase()}/`);
+  };
+
   const applyBrandingToQwc2Configs = async () => {
     const state = await readState();
     const logoPath = await resolveLogoPath();
     const logoSrc = logoPath ? await getLogoPublicUrl() : null;
-    const configPaths = [
+    const configPaths = Array.from(new Set([
+      path.join(installRoot, 'build', 'config.json'),
+      path.join(installRoot, 'dist', 'config.json'),
       path.join(installRoot, 'prod', 'config.json'),
-      path.join(installRoot, 'static', 'config.json')
-    ];
+      path.join(installRoot, 'static', 'config.json'),
+      path.join(installRoot, 'config.json')
+    ]));
 
     for (const cfgPath of configPaths) {
       try {
@@ -1231,7 +1241,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       .filter(Boolean);
     if (!safeProfileKey || !projectId || !mainLayerNames.length) return null;
     const background = getDefaultPublishedBackground(profile);
-    await fs.promises.unlink(publishedThumbnailPath(safeProfileKey)).catch(() => {});
     if (clearCaches) {
       await clearThumbnailRenderCaches([
         projectId,
@@ -2523,7 +2532,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     // Patch logo if branding available
     const logoPath = await resolveLogoPath();
     if (topBar?.cfg && logoPath) {
-      topBar.cfg.logoSrc = '/qtiler/branding/logo';
+      topBar.cfg.logoSrc = `/plugins/${pluginSlug}/public/branding/logo`;
     }
 
     // Apply routing service URL to Routing plugin config
@@ -3289,7 +3298,12 @@ ${mapIcon}
 
   const maybeAutoStartStandalone = async () => { /* removed */ };
 
-  app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
+  app.use(`/plugins/${pluginSlug}/admin-ui`, (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+  }, express.static(adminUiDir));
   app.use(`/plugins/${pluginSlug}/client`, express.static(clientDir));
   
   // Serve origo-controls with no-cache headers to prevent browser caching during development
@@ -3316,19 +3330,6 @@ ${mapIcon}
 
       const existing = await readPublishedThumbnailMeta(profileKey);
       if (existing?.filePath) return res.sendFile(existing.filePath);
-
-      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-      const regenerated = await regeneratePublishedThumbnail({
-        profileKey: record.profileKey,
-        profile: record.profile,
-        baseUrl,
-        cookieHeader: req.headers.cookie,
-        apiKey: getRequestApiKey(req),
-        authorization: req.get?.('authorization') || '',
-        clearCaches: false
-      }).catch(() => null);
-
-      if (regenerated?.filePath) return res.sendFile(regenerated.filePath);
       return next();
     } catch {
       return next();
@@ -3860,6 +3861,13 @@ ${mapIcon}
     return (Array.isArray(attrs) ? attrs : [])
       .map((attr) => {
         if (!attr || typeof attr !== 'object') return null;
+        const rawHtml = attr.html == null ? '' : String(attr.html);
+        if (rawHtml.trim()) {
+          return {
+            ...attr,
+            html: rawHtml
+          };
+        }
         const name = String(attr.name || '').trim();
         if (!name) return null;
         const rawTitle = attr.title == null ? '' : String(attr.title);
@@ -4148,6 +4156,7 @@ ${mapIcon}
             (wfsMeta.attributes || []).map(a => [a.name, a])
           );
           resolvedAttrs = resolvedAttrs.map(attr => {
+            if (attr && typeof attr === 'object' && String(attr.html || '').trim()) return attr;
             const raw = String(attr.type || '').trim();
             if (VALID_ORIGO_ATTR_TYPES.has(raw)) return attr;
             // Try alias mapping first
@@ -5094,7 +5103,10 @@ ${mapIcon}
     return res.json(config);
   });
 
-  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (_req, res) => {
+  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (req, res, next) => {
+    if (req.path === '/qtiler/branding/logo' && !requestMatchesPluginBrandingAlias(req, pluginSlug)) {
+      return next();
+    }
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
     return res.sendFile(logoPath);
@@ -5962,6 +5974,7 @@ ${mapIcon}
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
         const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
+        const fallbackAttributes = Array.isArray(sourceLayer?.attributes) ? sourceLayer.attributes : [];
         // Preserve wfsStyle from the style editor without implicitly forcing
         // the layer onto the WFS path. WFS stays explicit via serveAsWfs/editable.
         const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
@@ -5997,17 +6010,28 @@ ${mapIcon}
         // Persist user-defined infoclick attributes so the editor can restore
         // them, and so buildOrigoIndexConfig can apply them as the popup
         // attribute filter for both WFS and WMS layers.
-        if (Array.isArray(rule.attributes) && rule.attributes.length) {
-          out.attributes = normalizeInfoclickAttributes(rule.attributes)
-            .map((a) => (a && typeof a === 'object') ? {
-              name: String(a.name || '').trim(),
-              ...(a.type ? { type: String(a.type) } : {}),
-              ...(a.title ? { title: String(a.title) } : {}),
-              ...(a.url ? { url: String(a.url) } : {}),
-              ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
-              ...(Array.isArray(a.options) ? { options: a.options.map(String) } : {})
-            } : null)
-            .filter((a) => a && a.name);
+        const rawRuleAttributes = Array.isArray(rule.attributes) && rule.attributes.length
+          ? rule.attributes
+          : fallbackAttributes;
+        if (Array.isArray(rawRuleAttributes) && rawRuleAttributes.length) {
+          out.attributes = normalizeInfoclickAttributes(rawRuleAttributes)
+            .map((a) => {
+              if (!a || typeof a !== 'object') return null;
+              if (String(a.html || '').trim()) {
+                return { html: String(a.html) };
+              }
+              const name = String(a.name || '').trim();
+              if (!name) return null;
+              return {
+                name,
+                ...(a.type ? { type: String(a.type) } : {}),
+                ...(a.title ? { title: String(a.title) } : {}),
+                ...(a.url ? { url: String(a.url) } : {}),
+                ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
+                ...(Array.isArray(a.options) ? { options: a.options.map(String) } : {})
+              };
+            })
+            .filter(Boolean);
           if (!out.attributes.length) delete out.attributes;
         }
         const gType = String(rule.geometryType || sourceLayer?.geometryType || '').trim();
@@ -6104,7 +6128,7 @@ ${mapIcon}
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
       const previousThumbMeta = await readPublishedThumbnailMeta(profileKey).catch(() => null);
-      void regeneratePublishedThumbnail({
+      const generatedThumbMeta = await regeneratePublishedThumbnail({
         profileKey,
         profile: payload,
         baseUrl: syncBaseUrl,
@@ -6113,6 +6137,7 @@ ${mapIcon}
         authorization: req.get?.('authorization') || ''
       }).catch((thumbErr) => {
         console.warn('[Qtiler2Origo] published thumbnail regeneration warning:', thumbErr?.message || thumbErr);
+        return null;
       });
       void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
         console.warn('[Qtiler2Origo] publish runtime sync warning:', syncErr?.message || syncErr);
@@ -6135,7 +6160,7 @@ ${mapIcon}
         // Use the plugin-local Origo path for launching the map.
         launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
-        thumbnailUrl: previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : ''
+        thumbnailUrl: generatedThumbMeta?.url ? `${base}${generatedThumbMeta.url}` : (previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : '')
       });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_failed', details: String(err?.message || err) });

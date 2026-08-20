@@ -877,7 +877,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     let already = 0;
     const anchor = 'legendIcon:e.legendIcon,lineColor:e.lineColor';
     const iconAnchor = 'legendIcon:e.legendIcon,icon:e.icon,lineColor:e.lineColor';
-    const replacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
+    const legacyReplacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
+    const replacement = 'legendIcon:e.legendIcon,icon:e.icon,symbolXOffset:e.symbolXOffset,symbolYOffset:e.symbolYOffset,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
     const sldFallbackAnchor = 'catch(n){const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
     const sldFallbackLegacyReplacement = 'catch(n){this.config.icon&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
     const sldFallbackReplacement = 'catch(n){(this.config.qtilerStyleRules||this.config.icon)&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
@@ -887,6 +888,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const qtilerRulesLegacyReplacement = 'const U=this.config.qtilerStyleRules||[];function Q($){if(!Array.isArray(U)||!U.length)return null;const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):void 0,te=String(Q==null?"":Q),oe=String(Z.value==null?"":Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:null}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
     const qtilerRulesOldNormalizerReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){$=String($==null?"":$).trim();for(let G=0;G<2;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));return $}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):$&&$.getProperties?$.getProperties()[Z.property]:void 0,te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
     const qtilerRulesReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){if($&&typeof $=="object")try{$=JSON.stringify($)}catch{}$=String($==null?"":$).trim();for(let G=0;G<3;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));($.startsWith("\\\\\\\"")&&$.endsWith("\\\\\\\""))&&($=$.slice(2,-2));return $.replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'")}function W($,G){if(!$||!G)return;let Z=$.get?$.get(G):void 0;if(Z!==void 0&&Z!==null)return Z;const Q=$.getProperties?$.getProperties():{};if(Object.prototype.hasOwnProperty.call(Q,G))return Q[G];const te=String(G).toLowerCase(),oe=Object.keys(Q).find(Ee=>String(Ee).toLowerCase()===te);return oe?Q[oe]:void 0}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=W($,Z.property),te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}})||U[0];return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number.isFinite(Number(G.anchorX))?Number(G.anchorX):.5,Number.isFinite(Number(G.anchorY))?Number(G.anchorY):.5]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const simpleIconAnchor = 'function Y(){return new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
+    const simpleIconReplacement = 'function Y(){return Number.isFinite(Number(a))&&Number.isFinite(Number(l))&&Math.abs(Number(a))<=1&&Math.abs(Number(l))<=1?new vl({src:n,scale:D,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number(a),Number(l)]}):new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
     const qtilerRulesReturnAnchor = 'return[new ur(X())]}}class';
     const qtilerRulesReturnReplacement = 'return U.length?Q:[new ur(X())]}}class';
     for (const filePath of candidates) {
@@ -901,11 +904,23 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       if (next.includes(replacement)) {
         already++;
       } else {
+        if (next.includes(legacyReplacement)) {
+          const legacyReplacementCount = next.split(legacyReplacement).length - 1;
+          next = next.split(legacyReplacement).join(replacement);
+          patched += legacyReplacementCount;
+        }
         const activeAnchor = next.includes(iconAnchor) ? iconAnchor : anchor;
         const count = next.split(activeAnchor).length - 1;
         if (count > 0) {
           next = next.split(activeAnchor).join(replacement);
           patched += count;
+        }
+      }
+      if (!next.includes(simpleIconReplacement)) {
+        const simpleIconCount = next.split(simpleIconAnchor).length - 1;
+        if (simpleIconCount > 0) {
+          next = next.split(simpleIconAnchor).join(simpleIconReplacement);
+          patched += simpleIconCount;
         }
       }
       if (next.includes(qtilerRulesOldNormalizerReplacement) && !next.includes('slice(2,-2)')) {
@@ -1160,7 +1175,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const state = await readState();
     if (!state.logoFile) return null;
     const stamp = encodeURIComponent(String(state.logoUpdatedAt || '0'));
-    return `/qtiler/branding/logo?v=${stamp}`;
+    return `/plugins/${pluginSlug}/public/branding/logo?v=${stamp}`;
   };
 
   const getBrandingStatus = async () => {
@@ -1174,14 +1189,24 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
   };
 
+  const requestMatchesPluginBrandingAlias = (req, slug) => {
+    const referer = String(req?.get?.('referer') || '').toLowerCase();
+    if (!referer) return false;
+    return referer.includes(`/plugins/${String(slug || '').toLowerCase()}/`)
+      || referer.includes(`/${String(slug || '').toLowerCase()}/`);
+  };
+
   const applyBrandingToQwc2Configs = async () => {
     const state = await readState();
     const logoPath = await resolveLogoPath();
     const logoSrc = logoPath ? await getLogoPublicUrl() : null;
-    const configPaths = [
+    const configPaths = Array.from(new Set([
+      path.join(installRoot, 'build', 'config.json'),
+      path.join(installRoot, 'dist', 'config.json'),
       path.join(installRoot, 'prod', 'config.json'),
-      path.join(installRoot, 'static', 'config.json')
-    ];
+      path.join(installRoot, 'static', 'config.json'),
+      path.join(installRoot, 'config.json')
+    ]));
 
     for (const cfgPath of configPaths) {
       try {
@@ -1365,7 +1390,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const mainLayerNames = thumbnailTarget.mainLayerNames;
     if (!safeProfileKey || !projectId || !mainLayerNames.length) return null;
     const background = getDefaultPublishedBackground(profile);
-    await fs.promises.unlink(publishedThumbnailPath(safeProfileKey)).catch(() => {});
     if (clearCaches) {
       await clearThumbnailRenderCaches([
         projectId,
@@ -2721,7 +2745,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     // Patch logo if branding available
     const logoPath = await resolveLogoPath();
     if (topBar?.cfg && logoPath) {
-      topBar.cfg.logoSrc = '/qtiler/branding/logo';
+      topBar.cfg.logoSrc = `/plugins/${pluginSlug}/public/branding/logo`;
     }
 
     // Apply routing service URL to Routing plugin config
@@ -3485,7 +3509,12 @@ ${mapIcon}
 
   const maybeAutoStartStandalone = async () => { /* removed */ };
 
-  app.use(`/plugins/${pluginSlug}/admin-ui`, express.static(adminUiDir));
+  app.use(`/plugins/${pluginSlug}/admin-ui`, (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+  }, express.static(adminUiDir));
   app.use(`/plugins/${pluginSlug}/client`, express.static(clientDir));
   
   // Serve origo-controls with no-cache headers to prevent browser caching during development
@@ -3512,19 +3541,6 @@ ${mapIcon}
 
       const existing = await readPublishedThumbnailMeta(profileKey);
       if (existing?.filePath) return res.sendFile(existing.filePath);
-
-      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-      const regenerated = await regeneratePublishedThumbnail({
-        profileKey: record.profileKey,
-        profile: record.profile,
-        baseUrl,
-        cookieHeader: req.headers.cookie,
-        apiKey: getRequestApiKey(req),
-        authorization: req.get?.('authorization') || '',
-        clearCaches: false
-      }).catch(() => null);
-
-      if (regenerated?.filePath) return res.sendFile(regenerated.filePath);
       return next();
     } catch {
       return next();
@@ -3975,6 +3991,13 @@ ${mapIcon}
     return (Array.isArray(attrs) ? attrs : [])
       .map((attr) => {
         if (!attr || typeof attr !== 'object') return null;
+        const rawHtml = attr.html == null ? '' : String(attr.html);
+        if (rawHtml.trim()) {
+          return {
+            ...attr,
+            html: rawHtml
+          };
+        }
         const name = String(attr.name || '').trim();
         if (!name) return null;
         const rawTitle = attr.title == null ? '' : String(attr.title);
@@ -3986,6 +4009,31 @@ ${mapIcon}
       })
       .filter(Boolean);
   };
+
+  const getNamedInfoclickAttributes = (attrs) => normalizeInfoclickAttributes(attrs)
+    .filter((attr) => attr && typeof attr === 'object' && String(attr.name || '').trim());
+
+  const hajkInfoboxPlaceholder = (value) => String(value == null ? '' : value)
+    .replace(/\{\{\s*([A-Za-z_][\w.-]*)\s*\}\}/g, '{$1}');
+
+  const buildHajkInfobox = (attrs) => {
+    const normalized = normalizeInfoclickAttributes(attrs);
+    if (!normalized.length) return '';
+    return normalized
+      .map((attr) => {
+        if (attr && typeof attr === 'object' && String(attr.html || '').trim()) {
+          return hajkInfoboxPlaceholder(attr.html);
+        }
+        const name = String(attr?.name || '').trim();
+        if (!name) return '';
+        return `**${attr.title || name}:** {${name}}`;
+      })
+      .filter(Boolean)
+      .join('  \n');
+  };
+
+  const hasHtmlInfoclickRows = (layers) => (Array.isArray(layers) ? layers : [])
+    .some((layer) => normalizeInfoclickAttributes(layer?.attributes).some((attr) => String(attr?.html || '').trim()));
 
   const shouldUseWfsForPublishedLayer = (layerLike, fallbackEditable = false) => {
     if (!layerLike || typeof layerLike !== 'object') return fallbackEditable === true;
@@ -4173,6 +4221,10 @@ ${mapIcon}
         const scale = numberOrNull(icon.scale);
         if (scale !== null && scale > 0) out.pointSize = hajkMapPointSizeFromIconScale(scale);
         else out.pointSize = 8;
+        if (Array.isArray(icon.anchor) && Number.isFinite(Number(icon.anchor[0])) && Number.isFinite(Number(icon.anchor[1]))) {
+          out.symbolXOffset = Number(icon.anchor[0]);
+          out.symbolYOffset = Number(icon.anchor[1]);
+        }
       }
       const circle = rule.circle || null;
       if (circle && typeof circle === 'object') {
@@ -4866,6 +4918,7 @@ ${mapIcon}
             (wfsMeta.attributes || []).map(a => [a.name, a])
           );
           resolvedAttrs = resolvedAttrs.map(attr => {
+            if (attr && typeof attr === 'object' && String(attr.html || '').trim()) return attr;
             const raw = String(attr.type || '').trim();
             if (VALID_ORIGO_ATTR_TYPES.has(raw)) return attr;
             // Try alias mapping first
@@ -5304,10 +5357,11 @@ ${mapIcon}
            let vectorSldText = '';
            let qtilerStyleRules = [];
            try {
-             const hasMultiRuleLegend = getHajkLegendStyleEntries(fullVectorStyle, l).length > 1;
+             const legendEntries = getHajkLegendStyleEntries(fullVectorStyle, l);
+             const hasMultiRuleLegend = legendEntries.length > 1;
              styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l);
              scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode);
-             qtilerStyleRules = hasMultiRuleLegend ? toHajkRuntimeStyleRules(fullVectorStyle, baseUrl) : [];
+             qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl);
              vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl);
              vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
              vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon;
@@ -5319,9 +5373,8 @@ ${mapIcon}
              vectorLegend = vectorLegendIcon;
            }
            const searchId = `${hajkLayerId}_search`;
-           const displayFieldNames = Array.isArray(l.attributes) && l.attributes.length
-             ? l.attributes.map((a) => a.name || a).filter(Boolean)
-             : [];
+           const namedAttributes = getNamedInfoclickAttributes(l.attributes);
+           const displayFieldNames = namedAttributes.map((a) => a.name).filter(Boolean);
            // Hajk's infoclick calls `.split(',')` on displayFields, so it must
            // be a comma-separated string, not an array. displayFields also
            // drives the short "primary label" shown in the breadcrumb/list
@@ -5330,9 +5383,7 @@ ${mapIcon}
            // title (e.g. "-28, NULL, NULL, KAVLÅS, ..."). The full attribute
            // list is still shown in the infobox table below, unaffected.
            const displayFields = displayFieldNames.slice(0, 3).join(',');
-           const infobox = Array.isArray(l.attributes) && l.attributes.length
-             ? l.attributes.map((a) => `**${a.title || a.name}:** {${a.name}}`).join('  \n')
-             : '';
+           const infobox = buildHajkInfobox(l.attributes);
            vectorlayers.push({
              id: hajkLayerId,
              caption: l.title,
@@ -5402,7 +5453,7 @@ ${mapIcon}
              // if missing) and AttributeEditor needs `editableFields` in
              // Hajk's own shape (name/alias/textType), not our internal
              // `attributes` array.
-             const editableFields = (Array.isArray(l.attributes) ? l.attributes : [])
+             const editableFields = namedAttributes
                .map((a) => {
                  const fieldName = String((a && (a.name || a)) || '').trim();
                  if (!fieldName) return null;
@@ -5420,8 +5471,8 @@ ${mapIcon}
                url: lSource.url,
                uri: `http://qtiler.local/${encodeURIComponent(layerProjectId)}`,
                layers: [l.name],
-               searchFields: Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean) : [],
-               displayFields: (Array.isArray(l.attributes) && l.attributes.length ? l.attributes.map((a) => a.name || a).filter(Boolean).slice(0, 3) : []),
+               searchFields: displayFieldNames,
+               displayFields: displayFieldNames.slice(0, 3),
                geometryField: l.geometryName || 'geom',
                outputFormat: 'GML3',
                projection: projCode,
@@ -5480,12 +5531,9 @@ ${mapIcon}
            // layer's `displayFields` key name) - without these, WMS features fell back
            // to Hajk's generic raw-attribute table (looks inconsistent/"wrong" next to
            // a properly configured vector layer's popup).
-           const wmsDisplayFieldNames = Array.isArray(l.attributes) && l.attributes.length
-             ? l.attributes.map((a) => a.name || a).filter(Boolean)
-             : [];
-           const wmsInfobox = Array.isArray(l.attributes) && l.attributes.length
-             ? l.attributes.map((a) => `**${a.title || a.name}:** {${a.name}}`).join('  \n')
-             : '';
+           const wmsNamedAttributes = getNamedInfoclickAttributes(l.attributes);
+           const wmsDisplayFieldNames = wmsNamedAttributes.map((a) => a.name).filter(Boolean);
+           const wmsInfobox = buildHajkInfobox(l.attributes);
            wmslayers.push({
                id: hajkLayerId,
                caption: l.title,
@@ -5649,7 +5697,7 @@ ${mapIcon}
           strokeColor: { r: 200, g: 0, b: 0, a: 0.7 },
           strokeWidth: 4,
           fillColor: { r: 255, g: 0, b: 0, a: 0.1 },
-          allowDangerousHtml: false,
+          allowDangerousHtml: hasHtmlInfoclickRows(layers),
           useNewInfoclick: true,
           useNewPlaceholderMatching: true,
           useLevel1FeatureHighlight: true,
@@ -6343,7 +6391,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         );
         {
           const qtilerStyleRules = toHajkRuntimeStyleRules(previewStyles[styleName], baseUrl);
-          if (qtilerStyleRules.length > 1) {
+          if (qtilerStyleRules.length) {
             wfsDef.qtilerStyleRules = qtilerStyleRules;
             delete wfsDef.sldText;
             delete wfsDef.sldStyle;
@@ -6506,7 +6554,10 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     return res.json(config);
   });
 
-  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (_req, res) => {
+  app.get([`/plugins/${pluginSlug}/public/branding/logo`, '/qtiler/branding/logo'], async (req, res, next) => {
+    if (req.path === '/qtiler/branding/logo' && !requestMatchesPluginBrandingAlias(req, pluginSlug)) {
+      return next();
+    }
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
     return res.sendFile(logoPath);
@@ -6535,6 +6586,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const title = profile?.name || profileId;
       html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
       const hajkBase = `<base href="/plugins/${pluginSlug}/hajk/">`;
+      const hajkFavicon = `<link rel="icon" type="image/x-icon" href="/plugins/${pluginSlug}/hajk/favicon.ico"><link rel="apple-touch-icon" href="/plugins/${pluginSlug}/hajk/icon192.png">`;
       const publishedConfigUrl = `${getRequestBaseUrl(req)}/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
       const lantmateriScript = await buildLantmateriControlBootstrap(profile?.controls);
@@ -6565,7 +6617,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
 })();
 </script>`;
       if (/<head(\s[^>]*)?>/i.test(html)) {
-        html = html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n  ${hajkBase}\n${publishedShim}\n${patternFillScript}`);
+        html = html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n  ${hajkBase}\n  ${hajkFavicon}\n${publishedShim}\n${patternFillScript}`);
       }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.set('Cache-Control', 'no-store');
@@ -7341,15 +7393,23 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         // attribute filter for both WFS and WMS layers.
         if (Array.isArray(rule.attributes) && rule.attributes.length) {
           out.attributes = normalizeInfoclickAttributes(rule.attributes)
-            .map((a) => (a && typeof a === 'object') ? {
-              name: String(a.name || '').trim(),
-              ...(a.type ? { type: String(a.type) } : {}),
-              ...(a.title ? { title: String(a.title) } : {}),
-              ...(a.url ? { url: String(a.url) } : {}),
-              ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
-              ...(Array.isArray(a.options) ? { options: a.options.map(String) } : {})
-            } : null)
-            .filter((a) => a && a.name);
+            .map((a) => {
+              if (!a || typeof a !== 'object') return null;
+              if (String(a.html || '').trim()) {
+                return { html: String(a.html) };
+              }
+              const name = String(a.name || '').trim();
+              if (!name) return null;
+              return {
+                name,
+                ...(a.type ? { type: String(a.type) } : {}),
+                ...(a.title ? { title: String(a.title) } : {}),
+                ...(a.url ? { url: String(a.url) } : {}),
+                ...(typeof a.maxLength === 'number' ? { maxLength: a.maxLength } : {}),
+                ...(Array.isArray(a.options) ? { options: a.options.map(String) } : {})
+              };
+            })
+            .filter(Boolean);
           if (!out.attributes.length) delete out.attributes;
         }
         const gType = String(rule.geometryType || sourceLayer?.geometryType || '').trim();
@@ -7445,8 +7505,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-      const thumbnailUrl = `/plugins/${pluginSlug}/published/thumbs/${encodeURIComponent(profileKey)}.jpg`;
-      void regeneratePublishedThumbnail({
+      const previousThumbMeta = await readPublishedThumbnailMeta(profileKey).catch(() => null);
+      const generatedThumbMeta = await regeneratePublishedThumbnail({
         profileKey,
         profile: payload,
         baseUrl: syncBaseUrl,
@@ -7455,6 +7515,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         authorization: req.get?.('authorization') || ''
       }).catch((thumbErr) => {
         console.warn('[Qtiler2Hajk] publish thumbnail warning:', thumbErr?.message || thumbErr);
+        return null;
       });
       void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
         console.warn('[Qtiler2Hajk] publish runtime sync warning:', syncErr?.message || syncErr);
@@ -7477,7 +7538,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         // Use the plugin-local Origo path for launching the map.
         launchUrl: `${base}/plugins/${pluginSlug}/hajk/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
-        thumbnailUrl: `${base}${thumbnailUrl}`
+        thumbnailUrl: generatedThumbMeta?.url ? `${base}${generatedThumbMeta.url}` : (previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : '')
       });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_failed', details: String(err?.message || err) });

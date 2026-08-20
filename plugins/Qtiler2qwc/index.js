@@ -662,6 +662,20 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
   };
 
+  const redirectLegacyBrandingAlias = (req, res) => {
+    const referer = String(req?.get?.('referer') || '').toLowerCase();
+    const query = String(req.url || '').includes('?') ? String(req.url || '').slice(String(req.url || '').indexOf('?')) : '';
+    if (referer.includes('/plugins/qtiler2hajk/') || referer.includes('/qtiler2hajk/')) {
+      res.redirect(302, `/plugins/Qtiler2Hajk/public/branding/logo${query}`);
+      return true;
+    }
+    if (referer.includes('/plugins/qtiler2origo/') || referer.includes('/qtiler2origo/')) {
+      res.redirect(302, `/plugins/Qtiler2Origo/public/branding/logo${query}`);
+      return true;
+    }
+    return false;
+  };
+
   const applyBrandingToQwc2Configs = async () => {
     const state = await readState();
     const logoPath = await resolveLogoPath();
@@ -2713,7 +2727,8 @@ h1{margin:14px 0 10px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.05}.hero p{
       return res.status(500).json({ error: 'qwc2_themes_failed' });
     }
   });
-  app.get('/qtiler/branding/logo', async (_req, res) => {
+  app.get('/qtiler/branding/logo', async (req, res) => {
+    if (redirectLegacyBrandingAlias(req, res)) return;
     const logoPath = await resolveLogoPath();
     if (!logoPath) return res.status(404).json({ error: 'logo_not_configured' });
     return res.sendFile(logoPath);

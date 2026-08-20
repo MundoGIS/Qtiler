@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Qtiler2Hajk &ndash; Maps Portal</title>
+  <link rel="icon" type="image/x-icon" href="/plugins/Qtiler2Hajk/hajk/favicon.ico">
+  <link rel="apple-touch-icon" href="/plugins/Qtiler2Hajk/hajk/icon192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
@@ -503,15 +505,17 @@
       if (acceptBtn) acceptBtn.textContent = gdpr.acceptLabel || 'Accept all';
     }
 
+    const normalizeBrandingLogoUrl = (value) => String(value || '').trim().replace(/\/qtiler\/branding\/logo/ig, '/plugins/Qtiler2Hajk/public/branding/logo');
+
     function applyPortalHeader(currentPage, payload) {
       const page = currentPage || null;
       const mapsOnly = payload?.viewMode === 'maps';
       const showHeader = page ? page.showHeader !== false : true;
       const site = payload?.site || {};
       const headerHeight = Math.max(72, Math.min(360, Number(site.headerHeight) || (page ? Number(page.headerHeight) : 0) || 120));
-      const logoUrl = mapsOnly
+      const logoUrl = normalizeBrandingLogoUrl(mapsOnly
         ? (site.galleryHeaderLogoUrl || payload?.logoUrl || '')
-        : (site.headerLogoUrl || ((page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : '')));
+        : (site.headerLogoUrl || ((page && page.headerLogoUrl) ? page.headerLogoUrl : (payload && payload.logoUrl ? payload.logoUrl : ''))));
       const headerColor1 = isSafeCssColor(site.headerColor1) ? site.headerColor1 : '#0f766e';
       const headerColor2 = isSafeCssColor(site.headerColor2) ? site.headerColor2 : '#2563eb';
       const headerTextColor = isSafeCssColor(site.headerTextColor) ? site.headerTextColor : '#ffffff';

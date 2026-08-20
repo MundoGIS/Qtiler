@@ -400,6 +400,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_rules_help': 'Each rule is evaluated in order. For a default style, leave the filter empty in the last one.',
     'Qtiler2Origo.wfs_attrs_header': 'Popup attributes (Infoclick)',
     'Qtiler2Origo.wfs_add_attr': '+ Add attribute',
+    'Qtiler2Origo.wfs_add_html': '+ Add HTML',
     'Qtiler2Origo.wfs_attrs_help': 'Define the attributes to display. If you leave it empty, all are shown.',
     'Qtiler2Origo.wfs_json_label': 'Full layer JSON (configuration + style)',
     'Qtiler2Origo.wfs_json_help': 'Edit the complete object here: name, geometryType, wfsStyle, searchable, etc.',
@@ -987,6 +988,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_rules_help': 'Cada regla se evalúa por orden. Si quieres una "por defecto", deja el filtro vacío en la última.',
     'Qtiler2Origo.wfs_attrs_header': 'Atributos del Popup (Infoclick)',
     'Qtiler2Origo.wfs_add_attr': '+ Añadir atributo',
+    'Qtiler2Origo.wfs_add_html': '+ Añadir HTML',
     'Qtiler2Origo.wfs_attrs_help': 'Define los atributos a mostrar. Si no llenas nada, se muestran todos.',
     'Qtiler2Origo.wfs_json_label': 'JSON completo de la capa (configuración + estilo)',
     'Qtiler2Origo.wfs_json_help': 'Edita aquí el objeto completo: name, geometryType, wfsStyle, searchable, etc.',
@@ -1564,6 +1566,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.wfs_rules_help': 'Varje regel utvärderas i ordning. För en standardstil, lämna filtret tomt i den sista.',
     'Qtiler2Origo.wfs_attrs_header': 'Popup-attribut (Infoclick)',
     'Qtiler2Origo.wfs_add_attr': '+ Lägg till attribut',
+    'Qtiler2Origo.wfs_add_html': '+ Lägg till HTML',
     'Qtiler2Origo.wfs_attrs_help': 'Definiera attributen som ska visas. Om du lämnar tomt visas alla.',
     'Qtiler2Origo.wfs_json_label': 'Komplett lager-JSON (konfiguration + stil)',
     'Qtiler2Origo.wfs_json_help': 'Redigera det fullständiga objektet här: name, geometryType, wfsStyle, searchable, etc.',
@@ -1773,6 +1776,14 @@ const QTWC_I18N = {
     'Qtiler2Origo.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2Origo/, inklusive kartpubliceraren, portalbyggaren och logiken för åtkomstfallback.'
   }
 };
+
+const QTILER2ORIGO_BRANDING_LOGO_URL = '/plugins/Qtiler2Origo/public/branding/logo';
+
+function normalizeBrandingLogoUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return value;
+  return value.replace(/\/qtiler\/branding\/logo/ig, QTILER2ORIGO_BRANDING_LOGO_URL);
+}
 
 QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.title': 'Origo-bro for Qtiler',
@@ -2517,7 +2528,7 @@ const ORIGO_CTRL_SCHEMAS = {
     { key: 'supressResolutionsRecalculation', type: 'bool', label: 'Suppress resolutions recalc', defaultValue: false },
     // Logo placement (nested)
     { path: 'logo.src', type: 'text', label: 'Logo: image source path',
-      placeholder: '/qtiler/branding/logo  (or  css/png/logo_print.png)' },
+      placeholder: '/plugins/Qtiler2Origo/public/branding/logo  (or  css/png/logo_print.png)' },
     { path: 'logo.cls', type: 'text', label: 'Logo: CSS class (placement)',
       placeholder: 'padding-bottom-small  (e.g. padding-top-small for top)' },
     { path: 'logo.style.height', type: 'text', label: 'Logo: height (CSS)', placeholder: '3rem' },
@@ -4522,7 +4533,7 @@ function syncUI() {
   const running = !!s.standalone?.running;
   const standaloneUrl = s.standalone?.url || '';
   const hasLogo = !!s.branding?.hasLogo;
-  const logoUrl = s.branding?.logoUrl || '';
+  const logoUrl = normalizeBrandingLogoUrl(s.branding?.logoUrl || (hasLogo ? QTILER2ORIGO_BRANDING_LOGO_URL : ''));
 
   /* ── Installation card ── */
   if (installBadge) {
@@ -4566,23 +4577,23 @@ function syncUI() {
   }
 
   /* ── Logo card ── */
-  if (logoSection) logoSection.classList.toggle('card--disabled', !installed);
-  if (galleryBrandingSection) galleryBrandingSection.classList.toggle('card--disabled', !installed);
+  if (logoSection) logoSection.classList.remove('card--disabled');
+  if (galleryBrandingSection) galleryBrandingSection.classList.remove('card--disabled');
   if (logoBadge) {
     logoBadge.textContent = t(hasLogo ? 'Qtiler2Origo.logo_active' : 'Qtiler2Origo.no_logo');
     logoBadge.className = `badge ${hasLogo ? 'badge--ok' : 'badge--muted'}`;
   }
   if (logoPreview) {
     if (hasLogo && logoUrl) {
-      logoPreview.src = logoUrl + '?t=' + Date.now();
+      logoPreview.src = logoUrl + (logoUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
       logoPreview.style.display = 'block';
     } else {
       logoPreview.removeAttribute('src');
       logoPreview.style.display = 'none';
     }
   }
-  if (uploadLogoBtn) uploadLogoBtn.disabled = !installed;
-  if (removeLogoBtn) removeLogoBtn.disabled = !installed || !hasLogo;
+  if (uploadLogoBtn) uploadLogoBtn.disabled = false;
+  if (removeLogoBtn) removeLogoBtn.disabled = !hasLogo;
 
   /* ── Profiles card ── */
   if (publishSection) publishSection.classList.toggle('card--disabled', !installed);
@@ -6918,6 +6929,7 @@ function buildPublishApiBody() {
   const layersPayload = selectedLayers.map((layer) => {
     const key = getLayerKey(layer);
     const title = getLayerDisplayTitle(layer) || layer.name;
+    const rule = getLayerRule(layer) || {};
     return {
       name: layer.name,
       title,
@@ -6925,7 +6937,8 @@ function buildPublishApiBody() {
       themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
       visible: publishState.initialVisibility[key] !== false,
-      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
+      attributes: Array.isArray(rule.attributes) ? normalizeAttributesList(rule.attributes) : []
     };
   });
   const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
@@ -7063,6 +7076,7 @@ publishNowBtn?.addEventListener('click', async () => {
   const layersPayload = selectedLayers.map((layer) => {
     const key = getLayerKey(layer);
     const title = getLayerDisplayTitle(layer) || layer.name;
+    const rule = getLayerRule(layer) || {};
     return {
       name: layer.name,
       title,
@@ -7070,7 +7084,8 @@ publishNowBtn?.addEventListener('click', async () => {
       themeName: layer.themeName || null,
       sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
       visible: publishState.initialVisibility[key] !== false,
-      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
+      attributes: Array.isArray(rule.attributes) ? normalizeAttributesList(rule.attributes) : []
     };
   });
 
@@ -8344,6 +8359,10 @@ function getDefaultAttributeTitle(name) {
 
 function normalizeAttributeDefinition(attr) {
   if (!attr || typeof attr !== 'object') return null;
+  const rawHtml = attr.html == null ? '' : String(attr.html);
+  if (rawHtml.trim()) {
+    return { html: rawHtml };
+  }
   const name = String(attr.name || '').trim();
   if (!name) return null;
   const rawTitle = attr.title == null ? '' : String(attr.title);
@@ -8421,6 +8440,7 @@ function extractDropdownOptionsFromRules(attrName) {
 
 const attributesContainer = document.getElementById('wfs-attributes-container');
 const attributesAddBtn = document.getElementById('wfs-attributes-add');
+const attributesAddHtmlBtn = document.getElementById('wfs-attributes-add-html');
 const attributesCopySelect = document.getElementById('wfs-attributes-copy-select');
 
 function renderAttributesPanel() {
@@ -8434,9 +8454,20 @@ function renderAttributesPanel() {
   currentAttributes.forEach((attr, idx) => {
     const row = document.createElement('div');
     row.style.display = 'grid';
-    row.style.gridTemplateColumns = '1fr 1fr 130px 70px 30px';
+    const isHtmlRow = Object.prototype.hasOwnProperty.call(attr || {}, 'html') && !Object.prototype.hasOwnProperty.call(attr || {}, 'name');
+    row.style.gridTemplateColumns = isHtmlRow ? '1fr 30px' : '1fr 1fr 130px 70px 30px';
     row.style.gap = '0.4rem';
     row.style.alignItems = 'start';
+    if (isHtmlRow) {
+      row.innerHTML = `
+        <div>
+          <div style="font-size:0.75rem;color:#64748b;margin-bottom:0.2rem">${escapeHtml(t('Qtiler2Origo.opt_content'))}</div>
+          <textarea class="textarea is-small" rows="4" placeholder="<b>Foto punkt Nr. {{Numrering}} - {{Plats}}</b>" data-idx="${idx}" data-field="html">${escapeHtml(attr.html || '')}</textarea>
+        </div>
+        <button type="button" class="button small is-danger is-light" data-action="delete" data-idx="${idx}" title="${escapeHtml(t('Qtiler2Origo.delete'))}">×</button>`;
+      attributesContainer.appendChild(row);
+      return;
+    }
     const isInList = !attr.name || (currentLayerFields || []).some(f => f.name === attr.name);
     const nameField = (currentLayerFields && currentLayerFields.length && isInList)
       ? `<select class="input small" data-idx="${idx}" data-field="name">${fieldOpts.replace(`value="${attr.name}"`, `value="${attr.name}" selected`)}</select>`
@@ -8488,6 +8519,13 @@ if (attributesAddBtn) {
   });
 }
 
+if (attributesAddHtmlBtn) {
+  attributesAddHtmlBtn.addEventListener('click', () => {
+    currentAttributes.push({ html: '' });
+    renderAttributesPanel();
+  });
+}
+
 attributesCopySelect?.addEventListener('change', () => {
   const src = String(attributesCopySelect.value || '').trim();
   if (!src) return;
@@ -8507,6 +8545,8 @@ if (attributesContainer) {
       currentAttributes[idx].maxLength = isNaN(n) ? undefined : n;
     } else if (field === 'options') {
       currentAttributes[idx].options = val.split('\n').map(s => s.trim()).filter(Boolean);
+    } else if (field === 'html') {
+      currentAttributes[idx].html = val;
     } else {
       currentAttributes[idx][field] = val;
       // When the user picks a field name, auto-fill the type from WFS metadata
