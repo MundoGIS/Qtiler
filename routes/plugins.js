@@ -8,6 +8,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import AdmZip from "adm-zip";
+import multer from "multer";
 import crypto from "crypto";
 import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
@@ -889,6 +890,131 @@ export const registerPluginRoutes = ({
 
     // Restart only after the response is delivered to prevent connection reset in the browser.
     restartAfterResponse(res);
+  });
+
+  // Runtime folders that are re-downloaded on install and must never bloat a backup.
+  const BACKUP_EXCLUDED_SEGMENTS = new Set(["node_modules", "current", ".git"]);
+  const BACKUP_MANIFEST_NAME = "qtiler-backup.json";
+  const BACKUP_SCHEMA = "qtiler.plugin-data-backup.v1";
+  // Data backups can be much larger than a plugin archive (portal images, thumbnails).
+  const backupUpload = multer({
+    dest: path.join(os.tmpdir(), "qtiler-plugin-backups"),
+    limits: { fileSize: parseInt(process.env.PLUGIN_BACKUP_MAX_BYTES || "1073741824", 10) },
+    fileFilter: (_req, file, cb) => {
+      if (path.extname(file.originalname || "").toLowerCase() !== ".zip") {
+        const err = new Error("unsupported_backup_archive");
+        err.code = "UNSUPPORTED_BACKUP_ARCHIVE";
+        return cb(err);
+      }
+      cb(null, true);
+    }
+  });
+
+  const isBackupPathAllowed = (relativePath) => String(relativePath || "")
+    .split(/[\\/]+/)
+    .every((segment) => !BACKUP_EXCLUDED_SEGMENTS.has(segment));
+
+  app.get("/plugins/:name/backup", requireAdmin, async (req, res) => {
+    const pluginName = sanitizePluginName(req.params.name);
+    if (!pluginName) {
+      return res.status(400).json({ error: "plugin_name_required" });
+    }
+    const pluginDataPath = path.join(dataDir, pluginName);
+    if (!fs.existsSync(pluginDataPath)) {
+      return res.status(404).json({ error: "plugin_data_not_found" });
+    }
+    try {
+      const zip = new AdmZip();
+      zip.addFile(BACKUP_MANIFEST_NAME, Buffer.from(JSON.stringify({
+        schema: BACKUP_SCHEMA,
+        plugin: pluginName,
+        createdAt: new Date().toISOString()
+      }, null, 2), "utf8"));
+      zip.addLocalFolder(pluginDataPath, "data", isBackupPathAllowed);
+      const buffer = zip.toBuffer();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${pluginName}-backup-${stamp}.zip"`);
+      res.setHeader("Content-Length", buffer.length);
+      res.end(buffer);
+    } catch (backupErr) {
+      res.status(500).json({ error: "plugin_backup_failed", details: String(backupErr?.message || backupErr) });
+    }
+  });
+
+  app.post("/plugins/:name/restore", requireAdmin, (req, res) => {
+    backupUpload.single("backup")(req, res, async (uploadErr) => {
+      if (uploadErr) {
+        if (uploadErr.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ error: "plugin_backup_too_large" });
+        }
+        return res.status(400).json({ error: "plugin_backup_upload_failed", details: String(uploadErr?.message || uploadErr) });
+      }
+      const pluginName = sanitizePluginName(req.params.name);
+      const file = req.file;
+      const cleanup = async () => {
+        if (file?.path) {
+          try { await fs.promises.unlink(file.path); } catch { /* ignore */ }
+        }
+      };
+      if (!pluginName) {
+        await cleanup();
+        return res.status(400).json({ error: "plugin_name_required" });
+      }
+      if (!file) {
+        await cleanup();
+        return res.status(400).json({ error: "plugin_backup_required" });
+      }
+
+      try {
+        const zip = new AdmZip(file.path);
+        const entries = zip.getEntries();
+        const manifestEntry = entries.find((entry) => entry.entryName === BACKUP_MANIFEST_NAME);
+        let manifest = null;
+        try {
+          manifest = manifestEntry ? JSON.parse(manifestEntry.getData().toString("utf8")) : null;
+        } catch { manifest = null; }
+        if (!manifest || manifest.schema !== BACKUP_SCHEMA) {
+          await cleanup();
+          return res.status(400).json({ error: "invalid_plugin_backup" });
+        }
+        if (manifest.plugin !== pluginName && req.query.force !== "1") {
+          await cleanup();
+          return res.status(409).json({ error: "plugin_backup_mismatch", details: `Backup belongs to "${manifest.plugin}".` });
+        }
+
+        const pluginDataPath = path.join(dataDir, pluginName);
+        if (req.query.replace === "1") {
+          await removeRecursive(pluginDataPath).catch(() => { });
+        }
+        await fs.promises.mkdir(pluginDataPath, { recursive: true });
+        const dataRootResolved = path.resolve(pluginDataPath);
+
+        let restoredFiles = 0;
+        for (const entry of entries) {
+          if (entry.isDirectory) continue;
+          if (!entry.entryName.startsWith("data/")) continue;
+          const relative = entry.entryName.slice("data/".length);
+          if (!relative || !isBackupPathAllowed(relative)) continue;
+          const target = path.resolve(pluginDataPath, relative);
+          // Zip-slip guard: never write outside the plugin data directory.
+          if (target !== dataRootResolved && !target.startsWith(dataRootResolved + path.sep)) continue;
+          await fs.promises.mkdir(path.dirname(target), { recursive: true });
+          await fs.promises.writeFile(target, entry.getData());
+          restoredFiles += 1;
+        }
+
+        await cleanup();
+        res.json({
+          status: "restored",
+          plugin: { name: pluginName, restoredFiles, createdAt: manifest.createdAt || null }
+        });
+        restartAfterResponse(res);
+      } catch (restoreErr) {
+        await cleanup();
+        res.status(500).json({ error: "plugin_restore_failed", details: String(restoreErr?.message || restoreErr) });
+      }
+    });
   });
 
   app.post("/plugins/upload", requireAdminIfEnabled, (req, res) => {

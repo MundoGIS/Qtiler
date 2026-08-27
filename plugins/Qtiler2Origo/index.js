@@ -1883,9 +1883,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       const cachedLayer = await checkLayer({ projectId: entry?.sourceProjectId || mainProjectId, layerName: isTheme ? (themeName || name) : name, role: 'Map', theme: isTheme });
       if (!cachedLayer || isTheme) continue;
       const rule = layerRuleFor(entry);
-      const wantsWfs = rule?.editable === true || rule?.serveAsWfs === true || rule?.wfsStyle !== undefined;
+      // Only require a vector layer when the layer will actually be served as
+      // WFS (explicit serveAsWfs/editable). A saved wfsStyle alone does not
+      // force the WFS path — it may just be legend styling for a WMS layer.
+      const wantsWfs = rule?.editable === true || rule?.serveAsWfs === true;
       if (wantsWfs && cachedLayer.type !== 'vector' && !cachedLayer.geometry_type) {
-        addIssue('wfs_requires_vector_layer', `Layer "${name}" is configured as WFS/editable/styled WFS but is not a vector layer in the cache index.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name });
+        addIssue('wfs_requires_vector_layer', `Layer "${name}" is configured as WFS/editable but is not a vector layer in the cache index.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name });
       }
       const fields = collectFieldNames(cachedLayer);
       if (fields.size) {
@@ -2025,7 +2028,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       : bg?.type === 'osm'
         ? '|bg:osm'
         : '';
-    const hash = sanitizeFileToken(`${layerKey}${bgKey}`.replace(/,/g, '_')) || '_all';
+    const hash = sanitizeFileToken(`${layerKey}${bgKey}|s500k`.replace(/,/g, '_')) || '_all';
     return {
       safePid,
       hash,
@@ -2184,6 +2187,32 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       const padY = height * 0.12;
       return [minx - padX, miny - padY, maxx + padX, maxy + padY];
     };
+    // Nationwide WMS thumbs look empty at full extent. Crop around the
+    // centroid to ~1:500000 (280x160 @ 96 dpi) so legend icons show detail.
+    const cropExtentToDetailScale = (extentBbox, crsCode) => {
+      if (!Array.isArray(extentBbox) || extentBbox.length < 4) return extentBbox;
+      const [minx, miny, maxx, maxy] = extentBbox.map(Number);
+      if (![minx, miny, maxx, maxy].every(Number.isFinite) || !(maxx > minx) || !(maxy > miny)) return extentBbox;
+      const thumbW = 280;
+      const thumbH = 160;
+      const metersPerPx = (500000 * 0.0254) / 96;
+      let halfW = (thumbW * metersPerPx) / 2;
+      let halfH = (thumbH * metersPerPx) / 2;
+      const crs = String(crsCode || '').trim().toUpperCase();
+      if (crs === 'EPSG:4326' || crs === 'EPSG:4258' || crs === 'CRS:84') {
+        const lat = (miny + maxy) / 2;
+        const mPerDegLat = 111320;
+        const mPerDegLon = Math.max(1e-6, 111320 * Math.cos((lat * Math.PI) / 180));
+        halfW /= mPerDegLon;
+        halfH /= mPerDegLat;
+      }
+      const layerW = maxx - minx;
+      const layerH = maxy - miny;
+      if (layerW <= halfW * 2 && layerH <= halfH * 2) return extentBbox;
+      const cx = (minx + maxx) / 2;
+      const cy = (miny + maxy) / 2;
+      return [cx - halfW, cy - halfH, cx + halfW, cy + halfH];
+    };
     let bbox = null;
     let bboxWgs84 = null;
     let crs = null;
@@ -2215,6 +2244,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       crs = extent?.crs || 'EPSG:3857';
     }
     if (!crs) crs = 'EPSG:3857';
+    if (requestedLayers.length === 1) {
+      bbox = cropExtentToDetailScale(bbox, crs);
+      if (bboxWgs84) bboxWgs84 = cropExtentToDetailScale(bboxWgs84, 'EPSG:4326');
+    }
     const promise = new Promise((resolve) => {
       (async () => {
         try {
@@ -3539,7 +3572,7 @@ ${mapIcon}
 <title>Preview \u2013 ${projectId.replace(/[<>"&']/g, '')}</title>
 <link href="css/style.css" rel="stylesheet">
 <link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">
-<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
+<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}${origoLegendIconCss}</style>
 </head>
 <body>
 <div id="app-wrapper"></div>
@@ -3857,6 +3890,27 @@ ${mapIcon}
     return `${baseUrl}/plugins/${pluginSlug}/api/legend-icon?src=${encodeURIComponent(raw)}`;
   };
 
+  const buildWmsLegendGraphicUrl = (baseUrl, projectId, layerName) => {
+    const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
+    const name = String(layerName || '').trim();
+    if (!baseUrl || !pid || !name) return '';
+    // LAYERTITLE/RULELABEL=false: QGIS otherwise paints the layer name into the
+    // PNG. Origo then crops that wide image into a 24px box and the leftover
+    // letters show up to the left of the real layer title.
+    return `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.1.1&FORMAT=image/png&TRANSPARENT=TRUE&LAYERTITLE=FALSE&RULELABEL=FALSE&SYMBOLWIDTH=16&SYMBOLHEIGHT=16&LAYER=${encodeURIComponent(name)}`;
+  };
+
+  const origoLegendIconCss = `
+.o-map .legend-icon img,
+.o-map .legend-icon img.cover,
+.o-map img.extendedlegend {
+  object-fit: contain !important;
+  object-position: left center;
+  width: 100%;
+  height: 100%;
+}
+`;
+
   const normalizeInfoclickAttributes = (attrs) => {
     return (Array.isArray(attrs) ? attrs : [])
       .map((attr) => {
@@ -4043,7 +4097,10 @@ ${mapIcon}
       const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
       const sourceKey = getWmsSourceKey(normalizedProjectId);
       if (!source[sourceKey]) {
-        source[sourceKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}` };
+        source[sourceKey] = {
+          url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
+          projection: projCode
+        };
       }
       return sourceKey;
     };
@@ -4051,28 +4108,113 @@ ${mapIcon}
     source['osm'] = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' };
     // NOTE: No shared WMS source for background — each BG layer gets its own WMTS source
 
-    // Groups
-    const groups = [
-      { name: 'background', title: 'Background', expanded: false, exclusive: true }
-    ];
+    // Groups: accept both legacy flat `parent` entries and nested `groups` arrays.
+    // Build a nested groups array where each group may contain a `groups` array of children,
+    // which is the structure Origo expects (e.g. a group with subgroups).
+    const groups = [{ name: 'background', title: 'Background', expanded: false, exclusive: true }];
     if (Array.isArray(profile.groups) && profile.groups.length) {
+      // First, build a map of group definitions and parent links
+      const byName = new Map();
+      const parentOf = new Map();
+
+      const ensureEntry = (g) => {
+        const name = String(g?.name || '').trim();
+        if (!name) return null;
+        if (!byName.has(name)) {
+          byName.set(name, { name, title: String(g?.title || name), expanded: g?.expanded !== false, groups: [] });
+        } else {
+          const cur = byName.get(name);
+          cur.title = String(g?.title || cur.title || name);
+          cur.expanded = g?.expanded !== false;
+        }
+        return byName.get(name);
+      };
+
       for (const g of profile.groups) {
-        const gName = String(g?.name || '').trim();
-        if (!gName || gName === 'root' || gName === 'background') continue;
-        const entry = { name: gName, title: String(g?.title || gName), expanded: g?.expanded !== false };
-        if (g.parent) entry.parent = g.parent;
+        const name = String(g?.name || '').trim();
+        if (!name || name === 'root' || name === 'background') continue;
+        ensureEntry(g);
+        // If this group already contains nested `groups`, register parent links
+        if (Array.isArray(g.groups) && g.groups.length) {
+          for (const child of g.groups) {
+            const childName = String(child?.name || '').trim();
+            if (!childName) continue;
+            ensureEntry(child);
+            parentOf.set(childName, name);
+          }
+        }
+        // If legacy `parent` is present, record it
+        if (g.parent) {
+          const parentName = String(g.parent || '').trim();
+          if (parentName) parentOf.set(name, parentName);
+        }
+      }
+
+      // Attach children to their parents
+      for (const [childName, parentName] of parentOf.entries()) {
+        const parent = byName.get(parentName);
+        const child = byName.get(childName);
+        if (!parent || !child) continue;
+        if (!Array.isArray(parent.groups)) parent.groups = [];
+        // avoid duplicates
+        if (!parent.groups.some((g) => g.name === child.name)) parent.groups.push(child);
+      }
+
+      // Determine top-level groups preserving original order where possible
+      const added = new Set(['background']);
+      for (const g of profile.groups) {
+        const name = String(g?.name || '').trim();
+        if (!name || name === 'root' || name === 'background') continue;
+        if (parentOf.has(name)) continue; // child, will be included under its parent
+        if (added.has(name)) continue;
+        const entry = byName.get(name) || { name, title: name, expanded: true, groups: [] };
         groups.push(entry);
+        added.add(name);
       }
     }
-    // Auto-create any group referenced by a layer but missing from groups list,
-    // so Origo's layer tree can show it instead of silently dropping the layer.
-    const knownGroupNames = new Set(groups.map((g) => g.name));
-    for (const layer of (profile.layers || [])) {
-      const gn = String(layer?.group || '').trim();
-      if (gn && gn !== 'root' && gn !== 'background' && !knownGroupNames.has(gn)) {
-        groups.push({ name: gn, title: gn, expanded: true });
-        knownGroupNames.add(gn);
+
+    // Auto-create any group referenced by a layer but missing from the groups
+    // list, so Origo's layer tree can show it instead of silently dropping
+    // the layer. Runs unconditionally (not only when profile.groups exists).
+    {
+      const knownGroupNames = new Set();
+      const collectNames = (list) => {
+        for (const g of list) {
+          knownGroupNames.add(g.name);
+          if (Array.isArray(g.groups) && g.groups.length) collectNames(g.groups);
+        }
+      };
+      collectNames(groups);
+      for (const layer of (profile.layers || [])) {
+        const gn = String(layer?.group || '').trim();
+        if (gn && gn !== 'root' && gn !== 'background' && !knownGroupNames.has(gn)) {
+          groups.push({ name: gn, title: gn, expanded: true, groups: [] });
+          knownGroupNames.add(gn);
+        }
       }
+    }
+
+    // Prune groups that end up with no layers anywhere in their subtree (e.g.
+    // an empty placeholder group created in the admin UI but never assigned
+    // any layer or nested under another group) so they don't show up as a
+    // stray/empty entry in the published legend/layer tree.
+    {
+      const usedGroupNames = new Set(
+        (profile.layers || [])
+          .map((layer) => String(layer?.group || '').trim())
+          .filter((name) => name && name !== 'root' && name !== 'background')
+      );
+      const pruneEmpty = (list) => list
+        .map((g) => {
+          if (Array.isArray(g.groups) && g.groups.length) {
+            g.groups = pruneEmpty(g.groups);
+          }
+          return g;
+        })
+        .filter((g) => g.name === 'background' || usedGroupNames.has(g.name) || (Array.isArray(g.groups) && g.groups.length));
+      const pruned = pruneEmpty(groups);
+      groups.length = 0;
+      groups.push(...pruned);
     }
 
     // Layers and Styles
@@ -4196,7 +4338,9 @@ ${mapIcon}
         const thumbStyleName = `wms_thumb_${safe}`;
         const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(srcProjId)}?LAYERS=${encodeURIComponent(layer.name)}`;
         const manualLegendRaw = resolveManualWmsLegendUrl(layer, '');
-        const legendUrl = manualLegendRaw ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl) : thumbUrl;
+        const legendUrl = manualLegendRaw
+          ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl)
+          : buildWmsLegendGraphicUrl(baseUrl, srcProjId, layer.name);
         origoStyles[thumbStyleName] = [[{ icon: { src: legendUrl }, image: { src: legendUrl } }]];
         const wmsDef = {
           name: layer.name,
@@ -4206,6 +4350,8 @@ ${mapIcon}
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
           renderMode: 'image',
+          format: 'image/png',
+          transparent: true,
           queryable: true,
           visible: layer.visible !== false,
           style: thumbStyleName,
@@ -4282,7 +4428,7 @@ ${mapIcon}
           // Fall back to WMS
           const bgSrcKey = 'qtiler_bg_wms';
           if (!source[bgSrcKey] && srcProjId) {
-            source[bgSrcKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(srcProjId)}` };
+            source[bgSrcKey] = { url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(srcProjId)}` };
           }
           layers.push({
             name: `bg_${layerNameSafe}`,
@@ -4828,7 +4974,7 @@ ${mapIcon}
       const sourceKey = `qtiler_wms_${String(normalizedProjectId).replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
       if (!sourceMap[sourceKey]) {
         sourceMap[sourceKey] = {
-          url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
+          url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
           projection: projCode
         };
       }
@@ -4929,28 +5075,12 @@ ${mapIcon}
         layersArr.push(wfsDef);
         continue;
       }
+      const styleName = `wms_thumb_${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
       const manualLegendRaw = resolveManualWmsLegendUrl(rule, '');
-      if (manualLegendRaw) {
-        const manualLegendUrl = buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl);
-        const styleName = `wms_thumb_${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
-        previewStyles[styleName] = [[{ icon: { src: manualLegendUrl }, image: { src: manualLegendUrl } }]];
-        layersArr.push({
-          name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
-          id: layerName,
-          title: displayTitle,
-          group: String(layerSpec.group || 'root').trim() || 'root',
-          source: ensurePreviewWmsSource(sourceProjectId),
-          type: 'WMS',
-          renderMode: 'image',
-          format: 'image/png',
-          transparent: true,
-          queryable: false,
-          visible: layerSpec.visible !== false,
-          style: styleName,
-          thumbnail: manualLegendUrl
-        });
-        continue;
-      }
+      const legendUrl = manualLegendRaw
+        ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl)
+        : buildWmsLegendGraphicUrl(baseUrl, sourceProjectId, layerName);
+      if (legendUrl) previewStyles[styleName] = [[{ icon: { src: legendUrl }, image: { src: legendUrl } }]];
       layersArr.push({
         name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
         id: layerName,
@@ -4962,7 +5092,8 @@ ${mapIcon}
         format: 'image/png',
         transparent: true,
         queryable: false,
-        visible: layerSpec.visible !== false
+        visible: layerSpec.visible !== false,
+        ...(legendUrl ? { style: styleName, thumbnail: legendUrl } : {})
       });
     }
     if (wmtsBgLayerName && bgTileGrid) {
@@ -5135,6 +5266,10 @@ ${mapIcon}
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
       if (!html.includes(`/origo-controls/lantmateri-search.css`)) {
         if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${lantmateriCss}\n</head>`);
+      }
+      const legendCssTag = `<style id="qtiler2origo-legend-icon">${origoLegendIconCss}</style>`;
+      if (!html.includes('qtiler2origo-legend-icon')) {
+        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${legendCssTag}\n</head>`);
       }
       
       // Inject Lantmäteriet control script inline (not as external file to avoid cache issues)
@@ -5968,7 +6103,11 @@ ${mapIcon}
           ? layerRulesInput[layerRuleKey]
           : ((layerRulesInput[name] && typeof layerRulesInput[name] === 'object') ? layerRulesInput[name] : {});
         const fallbackSearchable = sourceLayer?.searchable === true || authFlags?.wfsSearchable === true;
-        const fallbackEditable = sourceLayer?.editable === true || authFlags?.wfsEditable === true;
+        // Do not implicitly enable editable/WFS purely because the server-level
+        // auth flags allow editing. Admins must explicitly opt-in to editing
+        // in the published profile. Preserve per-layer `editable` from
+        // source project metadata but do not use auth flags as a default.
+        const fallbackEditable = sourceLayer?.editable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
         const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || '').trim() || null;
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
@@ -5987,7 +6126,11 @@ ${mapIcon}
           group: incomingGroupByName[layerRuleKey] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: isTheme ? false : ((rule.searchable === true) || fallbackSearchable),
           editable: isTheme ? false : ((rule.editable === true) || fallbackEditable),
-          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true || fallbackServeAsWfs || authFlags?.wfsEditable === true),
+          // Serve as WFS only when explicitly requested (serveAsWfs true) or
+          // when the layer is editable (explicit or from source metadata).
+          // Do NOT force WFS simply because authFlags allow editing on the
+          // server side — that would cause WMS layers to be misclassified.
+          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true || fallbackServeAsWfs || (rule.editable === true) || fallbackEditable),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,
@@ -7156,6 +7299,183 @@ ${mapIcon}
       res.status(500).send(String(err?.message || err));
     }
   });
+
+  /* ── WMS proxy: keep ImageWMS under Qtiler's 4M-pixel GetMap cap ──
+     Recipients who only install this plugin still hit /wms 400 XML on
+     full-viewport ImageWMS. Proxy through the plugin, downscale the
+     render, then stretch the PNG back to WIDTH x HEIGHT so Origo can
+     decode it and place it on the requested BBOX. */
+  const ORIGO_WMS_MAX_PIXELS = 4000000;
+  const origoFitGetMapSize = (width, height, maxPixels) => {
+    const w0 = Math.max(1, Number(width) || 1);
+    const h0 = Math.max(1, Number(height) || 1);
+    const pixels = w0 * h0;
+    if (!(maxPixels > 0) || pixels <= maxPixels) {
+      return { width: w0, height: h0, scaled: false };
+    }
+    const scale = Math.sqrt(maxPixels / pixels);
+    let w = Math.max(1, Math.floor(w0 * scale));
+    let h = Math.max(1, Math.floor(h0 * scale));
+    while (w * h > maxPixels && (w > 1 || h > 1)) {
+      if (w >= h && w > 1) w -= 1;
+      else if (h > 1) h -= 1;
+      else break;
+    }
+    return { width: w, height: h, scaled: true };
+  };
+  const origoWmsParam = (req, key) => {
+    const target = String(key || '').toLowerCase();
+    for (const source of [req.query, req.body]) {
+      if (!source || typeof source !== 'object') continue;
+      if (source[key] != null) return Array.isArray(source[key]) ? source[key][0] : source[key];
+      for (const [k, v] of Object.entries(source)) {
+        if (String(k).toLowerCase() === target) return Array.isArray(v) ? v[0] : v;
+      }
+    }
+    return null;
+  };
+  const fetchUpstreamWms = (imageUrl, auth = {}) => new Promise((resolve, reject) => {
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const reqOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {}
+      };
+      if (auth.cookieHeader) reqOptions.headers.cookie = auth.cookieHeader;
+      if (auth.apiKey) reqOptions.headers['x-api-key'] = auth.apiKey;
+      if (auth.authorization) reqOptions.headers.authorization = auth.authorization;
+      const fetcher = imageUrl.startsWith('https') ? https : http;
+      const proxyReq = fetcher.get(reqOptions, (proxyRes) => {
+        const chunks = [];
+        proxyRes.on('data', (chunk) => chunks.push(chunk));
+        proxyRes.on('end', () => resolve({
+          status: proxyRes.statusCode || 500,
+          contentType: String(proxyRes.headers['content-type'] || ''),
+          buffer: Buffer.concat(chunks)
+        }));
+        proxyRes.on('error', reject);
+      });
+      proxyReq.setTimeout(120_000, () => {
+        try { proxyReq.destroy(new Error('origo wms proxy timed out')); } catch (_) {}
+      });
+      proxyReq.on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
+  const handleOrigoWmsProxy = async (req, res) => {
+    try {
+      const baseUrl = getRequestBaseUrl(req);
+      const merged = { ...(req.query || {}), ...(req.body || {}) };
+      const requestName = String(origoWmsParam(req, 'REQUEST') || origoWmsParam(req, 'request') || '').trim();
+      const widthReq = Number.parseInt(String(origoWmsParam(req, 'WIDTH') ?? ''), 10);
+      const heightReq = Number.parseInt(String(origoWmsParam(req, 'HEIGHT') ?? ''), 10);
+      const isGetMap = requestName.toUpperCase() === 'GETMAP';
+      const fitted = (isGetMap && widthReq > 0 && heightReq > 0)
+        ? origoFitGetMapSize(widthReq, heightReq, ORIGO_WMS_MAX_PIXELS)
+        : null;
+      const upstreamParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(merged)) {
+        if (value == null) continue;
+        const k = String(key);
+        if (fitted?.scaled && /^WIDTH$/i.test(k)) {
+          upstreamParams.set(k, String(fitted.width));
+          continue;
+        }
+        if (fitted?.scaled && /^HEIGHT$/i.test(k)) {
+          upstreamParams.set(k, String(fitted.height));
+          continue;
+        }
+        if (Array.isArray(value)) upstreamParams.set(k, String(value[0] ?? ''));
+        else upstreamParams.set(k, String(value));
+      }
+      const isGetLegendGraphic = requestName.toUpperCase() === 'GETLEGENDGRAPHIC';
+      if (isGetLegendGraphic) {
+        upstreamParams.set('LAYERTITLE', 'FALSE');
+        upstreamParams.set('RULELABEL', 'FALSE');
+        if (![...upstreamParams.keys()].some((k) => /^TRANSPARENT$/i.test(k))) {
+          upstreamParams.set('TRANSPARENT', 'TRUE');
+        }
+        if (![...upstreamParams.keys()].some((k) => /^SYMBOLWIDTH$/i.test(k))) {
+          upstreamParams.set('SYMBOLWIDTH', '16');
+        }
+        if (![...upstreamParams.keys()].some((k) => /^SYMBOLHEIGHT$/i.test(k))) {
+          upstreamParams.set('SYMBOLHEIGHT', '16');
+        }
+      }
+      const upstreamUrl = `${baseUrl}/wms?${upstreamParams.toString()}`;
+      const upstream = await fetchUpstreamWms(upstreamUrl, {
+        cookieHeader: req.headers?.cookie,
+        apiKey: req.headers?.['x-api-key'] || req.query?.api_key,
+        authorization: req.get?.('authorization') || ''
+      });
+      let body = upstream.buffer;
+      let contentType = upstream.contentType || 'application/octet-stream';
+      if (fitted?.scaled && String(contentType).toLowerCase().startsWith('image/')) {
+        try {
+          const formatHint = String(origoWmsParam(req, 'FORMAT') || contentType).toLowerCase();
+          const pipeline = sharp(body).resize(widthReq, heightReq, { fit: 'fill' });
+          if (formatHint.includes('jpeg') || formatHint.includes('jpg')) {
+            body = await pipeline.jpeg({ quality: 85 }).toBuffer();
+            contentType = 'image/jpeg';
+          } else {
+            body = await pipeline.png().toBuffer();
+            contentType = 'image/png';
+          }
+        } catch (resizeErr) {
+          console.warn('[Qtiler2Origo] WMS proxy resize failed:', resizeErr?.message || resizeErr);
+        }
+      }
+      if (isGetLegendGraphic && String(contentType).toLowerCase().startsWith('image/')) {
+        try {
+          const meta = await sharp(body).metadata();
+          const w = Number(meta.width) || 0;
+          const h = Number(meta.height) || 0;
+          if (w > 40 && h > 0 && w > h * 1.4) {
+            const pad = Math.min(4, Math.max(0, w - 1));
+            const swatch = Math.max(16, Math.min(32, w, h + pad));
+            body = await sharp(body)
+              .extract({ left: 0, top: 0, width: Math.min(swatch, w), height: h })
+              .png()
+              .toBuffer();
+            contentType = 'image/png';
+          }
+        } catch (legendCropErr) {
+          console.warn('[Qtiler2Origo] legend crop failed:', legendCropErr?.message || legendCropErr);
+        }
+      }
+      res.status(upstream.status || 200);
+      res.set('Cache-Control', 'no-store');
+      res.type(contentType.split(';')[0] || 'application/octet-stream');
+      return res.send(body);
+    } catch (err) {
+      console.error('[Qtiler2Origo] WMS proxy failed:', err?.message || err);
+      return res.status(502).type('application/xml').send(
+        '<?xml version="1.0"?><ServiceExceptionReport><ServiceException>Origo WMS proxy failed</ServiceException></ServiceExceptionReport>'
+      );
+    }
+  };
+  app.get(`/plugins/${pluginSlug}/wms`, handleOrigoWmsProxy);
+  app.post(
+    `/plugins/${pluginSlug}/wms`,
+    express.urlencoded({ extended: true, limit: '50mb' }),
+    express.json({ limit: '50mb' }),
+    (req, res, next) => {
+      try {
+        const merged = Object.assign({}, req.query || {}, req.body || {});
+        Object.defineProperty(req, 'query', {
+          value: merged,
+          writable: true,
+          enumerable: true,
+          configurable: true
+        });
+      } catch { /* keep original query */ }
+      next();
+    },
+    handleOrigoWmsProxy
+  );
 
   /* ── Thumbnail proxy: generates a WMS GetMap preview for a project (cached) ── */
   app.get(`/plugins/${pluginSlug}/api/thumbnail/:projectId`, async (req, res) => {

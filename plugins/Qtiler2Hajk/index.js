@@ -2071,9 +2071,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       const cachedLayer = await checkLayer({ projectId: entry?.sourceProjectId || mainProjectId, layerName: isTheme ? (themeName || name) : name, role: 'Map', theme: isTheme });
       if (!cachedLayer || isTheme) continue;
       const rule = layerRuleFor(entry);
-      const wantsWfs = rule?.editable === true || rule?.serveAsWfs === true || rule?.wfsStyle !== undefined;
+      // Only require a vector layer when the layer will actually be served as
+      // WFS (explicit serveAsWfs/editable). A saved wfsStyle alone does not
+      // force the WFS path — it may just be legend styling for a WMS layer.
+      const wantsWfs = rule?.editable === true || rule?.serveAsWfs === true;
       if (wantsWfs && cachedLayer.type !== 'vector' && !cachedLayer.geometry_type) {
-        addIssue('wfs_requires_vector_layer', `Layer "${name}" is configured as WFS/editable/styled WFS but is not a vector layer in the cache index.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name });
+        addIssue('wfs_requires_vector_layer', `Layer "${name}" is configured as WFS/editable but is not a vector layer in the cache index.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name });
       }
       const fields = collectFieldNames(cachedLayer);
       if (fields.size) {

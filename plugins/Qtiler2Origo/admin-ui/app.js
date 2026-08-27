@@ -543,7 +543,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_groups_label': 'Groups',
     'Qtiler2Origo.pub_add_group': '+ Add group',
     'Qtiler2Origo.pub_layer_assign_label': 'Layers → group + initial visibility',
-    'Qtiler2Origo.pub_layer_assign_help': 'Only layers checked in step 1 appear here.',
+    'Qtiler2Origo.pub_layer_assign_help': 'Only layers checked in step 1 appear here. Use the arrows to change layer order inside each group.',
+    'Qtiler2Origo.pub_layer_order': 'Layer order',
+    'Qtiler2Origo.extra_layers_style': 'Layer style',
     'Qtiler2Origo.pub_no_groups': 'No custom groups. Layers will go to the default group.',
     'Qtiler2Origo.pub_no_parent': '(no parent)',
     'Qtiler2Origo.pub_group_name_ph': 'technical name',
@@ -1131,7 +1133,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_groups_label': 'Grupos',
     'Qtiler2Origo.pub_add_group': '+ Añadir grupo',
     'Qtiler2Origo.pub_layer_assign_label': 'Capas → grupo + visibilidad inicial',
-    'Qtiler2Origo.pub_layer_assign_help': 'Solo aparecen las capas marcadas en el paso 1.',
+    'Qtiler2Origo.pub_layer_assign_help': 'Solo aparecen las capas marcadas en el paso 1. Usa las flechas para cambiar el orden de las capas dentro de cada grupo.',
+    'Qtiler2Origo.pub_layer_order': 'Orden de capas',
+    'Qtiler2Origo.extra_layers_style': 'Estilo de la capa',
     'Qtiler2Origo.pub_no_groups': 'No hay grupos personalizados. Las capas irán al grupo por defecto.',
     'Qtiler2Origo.pub_no_parent': '(sin padre)',
     'Qtiler2Origo.pub_group_name_ph': 'nombre técnico',
@@ -1709,7 +1713,9 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_groups_label': 'Grupper',
     'Qtiler2Origo.pub_add_group': '+ Lägg till grupp',
     'Qtiler2Origo.pub_layer_assign_label': 'Lager → grupp + initial synlighet',
-    'Qtiler2Origo.pub_layer_assign_help': 'Endast lager kryssade i steg 1 visas här.',
+    'Qtiler2Origo.pub_layer_assign_help': 'Endast lager kryssade i steg 1 visas här. Använd pilarna för att ändra lagerordningen i varje grupp.',
+    'Qtiler2Origo.pub_layer_order': 'Lagerordning',
+    'Qtiler2Origo.extra_layers_style': 'Lagerstil',
     'Qtiler2Origo.pub_no_groups': 'Inga anpassade grupper. Lagren hamnar i standardgruppen.',
     'Qtiler2Origo.pub_no_parent': '(ingen förälder)',
     'Qtiler2Origo.pub_group_name_ph': 'tekniskt namn',
@@ -3008,9 +3014,131 @@ function getAllPublishLayers() {
     .concat(Array.isArray(publishState.extraLayers) ? publishState.extraLayers : []);
 }
 
+function ensureLayerOrderKeys(keys) {
+  const wanted = (Array.isArray(keys) ? keys : []).map((key) => String(key || '').trim()).filter(Boolean);
+  const wantedSet = new Set(wanted);
+  const seen = new Set();
+  const next = [];
+  for (const key of (Array.isArray(publishState.layerOrder) ? publishState.layerOrder : [])) {
+    if (wantedSet.has(key) && !seen.has(key)) {
+      next.push(key);
+      seen.add(key);
+    }
+  }
+  for (const key of wanted) {
+    if (!seen.has(key)) {
+      next.push(key);
+      seen.add(key);
+    }
+  }
+  publishState.layerOrder = next;
+  return next;
+}
+
+function getOrderedPublishLayers() {
+  const layers = getAllPublishLayers();
+  const byKey = new Map(layers.map((layer) => [getLayerKey(layer), layer]));
+  const keys = ensureLayerOrderKeys(layers.map((layer) => getLayerKey(layer)).filter(Boolean));
+  return keys.map((key) => byKey.get(key)).filter(Boolean);
+}
+
 function getSelectedPublishLayers() {
   const selectedKeys = new Set(getCheckedLayerNames(projectLayersList));
-  return getAllPublishLayers().filter((layer) => selectedKeys.has(getLayerKey(layer)));
+  return getOrderedPublishLayers().filter((layer) => selectedKeys.has(getLayerKey(layer)));
+}
+
+function movePublishLayerInGroup(layerKey, direction) {
+  const key = String(layerKey || '').trim();
+  const dir = Number(direction) || 0;
+  if (!key || !dir) return false;
+  const ordered = getOrderedPublishLayers();
+  const keys = ordered.map((layer) => getLayerKey(layer));
+  const group = String(publishState.layerGroups[key] || 'root').trim() || 'root';
+  const sameGroup = keys.filter((candidate) => (String(publishState.layerGroups[candidate] || 'root').trim() || 'root') === group);
+  const idx = sameGroup.indexOf(key);
+  const to = idx + dir;
+  if (idx < 0 || to < 0 || to >= sameGroup.length) return false;
+  const fromGlobal = keys.indexOf(key);
+  const toGlobal = keys.indexOf(sameGroup[to]);
+  if (fromGlobal < 0 || toGlobal < 0) return false;
+  const next = keys.slice();
+  const [moved] = next.splice(fromGlobal, 1);
+  next.splice(toGlobal, 0, moved);
+  publishState.layerOrder = next;
+  return true;
+}
+
+function getWmsLegendPreviewUrl(layer, rule) {
+  const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+  const name = String(layer?.name || '').trim();
+  const mode = String(rule?.wmsLegendMode || 'auto').trim().toLowerCase();
+  const manual = String(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
+  if (mode === 'manual' && manual) return manual;
+  if (!pid || !name) return '';
+  return `/plugins/Qtiler2Origo/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.1.1&FORMAT=image/png&TRANSPARENT=TRUE&LAYERTITLE=FALSE&RULELABEL=FALSE&SYMBOLWIDTH=16&SYMBOLHEIGHT=16&LAYER=${encodeURIComponent(name)}`;
+}
+
+function wfsStyleToPreviewSvg(style, geometry) {
+  try {
+    const rules = typeof origoStyleToRules === 'function'
+      ? origoStyleToRules(Array.isArray(style) ? style : [style])
+      : [];
+    const first = Array.isArray(rules) && rules.length ? rules[0] : {};
+    return rulePreviewSampleSvg(first || {}, geometryFamily(geometry));
+  } catch {
+    return '';
+  }
+}
+
+function getDetectedLayerStyle(projectId, layerName) {
+  const pid = String(projectId || '').trim();
+  const name = String(layerName || '').trim();
+  if (!pid || !name) return Promise.resolve(null);
+  const cache = publishState.projectLayerStylePreview || (publishState.projectLayerStylePreview = {});
+  const key = `${pid}::${name}`;
+  if (Object.prototype.hasOwnProperty.call(cache, key)) return Promise.resolve(cache[key]).then((value) => value);
+  const pending = fetch(`/Qtiler2Origo/layer-style?project=${encodeURIComponent(pid)}&layer=${encodeURIComponent(name)}`)
+    .then((res) => res.ok ? res.json() : null)
+    .then((data) => (data && data.supported === false ? null : (data?.style || null)))
+    .catch(() => null)
+    .then((style) => {
+      cache[key] = style;
+      return style;
+    });
+  cache[key] = pending;
+  return pending;
+}
+
+function layerStylePreviewHtml(layer, rule, modeHint) {
+  const serveWfs = String(modeHint || '').toUpperCase() === 'WFS' || rule?.serveAsWfs === true;
+  if (serveWfs) {
+    const geom = rule?.geometryType || layer?.geometry;
+    if (rule?.wfsStyle) {
+      const svg = wfsStyleToPreviewSvg(rule.wfsStyle, geom);
+      if (svg) return `<span class="Qtiler2Origo-layer-style-preview">${svg}</span>`;
+    }
+    return `<span class="Qtiler2Origo-layer-style-preview Qtiler2Origo-layer-style-preview--pending" data-wfs-style-preview="${escapeHtml(getLayerKey(layer))}">WFS</span>`;
+  }
+  const url = getWmsLegendPreviewUrl(layer, rule);
+  if (!url) return `<span class="Qtiler2Origo-wms-legend-empty">${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</span>`;
+  return `<img class="Qtiler2Origo-wms-legend-preview" src="${escapeHtml(url)}" alt="" loading="lazy" />`;
+}
+
+async function hydrateWfsStylePreviews(root, layers) {
+  if (!root) return;
+  const nodes = Array.from(root.querySelectorAll('[data-wfs-style-preview]'));
+  if (!nodes.length) return;
+  const list = Array.isArray(layers) ? layers : [];
+  await Promise.all(nodes.map(async (node) => {
+    const key = String(node.getAttribute('data-wfs-style-preview') || '').trim();
+    const layer = list.find((entry) => getLayerKey(entry) === key);
+    if (!layer) return;
+    const rule = publishState.mainRules[key] || {};
+    const style = rule.wfsStyle || await getDetectedLayerStyle(layer.sourceProjectId, layer.name);
+    if (!style) return;
+    const svg = wfsStyleToPreviewSvg(style, rule.geometryType || layer.geometry);
+    if (svg) node.outerHTML = `<span class="Qtiler2Origo-layer-style-preview">${svg}</span>`;
+  }));
 }
 
 function getLayerProjectId(layerName) {
@@ -3684,6 +3812,8 @@ const publishState = {
   initialVisibility: {},
   backgroundOptions: [],
   defaultBackgroundKey: 'none',
+  layerOrder: [],        // [layerKey, ...] draw/legend order
+  projectLayerStylePreview: {},
   groups: [],            // [{ name, title, parent, expanded }]
   layerGroups: {},       // { layerName: 'groupName' }
   controls: {},          // { search: { hintText, minLength, limit, ... } }
@@ -4975,9 +5105,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
       // the other action buttons left/right.
       const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
       const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
-      const preview = manualLegend
-        ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Origo-wms-legend-preview" />`
-        : `<span class="Qtiler2Origo-wms-legend-empty">${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</span>`;
+      const preview = layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS');
       wmsLegendControls = `
         <div class="Qtiler2Origo-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Origo.wms_legend_help'))}">
           <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
@@ -5045,6 +5173,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
     `;
   }).join('');
   syncProjectLayerOptionState();
+  try { hydrateWfsStylePreviews(container, layers); } catch {}
   try { renderPublishConfigSummary(); } catch {}
 }
 
@@ -5252,6 +5381,19 @@ function ensureExtraSections() {
         const layerName = target.getAttribute('data-layer-group-for');
         if (layerName) {
           publishState.layerGroups[layerName] = String(target.value || 'root');
+          renderLayerAssignments();
+          schedulePreviewRefresh();
+        }
+      });
+    groupsSection.querySelector('#Qtiler2OrigoLayerAssignList')
+      .addEventListener('click', (ev) => {
+        const moveBtn = ev.target.closest('[data-move-layer]');
+        if (!moveBtn) return;
+        const layerKey = String(moveBtn.getAttribute('data-layer-key') || '').trim();
+        const direction = moveBtn.getAttribute('data-move-layer') === 'up' ? -1 : 1;
+        if (movePublishLayerInGroup(layerKey, direction)) {
+          renderLayerAssignments();
+          schedulePreviewRefresh();
         }
       });
   }
@@ -5373,7 +5515,9 @@ function renderExternalLayersSummary() {
   host.innerHTML = rows.map((layer) => {
     const key = getLayerKey(layer);
     const rule = publishState.mainRules[key] || {};
-    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+    const preview = layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS');
+    return `<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      ${preview}
       <div>
         <strong>${escapeHtml(layer.name)}</strong>
         <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
@@ -5382,6 +5526,7 @@ function renderExternalLayersSummary() {
       <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">${escapeHtml(t('Qtiler2Origo.extra_layers_remove'))}</button>
     </div>`;
   }).join('');
+  try { hydrateWfsStylePreviews(host, rows); } catch {}
 }
 
 function ensureExternalLayerModal() {
@@ -5423,12 +5568,12 @@ async function renderExternalLayerModalList(projectId) {
   }
   const currentProjectId = String(publishProjectSelect?.value || '').trim();
   if (pid === currentProjectId) {
-    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_current_project'))}</p>`;
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_help'))}</p>`;
     return;
   }
   const layers = await getProjectLayersCatalog(pid);
-  if (!layers.length) {
-    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.extra_layers_no_layers'))}</p>`;
+  if (!Array.isArray(layers) || !layers.length) {
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.no_layers'))}</p>`;
     return;
   }
   host.innerHTML = layers.map((layer) => {
@@ -5437,11 +5582,13 @@ async function renderExternalLayerModalList(projectId) {
     const checked = publishState.extraLayers.some((row) => getLayerKey(row) === key) ? 'checked' : '';
     const currentRule = publishState.mainRules[key] || {};
     const mode = currentRule.serveAsWfs ? 'WFS' : 'WMS';
-    return `<label style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+    const preview = layerStylePreviewHtml(layer, currentRule, mode);
+    return `<label style="display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
       <input type="checkbox" data-external-layer-check="${escapeHtml(key)}" ${checked} />
+      ${preview}
       <div>
         <div><strong>${escapeHtml(layer.name)}</strong></div>
-        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || t('Qtiler2Origo.layer_generic'))}</div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || t('Qtiler2Origo.layer_generic'))} · ${escapeHtml(t('Qtiler2Origo.extra_layers_style'))}</div>
       </div>
       <select class="input is-small" style="width:92px" data-external-layer-mode="${escapeHtml(key)}" ${isVector ? '' : 'disabled'}>
         <option value="WMS" ${mode === 'WMS' ? 'selected' : ''}>WMS</option>
@@ -5449,6 +5596,7 @@ async function renderExternalLayerModalList(projectId) {
       </select>
     </label>`;
   }).join('');
+  try { hydrateWfsStylePreviews(host, layers); } catch {}
 }
 
 function bindExternalLayerPickerEvents() {
@@ -5482,6 +5630,21 @@ function bindExternalLayerPickerEvents() {
     document.getElementById('Qtiler2OrigoExternalProjectSelect')?.addEventListener('change', async (event) => {
       const target = event.target;
       await renderExternalLayerModalList(String(target.value || '').trim());
+    });
+    document.getElementById('Qtiler2OrigoExternalProjectLayers')?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLSelectElement) || !target.hasAttribute('data-external-layer-mode')) return;
+      const layerKey = String(target.getAttribute('data-external-layer-mode') || '').trim();
+      if (!layerKey) return;
+      const pid = String(document.getElementById('Qtiler2OrigoExternalProjectSelect')?.value || '').trim();
+      const layers = publishState.projectLayerCatalog[pid] || [];
+      const layer = layers.find((entry) => getLayerKey(entry) === layerKey);
+      if (!layer) return;
+      const mode = String(target.value || 'WMS').trim().toUpperCase() === 'WFS' ? 'WFS' : 'WMS';
+      const label = target.closest('label');
+      const previewHost = label?.querySelector('.Qtiler2Origo-layer-style-preview, .Qtiler2Origo-wms-legend-preview, .Qtiler2Origo-wms-legend-empty');
+      if (previewHost) previewHost.outerHTML = layerStylePreviewHtml(layer, publishState.mainRules[layerKey] || {}, mode);
+      try { hydrateWfsStylePreviews(label, [layer]); } catch {}
     });
     document.getElementById('Qtiler2OrigoExternalLayerApply')?.addEventListener('click', async () => {
       const select = document.getElementById('Qtiler2OrigoExternalProjectSelect');
@@ -5667,26 +5830,23 @@ function renderGroupsManager() {
 function renderLayerAssignments() {
   const list = document.getElementById('Qtiler2OrigoLayerAssignList');
   if (!list) return;
-  // Show ALL project layers (active + inactive) so the user can assign every
-  // layer to a group up-front, even if it isn't currently checked. Active
-  // layers are visually emphasized so the user can tell at a glance.
   const allLayers = getAllPublishLayers();
   if (!allLayers.length) {
     list.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.pub_assign_help'))}</p>`;
     return;
   }
   const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
-  // Sort: active first, then inactive — preserving original order within each bucket.
-  const ordered = [
-    ...allLayers.filter((l) => checkedSet.has(getLayerKey(l))),
-    ...allLayers.filter((l) => !checkedSet.has(getLayerKey(l)))
-  ];
+  const ordered = getOrderedPublishLayers();
   list.innerHTML = ordered.map((layer) => {
     const name = String(layer?.name || '');
     const layerKey = getLayerKey(layer);
     if (!name || !layerKey) return '';
     const isActive = checkedSet.has(layerKey);
     const groupSel = publishState.layerGroups[layerKey] || 'root';
+    const sameGroup = ordered.filter((candidate) => (String(publishState.layerGroups[getLayerKey(candidate)] || 'root').trim() || 'root') === (String(groupSel).trim() || 'root'));
+    const groupIdx = sameGroup.findIndex((candidate) => getLayerKey(candidate) === layerKey);
+    const upDisabled = groupIdx <= 0 ? 'disabled' : '';
+    const downDisabled = groupIdx < 0 || groupIdx >= sameGroup.length - 1 ? 'disabled' : '';
     const opacity = isActive ? '1' : '0.6';
     const dot = isActive
       ? '<span title="active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex:0 0 8px"></span>'
@@ -5694,10 +5854,12 @@ function renderLayerAssignments() {
     const removeBtn = isActive
       ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.pub_search_source_remove'))}</button>`
       : '<span></span>';
-    return `<div style="display:grid;grid-template-columns:14px 1fr 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
+    return `<div style="display:grid;grid-template-columns:14px 1fr 160px auto auto auto;gap:6px;margin-bottom:4px;align-items:center;opacity:${opacity}">
       ${dot}
       <span title="${escapeHtml(name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}${layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim() ? ` [${escapeHtml(layer.sourceProjectId)}]` : ''}</span>
       <select class="input is-small" data-layer-group-for="${escapeHtml(layerKey)}">${getGroupOptionsHtml(groupSel)}</select>
+      <button type="button" class="button is-small is-light" data-move-layer="up" data-layer-key="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Origo.wfs_move_up'))}" ${upDisabled}>▲</button>
+      <button type="button" class="button is-small is-light" data-move-layer="down" data-layer-key="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Origo.wfs_move_down'))}" ${downDisabled}>▼</button>
       ${removeBtn}
     </div>`;
   }).join('');
@@ -5986,6 +6148,7 @@ function closePublishModal() {
   clearPublishStatusError();
   publishState.groups = [];
   publishState.layerGroups = {};
+  publishState.layerOrder = [];
   publishState.initialVisibility = {};
   publishState.controls = {};
   publishState.extraLayers = [];
@@ -6148,19 +6311,41 @@ async function preparePublishModal(editProfileId = null) {
       if (cfgDxfUrl) cfgDxfUrl.value = tc.dxfExportServiceUrl || '';
 
       // Groups, per-layer placement and module controls
-      publishState.groups = Array.isArray(profile.groups)
-        ? profile.groups.map((g) => ({
-            name: String(g?.name || '').trim(),
-            title: String(g?.title || g?.name || '').trim(),
-            parent: String(g?.parent || '').trim(),
-            expanded: g?.expanded !== false
-          })).filter((g) => g.name)
-        : [];
+      // Accept both flat lists (with `parent`) and nested `groups` arrays
+      if (!Array.isArray(profile.groups)) {
+        publishState.groups = [];
+      } else {
+        const flat = [];
+        const walk = (g, parent) => {
+          if (!g || typeof g !== 'object') return;
+          const name = String(g?.name || '').trim();
+          if (name) {
+            flat.push({ name, title: String(g?.title || name).trim(), parent: String(parent || '').trim(), expanded: g?.expanded !== false });
+          }
+          if (Array.isArray(g.groups)) {
+            for (const ch of g.groups) walk(ch, name);
+          }
+        };
+        const hasNested = profile.groups.some((g) => Array.isArray(g?.groups) && g.groups.length);
+        if (hasNested) {
+          for (const g of profile.groups) walk(g, g.parent);
+        } else {
+          for (const g of profile.groups) {
+            const name = String(g?.name || '').trim();
+            if (!name) continue;
+            flat.push({ name, title: String(g?.title || name).trim(), parent: String(g?.parent || '').trim(), expanded: g?.expanded !== false });
+          }
+        }
+        publishState.groups = flat.filter((g) => g.name);
+      }
       publishState.layerGroups = {};
+      publishState.layerOrder = [];
       savedMain.forEach((l) => {
         const ln = String(l?.name || '').trim();
         const key = makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, ln);
-        if (key) publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
+        if (!key) return;
+        publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
+        publishState.layerOrder.push(key);
       });
       // Restore Origo controls: update textarea and checkboxes
       const savedControls = Array.isArray(profile.controls) ? profile.controls : [];
@@ -6918,8 +7103,7 @@ function buildPublishApiBody() {
     err.tab = 'layers';
     throw err;
   }
-  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
-  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  const selectedLayers = getSelectedPublishLayers();
   if (!selectedLayers.length) {
     const err = new Error('Select at least one main layer to publish.');
     err.tab = 'layers';
@@ -6959,6 +7143,7 @@ function buildPublishApiBody() {
     const key = getLayerKey(layer);
     layerRules[key] = getLayerRule(layer) || { searchable: false, editable: false };
   });
+  
   return {
     mapName,
     body: {
@@ -6967,6 +7152,7 @@ function buildPublishApiBody() {
       editingProfileId: publishState.editingProfileId || null,
       projectId,
       layers: layersPayload,
+      layerOrder: Array.isArray(publishState.layerOrder) ? publishState.layerOrder.slice() : [],
       backgroundProjectId: backgroundProjectId || null,
       backgroundLayerNames, backgrounds,
       defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
@@ -6986,14 +7172,7 @@ function buildPublishApiBody() {
         elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
         dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
       },
-      groups: (publishState.groups || [])
-        .map((g) => ({
-          name: String(g?.name || '').trim(),
-          title: String(g?.title || g?.name || '').trim(),
-          parent: String(g?.parent || '').trim(),
-          expanded: g?.expanded !== false
-        }))
-        .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+      groups: buildNestedGroupsFromState(publishState.groups, publishState.layers),
       features: {
         searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
           .map((src) => ({
@@ -7137,14 +7316,7 @@ publishNowBtn?.addEventListener('click', async () => {
           elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
           dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
         },
-        groups: (publishState.groups || [])
-          .map((g) => ({
-            name: String(g?.name || '').trim(),
-            title: String(g?.title || g?.name || '').trim(),
-            parent: String(g?.parent || '').trim(),
-            expanded: g?.expanded !== false
-          }))
-          .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+        groups: buildNestedGroupsFromState(publishState.groups, publishState.layers),
         features: {
           // Cross-project search sources (other feature flags are derived
           // server-side from defaults; only fields we manage explicitly are
@@ -7361,6 +7533,70 @@ publishModalTabButtons.forEach((button) => {
   button.addEventListener('click', () => setPublishModalTab(button.getAttribute('data-publish-tab')));
 });
 
+// Helper: build nested Origo `groups` array from publishState.groups (top-level so it is in scope everywhere it's used).
+function buildNestedGroupsFromState(stateGroups, layerRefs) {
+  const raw = Array.isArray(stateGroups) ? stateGroups : [];
+  const byName = new Map();
+  const parentOf = new Map();
+  const ensureEntry = (g) => {
+    const name = String(g?.name || '').trim();
+    if (!name) return null;
+    if (!byName.has(name)) {
+      byName.set(name, { name, title: String(g?.title || name), expanded: g?.expanded !== false, groups: [] });
+    } else {
+      const cur = byName.get(name);
+      cur.title = String(g?.title || cur.title || name);
+      cur.expanded = g?.expanded !== false;
+    }
+    return byName.get(name);
+  };
+  for (const g of raw) {
+    const name = String(g?.name || '').trim();
+    if (!name || name === 'root' || name === 'background') continue;
+    ensureEntry(g);
+    if (Array.isArray(g.groups)) {
+      for (const child of g.groups) {
+        const childName = String(child?.name || '').trim();
+        if (!childName) continue;
+        ensureEntry(child);
+        parentOf.set(childName, name);
+      }
+    }
+    if (g.parent) {
+      const p = String(g.parent || '').trim();
+      if (p) parentOf.set(name, p);
+    }
+  }
+  for (const [child, parent] of parentOf.entries()) {
+    const p = byName.get(parent);
+    const c = byName.get(child);
+    if (!p || !c) continue;
+    if (!Array.isArray(p.groups)) p.groups = [];
+    if (!p.groups.some((x) => x.name === c.name)) p.groups.push(c);
+  }
+  const result = [];
+  const added = new Set();
+  for (const g of raw) {
+    const name = String(g?.name || '').trim();
+    if (!name || name === 'root' || name === 'background') continue;
+    if (parentOf.has(name)) continue;
+    if (added.has(name)) continue;
+    const entry = byName.get(name) || { name, title: name, expanded: true, groups: [] };
+    result.push(entry);
+    added.add(name);
+  }
+  const known = new Set(result.map((r) => r.name));
+  const layers = Array.isArray(layerRefs) ? layerRefs : [];
+  for (const layer of layers) {
+    const gn = String(layer?.group || '').trim();
+    if (gn && gn !== 'root' && gn !== 'background' && !known.has(gn)) {
+      result.push({ name: gn, title: gn, expanded: true, groups: [] });
+      known.add(gn);
+    }
+  }
+  return result;
+}
+
 /* ── Origo preview panel ── */
 function buildMapPreviewPayload() {
   const projectId = String(publishProjectSelect?.value || '').trim();
@@ -7453,7 +7689,9 @@ async function buildMapPreviewUrl() {
 <base href="${origoBaseHref}">
 <title>Preview</title>
 <link href="${origoCssUrl}" rel="stylesheet">
-<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
+<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}
+.o-map .legend-icon img,.o-map .legend-icon img.cover,.o-map img.extendedlegend{object-fit:contain!important;object-position:left center;width:100%;height:100%}
+</style>
 </head>
 <body>
 <div id="app-wrapper"></div>
@@ -9859,10 +10097,7 @@ function generateMapConfigJson() {
     const mapName = String(publishName?.value || '').trim();
     const mapDescription = String(publishDescription?.value || '').trim();
     const projectId = String(publishProjectSelect?.value || '').trim();
-    
-    const allLayers = getAllPublishLayers();
-    const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
-    const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+    const selectedLayers = getSelectedPublishLayers();
     
     const layersPayload = selectedLayers.map((layer) => {
       const key = getLayerKey(layer);
@@ -9937,14 +10172,7 @@ function generateMapConfigJson() {
     const minZoom = (() => { const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
     const maxZoom = (() => { const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
 
-    const groups = (publishState.groups || [])
-      .map((g) => ({
-        name: String(g?.name || '').trim(),
-        title: String(g?.title || g?.name || '').trim(),
-        parent: String(g?.parent || '').trim(),
-        expanded: g?.expanded !== false
-      }))
-      .filter((g) => g.name && g.name !== 'root' && g.name !== 'background');
+    const groups = buildNestedGroupsFromState(publishState.groups, publishState.layers);
 
     const searchSources = (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
       .map((src) => ({
@@ -9962,6 +10190,7 @@ function generateMapConfigJson() {
       projectId,
       layers: layersPayload,
       backgroundProjectId: backgroundProjectId || null,
+      layerOrder: Array.isArray(publishState.layerOrder) ? publishState.layerOrder.slice() : [],
       backgroundLayerNames,
       backgrounds,
       defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
@@ -10139,6 +10368,7 @@ function applyMapJsonChanges() {
       publishState.initialVisibility = {};
       publishState.layerGroups = {};
       publishState.mainRules = {};
+      publishState.layerOrder = [];
       
       config.layers.forEach(layer => {
         const key = makeLayerKey(layer.sourceProjectId || config.projectId, layer.name);
@@ -10154,7 +10384,11 @@ function applyMapJsonChanges() {
           geometryType: layer.geometryType || undefined
         };
         if (!publishState.mainRules[key].title) delete publishState.mainRules[key].title;
+        if (key) publishState.layerOrder.push(key);
       });
+      if (Array.isArray(config.layerOrder) && config.layerOrder.length) {
+        publishState.layerOrder = config.layerOrder.map((key) => String(key || '').trim()).filter(Boolean);
+      }
     }
     
     logJsonEditor('✓ Changes applied successfully', 'info');

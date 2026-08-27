@@ -44,6 +44,16 @@ const I18N = {
     enabledStatus: 'Enabled',
     disabledStatus: 'Not enabled',
     uninstall: 'Uninstall',
+    backup: 'Backup',
+    restore: 'Restore',
+    backupRunning: 'Creating backup…',
+    backupDone: 'Backup of {plugin} saved.',
+    backupFailed: 'Could not create the backup.',
+    backupCancelled: 'Backup cancelled. Uninstall aborted.',
+    confirmBackupBeforeUninstall: 'Do you want to create a backup of {plugin} (maps, galleries and portals) before uninstalling?',
+    restoreConfirm: 'Restore {plugin} data from a backup file? Existing items with the same name will be overwritten.',
+    restoreDone: 'Backup restored into {plugin} ({files} files).',
+    restoreFailed: 'Could not restore the backup.',
     errorLoadPlugins: 'Error loading plugins.',
     successEnable: 'Plugin {plugin} enabled.',
     errorEnable: 'Could not enable plugin.',
@@ -142,6 +152,16 @@ const I18N = {
     enabledStatus: 'Habilitado',
     disabledStatus: 'No habilitado',
     uninstall: 'Desinstalar',
+    backup: 'Copia de seguridad',
+    restore: 'Restaurar',
+    backupRunning: 'Creando copia de seguridad…',
+    backupDone: 'Copia de seguridad de {plugin} guardada.',
+    backupFailed: 'No se pudo crear la copia de seguridad.',
+    backupCancelled: 'Copia cancelada. Desinstalación abortada.',
+    confirmBackupBeforeUninstall: 'Do you want to create a backup of {plugin} (maps, galleries and portals) before uninstalling?',
+    restoreConfirm: '¿Restaurar los datos de {plugin} desde una copia de seguridad? Los elementos con el mismo nombre se sobrescribirán.',
+    restoreDone: 'Copia restaurada en {plugin} ({files} archivos).',
+    restoreFailed: 'No se pudo restaurar la copia de seguridad.',
     errorLoadPlugins: 'Error al cargar plugins.',
     successEnable: 'Plugin {plugin} habilitado.',
     errorEnable: 'No se pudo habilitar el plugin.',
@@ -240,6 +260,16 @@ const I18N = {
     enabledStatus: 'Aktiverad',
     disabledStatus: 'Inte aktiverad',
     uninstall: 'Avinstallera',
+    backup: 'Säkerhetskopia',
+    restore: 'Återställ',
+    backupRunning: 'Skapar säkerhetskopia…',
+    backupDone: 'Säkerhetskopia av {plugin} sparad.',
+    backupFailed: 'Kunde inte skapa säkerhetskopian.',
+    backupCancelled: 'Säkerhetskopian avbröts. Avinstallationen stoppades.',
+    confirmBackupBeforeUninstall: 'Do you want to create a backup of {plugin} (maps, galleries and portals) before uninstalling?',
+    restoreConfirm: 'Återställ data för {plugin} från en säkerhetskopia? Objekt med samma namn skrivs över.',
+    restoreDone: 'Säkerhetskopian återställd i {plugin} ({files} filer).',
+    restoreFailed: 'Kunde inte återställa säkerhetskopian.',
     errorLoadPlugins: 'Fel vid laddning av plugins.',
     successEnable: 'Plugin {plugin} aktiverat.',
     errorEnable: 'Kunde inte aktivera plugin.',
@@ -1227,7 +1257,31 @@ function renderPlugins() {
 
     // Removed manual Enable/Disable buttons as per requirement.
     // Plugins are auto-enabled on install and removed on uninstall.
-    
+
+    const backupBtn = document.createElement('button');
+    backupBtn.type = 'button';
+    backupBtn.className = 'button button-secondary';
+    backupBtn.textContent = t('backup');
+    backupBtn.addEventListener('click', async () => {
+      backupBtn.disabled = true;
+      try {
+        const saved = await downloadPluginBackup(name);
+        if (saved) showMessage('success', t('backupDone', { plugin: name }));
+      } catch (err) {
+        showMessage('error', parseError(err, t('backupFailed')));
+      } finally {
+        backupBtn.disabled = false;
+      }
+    });
+    actions.appendChild(backupBtn);
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'button button-secondary';
+    restoreBtn.textContent = t('restore');
+    restoreBtn.addEventListener('click', () => restorePluginBackup(name));
+    actions.appendChild(restoreBtn);
+
     const uninstallBtn = document.createElement('button');
     uninstallBtn.type = 'button';
     uninstallBtn.className = 'button button-danger';
@@ -1461,6 +1515,67 @@ async function enablePlugin(name) {
   }
 }
 
+async function downloadPluginBackup(name) {
+  const res = await fetch(`/plugins/${encodeURIComponent(name)}/backup`, { credentials: 'include' });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const error = new Error(payload?.error || res.statusText || 'backup_failed');
+    error.status = res.status;
+    if (payload?.error) error.code = payload.error;
+    throw error;
+  }
+  const blob = await res.blob();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const suggestedName = `${name}-backup-${stamp}.zip`;
+
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    } catch (err) {
+      // AbortError means the user dismissed the save dialog.
+      if (err?.name === 'AbortError') return false;
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = suggestedName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return true;
+}
+
+function restorePluginBackup(name) {
+  if (!confirm(t('restoreConfirm', { plugin: name }))) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.zip,application/zip';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('backup', file);
+    try {
+      const payload = await api(`/plugins/${encodeURIComponent(name)}/restore`, { method: 'POST', body: formData });
+      showMessage('success', t('restoreDone', { plugin: name, files: payload?.plugin?.restoredFiles ?? 0 }));
+      await loadPlugins();
+    } catch (err) {
+      showMessage('error', parseError(err, t('restoreFailed')));
+    }
+  });
+  input.click();
+}
+
 async function uninstallPlugin(name) {
   const isWmsCache = String(name || '').toLowerCase() === 'wmscache';
   const isVectorTiles = String(name || '').toLowerCase() === 'vectortiles';
@@ -1468,6 +1583,22 @@ async function uninstallPlugin(name) {
   if (isWmsCache) confirmKey = 'confirmUninstallWmsCache';
   if (isVectorTiles) confirmKey = 'confirmUninstallVectorTiles';
   if (!confirm(t(confirmKey, { plugin: name }))) return;
+
+  if (confirm(t('confirmBackupBeforeUninstall', { plugin: name }))) {
+    showMessage('info', t('backupRunning'));
+    try {
+      const saved = await downloadPluginBackup(name);
+      if (!saved) {
+        showMessage('info', t('backupCancelled'));
+        return;
+      }
+      showMessage('success', t('backupDone', { plugin: name }));
+    } catch (err) {
+      showMessage('error', parseError(err, t('backupFailed')));
+      return;
+    }
+  }
+
   try {
     await api(`/plugins/${encodeURIComponent(name)}`, { method: 'DELETE' });
     showMessage('success', t('successUninstall', { plugin: name }));

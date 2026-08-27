@@ -10,6 +10,7 @@ import crypto from "crypto";
 import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 import express from "express";
 import proj4 from "proj4";
+import sharp from "sharp";
 
 // Register proj4 presets from config if available so server-side reprojection works
 try {
@@ -222,6 +223,27 @@ const parseLimit = (value, fallback) => {
 
 const WMS_MAX_PIXELS = parseLimit(process.env.QTILER_WMS_MAX_PIXELS, 4000000);
 const WMS_MAX_LAYERS = parseLimit(process.env.QTILER_WMS_MAX_LAYERS, 20);
+
+// Origo ImageWMS (renderMode: 'image') requests the full map viewport
+// (e.g. 5733x1459). Returning XML 400 makes the client throw EncodingError
+// because it tries to decode the exception as PNG. Scale down instead.
+const fitGetMapSize = (width, height, maxPixels) => {
+  const w0 = Math.max(1, Number(width) || 1);
+  const h0 = Math.max(1, Number(height) || 1);
+  const pixels = w0 * h0;
+  if (!(maxPixels > 0) || pixels <= maxPixels) {
+    return { width: w0, height: h0, scaled: false };
+  }
+  const scale = Math.sqrt(maxPixels / pixels);
+  let w = Math.max(1, Math.floor(w0 * scale));
+  let h = Math.max(1, Math.floor(h0 * scale));
+  while (w * h > maxPixels && (w > 1 || h > 1)) {
+    if (w >= h && w > 1) w -= 1;
+    else if (h > 1) h -= 1;
+    else break;
+  }
+  return { width: w, height: h, scaled: true };
+};
 
 const normalizeCrs = (value) => {
   if (!value) return null;
@@ -454,6 +476,25 @@ const usesNorthEastAxisOrderForWms13 = (crs) => {
   return normalized === 'EPSG:3006' || normalized === 'EPSG:4326';
 };
 
+// Decide whether an incoming WMS 1.3.0 BBOX for EPSG:3006 needs swapping to
+// QGIS x/y order by comparing the geo aspect ratio (width/height) against the
+// requested pixel aspect ratio under both interpretations, instead of a fixed
+// coordinate-magnitude threshold. A magnitude threshold breaks for large/
+// nationwide extents where easting can itself exceed the threshold.
+const bboxNeedsSwapForAspect = (nums, width, height) => {
+  const [a, b, c, d] = nums;
+  const wNoSwap = c - a, hNoSwap = d - b;
+  const wSwap = d - b, hSwap = c - a;
+  const pxWidth = Number(width), pxHeight = Number(height);
+  if (!(pxWidth > 0) || !(pxHeight > 0) || !(wNoSwap > 0) || !(hNoSwap > 0) || !(wSwap > 0) || !(hSwap > 0)) {
+    return null;
+  }
+  const pxRatio = pxWidth / pxHeight;
+  const errNoSwap = Math.abs(Math.log((wNoSwap / hNoSwap) / pxRatio));
+  const errSwap = Math.abs(Math.log((wSwap / hSwap) / pxRatio));
+  return errSwap < errNoSwap;
+};
+
 const looksLikeNorthEastProjectedBbox = (bbox) => {
   const nums = numericBbox(bbox);
   if (!nums) return false;
@@ -462,15 +503,17 @@ const looksLikeNorthEastProjectedBbox = (bbox) => {
   return a > 2000000 && c > 2000000 && b < 2000000 && d < 2000000;
 };
 
-const toQgisXyBboxFromWms13 = (bbox, crs) => {
+const toQgisXyBboxFromWms13 = (bbox, crs, width, height) => {
   const nums = numericBbox(bbox);
   if (!nums) return bbox;
   const normalized = String(normalizeCrs(crs) || crs || '').toUpperCase();
   if (normalized === 'EPSG:4326') {
     return [nums[1], nums[0], nums[3], nums[2]];
   }
-  if (normalized === 'EPSG:3006' && looksLikeNorthEastProjectedBbox(nums)) {
-    return [nums[1], nums[0], nums[3], nums[2]];
+  if (normalized === 'EPSG:3006') {
+    const aspectDecision = bboxNeedsSwapForAspect(nums, width, height);
+    const shouldSwap = aspectDecision !== null ? aspectDecision : looksLikeNorthEastProjectedBbox(nums);
+    if (shouldSwap) return [nums[1], nums[0], nums[3], nums[2]];
   }
   return nums;
 };
@@ -1093,19 +1136,24 @@ export const registerWmsRoutes = ({
         return;
       }
 
-      const width = clampInt(getQueryCI(req, "WIDTH"), { min: 1, max: 8192, fallback: null });
-      const height = clampInt(getQueryCI(req, "HEIGHT"), { min: 1, max: 8192, fallback: null });
-      if (!width || !height) {
-        console.warn('[WMS-400] WIDTH/HEIGHT missing | W='+width+' H='+height+' | method:', req.method);
+      const widthReq = clampInt(getQueryCI(req, "WIDTH"), { min: 1, max: 8192, fallback: null });
+      const heightReq = clampInt(getQueryCI(req, "HEIGHT"), { min: 1, max: 8192, fallback: null });
+      if (!widthReq || !heightReq) {
+        console.warn('[WMS-400] WIDTH/HEIGHT missing | W='+widthReq+' H='+heightReq+' | method:', req.method);
         res.status(400).type("application/xml").send(wmsExceptionXml("WIDTH/HEIGHT are required"));
         return;
       }
 
-      if (width * height > WMS_MAX_PIXELS) {
-        res.status(400).type("application/xml").send(
-          wmsExceptionXml(`Requested image size too large (max ${WMS_MAX_PIXELS} pixels).`, { code: "InvalidRequest" })
+      const fitted = fitGetMapSize(widthReq, heightReq, WMS_MAX_PIXELS);
+      const width = fitted.width;
+      const height = fitted.height;
+      if (fitted.scaled) {
+        console.warn(
+          '[WMS] Scaled oversized GetMap | requested=' + widthReq + 'x' + heightReq +
+          ' (' + (widthReq * heightReq) + ') rendered=' + width + 'x' + height +
+          ' (' + (width * height) + ') max=' + WMS_MAX_PIXELS,
+          '| method:', req.method
         );
-        return;
       }
 
       const formatRaw = String(getQueryCI(req, "FORMAT") || "image/png").trim().toLowerCase();
@@ -1147,6 +1195,7 @@ export const registerWmsRoutes = ({
       }
 
       if (layers.length > WMS_MAX_LAYERS) {
+        console.warn('[WMS-400] Too many layers | count='+layers.length+' max='+WMS_MAX_LAYERS+' | LAYERS='+layers.join(','), '| method:', req.method);
         res.status(400).type("application/xml").send(
           wmsExceptionXml(`Too many layers requested (max ${WMS_MAX_LAYERS}).`, { code: "InvalidRequest" })
         );
@@ -1156,10 +1205,12 @@ export const registerWmsRoutes = ({
       // WMS 1.3.0 axis order may be north/east for some CRS (e.g. EPSG:4326,
       // EPSG:3006). Convert advertised WMS axis order back to QGIS x/y order.
       // OpenLayers TileWMS with Qtiler proj4 defs (no +axis=neu) already sends
-      // XY for EPSG:3006; only swap when the incoming BBOX looks north/east.
+      // XY for EPSG:3006; disambiguate using the requested pixel aspect ratio
+      // rather than a fixed coordinate-magnitude threshold (which breaks for
+      // nationwide/large extents whose easting also exceeds the threshold).
       let bbox = bboxRaw;
       if (String(version).trim() === "1.3.0" && usesNorthEastAxisOrderForWms13(crs)) {
-        bbox = toQgisXyBboxFromWms13(bboxRaw, crs);
+        bbox = toQgisXyBboxFromWms13(bboxRaw, crs, width, height);
       }
 
       // GeoWebCache-like caching: only cache tile-aligned WMS requests.
@@ -1281,9 +1332,21 @@ export const registerWmsRoutes = ({
           return;
         }
 
+        let sendFile = outFile;
+        // ImageWMS places the PNG by pixel size. A downscaled render would sit
+        // on the west/left of the requested viewport unless we stretch it back
+        // to WIDTH x HEIGHT while keeping the same BBOX.
+        if (fitted.scaled && (width !== widthReq || height !== heightReq)) {
+          const resizedFile = path.join(tmpDir, `map-fit.${ext}`);
+          const pipeline = sharp(outFile).resize(widthReq, heightReq, { fit: "fill" });
+          if (format === "image/png") await pipeline.png().toFile(resizedFile);
+          else await pipeline.jpeg({ quality: 85 }).toFile(resizedFile);
+          sendFile = resizedFile;
+        }
+
         res.setHeader("Cache-Control", "no-store");
         res.type(format);
-        res.sendFile(outFile, async () => {
+        res.sendFile(sendFile, async () => {
           try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
         });
       } catch (err) {
