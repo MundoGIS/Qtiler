@@ -23,7 +23,7 @@
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
-    <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css?v=wms-legend-crop-20260327" />
+    <link rel="stylesheet" href="/plugins/Qtiler2Origo/admin-ui/style.css?v=legend-library-20260827" />
     <style>
       .hiw-actions { margin-top: 0.75rem; }
       .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
@@ -147,6 +147,24 @@
             <button id="uploadLogoBtn" class="button primary" data-i18n="Qtiler2Origo.upload_logo">Upload logo</button>
             <button id="removeLogoBtn" class="button" disabled data-i18n="Qtiler2Origo.remove_logo">Remove logo</button>
           </div>
+        </section>
+
+        <section id="legendLibrarySection" class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Origo.legend_library_title">Legend icons</h2>
+            <span id="legendLibraryBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Origo.legend_library_help">Upload PNG or SVG icons once. They stay available for every published map. Raster files are cropped to 24×24 so they fit the Origo legend.</p>
+          <div class="grid grid--logo">
+            <label>
+              <span data-i18n="Qtiler2Origo.legend_library_file">PNG or SVG file</span>
+              <input id="legendLibraryFileInput" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="legendLibraryUploadBtn" class="button primary" type="button" data-i18n="Qtiler2Origo.legend_library_upload">Upload icon</button>
+          </div>
+          <div id="legendLibraryGrid" class="Qtiler2Origo-legend-library-grid"></div>
         </section>
       </div>
 
@@ -1160,7 +1178,7 @@
     </div>
 
     <script src="/lang-support.js"></script>
-    <script src="/plugins/Qtiler2Origo/admin-ui/app.js?v=wms-legend-crop-20260327"></script>
+    <script src="/plugins/Qtiler2Origo/admin-ui/app.js?v=legend-library-20260827"></script>
 </body>
 </html>
 

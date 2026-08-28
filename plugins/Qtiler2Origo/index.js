@@ -30,8 +30,11 @@ const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.
 const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const MAX_PORTAL_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_LEGEND_LIBRARY_BYTES = 2 * 1024 * 1024;
+const LEGEND_SWATCH_SIZE = 24;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 const ALLOWED_PORTAL_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 const PREVIEW_STATE_TTL_MS = 10 * 60 * 1000;
 let previewStateStore = null;
 
@@ -800,6 +803,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const portalAssetsRoot = path.join(runtimeRoot, 'portal-assets');
+  const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
+  const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
+  const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const projectsDir = resolveRepoPath('qgisprojects');
@@ -824,6 +830,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
   await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
+  await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+  await fs.promises.mkdir(thumbCacheDir, { recursive: true });
 
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
     const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
@@ -1007,6 +1015,93 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       cb(null, true);
     }
   });
+
+  const legendLibraryUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_LEGEND_LIBRARY_BYTES },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
+      if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(ext)) {
+        return cb(new Error('invalid_legend_library_extension'));
+      }
+      cb(null, true);
+    }
+  });
+
+  const legendLibraryPublicUrl = (fileName, stamp = '') => {
+    const safe = sanitizeFileToken(fileName);
+    if (!safe) return '';
+    return `/plugins/${pluginSlug}/legend-library/${encodeURIComponent(safe)}${stamp ? `?v=${encodeURIComponent(String(stamp))}` : ''}`;
+  };
+
+  const readLegendLibraryIndex = async () => {
+    try {
+      const raw = await fs.promises.readFile(legendLibraryIndexPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.items) ? parsed.items : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeLegendLibraryIndex = async (items) => {
+    await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+    await fs.promises.writeFile(legendLibraryIndexPath, JSON.stringify({ items }, null, 2), 'utf8');
+  };
+
+  const cropLegendLibraryBuffer = async (buffer, ext) => {
+    if (ext === '.svg') return { buffer, ext: '.svg', mime: 'image/svg+xml' };
+    const png = await sharp(buffer)
+      .resize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE, {
+        fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      })
+      .png()
+      .toBuffer();
+    return { buffer: png, ext: '.png', mime: 'image/png' };
+  };
+
+  const listLegendLibraryItems = async () => {
+    const items = await readLegendLibraryIndex();
+    const out = [];
+    for (const item of items) {
+      const fileName = sanitizeFileToken(item?.fileName || '');
+      if (!fileName) continue;
+      const filePath = path.join(legendLibraryRoot, fileName);
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (!stat.isFile() || stat.size <= 0) continue;
+        out.push({
+          id: String(item.id || fileName),
+          name: String(item.name || fileName),
+          fileName,
+          url: legendLibraryPublicUrl(fileName, stat.mtimeMs),
+          mime: String(item.mime || ''),
+          createdAt: item.createdAt || new Date(stat.mtimeMs).toISOString()
+        });
+      } catch {
+        /* missing file */
+      }
+    }
+    return out;
+  };
+
+  const removeCachedLayerThumbnails = async (projectId, layerName) => {
+    const safePid = sanitizeFileToken(projectId);
+    const layerToken = sanitizeFileToken(String(layerName || '').replace(/,/g, '_'));
+    if (!safePid || !layerToken) return 0;
+    let removed = 0;
+    const entries = await fs.promises.readdir(thumbCacheDir).catch(() => []);
+    await Promise.all(entries.map(async (name) => {
+      if (!name.startsWith(`${safePid}_`) || !name.toLowerCase().endsWith('.jpg')) return;
+      if (!name.includes(layerToken)) return;
+      try {
+        await fs.promises.unlink(path.join(thumbCacheDir, name));
+        removed += 1;
+      } catch (_) {}
+    }));
+    return removed;
+  };
 
   const readState = async () => {
     const state = await stateStore.read();
@@ -2003,7 +2098,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
    * Generate or return a cached WMS thumbnail for a project + layers combo.
    * Saves to data/Qtiler2Origo/thumbs/<projectId>_<hash>.jpg.
    */
-  const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const thumbPendingRequests = new Map(); // key -> Promise (in-flight requests)
   const normalizeThumbnailBackground = (input) => {
     const source = input && typeof input === 'object' ? input : {};
@@ -3879,14 +3973,16 @@ ${mapIcon}
 
   const resolveManualWmsLegendUrl = (layer, fallbackUrl = '') => {
     if (!layer || typeof layer !== 'object') return fallbackUrl || '';
+    const mode = String(layer.wmsLegendMode || 'auto').trim().toLowerCase();
     const raw = String(layer.wmsLegendUrl || layer.wmsLegendIcon || layer.legendIcon || '').trim();
-    if (String(layer.wmsLegendMode || '').trim().toLowerCase() !== 'manual' || !raw) return fallbackUrl || '';
-    return raw;
+    if (['manual', 'svg', 'library'].includes(mode) && raw) return raw;
+    return fallbackUrl || '';
   };
 
   const buildManualWmsLegendIconUrl = (rawUrl, baseUrl) => {
     const raw = String(rawUrl || '').trim();
     if (!raw) return '';
+    if (raw.startsWith('/plugins/') || raw.startsWith('/qgis-svg') || raw.startsWith('/qtiler-symbology')) return raw;
     return `${baseUrl}/plugins/${pluginSlug}/api/legend-icon?src=${encodeURIComponent(raw)}`;
   };
 
@@ -3894,10 +3990,7 @@ ${mapIcon}
     const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
     const name = String(layerName || '').trim();
     if (!baseUrl || !pid || !name) return '';
-    // LAYERTITLE/RULELABEL=false: QGIS otherwise paints the layer name into the
-    // PNG. Origo then crops that wide image into a 24px box and the leftover
-    // letters show up to the left of the real layer title.
-    return `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.1.1&FORMAT=image/png&TRANSPARENT=TRUE&LAYERTITLE=FALSE&RULELABEL=FALSE&SYMBOLWIDTH=16&SYMBOLHEIGHT=16&LAYER=${encodeURIComponent(name)}`;
+    return `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(pid)}?LAYERS=${encodeURIComponent(name)}&LEGEND=1`;
   };
 
   const origoLegendIconCss = `
@@ -6144,7 +6237,7 @@ ${mapIcon}
         const wmsLegendMode = String(rule?.wmsLegendMode || '').trim().toLowerCase();
         const wmsLegendIcon = String(rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
         const wmsLegendUrl = String(rule?.wmsLegendUrl || rule?.legend || '').trim();
-        if (wmsLegendMode === 'manual') out.wmsLegendMode = 'manual';
+        if (['manual', 'svg', 'library', 'auto', 'thumbnail'].includes(wmsLegendMode)) out.wmsLegendMode = wmsLegendMode;
         if (wmsLegendIcon) out.wmsLegendIcon = wmsLegendIcon;
         if (wmsLegendUrl) out.wmsLegendUrl = wmsLegendUrl;
         if (rule?.designerOptions && typeof rule.designerOptions === 'object' && Object.keys(rule.designerOptions).length) {
@@ -7152,6 +7245,128 @@ ${mapIcon}
   });
 
   // Wipe cached WMS thumbnails for a project so the next request regenerates them.
+  app.delete(`/plugins/${pluginSlug}/api/thumbnail/cache/:projectId/layer/:layerName`, adminOnly, async (req, res) => {
+    try {
+      const projectId = normalizeProjectId(req.params?.projectId || '');
+      const layerName = String(req.params?.layerName || '').trim();
+      if (!projectId || !layerName) return res.status(400).json({ error: 'project_and_layer_required' });
+      const removed = await removeCachedLayerThumbnails(projectId, layerName);
+      res.json({ status: 'cleared', projectId, layerName, removed });
+    } catch (err) {
+      console.error('[thumbnail-layer-cache-clear]', err);
+      res.status(500).json({ error: 'thumbnail_layer_cache_clear_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/thumbnail/regenerate/:projectId/layer/:layerName`, adminOnly, async (req, res) => {
+    try {
+      const projectId = normalizeProjectId(req.params?.projectId || '');
+      const layerName = String(req.params?.layerName || '').trim();
+      if (!projectId || !layerName) return res.status(400).json({ error: 'project_and_layer_required' });
+      await removeCachedLayerThumbnails(projectId, layerName);
+      await clearThumbnailRenderCaches([projectId]);
+      const baseUrl = getRequestBaseUrl(req);
+      const generated = await generateThumbnail(projectId, layerName, baseUrl, req.headers.cookie, {
+        apiKey: getRequestApiKey(req),
+        authorization: req.get?.('authorization') || ''
+      });
+      const stamp = Date.now();
+      res.json({
+        status: generated ? 'regenerated' : 'placeholder',
+        projectId,
+        layerName,
+        thumbUrl: `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layerName)}&_=${stamp}`,
+        legendUrl: `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layerName)}&LEGEND=1&_=${stamp}`
+      });
+    } catch (err) {
+      console.error('[thumbnail-layer-regenerate]', err);
+      res.status(500).json({ error: 'thumbnail_layer_regenerate_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.use(`/plugins/${pluginSlug}/legend-library`, express.static(legendLibraryRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '7d',
+    index: false
+  }));
+
+  app.get(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, async (_req, res) => {
+    try {
+      const items = await listLegendLibraryItems();
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, (req, res) => {
+    legendLibraryUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const msg = String(err?.message || err || 'legend_library_upload_failed');
+        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'legend_library_too_large', details: `max_bytes_${MAX_LEGEND_LIBRARY_BYTES}` });
+        }
+        if (msg.includes('invalid_legend_library_extension')) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        return res.status(400).json({ error: 'legend_library_upload_failed', details: msg });
+      }
+      try {
+        const uploaded = req.file;
+        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
+          return res.status(400).json({ error: 'legend_library_file_required' });
+        }
+        const origExt = path.extname(String(uploaded.originalname || '')).toLowerCase();
+        if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(origExt)) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        const cropped = await cropLegendLibraryBuffer(uploaded.buffer, origExt);
+        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'legend'), origExt)).slice(0, 80) || 'legend';
+        const fileName = `${Date.now()}-${stem}${cropped.ext}`;
+        const targetPath = path.join(legendLibraryRoot, fileName);
+        await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+        await fs.promises.writeFile(targetPath, cropped.buffer);
+        const item = {
+          id: fileName,
+          name: path.basename(String(uploaded.originalname || fileName)),
+          fileName,
+          mime: cropped.mime,
+          createdAt: nowIso()
+        };
+        const items = await readLegendLibraryIndex();
+        items.unshift(item);
+        await writeLegendLibraryIndex(items);
+        return res.status(201).json({
+          status: 'uploaded',
+          item: {
+            ...item,
+            url: legendLibraryPublicUrl(fileName, Date.now())
+          }
+        });
+      } catch (uploadErr) {
+        return res.status(500).json({ error: 'legend_library_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(req.params?.id || '');
+      if (!id) return res.status(400).json({ error: 'legend_library_id_required' });
+      const items = await readLegendLibraryIndex();
+      const match = items.find((item) => sanitizeFileToken(item?.id || item?.fileName || '') === id);
+      const fileName = sanitizeFileToken(match?.fileName || id);
+      if (fileName) {
+        await fs.promises.rm(path.join(legendLibraryRoot, fileName), { force: true }).catch(() => {});
+      }
+      await writeLegendLibraryIndex(items.filter((item) => sanitizeFileToken(item?.id || item?.fileName || '') !== id));
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
   app.delete(`/plugins/${pluginSlug}/api/thumbnail/cache/:projectId`, adminOnly, async (req, res) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
@@ -7514,6 +7729,21 @@ ${mapIcon}
         authorization: req.get?.('authorization') || ''
       });
       if (thumbPath) {
+        const asLegend = ['1', 'true', 'yes'].includes(String(req.query?.LEGEND || req.query?.legend || '').trim().toLowerCase());
+        if (asLegend) {
+          try {
+            const swatch = await sharp(thumbPath)
+              .resize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE, {
+                fit: 'contain',
+                background: { r: 255, g: 255, b: 255, alpha: 0 }
+              })
+              .png()
+              .toBuffer();
+            res.set('Cache-Control', 'public, max-age=300');
+            res.type('image/png');
+            return res.send(swatch);
+          } catch (_) { /* fall through to full thumbnail */ }
+        }
         res.set('Cache-Control', 'public, max-age=300');
         return res.sendFile(thumbPath);
       }

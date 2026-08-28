@@ -96,10 +96,25 @@ const QTWC_I18N = {
     'Qtiler2Origo.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
     'Qtiler2Origo.wms_legend_auto': 'WMS thumbnail',
     'Qtiler2Origo.wms_legend_manual': 'Manual icon',
+    'Qtiler2Origo.wms_legend_library': 'Uploaded icon',
     'Qtiler2Origo.wms_legend_pick': 'Pick SVG',
+    'Qtiler2Origo.wms_legend_pick_library': 'Pick uploaded',
+    'Qtiler2Origo.wms_legend_regen': 'Recreate thumbnail',
     'Qtiler2Origo.wms_legend_clear': 'Clear',
     'Qtiler2Origo.wms_legend_url': 'SVG/PNG URL or path',
-    'Qtiler2Origo.wms_legend_help': 'WMS layers use a generated thumbnail by default. Pick a QGIS SVG or paste an SVG/PNG URL to override the legend icon.',
+    'Qtiler2Origo.wms_legend_help': 'WMS layers use a generated map thumbnail by default. Recreate it, pick a QGIS SVG, or use a PNG/SVG uploaded in Setup.',
+    'Qtiler2Origo.legend_library_title': 'Legend icons',
+    'Qtiler2Origo.legend_library_help': 'Upload PNG or SVG icons once. They stay available for every published map. Raster files are cropped to 24×24 so they fit the Origo legend.',
+    'Qtiler2Origo.legend_library_file': 'PNG or SVG file',
+    'Qtiler2Origo.legend_library_upload': 'Upload icon',
+    'Qtiler2Origo.legend_library_empty': 'No uploaded icons yet.',
+    'Qtiler2Origo.legend_library_delete': 'Delete',
+    'Qtiler2Origo.legend_library_select_file': 'Select a PNG or SVG file first.',
+    'Qtiler2Origo.log_legend_uploaded': 'Legend icon uploaded.',
+    'Qtiler2Origo.log_legend_deleted': 'Legend icon deleted.',
+    'Qtiler2Origo.log_layer_thumb_regen': 'Thumbnail recreated for "{layer}".',
+    'Qtiler2Origo.log_layer_thumb_removed': 'Cached thumbnail removed for "{layer}".',
+    'Qtiler2Origo.legend_library_picker_title': 'Uploaded legend icons',
     'Qtiler2Origo.bg_project': 'Background project (optional)',
     'Qtiler2Origo.bg_layers': 'Background layers',
     'Qtiler2Origo.default_bg': 'Default background',
@@ -686,10 +701,25 @@ const QTWC_I18N = {
     'Qtiler2Origo.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
     'Qtiler2Origo.wms_legend_auto': 'Thumbnail WMS',
     'Qtiler2Origo.wms_legend_manual': 'Icono manual',
+    'Qtiler2Origo.wms_legend_library': 'Icono subido',
     'Qtiler2Origo.wms_legend_pick': 'Elegir SVG',
+    'Qtiler2Origo.wms_legend_pick_library': 'Elegir subido',
+    'Qtiler2Origo.wms_legend_regen': 'Recrear thumbnail',
     'Qtiler2Origo.wms_legend_clear': 'Limpiar',
     'Qtiler2Origo.wms_legend_url': 'URL o ruta SVG/PNG',
-    'Qtiler2Origo.wms_legend_help': 'Las capas WMS usan un thumbnail generado por defecto. Elige un SVG de QGIS o pega una URL SVG/PNG para reemplazar el icono de leyenda.',
+    'Qtiler2Origo.wms_legend_help': 'Las capas WMS usan un thumbnail del mapa por defecto. Recréalo, elige un SVG de QGIS o usa un PNG/SVG subido en Setup.',
+    'Qtiler2Origo.legend_library_title': 'Iconos de leyenda',
+    'Qtiler2Origo.legend_library_help': 'Sube PNG o SVG una vez. Quedan disponibles para todos los mapas publicados. Las imágenes raster se recortan a 24×24 para la leyenda de Origo.',
+    'Qtiler2Origo.legend_library_file': 'Archivo PNG o SVG',
+    'Qtiler2Origo.legend_library_upload': 'Subir icono',
+    'Qtiler2Origo.legend_library_empty': 'Todavía no hay iconos subidos.',
+    'Qtiler2Origo.legend_library_delete': 'Eliminar',
+    'Qtiler2Origo.legend_library_select_file': 'Selecciona primero un PNG o SVG.',
+    'Qtiler2Origo.log_legend_uploaded': 'Icono de leyenda subido.',
+    'Qtiler2Origo.log_legend_deleted': 'Icono de leyenda eliminado.',
+    'Qtiler2Origo.log_layer_thumb_regen': 'Thumbnail recreado para "{layer}".',
+    'Qtiler2Origo.log_layer_thumb_removed': 'Thumbnail en caché eliminado para "{layer}".',
+    'Qtiler2Origo.legend_library_picker_title': 'Iconos de leyenda subidos',
     'Qtiler2Origo.bg_project': 'Proyecto de fondo (opcional)',
     'Qtiler2Origo.bg_layers': 'Capas de fondo',
     'Qtiler2Origo.default_bg': 'Fondo por defecto',
@@ -1265,6 +1295,27 @@ const QTWC_I18N = {
     'Qtiler2Origo.no_activity': 'Ingen aktivitet ännu.',
     'Qtiler2Origo.modal_title': 'Publicera projekt i Origo',
     'Qtiler2Origo.modal_title_edit': 'Redigera profil: {id}',
+    'Qtiler2Origo.wms_legend_auto': 'WMS-thumbnail',
+    'Qtiler2Origo.wms_legend_manual': 'Manuell ikon',
+    'Qtiler2Origo.wms_legend_library': 'Uppladdad ikon',
+    'Qtiler2Origo.wms_legend_pick': 'Välj SVG',
+    'Qtiler2Origo.wms_legend_pick_library': 'Välj uppladdad',
+    'Qtiler2Origo.wms_legend_regen': 'Återskapa thumbnail',
+    'Qtiler2Origo.wms_legend_clear': 'Rensa',
+    'Qtiler2Origo.wms_legend_url': 'SVG/PNG-URL eller sökväg',
+    'Qtiler2Origo.wms_legend_help': 'WMS-lager använder en genererad kartthumbnail som standard. Återskapa den, välj en QGIS-SVG eller använd en PNG/SVG som laddats upp under Setup.',
+    'Qtiler2Origo.legend_library_title': 'Legendikoner',
+    'Qtiler2Origo.legend_library_help': 'Ladda upp PNG eller SVG en gång. De finns sedan tillgängliga för alla publicerade kartor. Rasterbilder beskärs till 24×24 för Origos legend.',
+    'Qtiler2Origo.legend_library_file': 'PNG- eller SVG-fil',
+    'Qtiler2Origo.legend_library_upload': 'Ladda upp ikon',
+    'Qtiler2Origo.legend_library_empty': 'Inga uppladdade ikoner ännu.',
+    'Qtiler2Origo.legend_library_delete': 'Ta bort',
+    'Qtiler2Origo.legend_library_select_file': 'Välj först en PNG- eller SVG-fil.',
+    'Qtiler2Origo.log_legend_uploaded': 'Legendikon uppladdad.',
+    'Qtiler2Origo.log_legend_deleted': 'Legendikon borttagen.',
+    'Qtiler2Origo.log_layer_thumb_regen': 'Thumbnail återskapad för "{layer}".',
+    'Qtiler2Origo.log_layer_thumb_removed': 'Cachad thumbnail borttagen för "{layer}".',
+    'Qtiler2Origo.legend_library_picker_title': 'Uppladdade legendikoner',
     'Qtiler2Origo.main_project': 'Huvudprojekt',
     'Qtiler2Origo.project_layers': 'Projektlager',
     'Qtiler2Origo.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med genererad thumbnail eller en valfri manuell SVG/PNG-legendikon.',
@@ -1274,12 +1325,6 @@ const QTWC_I18N = {
     'Qtiler2Origo.layer_title_placeholder': 'Synlig titel (valfritt)',
     'Qtiler2Origo.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
     'Qtiler2Origo.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
-    'Qtiler2Origo.wms_legend_auto': 'WMS-thumbnail',
-    'Qtiler2Origo.wms_legend_manual': 'Manuell ikon',
-    'Qtiler2Origo.wms_legend_pick': 'Välj SVG',
-    'Qtiler2Origo.wms_legend_clear': 'Rensa',
-    'Qtiler2Origo.wms_legend_url': 'SVG/PNG-URL eller sökväg',
-    'Qtiler2Origo.wms_legend_help': 'WMS-lager använder en genererad thumbnail som standard. Välj en QGIS-SVG eller klistra in en SVG/PNG-URL för att ersätta legendikonen.',
     'Qtiler2Origo.bg_project': 'Bakgrundsprojekt (valfritt)',
     'Qtiler2Origo.bg_layers': 'Bakgrundslager',
     'Qtiler2Origo.default_bg': 'Standardbakgrund',
@@ -1909,6 +1954,12 @@ const logoFileInput = document.getElementById('logoFileInput');
 const uploadLogoBtn = document.getElementById('uploadLogoBtn');
 const removeLogoBtn = document.getElementById('removeLogoBtn');
 const logoPreview = document.getElementById('logoPreview');
+const legendLibrarySection = document.getElementById('legendLibrarySection');
+const legendLibraryBadge = document.getElementById('legendLibraryBadge');
+const legendLibraryFileInput = document.getElementById('legendLibraryFileInput');
+const legendLibraryUploadBtn = document.getElementById('legendLibraryUploadBtn');
+const legendLibraryGrid = document.getElementById('legendLibraryGrid');
+let legendLibraryItems = [];
 const publishSection = document.getElementById('publishSection');
 const profilesBadge = document.getElementById('profilesBadge');
 const openPublishModalBtn = document.getElementById('openPublishModalBtn');
@@ -3068,14 +3119,20 @@ function movePublishLayerInGroup(layerKey, direction) {
   return true;
 }
 
+function normalizeWmsLegendMode(value) {
+  const mode = String(value || 'auto').trim().toLowerCase();
+  if (mode === 'library' || mode === 'svg' || mode === 'manual') return mode;
+  return 'auto';
+}
+
 function getWmsLegendPreviewUrl(layer, rule) {
   const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
   const name = String(layer?.name || '').trim();
-  const mode = String(rule?.wmsLegendMode || 'auto').trim().toLowerCase();
+  const mode = normalizeWmsLegendMode(rule?.wmsLegendMode);
   const manual = String(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
-  if (mode === 'manual' && manual) return manual;
+  if ((mode === 'manual' || mode === 'svg' || mode === 'library') && manual) return manual;
   if (!pid || !name) return '';
-  return `/plugins/Qtiler2Origo/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.1.1&FORMAT=image/png&TRANSPARENT=TRUE&LAYERTITLE=FALSE&RULELABEL=FALSE&SYMBOLWIDTH=16&SYMBOLHEIGHT=16&LAYER=${encodeURIComponent(name)}`;
+  return `/plugins/Qtiler2Origo/api/thumbnail/${encodeURIComponent(pid)}?LAYERS=${encodeURIComponent(name)}&LEGEND=1`;
 }
 
 function wfsStyleToPreviewSvg(style, geometry) {
@@ -4724,6 +4781,7 @@ function syncUI() {
   }
   if (uploadLogoBtn) uploadLogoBtn.disabled = false;
   if (removeLogoBtn) removeLogoBtn.disabled = !hasLogo;
+  if (legendLibrarySection) legendLibrarySection.classList.remove('card--disabled');
 
   /* ── Profiles card ── */
   if (publishSection) publishSection.classList.toggle('card--disabled', !installed);
@@ -4845,6 +4903,7 @@ async function loadStatus() {
   currentStatus = await api('/plugins/Qtiler2Origo/api/status');
   syncUI();
   renderPortalEditor();
+  loadLegendLibrary().catch(() => {});
 }
 
 async function loadPublishedProfiles() {
@@ -5097,22 +5156,21 @@ function renderLayerChecklist(container, layers, rules = {}) {
         </div>
       `;
     }
-
     let wmsLegendControls = '';
-    if (isMainLayerList && !layer.isTheme) {
-      // Keep this block in the DOM (hidden, not removed) when WFS is selected
-      // so toggling WMS/WFS doesn't change the row's flex width and shift
-      // the other action buttons left/right.
-      const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
+    if (isMainLayerList) {
+      const mode = normalizeWmsLegendMode(rule.wmsLegendMode);
       const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
       const preview = layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS');
       wmsLegendControls = `
         <div class="Qtiler2Origo-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Origo.wms_legend_help'))}">
           <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
             <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_auto'))}</option>
-            <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_manual'))}</option>
+            <option value="svg"${mode === 'svg' || mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_pick'))}</option>
+            <option value="library"${mode === 'library' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Origo.wms_legend_library'))}</option>
           </select>
           <button type="button" class="button is-small is-light" data-wms-legend-pick="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_pick'))}</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-library="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_pick_library'))}</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-regen="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_regen'))}</button>
           <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Origo.wms_legend_clear'))}</button>
           <input class="input is-small" type="text" data-wms-legend-url="${escapeHtml(layerKey)}" value="${escapeHtml(manualLegend)}" placeholder="${escapeHtml(t('Qtiler2Origo.wms_legend_url'))}" />
           ${preview}
@@ -5193,7 +5251,7 @@ function syncProjectLayerOptionState() {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
-    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-library], button[data-wms-legend-regen], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
       el.disabled = !included;
       el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
@@ -5679,6 +5737,14 @@ function bindExternalLayerPickerEvents() {
       if (!(target instanceof HTMLElement)) return;
       const key = String(target.getAttribute('data-remove-extra-layer') || '').trim();
       if (!key) return;
+      const extraLayer = publishState.extraLayers.find((layer) => getLayerKey(layer) === key);
+      const extraPid = String(extraLayer?.sourceProjectId || '').trim();
+      const extraName = String(extraLayer?.name || '').trim();
+      if (extraPid && extraName) {
+        api(`/plugins/Qtiler2Origo/api/thumbnail/cache/${encodeURIComponent(extraPid)}/layer/${encodeURIComponent(extraName)}`, { method: 'DELETE' })
+          .then((payload) => addLog(t('Qtiler2Origo.log_layer_thumb_removed', { layer: extraName, n: payload?.removed || 0 }), 'ok'))
+          .catch(() => {});
+      }
       publishState.extraLayers = publishState.extraLayers.filter((layer) => getLayerKey(layer) !== key);
       delete publishState.mainRules[key];
       delete publishState.layerGroups[key];
@@ -6207,7 +6273,7 @@ async function preparePublishModal(editProfileId = null) {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
           wfsStyle: layer?.wfsStyle || null,
-          wmsLegendMode: String(layer?.wmsLegendMode || publishState.mainRules[key]?.wmsLegendMode || 'auto').trim() || 'auto',
+          wmsLegendMode: normalizeWmsLegendMode(layer?.wmsLegendMode || publishState.mainRules[key]?.wmsLegendMode || 'auto'),
           wmsLegendIcon: String(layer?.wmsLegendIcon || layer?.legendIcon || publishState.mainRules[key]?.wmsLegendIcon || '').trim(),
           wmsLegendUrl: String(layer?.wmsLegendUrl || layer?.legend || publishState.mainRules[key]?.wmsLegendUrl || '').trim(),
           designerOptions: layer?.designerOptions && typeof layer.designerOptions === 'object'
@@ -6839,6 +6905,42 @@ uploadLogoBtn?.addEventListener('click', async () => {
   }
 });
 
+legendLibraryUploadBtn?.addEventListener('click', async () => {
+  const file = legendLibraryFileInput?.files?.[0];
+  if (!file) { addLog(t('Qtiler2Origo.legend_library_select_file'), 'error'); return; }
+  legendLibraryUploadBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('image', file, file.name || 'legend.png');
+    await api('/plugins/Qtiler2Origo/api/legend-library', { method: 'POST', body });
+    if (legendLibraryFileInput) legendLibraryFileInput.value = '';
+    addLog(t('Qtiler2Origo.log_legend_uploaded'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  } finally {
+    legendLibraryUploadBtn.disabled = false;
+  }
+});
+
+legendLibraryGrid?.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest('[data-legend-library-delete]');
+  if (!button) return;
+  const id = String(button.getAttribute('data-legend-library-delete') || '').trim();
+  if (!id) return;
+  button.disabled = true;
+  try {
+    await api(`/plugins/Qtiler2Origo/api/legend-library/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    addLog(t('Qtiler2Origo.log_legend_deleted'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+    button.disabled = false;
+  }
+});
+
 removeLogoBtn?.addEventListener('click', async () => {
   removeLogoBtn.disabled = true;
   try {
@@ -6900,7 +7002,7 @@ projectLayersList?.addEventListener('change', (event) => {
     const layerKey = String(target.getAttribute('data-wms-legend-mode') || '').trim();
     if (!layerKey) return;
     publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
-    publishState.mainRules[layerKey].wmsLegendMode = target.value === 'manual' ? 'manual' : 'auto';
+    publishState.mainRules[layerKey].wmsLegendMode = normalizeWmsLegendMode(target.value);
     schedulePreviewRefresh();
     return;
   }
@@ -6909,7 +7011,9 @@ projectLayersList?.addEventListener('change', (event) => {
     if (!layerKey) return;
     const value = String(target.value || '').trim();
     publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
-    publishState.mainRules[layerKey].wmsLegendMode = value ? 'manual' : (publishState.mainRules[layerKey].wmsLegendMode || 'auto');
+    publishState.mainRules[layerKey].wmsLegendMode = value
+      ? (normalizeWmsLegendMode(publishState.mainRules[layerKey].wmsLegendMode) === 'auto' ? 'manual' : normalizeWmsLegendMode(publishState.mainRules[layerKey].wmsLegendMode))
+      : 'auto';
     publishState.mainRules[layerKey].wmsLegendUrl = value;
     publishState.mainRules[layerKey].wmsLegendIcon = value;
     schedulePreviewRefresh();
@@ -6954,6 +7058,17 @@ projectLayersList?.addEventListener('change', (event) => {
   }
 
   if (!target.hasAttribute('data-layer-include')) return;
+  if (!target.checked) {
+    const layerKey = String(target.getAttribute('data-layer-include') || target.getAttribute('data-layer-name') || '').trim();
+    const layer = getMainLayerByName(layerKey);
+    const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+    const layerName = String(layer?.name || '').trim();
+    if (pid && layerName) {
+      api(`/plugins/Qtiler2Origo/api/thumbnail/cache/${encodeURIComponent(pid)}/layer/${encodeURIComponent(layerName)}`, { method: 'DELETE' })
+        .then((payload) => addLog(t('Qtiler2Origo.log_layer_thumb_removed', { layer: layerName, n: payload?.removed || 0 }), 'ok'))
+        .catch(() => {});
+    }
+  }
   syncProjectLayerOptionState();
   renderLayerAssignments();
   schedulePreviewRefresh();
@@ -6998,7 +7113,7 @@ projectLayersList?.addEventListener('click', (event) => {
     if (!layerKey) return;
     openSvgPicker((url) => {
       publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
-      publishState.mainRules[layerKey].wmsLegendMode = 'manual';
+      publishState.mainRules[layerKey].wmsLegendMode = 'svg';
       publishState.mainRules[layerKey].wmsLegendIcon = url;
       publishState.mainRules[layerKey].wmsLegendUrl = url;
       const checkedNames = getCheckedLayerNames(projectLayersList);
@@ -7006,6 +7121,45 @@ projectLayersList?.addEventListener('click', (event) => {
       setCheckedLayerNames(projectLayersList, checkedNames);
       schedulePreviewRefresh();
     });
+    return;
+  }
+  const libraryButton = target.closest('button[data-wms-legend-library]');
+  if (libraryButton) {
+    const layerKey = String(libraryButton.getAttribute('data-wms-legend-library') || '').trim();
+    if (!layerKey) return;
+    openLegendLibraryPicker((url) => {
+      publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+      publishState.mainRules[layerKey].wmsLegendMode = 'library';
+      publishState.mainRules[layerKey].wmsLegendIcon = url;
+      publishState.mainRules[layerKey].wmsLegendUrl = url;
+      const checkedNames = getCheckedLayerNames(projectLayersList);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      schedulePreviewRefresh();
+    });
+    return;
+  }
+  const regenButton = target.closest('button[data-wms-legend-regen]');
+  if (regenButton) {
+    const layerKey = String(regenButton.getAttribute('data-wms-legend-regen') || '').trim();
+    if (!layerKey) return;
+    const layer = getMainLayerByName(layerKey);
+    const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+    const layerName = String(layer?.name || '').trim();
+    if (!pid || !layerName) return;
+    regenButton.disabled = true;
+    api(`/plugins/Qtiler2Origo/api/thumbnail/regenerate/${encodeURIComponent(pid)}/layer/${encodeURIComponent(layerName)}`, { method: 'POST' })
+      .then(() => {
+        publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+        publishState.mainRules[layerKey].wmsLegendMode = 'auto';
+        addLog(t('Qtiler2Origo.log_layer_thumb_regen', { layer: layerName }), 'ok');
+        const checkedNames = getCheckedLayerNames(projectLayersList);
+        renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+        setCheckedLayerNames(projectLayersList, checkedNames);
+        schedulePreviewRefresh();
+      })
+      .catch((err) => addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error'))
+      .finally(() => { regenButton.disabled = false; });
     return;
   }
   const clearButton = target.closest('button[data-wms-legend-clear]');
@@ -9255,6 +9409,84 @@ function loadSvgLibrary() {
     .then(r => r.ok ? r.json() : { categories: [] })
     .then(d => { svgLibraryCache = d.categories || []; return svgLibraryCache; })
     .catch(() => []);
+}
+
+async function loadLegendLibrary() {
+  try {
+    const payload = await api('/plugins/Qtiler2Origo/api/legend-library');
+    legendLibraryItems = Array.isArray(payload?.items) ? payload.items : [];
+  } catch {
+    legendLibraryItems = [];
+  }
+  renderLegendLibraryGrid();
+  return legendLibraryItems;
+}
+
+function renderLegendLibraryGrid() {
+  if (legendLibraryBadge) legendLibraryBadge.textContent = String(legendLibraryItems.length);
+  if (!legendLibraryGrid) return;
+  if (!legendLibraryItems.length) {
+    legendLibraryGrid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.legend_library_empty'))}</p>`;
+    return;
+  }
+  legendLibraryGrid.innerHTML = legendLibraryItems.map((item) => `
+    <div class="Qtiler2Origo-legend-library-item">
+      <img src="${escapeHtml(item.url)}" alt="" />
+      <span title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || item.fileName || '')}</span>
+      <button type="button" class="button is-small is-danger is-light" data-legend-library-delete="${escapeHtml(item.id)}">${escapeHtml(t('Qtiler2Origo.legend_library_delete'))}</button>
+    </div>
+  `).join('');
+}
+
+function openLegendLibraryPicker(targetCallback) {
+  let modal = document.getElementById('Qtiler2OrigoLegendLibraryPicker');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'Qtiler2OrigoLegendLibraryPicker';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-background" data-close-legend-library-picker></div>
+      <div class="modal-card" style="width:min(720px, calc(100vw - 32px))">
+        <header class="modal-card-head">
+          <p class="modal-card-title">${escapeHtml(t('Qtiler2Origo.legend_library_picker_title'))}</p>
+          <button type="button" class="delete" aria-label="close" data-close-legend-library-picker></button>
+        </header>
+        <section class="modal-card-body">
+          <div id="Qtiler2OrigoLegendLibraryPickerGrid" class="Qtiler2Origo-legend-library-picker"></div>
+        </section>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      if (el.hasAttribute('data-close-legend-library-picker')) modal.classList.remove('is-active');
+      const pick = el.closest('[data-legend-library-pick]');
+      if (pick) {
+        const url = String(pick.getAttribute('data-legend-library-pick') || '').trim();
+        const cb = modal._pickCb;
+        modal.classList.remove('is-active');
+        if (url && typeof cb === 'function') cb(url);
+      }
+    });
+  }
+  modal._pickCb = targetCallback;
+  const grid = document.getElementById('Qtiler2OrigoLegendLibraryPickerGrid');
+  const paint = (items) => {
+    if (!grid) return;
+    if (!items.length) {
+      grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.legend_library_empty'))}</p>`;
+      return;
+    }
+    grid.innerHTML = items.map((item) => `
+      <button type="button" class="Qtiler2Origo-legend-library-pick" data-legend-library-pick="${escapeHtml(item.url)}">
+        <img src="${escapeHtml(item.url)}" alt="" />
+        <span>${escapeHtml(item.name || '')}</span>
+      </button>
+    `).join('');
+  };
+  paint(legendLibraryItems);
+  modal.classList.add('is-active');
+  loadLegendLibrary().then(paint);
 }
 
 function openSvgPicker(targetCallback) {
