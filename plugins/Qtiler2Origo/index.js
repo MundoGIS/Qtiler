@@ -5909,6 +5909,33 @@ ${mapIcon}
         return res.status(500).json({ error: 'portal_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
       }
     });
+
+  // List available portal assets (images)
+  app.get(`/plugins/${pluginSlug}/api/portal-assets`, portalEditorOnly, async (_req, res) => {
+    try {
+      const files = await fs.promises.readdir(portalAssetsRoot, { withFileTypes: true });
+      const items = [];
+      for (const f of files) {
+        if (!f.isFile()) continue;
+        const ext = path.extname(f.name).toLowerCase();
+        if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) continue;
+        try {
+          const stat = await fs.promises.stat(path.join(portalAssetsRoot, f.name));
+          items.push({
+            fileName: f.name,
+            url: `/plugins/${pluginSlug}/portal-assets/${encodeURIComponent(f.name)}`,
+            size: stat.size,
+            mtime: stat.mtime.toISOString()
+          });
+        } catch (statErr) { /* ignore per-file stat errors */ }
+      }
+      // sort newest first
+      items.sort((a, b) => (b.mtime || '').localeCompare(a.mtime || ''));
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'portal_assets_list_failed', details: String(err?.message || err) });
+    }
+  });
   });
 
   app.delete(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {
