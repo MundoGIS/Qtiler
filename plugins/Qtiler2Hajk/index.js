@@ -2289,8 +2289,18 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         try {
           const contentType = String(proxyRes.headers['content-type'] || '');
           if (!contentType.startsWith('image/')) {
-            proxyRes.resume();
-            return resolve(null);
+            // Non-image response usually means the WMS render itself failed
+            // (e.g. a ServiceException XML). Log a snippet so failures are
+            // diagnosable instead of silently producing an empty thumbnail.
+            const chunks = [];
+            proxyRes.on('data', (chunk) => chunks.push(chunk));
+            proxyRes.on('end', () => {
+              const snippet = Buffer.concat(chunks).toString('utf8').slice(0, 500);
+              console.warn(`[Qtiler2Hajk] thumbnail WMS fetch got non-image response (status ${proxyRes.statusCode}, content-type "${contentType}") for ${imageUrl}: ${snippet}`);
+              resolve(null);
+            });
+            proxyRes.on('error', () => resolve(null));
+            return;
           }
           const chunks = [];
           proxyRes.on('data', (chunk) => chunks.push(chunk));
@@ -2300,11 +2310,16 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           resolve(null);
         }
       });
-      proxyReq.setTimeout(60_000, () => {
+      proxyReq.setTimeout(120_000, () => {
+        console.warn(`[Qtiler2Hajk] thumbnail WMS fetch timed out after 120s for ${imageUrl}`);
         try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
       });
-      proxyReq.on('error', () => resolve(null));
-    } catch {
+      proxyReq.on('error', (err) => {
+        console.warn(`[Qtiler2Hajk] thumbnail WMS fetch error for ${imageUrl}: ${err?.message || err}`);
+        resolve(null);
+      });
+    } catch (err) {
+      console.warn(`[Qtiler2Hajk] thumbnail WMS fetch setup error for ${imageUrl}: ${err?.message || err}`);
       resolve(null);
     }
   });
@@ -7519,18 +7534,11 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
+      // Thumbnail regeneration is expensive (renders WMS) and must only run
+      // when the admin explicitly clicks "Regenerate thumbnail" — never
+      // automatically on every publish/save. Keep whatever thumbnail (if any)
+      // already exists on disk.
       const previousThumbMeta = await readPublishedThumbnailMeta(profileKey).catch(() => null);
-      const generatedThumbMeta = await regeneratePublishedThumbnail({
-        profileKey,
-        profile: payload,
-        baseUrl: syncBaseUrl,
-        cookieHeader: req.headers.cookie,
-        apiKey: getRequestApiKey(req),
-        authorization: req.get?.('authorization') || ''
-      }).catch((thumbErr) => {
-        console.warn('[Qtiler2Hajk] publish thumbnail warning:', thumbErr?.message || thumbErr);
-        return null;
-      });
       void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
         console.warn('[Qtiler2Hajk] publish runtime sync warning:', syncErr?.message || syncErr);
       });
@@ -7552,7 +7560,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         // Use the plugin-local Origo path for launching the map.
         launchUrl: `${base}/plugins/${pluginSlug}/hajk/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
-        thumbnailUrl: generatedThumbMeta?.url ? `${base}${generatedThumbMeta.url}` : (previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : '')
+        thumbnailUrl: previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : ''
       });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_failed', details: String(err?.message || err) });
