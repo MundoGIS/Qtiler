@@ -35,6 +35,14 @@ const LEGEND_SWATCH_SIZE = 24;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 const ALLOWED_PORTAL_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
+// Thumbnail generation calls this server's own /wms endpoint internally; use
+// the local loopback + real listening port instead of PUBLIC_BASE_URL so it
+// never depends on external DNS/IIS/reverse-proxy reachability.
+const INTERNAL_APP_PORT = (() => {
+  const parsed = Number.parseInt(String(process.env.PORT || '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 3000;
+})();
+const INTERNAL_APP_ORIGIN = `http://127.0.0.1:${INTERNAL_APP_PORT}`;
 const PREVIEW_STATE_TTL_MS = 10 * 60 * 1000;
 let previewStateStore = null;
 
@@ -2359,7 +2367,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               BBOX: bbox.join(','), WIDTH: '280', HEIGHT: '160',
               FORMAT: format, TRANSPARENT: transparent ? 'true' : 'false', project: targetProjectId
             });
-            return `${baseUrl}/wms?${wmsParams.toString()}`;
+            // Self-call: always hit the local loopback, never the externally
+            // advertised baseUrl (which may be an https DNS name behind a
+            // reverse proxy the server itself cannot reliably reach).
+            return `${INTERNAL_APP_ORIGIN}/wms?${wmsParams.toString()}`;
           };
 
           let backgroundBuffer = null;
@@ -7655,7 +7666,7 @@ ${mapIcon}
           upstreamParams.set('SYMBOLHEIGHT', '16');
         }
       }
-      const upstreamUrl = `${baseUrl}/wms?${upstreamParams.toString()}`;
+      const upstreamUrl = `${INTERNAL_APP_ORIGIN}/wms?${upstreamParams.toString()}`;
       const upstream = await fetchUpstreamWms(upstreamUrl, {
         cookieHeader: req.headers?.cookie,
         apiKey: req.headers?.['x-api-key'] || req.query?.api_key,
