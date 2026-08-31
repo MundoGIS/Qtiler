@@ -5381,9 +5381,11 @@ function refreshBackgroundOptions() {
 // Background image selection handlers
 defaultBackgroundList?.addEventListener('click', (ev) => {
   const btn = ev.target && ev.target.closest && ev.target.closest('[data-bg-choose], [data-bg-clear]');
+  console.debug('Q2O: defaultBackgroundList click', { target: ev.target, btn });
   if (!btn) return;
   const chooseKey = btn.getAttribute('data-bg-choose');
   const clearKey = btn.getAttribute('data-bg-clear');
+  console.debug('Q2O: found chooseKey/clearKey', { chooseKey, clearKey });
   if (chooseKey) {
     ev.preventDefault();
     chooseBackgroundImageForKey(chooseKey).catch((e) => addLog(t('Qtiler2Origo.log_error', { msg: e.message }), 'error'));
