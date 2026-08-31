@@ -263,6 +263,13 @@ const normalizeBackgroundSelection = ({
       isDefault: item.isDefault === true
     };
 
+    // Preserve a custom uploaded background image (must be one of our own
+    // served portal assets, never an arbitrary external URL).
+    const imageUrl = String(item.imageUrl || '').trim();
+    if (imageUrl && imageUrl.startsWith('/plugins/Qtiler2Origo/portal-assets/')) {
+      option.imageUrl = imageUrl;
+    }
+
     if (type === 'layer') {
       const sourceProjectId = normalizeProjectId(item.sourceProjectId || '');
       const name = String(item.name || '').trim();
@@ -2159,7 +2166,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           resolve(null);
         }
       });
-      proxyReq.setTimeout(60_000, () => {
+      proxyReq.setTimeout(120_000, () => {
         try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
       });
       proxyReq.on('error', () => resolve(null));
@@ -4479,9 +4486,10 @@ ${mapIcon}
         const layerNameSafe = (isThemeBackground ? `theme_${bgThemeName}` : bgName).replace(/\s+/g, '_');
         const displayTitle = String(bg.title || (isThemeBackground ? bgThemeName : bgName));
         const bgStyleName = `bg_thumb_${layerNameSafe}`;
-        const bgThumbUrl = srcProjId
+        const autoThumbUrl = srcProjId
           ? `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(wmsLayerName)}?project=${encodeURIComponent(srcProjId)}`
           : null;
+        const bgThumbUrl = bg.imageUrl ? `${baseUrl}${bg.imageUrl}` : autoThumbUrl;
         if (bgThumbUrl) origoStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
         // Use WMTS when tile grid is available, otherwise fall back to WMS
         if (bgTileGrid && srcProjId) {

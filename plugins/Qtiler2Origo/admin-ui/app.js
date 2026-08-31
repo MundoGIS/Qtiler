@@ -5417,7 +5417,12 @@ defaultBackgroundList?.addEventListener('click', (ev) => {
   }
   if (regenKey) {
     ev.preventDefault();
-    regenerateBackgroundThumbnail(regenKey).catch((e) => addLog(t('Qtiler2Origo.log_error', { msg: e.message }), 'error'));
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    btn.textContent = t('Qtiler2Origo.preflight_checking') || 'Checking...';
+    regenerateBackgroundThumbnail(regenKey)
+      .catch((e) => addLog(t('Qtiler2Origo.log_error', { msg: e.message }), 'error'))
+      .finally(() => { btn.disabled = false; btn.textContent = originalLabel; });
     return;
   }
 });
@@ -5425,9 +5430,17 @@ defaultBackgroundList?.addEventListener('click', (ev) => {
 async function regenerateBackgroundThumbnail(key) {
   const item = (publishState.backgroundOptions || []).find((i) => i && i.key === key);
   if (!item || item.type !== 'layer' || !item.sourceProjectId || !item.name) return;
-  const payload = await api(`/plugins/Qtiler2Origo/api/thumbnail/cache/${encodeURIComponent(item.sourceProjectId)}/layer/${encodeURIComponent(item.name)}`, { method: 'DELETE' });
+  // Use the full regenerate endpoint (clears cache + renders synchronously)
+  // instead of just clearing the cache, so the user gets immediate feedback
+  // and large background layers (e.g. aerial orthophotos) get enough time
+  // to render before the request resolves.
+  const payload = await api(`/plugins/Qtiler2Origo/api/thumbnail/regenerate/${encodeURIComponent(item.sourceProjectId)}/layer/${encodeURIComponent(item.name)}`, { method: 'POST' });
   item.thumbCacheBust = Date.now();
-  addLog(t('Qtiler2Origo.log_layer_thumb_regen', { layer: item.name }) || `Thumbnail recreated for "${item.name}".`, 'ok');
+  if (payload?.status === 'placeholder') {
+    addLog(t('Qtiler2Origo.log_error', { msg: `No thumbnail could be generated for "${item.name}".` }), 'error');
+  } else {
+    addLog(t('Qtiler2Origo.log_layer_thumb_regen', { layer: item.name }) || `Thumbnail recreated for "${item.name}".`, 'ok');
+  }
   renderDefaultBackgroundOptions();
   return payload;
 }
