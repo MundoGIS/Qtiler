@@ -5909,6 +5909,7 @@ ${mapIcon}
         return res.status(500).json({ error: 'portal_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
       }
     });
+  });
 
   // List available portal assets (images)
   app.get(`/plugins/${pluginSlug}/api/portal-assets`, portalEditorOnly, async (_req, res) => {
@@ -5935,7 +5936,6 @@ ${mapIcon}
     } catch (err) {
       res.status(500).json({ error: 'portal_assets_list_failed', details: String(err?.message || err) });
     }
-  });
   });
 
   app.delete(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {

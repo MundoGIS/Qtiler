@@ -1250,6 +1250,18 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   z-index: 2100;
 }
 
+.Qtiler2Origo-asset-modal.overlay {
+  /* Stay above the publish-editor overlay (z-index 1000); this modal is
+     created dynamically from JS and opens on top of the background picker. */
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+}
+
 .Qtiler2origo-modal-card {
   width: min(1200px, 98vw);
   height: 96vh;
