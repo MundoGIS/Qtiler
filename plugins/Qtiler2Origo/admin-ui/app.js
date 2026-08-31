@@ -7671,7 +7671,9 @@ publishNowBtn?.addEventListener('click', async () => {
     name: item.type === 'layer' ? item.name : null,
     isTheme: item.type === 'layer' ? item.isTheme === true : false,
     themeName: item.type === 'layer' ? item.themeName || null : null,
-    isDefault: item.key === publishState.defaultBackgroundKey
+    isDefault: item.key === publishState.defaultBackgroundKey,
+    // include custom image URL if the admin selected one
+    imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
   }));
   const layerRules = {};
   selectedLayers.forEach((layer) => {
@@ -10601,7 +10603,8 @@ function generateMapConfigJson() {
       name: item.type === 'layer' ? item.name : null,
       isTheme: item.type === 'layer' ? item.isTheme === true : false,
       themeName: item.type === 'layer' ? item.themeName || null : null,
-      isDefault: item.key === publishState.defaultBackgroundKey
+      isDefault: item.key === publishState.defaultBackgroundKey,
+      imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
     }));
 
     let controls = [];
