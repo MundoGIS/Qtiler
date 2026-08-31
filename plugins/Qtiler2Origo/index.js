@@ -6084,7 +6084,7 @@ ${mapIcon}
     }
   });
 
-  app.post(`/plugins/${pluginSlug}/api/publish`, adminOnly, async (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/publish`, adminOnly, express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const name = String(req.body?.name || '').trim();
       if (!name) {

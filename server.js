@@ -439,7 +439,10 @@ app.use(cors({
   credentials: CORS_ALLOW_CREDENTIALS,
   exposedHeaders: ['Content-Disposition', 'Retry-After']
 }));
-app.use(express.json());
+// Global default is generous because this runs before any per-route parser;
+// plugin routes that declare their own (larger) express.json() limit never
+// get a chance to apply it once this one has already rejected/parsed the body.
+app.use(express.json({ limit: '50mb' }));
 // WFS-T Transaction uses XML payloads; parse them as raw text.
 app.use(
   "/wfs",
