@@ -2942,6 +2942,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   border-radius: 6px;
   overflow: hidden;
   background: var(--line);
+  position: relative;
 }
 
 .published-item__preview img {
@@ -2949,6 +2950,25 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.published-item__preview img[src=""] {
+  display: none;
+}
+
+.published-item__preview .badge--warning {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 8px, #fde68a 8px, #fde68a 16px);
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 0;
+  padding: 0;
+  text-align: center;
 }
 
 .published-item__content {
