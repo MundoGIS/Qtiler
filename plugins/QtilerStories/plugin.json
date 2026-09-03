@@ -1,0 +1,45 @@
+{
+  "name": "QtilerStories",
+  "version": "0.1.0",
+  "displayName": "Qtiler Stories",
+  "description": "Build public story portals and map galleries that combine published maps from Qtiler2Origo, Qtiler2Hajk and Qtiler 3D Eye in one place.",
+  "docs": {
+    "en": {
+      "description": "Standalone portal/CMS plugin for Qtiler. Qtiler Stories lets you design public-facing landing pages, map galleries and story pages that embed or link maps published through any Qtiler viewer plugin (Origo, Hajk or 3D Eye), with per-page visibility rules, GDPR banner and custom branding.",
+      "readme": [
+        "Create editorial pages with hero sections, rich text, cards, social links and map collections — no coding required.",
+        "Mix maps from Qtiler2Origo, Qtiler2Hajk and Qtiler 3D Eye in the same page or gallery; each map keeps its own thumbnail, title, description and launch link.",
+        "Control who sees each page and each block: public, authenticated users, or specific users and roles via QtilerAuth.",
+        "Brand the portal with your logo, colors, header font, footer links and a configurable GDPR cookie banner.",
+        "Export and import the full portal configuration (pages + site identity + GDPR) as a JSON backup, or restore it on another Qtiler instance.",
+        "Open source under MPL-2.0. No runtime telemetry; all data stays in your Qtiler data folder."
+      ]
+    },
+    "es": {
+      "description": "Plugin independiente de portal/CMS para Qtiler. Qtiler Stories te permite diseñar páginas públicas de aterrizaje, galerías de mapas y páginas de historias que incrustan o enlazan mapas publicados con cualquier plugin visor de Qtiler (Origo, Hajk o 3D Eye), con reglas de visibilidad por página, banner GDPR y branding personalizado.",
+      "readme": [
+        "Crea páginas editoriales con secciones hero, texto enriquecido, tarjetas, enlaces sociales y colecciones de mapas — sin programar.",
+        "Combina mapas de Qtiler2Origo, Qtiler2Hajk y Qtiler 3D Eye en la misma página o galería; cada mapa conserva su miniatura, título, descripción y enlace de apertura.",
+        "Controla quién ve cada página y cada bloque: público, usuarios autenticados o usuarios y roles concretos vía QtilerAuth.",
+        "Personaliza el portal con tu logo, colores, fuente de cabecera, enlaces de pie de página y un banner de cookies GDPR configurable.",
+        "Exporta e importa toda la configuración del portal (páginas + identidad del sitio + GDPR) como copia de seguridad JSON, o restáurala en otra instancia de Qtiler.",
+        "Software libre bajo MPL-2.0. Sin telemetría en tiempo de ejecución; todos los datos permanecen en tu carpeta de datos de Qtiler."
+      ]
+    },
+    "sv": {
+      "description": "Fristående portal/CMS-plugin för Qtiler. Qtiler Stories låter dig designa publika landningssidor, kartgallerier och berättelsesidor som bäddar in eller länkar kartor publicerade via valfri Qtiler-visare (Origo, Hajk eller 3D Eye), med synlighetsregler per sida, GDPR-banner och egen varumärkesprofil.",
+      "readme": [
+        "Skapa redaktionella sidor med hero-sektioner, rik text, kort, sociallänkar och kartkollektioner — utan att koda.",
+        "Blanda kartor från Qtiler2Origo, Qtiler2Hajk och Qtiler 3D Eye på samma sida eller galleri; varje karta behåller sin egen miniatyr, titel, beskrivning och öppningslänk.",
+        "Styr vem som ser varje sida och varje block: publikt, autentiserade användare eller specifika användare och roller via QtilerAuth.",
+        "Profilera portalen med din logotyp, färger, rubriktypsnitt, sidfotlänkar och en konfigurerbar GDPR-cookiebanner.",
+        "Exportera och importera hela portalkonfigurationen (sidor + webbplatsidentitet + GDPR) som en JSON-säkerhetskopia, eller återställ den på en annan Qtiler-instans.",
+        "Öppen källkod under MPL-2.0. Ingen telemetri vid körning; all data stannar i din Qtiler-datakatalog."
+      ]
+    }
+  },
+  "autoEnable": false,
+  "license": "MPL-2.0",
+  "licenseFile": "LICENSE",
+  "supportContact": "support@mundogis.se"
+}

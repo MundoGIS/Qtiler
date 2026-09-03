@@ -1,9 +1,10 @@
-{
-  "enabled": [
-    "Qtiler2qwc",
-    "Qrigo",
-    "Qtiler2Hajk",
-    "Qtiler-3D-eye",
-    "Qtiler2Origo"
-  ]
+﻿{
+    "enabled":  [
+                    "Qtiler2qwc",
+                    "Qrigo",
+                    "Qtiler2Hajk",
+                    "Qtiler-3D-eye",
+                    "Qtiler2Origo",
+                    "QtilerStories"
+                ]
 }
