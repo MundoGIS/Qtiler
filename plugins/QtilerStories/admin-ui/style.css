@@ -610,6 +610,91 @@ body.admin-editor-detached--portal #pPanelPreview .portal-preview-host {
   color: var(--muted);
 }
 
+.portal-empty-state__icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.portal-empty-state h3 {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font-family: "Fraunces", Georgia, serif;
+}
+
+.portal-empty-state p {
+  max-width: 560px;
+  margin: 0 auto 0.5rem;
+  line-height: 1.6;
+}
+
+/* ── Portal toolbar with per-action hints ── */
+.portal-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 16px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.portal-toolbar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.portal-toolbar__hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+  margin: 0;
+}
+
+/* ── Panel intro text (explains what each tab is for) ── */
+.panel-intro {
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0 0 1rem;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ── Site Identity: two clear columns ── */
+.portal-identity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.portal-identity-col {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: #fff;
+}
+
+.portal-identity-col__title {
+  margin: 0 0 0.75rem;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.1rem;
+  color: var(--ink);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .portal-identity-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .portal-template-bar {
   display: flex;
   align-items: center;

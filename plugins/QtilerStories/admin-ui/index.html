@@ -80,16 +80,45 @@
       <div class="tab-panel tab-panel--active" data-panel="portal">
         <section id="portalSection" class="card">
           <div class="card-header-row">
-            <h2 data-i18n="QtilerStories.portal_section">Portal pages</h2>
-            <span id="portalPagesBadge" class="badge badge--muted">0</span>
-            <span id="portalDirtyBadge" class="badge badge--warning" hidden data-i18n="QtilerStories.page_unsaved_hint">Unsaved changes</span>
+            <div>
+              <h2 data-i18n="QtilerStories.portal_section">Portal pages</h2>
+              <p class="help" data-i18n="QtilerStories.portal_desc">Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.</p>
+            </div>
+            <div class="card-header-row__badges">
+              <span id="portalPagesBadge" class="badge badge--muted">0</span>
+              <span id="portalDirtyBadge" class="badge badge--warning" hidden data-i18n="QtilerStories.page_unsaved_hint">Unsaved changes</span>
+            </div>
           </div>
-          <p class="help" data-i18n="QtilerStories.portal_desc">Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.</p>
-          <div class="actions">
-            <button id="portalAddPageBtn" class="button primary" type="button" data-i18n="QtilerStories.portal_add_page">New page</button>
-            <button id="portalDuplicatePageBtn" class="button" type="button" data-i18n="QtilerStories.portal_duplicate_page">Duplicate page</button>
-            <button id="portalToggleFullscreenBtn" class="button" type="button" data-i18n="QtilerStories.portal_fullscreen">Fullscreen editor</button>
-            <a id="portalOpenPageBtn" class="button ghost is-disabled" href="/QtilerStories/maps" target="_blank" rel="noreferrer" data-i18n="QtilerStories.portal_open_page">Open page</a>
+
+          <div class="portal-toolbar">
+            <div class="portal-toolbar__group">
+              <button id="portalAddPageBtn" class="button primary" type="button">
+                <span class="icon">＋</span>
+                <span data-i18n="QtilerStories.portal_add_page">New page</span>
+              </button>
+              <p class="help portal-toolbar__hint" data-i18n="QtilerStories.portal_add_page_hint">Creates a blank page with a hero section you can customize.</p>
+            </div>
+            <div class="portal-toolbar__group">
+              <button id="portalDuplicatePageBtn" class="button is-light" type="button">
+                <span class="icon">⧉</span>
+                <span data-i18n="QtilerStories.portal_duplicate_page">Duplicate</span>
+              </button>
+              <p class="help portal-toolbar__hint" data-i18n="QtilerStories.portal_duplicate_page_hint">Copies the currently selected page including all its sections and settings.</p>
+            </div>
+            <div class="portal-toolbar__group">
+              <button id="portalToggleFullscreenBtn" class="button is-light" type="button">
+                <span class="icon">⛶</span>
+                <span data-i18n="QtilerStories.portal_fullscreen">Fullscreen</span>
+              </button>
+              <p class="help portal-toolbar__hint" data-i18n="QtilerStories.portal_fullscreen_hint">Expands the editor to fill the window. Press Esc to exit.</p>
+            </div>
+            <div class="portal-toolbar__group">
+              <a id="portalOpenPageBtn" class="button is-link" href="/QtilerStories/maps" target="_blank" rel="noreferrer">
+                <span class="icon">↗</span>
+                <span data-i18n="QtilerStories.portal_open_page">Open page</span>
+              </a>
+              <p class="help portal-toolbar__hint" data-i18n="QtilerStories.portal_open_page_hint">Opens the currently selected page in the public portal. Select a page in the list first.</p>
+            </div>
           </div>
 
           <details class="portal-backup-panel">
@@ -134,15 +163,20 @@
               </aside>
 
               <section class="portal-editor__workspace">
-                <div id="portalPageEmpty" class="portal-editor__empty" data-i18n="QtilerStories.portal_empty">
-                  Create the first page to turn the maps portal into an editorial landing page.
+                <div id="portalPageEmpty" class="portal-editor__empty">
+                  <div class="portal-empty-state">
+                    <div class="portal-empty-state__icon">🗺️</div>
+                    <h3>No pages yet</h3>
+                    <p>Pages are the building blocks of your public portal. Each page is a URL visitors can open, built from sections: heroes, rich text, map galleries and cards.</p>
+                    <p class="help">Click <strong>＋ New page</strong> above to create your first story page, then add sections in the Content tab, configure its URL and visibility in Page Settings, and preview it live in the Preview tab.</p>
+                  </div>
                 </div>
 
                 <div id="portalPageEditor" hidden>
                   <div class="portal-template-bar" style="margin-bottom:1rem;">
                     <div>
                       <strong data-i18n="QtilerStories.portal_templates">Page Templates</strong>
-                      <p class="help" data-i18n="QtilerStories.portal_templates_help">Start from a polished layout and adapt.</p>
+                      <p class="help">Start from a ready-made layout instead of an empty page. <strong>Story landing</strong>: hero + text + maps. <strong>Newsroom</strong>: hero + news cards + featured maps. <strong>Campaign</strong>: hero with call-to-action + text + featured maps. You can edit everything afterwards.</p>
                     </div>
                     <div class="portal-template-bar__controls">
                       <div class="select is-small">
@@ -171,7 +205,7 @@
                     <div class="portal-blocks-head">
                       <div>
                         <h3 data-i18n="QtilerStories.portal_blocks">Story Sections</h3>
-                        <p class="help" data-i18n="QtilerStories.portal_blocks_help">Combine hero, text, maps and news sections.</p>
+                        <p class="help">Sections are the building blocks of the page, rendered top to bottom. <strong>Hero</strong>: big banner with title, subtitle and optional call-to-action. <strong>Text</strong>: rich text with optional image beside or above it. <strong>Maps</strong>: gallery of published maps (cards, embedded or links). <strong>Cards</strong>: grid of small info cards with title, text and link. <strong>Social</strong>: row of links with icons. Each section can have its own visibility rule.</p>
                       </div>
                       <div class="portal-blocks-actions">
                         <button id="portalAddBlockBtn" class="button small info" type="button" data-i18n="QtilerStories.portal_add_block">Add Section</button>
@@ -182,46 +216,58 @@
 
                   <!-- PAGE TAB 2: Settings -->
                   <div id="pPanelSettings" class="page-portal-panel" style="display:none;">
+                    <p class="panel-intro">Name and route of this page. The title appears in the browser tab and the page header; the slug becomes the public URL.</p>
                     <div class="portal-meta-grid card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px; margin-bottom:1rem;">
                       <div class="field">
-                        <label class="label" for="portalPageTitle" data-i18n="QtilerStories.portal_page_title">Page title</label>
+                        <label class="label" for="portalPageTitle">Page title</label>
                         <div class="control"><input id="portalPageTitle" class="input" type="text" maxlength="120" /></div>
+                        <p class="help">Shown as the page heading and in the browser tab.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageSlug" data-i18n="QtilerStories.portal_page_slug">Slug (URL path)</label>
+                        <label class="label" for="portalPageSlug">Slug (URL path)</label>
                         <div class="control"><input id="portalPageSlug" class="input" type="text" maxlength="120" placeholder="about-us" /></div>
+                        <p class="help">Public URL: <code>/QtilerStories/portal/&lt;slug&gt;</code>. Lowercase letters, numbers and hyphens only.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageNavLabel" data-i18n="QtilerStories.portal_page_nav">Navigation label</label>
+                        <label class="label" for="portalPageNavLabel">Navigation label</label>
                         <div class="control"><input id="portalPageNavLabel" class="input" type="text" maxlength="80" /></div>
+                        <p class="help">Short text shown in the portal menu. Defaults to the page title if empty.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageSummary" data-i18n="QtilerStories.portal_page_summary">Short summary</label>
+                        <label class="label" for="portalPageSummary">Short summary</label>
                         <div class="control"><input id="portalPageSummary" class="input" type="text" maxlength="180" /></div>
+                        <p class="help">One-line description shown under the page title in the portal header.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageHeaderLogoUrl" data-i18n="QtilerStories.portal_header_logo">Header logo URL</label>
+                        <label class="label" for="portalPageHeaderLogoUrl">Header logo URL</label>
                         <div class="control"><input id="portalPageHeaderLogoUrl" class="input" type="text" maxlength="400" placeholder="/plugins/QtilerStories/public/branding/logo" /></div>
+                        <p class="help">Overrides the global portal logo on this page only.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageHeaderHeight" data-i18n="QtilerStories.portal_header_height">Header height (px)</label>
+                        <label class="label" for="portalPageHeaderHeight">Header height (px)</label>
                         <div class="control"><input id="portalPageHeaderHeight" class="input" type="number" min="0" max="320" step="4" /></div>
+                        <p class="help">Height of the colored banner at the top of this page (default 120 px).</p>
                       </div>
                     </div>
 
+                    <p class="panel-intro">Navigation and homepage behavior for this page.</p>
                     <div class="field portal-meta-grid__checks card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
-                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageShowInNav" type="checkbox" checked /> <span data-i18n="QtilerStories.portal_show_in_nav">Show in navigation menu</span></label>
-                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageIsHome" type="checkbox" /> <span data-i18n="QtilerStories.portal_set_home">Use as default portal homepage</span></label>
-                      <label class="checkbox" style="display:block;"><input id="portalPageShowHeader" type="checkbox" checked /> <span data-i18n="QtilerStories.portal_show_header">Show navigation header</span></label>
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageShowInNav" type="checkbox" checked /> <span>Show in navigation menu</span></label>
+                      <p class="help" style="margin:0 0 0.75rem 1.4rem">Uncheck to hide this page from the portal menu (still reachable by direct link).</p>
+                      <label class="checkbox" style="display:block; margin-bottom:0.5rem;"><input id="portalPageIsHome" type="checkbox" /> <span>Use as default portal homepage</span></label>
+                      <p class="help" style="margin:0 0 0.75rem 1.4rem">Visitors opening the portal root land on this page instead of the map gallery.</p>
+                      <label class="checkbox" style="display:block;"><input id="portalPageShowHeader" type="checkbox" checked /> <span>Show navigation header</span></label>
+                      <p class="help" style="margin:0 0 0 1.4rem">Uncheck for a clean, header-less page (e.g. for embedding in another site).</p>
                     </div>
                   </div>
 
                   <!-- PAGE TAB 3: Security -->
                   <div id="pPanelSecurity" class="page-portal-panel" style="display:none;">
+                    <p class="panel-intro">Control who can see this page in the public portal. Blocks inside the page can have their own visibility rules that inherit from here.</p>
                     <p id="portalAuthWarning" class="notification is-warning is-light" style="margin-bottom:1rem" hidden></p>
                     <div class="portal-meta-grid portal-meta-grid--audience card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
                       <div class="field">
-                        <label class="label" for="portalPageVisibility" data-i18n="QtilerStories.portal_visibility">Page visibility</label>
+                        <label class="label" for="portalPageVisibility">Page visibility</label>
                         <div class="control">
                           <div class="select is-fullwidth">
                             <select id="portalPageVisibility">
@@ -231,17 +277,20 @@
                             </select>
                           </div>
                         </div>
+                        <p class="help">Public = anyone with the link. Authenticated = any logged-in user. Restricted = only the users or roles listed below.</p>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageUsers" data-i18n="QtilerStories.portal_users">Allowed users</label>
+                        <label class="label" for="portalPageUsers">Allowed users</label>
                         <div class="control"><input id="portalPageUsers" class="input" type="text" placeholder="anna, diego" /></div>
+                        <p class="help">Comma-separated usernames, or pick from the list below.</p>
                         <div class="control">
                           <select id="portalPageUsersCatalog" class="input portal-multiselect" multiple size="6"></select>
                         </div>
                       </div>
                       <div class="field">
-                        <label class="label" for="portalPageRoles" data-i18n="QtilerStories.portal_roles">Allowed roles</label>
+                        <label class="label" for="portalPageRoles">Allowed roles</label>
                         <div class="control"><input id="portalPageRoles" class="input" type="text" placeholder="editor, customer" /></div>
+                        <p class="help">Comma-separated role names, or pick from the list below.</p>
                         <div class="control">
                           <select id="portalPageRolesCatalog" class="input portal-multiselect" multiple size="4"></select>
                         </div>
@@ -251,6 +300,7 @@
 
                   <!-- PAGE TAB 4: Preview -->
                   <div id="pPanelPreview" class="page-portal-panel" style="display:none;">
+                    <p class="panel-intro">Live preview of the current page. Uses your real content and the portal branding. Open the page in a new tab to see it exactly as visitors will.</p>
                     <div class="portal-preview-card">
                       <div class="card-header-row">
                         <h3 data-i18n="QtilerStories.portal_preview">Live Preview</h3>
@@ -273,77 +323,101 @@
 
           <!-- GLOBAL TAB 2: Site Identity -->
           <div id="gPanelIdentity" class="global-portal-panel" style="display:none; padding:1.5rem;">
-            <h3 style="margin-bottom:1rem;">Global Site Identity</h3>
-            <p class="help" style="margin-bottom:1rem;">These fields change the public header next to the login button on the maps portal.</p>
-            <div class="portal-meta-grid">
-              <div class="field">
-                <label class="label">Portal header title</label>
-                <div class="control"><input id="portalSiteTitle" class="input" type="text" maxlength="80" placeholder="Kartportal" /></div>
-              </div>
-              <div class="field">
-                <label class="label">Portal header subtitle</label>
-                <div class="control"><input id="portalSiteSubtitle" class="input" type="text" maxlength="200" placeholder="Interactive maps published via Qtiler" /></div>
-              </div>
-              <div class="field">
-                <label class="label">Portal logo URL</label>
-                <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="Leave empty to use uploaded branding logo" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_height">Header height</label>
-                <div class="control"><input id="portalSiteHeaderHeight" class="input" type="number" min="72" max="360" step="4" placeholder="120" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_font">Header font</label>
-                <div class="control">
-                  <div class="select is-fullwidth">
-                    <select id="portalSiteHeaderFont">
-                      <option value="fraunces">Fraunces</option>
-                      <option value="manrope">Manrope</option>
-                      <option value="serif">Georgia serif</option>
-                      <option value="sans">Segoe UI sans</option>
-                    </select>
+            <p class="panel-intro">Branding for the public portal: the colored header banner and the footer shown on every page. Changes apply immediately after saving.</p>
+            <div class="portal-identity-grid">
+              <div class="portal-identity-col">
+                <h4 class="portal-identity-col__title">Header</h4>
+                <div class="portal-meta-grid">
+                  <div class="field">
+                    <label class="label">Portal header title</label>
+                    <div class="control"><input id="portalSiteTitle" class="input" type="text" maxlength="80" placeholder="Map portal" /></div>
+                    <p class="help">Main heading in the colored banner at the top of the portal.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label">Portal header subtitle</label>
+                    <div class="control"><input id="portalSiteSubtitle" class="input" type="text" maxlength="200" placeholder="Interactive maps published via Qtiler" /></div>
+                    <p class="help">Short tagline shown under the title.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label">Portal logo URL</label>
+                    <div class="control"><input id="portalSiteLogoUrl" class="input" type="text" maxlength="500" placeholder="Leave empty to use the default Qtiler logo" /></div>
+                    <p class="help">Logo shown in the header. Leave empty to use the default.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_height">Header height</label>
+                    <div class="control"><input id="portalSiteHeaderHeight" class="input" type="number" min="72" max="360" step="4" placeholder="120" /></div>
+                    <p class="help">Height of the banner in pixels (default 120).</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_font">Header font</label>
+                    <div class="control">
+                      <div class="select is-fullwidth">
+                        <select id="portalSiteHeaderFont">
+                          <option value="fraunces">Fraunces (elegant serif)</option>
+                          <option value="manrope">Manrope (modern sans)</option>
+                          <option value="serif">Georgia serif</option>
+                          <option value="sans">Segoe UI sans</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p class="help">Typeface used for the portal title in the header.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_color1">Header color 1</label>
+                    <div class="control"><input id="portalSiteHeaderColor1" class="input" type="color" value="#0f766e" /></div>
+                    <p class="help">Left color of the header gradient.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_color2">Header color 2</label>
+                    <div class="control"><input id="portalSiteHeaderColor2" class="input" type="color" value="#2563eb" /></div>
+                    <p class="help">Right color of the header gradient.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_text_color">Header text color</label>
+                    <div class="control"><input id="portalSiteHeaderTextColor" class="input" type="color" value="#ffffff" /></div>
+                    <p class="help">Color of the title and subtitle text over the banner.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_header_background_url">Header background image URL</label>
+                    <div class="control"><input id="portalSiteHeaderBackgroundUrl" class="input" type="text" maxlength="500" placeholder="https://... or /plugins/QtilerStories/..." /></div>
+                    <p class="help">Optional image behind the gradient (darkened so text stays readable).</p>
                   </div>
                 </div>
               </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_color1">Header color 1</label>
-                <div class="control"><input id="portalSiteHeaderColor1" class="input" type="color" value="#0f766e" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_color2">Header color 2</label>
-                <div class="control"><input id="portalSiteHeaderColor2" class="input" type="color" value="#2563eb" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_text_color">Header text color</label>
-                <div class="control"><input id="portalSiteHeaderTextColor" class="input" type="color" value="#ffffff" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_header_background_url">Header background image URL</label>
-                <div class="control"><input id="portalSiteHeaderBackgroundUrl" class="input" type="text" maxlength="500" placeholder="https://... or /plugins/QtilerStories/..." /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_text">Footer text</label>
-                <div class="control"><input id="portalSiteFooterText" class="input" type="text" maxlength="200" placeholder="© {year} Qtiler · MundoGIS" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_link_label">Footer link label</label>
-                <div class="control"><input id="portalSiteFooterLinkLabel" class="input" type="text" maxlength="80" placeholder="Qtiler" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_link_url">Footer link URL</label>
-                <div class="control"><input id="portalSiteFooterLink" class="input" type="text" maxlength="500" placeholder="https://mundogis.se" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_background_color">Footer background color</label>
-                <div class="control"><input id="portalSiteFooterBackgroundColor" class="input" type="color" value="#1f2933" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_text_color">Footer text color</label>
-                <div class="control"><input id="portalSiteFooterTextColor" class="input" type="color" value="#cbd5e1" /></div>
-              </div>
-              <div class="field">
-                <label class="label" data-i18n="QtilerStories.portal_site_footer_link_color">Footer link color</label>
-                <div class="control"><input id="portalSiteFooterLinkColor" class="input" type="color" value="#93c5fd" /></div>
+              <div class="portal-identity-col">
+                <h4 class="portal-identity-col__title">Footer</h4>
+                <div class="portal-meta-grid">
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_text">Footer text</label>
+                    <div class="control"><input id="portalSiteFooterText" class="input" type="text" maxlength="200" placeholder="© {year} Your organization" /></div>
+                    <p class="help">Text on the left of the footer. <code>{year}</code> is replaced with the current year.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_link_label">Footer link label</label>
+                    <div class="control"><input id="portalSiteFooterLinkLabel" class="input" type="text" maxlength="80" placeholder="Your website" /></div>
+                    <p class="help">Text of the link on the right of the footer.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_link_url">Footer link URL</label>
+                    <div class="control"><input id="portalSiteFooterLink" class="input" type="text" maxlength="500" placeholder="https://example.com" /></div>
+                    <p class="help">Destination of the footer link.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_background_color">Footer background color</label>
+                    <div class="control"><input id="portalSiteFooterBackgroundColor" class="input" type="color" value="#1f2933" /></div>
+                    <p class="help">Background color of the footer bar.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_text_color">Footer text color</label>
+                    <div class="control"><input id="portalSiteFooterTextColor" class="input" type="color" value="#cbd5e1" /></div>
+                    <p class="help">Color of the footer text.</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" data-i18n="QtilerStories.portal_site_footer_link_color">Footer link color</label>
+                    <div class="control"><input id="portalSiteFooterLinkColor" class="input" type="color" value="#93c5fd" /></div>
+                    <p class="help">Color of the footer link text.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
