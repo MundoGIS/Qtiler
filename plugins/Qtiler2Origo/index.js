@@ -820,6 +820,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const portalAssetsRoot = path.join(runtimeRoot, 'portal-assets');
   const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
   const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
+  const draftsRoot = path.join(runtimeRoot, 'drafts');
   const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
@@ -847,6 +848,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
   await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
   await fs.promises.mkdir(thumbCacheDir, { recursive: true });
+  await fs.promises.mkdir(draftsRoot, { recursive: true });
 
   // WFS DescribeFeatureType cache (in-memory with optional on-disk backup)
   const wfsMetaCache = new Map(); // key -> { meta, updatedAt }
@@ -1493,9 +1495,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       projects
     };
   };
-
-  // Standalone server support removed — no-op placeholders kept for compatibility
-  const stopStandaloneServer = async () => { /* removed */ };
 
   const nodeUrl = await import('url');
 
@@ -3480,11 +3479,6 @@ ${mapIcon}
 <p>There are no published maps at this time.</p>
 </div></body></html>`;
   };
-
-  // startStandaloneServer removed — QWC2 served from same-origin under /Qtiler2Origo/webmap
-  const startStandaloneServer = async (_port) => { return { port: null }; };
-
-  const maybeAutoStartStandalone = async () => { /* removed */ };
 
   app.use(`/plugins/${pluginSlug}/admin-ui`, (req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -5925,6 +5919,12 @@ ${mapIcon}
     const installed = await hasQwc2Install();
     const branding = await getBrandingStatus();
     const authCatalog = readAuthCatalog();
+    // Lantmäteriet runs in DEMO/MOCK mode when no API key is configured;
+    // surface that to the admin UI so the Search control isn't enabled
+    // blindly against fake data.
+    const lantmateriDemo = !(process.env.LANTMATERI_API_KEY
+      || process.env.LANTMATERI_FASTIGHET_API_KEY
+      || process.env.LANTMATERI_CLIENT_ID);
     res.json({
       plugin: pluginSlug,
       installed,
@@ -5935,6 +5935,7 @@ ${mapIcon}
       installedAt: state.installedAt,
       lastSyncAt: state.lastSyncAt,
       lastError: state.lastError,
+      lantmateriDemo,
       branding,
       authCatalog,
       origoUrl: installed ? `/plugins/${pluginSlug}/origo` : null,
@@ -6334,7 +6335,35 @@ ${mapIcon}
         });
       }
       if (req.body?.dryRun === true) {
-        return res.json({ ok: true, dryRun: true, issues: [] });
+        // Real preflight: verify project files exist on disk, the cache index
+        // is generated (needed for extents/CRS), and report which layers are
+        // missing from it so the admin knows what would render blank.
+        const checks = [];
+        const projects = await listProjectsFromDisk(projectsDir).catch(() => []);
+        const byProject = new Map();
+        for (const entry of layerEntries) {
+          const pid = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
+          if (!byProject.has(pid)) byProject.set(pid, []);
+          byProject.get(pid).push(String(entry?.name || '').trim());
+        }
+        for (const [pid, names] of byProject.entries()) {
+          const proj = projects.find((p) => String(p.id) === pid);
+          if (!proj) {
+            checks.push({ severity: 'error', code: 'project_not_found', message: `Project "${pid}" was not found on disk.`, projectId: pid });
+            continue;
+          }
+          const cacheIndex = await readCacheIndex(pid).catch(() => null);
+          if (!cacheIndex || !Array.isArray(cacheIndex.layers) || !cacheIndex.layers.length) {
+            checks.push({ severity: 'warning', code: 'cache_index_missing', message: `Project "${pid}" has no generated cache index. Run project cache generation so extents, CRS and thumbnails work.`, projectId: pid });
+            continue;
+          }
+          const cachedNames = new Set(cacheIndex.layers.map((l) => String(l?.name || l?.layer || '').trim()).filter(Boolean));
+          const missing = names.filter((n) => n && !cachedNames.has(n));
+          if (missing.length) {
+            checks.push({ severity: 'warning', code: 'layers_not_in_cache', message: `Layers missing from the cache index of "${pid}": ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` (+${missing.length - 5} more)` : ''}`, projectId: pid });
+          }
+        }
+        return res.json({ ok: !checks.some((c) => c.severity === 'error'), dryRun: true, issues: [], checks });
       }
       const projectLayerFlagsByProject = new Map();
       for (const entry of layerEntries) {
@@ -7454,6 +7483,102 @@ ${mapIcon}
     }
   });
 
+  // Report which published profiles/layers reference a given legend icon, so
+  // the admin UI can warn before deleting an icon that is in use anywhere
+  // (not just the currently open draft).
+  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = String(req.params?.id || '').trim();
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const items = await listLegendLibraryItems();
+      const item = items.find((it) => String(it.id) === id);
+      if (!item) return res.status(404).json({ error: 'not_found' });
+      const stripStamp = (url) => String(url || '').split('?')[0];
+      const itemUrlBase = stripStamp(item.url);
+      const profiles = await readAllPublishedProfiles();
+      const usage = [];
+      for (const profile of profiles) {
+        const layers = [];
+        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
+          if (ref && ref === itemUrlBase) {
+            layers.push(String(layer?.title || layer?.name || '').trim());
+          }
+        }
+        if (layers.length) {
+          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
+        }
+      }
+      res.json({ id, name: item.name, usage });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Drafts: save/restore in-progress publish editor state server-side so it
+  // survives browser restarts and works across machines.
+  app.get(`/plugins/${pluginSlug}/api/drafts`, portalEditorOnly, async (_req, res) => {
+    try {
+      const entries = await fs.promises.readdir(draftsRoot).catch(() => []);
+      const drafts = [];
+      for (const fileName of entries) {
+        if (!fileName.toLowerCase().endsWith('.json')) continue;
+        try {
+          const raw = await fs.promises.readFile(path.join(draftsRoot, fileName), 'utf8');
+          const parsed = JSON.parse(raw || '{}');
+          drafts.push({
+            id: fileName.replace(/\.json$/i, ''),
+            name: String(parsed?.name || '').trim(),
+            projectId: String(parsed?.projectId || '').trim(),
+            savedAt: String(parsed?.savedAt || '').trim()
+          });
+        } catch { /* skip malformed */ }
+      }
+      drafts.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+      res.json({ drafts });
+    } catch (err) {
+      res.status(500).json({ error: 'drafts_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const raw = await fs.promises.readFile(path.join(draftsRoot, `${id}.json`), 'utf8');
+      res.type('application/json');
+      return res.send(raw);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return res.status(404).json({ error: 'draft_not_found' });
+      res.status(500).json({ error: 'draft_read_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const payload = (req.body && typeof req.body === 'object') ? req.body : {};
+      payload.savedAt = nowIso();
+      await fs.promises.mkdir(draftsRoot, { recursive: true });
+      await fs.promises.writeFile(path.join(draftsRoot, `${id}.json`), JSON.stringify(payload, null, 2), 'utf8');
+      res.json({ status: 'saved', id, savedAt: payload.savedAt });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      await fs.promises.rm(path.join(draftsRoot, `${id}.json`), { force: true });
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
   app.post(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, (req, res) => {
     legendLibraryUpload.single('image')(req, res, async (err) => {
       if (err) {
@@ -8473,8 +8598,11 @@ ${mapIcon}
       res.json({ results: fulltextResults, result_counts: counts });
     } catch(err) { console.error('XERR', err);
       console.error('/Qtiler2Origo/search API Error:', err);
+      // Surface failures so the client can tell "no results" apart from
+      // "search backend broken" (previously both returned empty arrays).
+      res.status(500);
       if (req.query.origo || req._forceOrigo) return res.json([]);
-      res.json({ results: [], result_counts: [] });
+      res.json({ results: [], result_counts: [], error: 'search_failed', details: String(err?.message || err) });
     }
   };
   app.get('/Qtiler2Origo/search', searchHandler);
