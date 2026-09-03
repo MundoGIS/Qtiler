@@ -848,6 +848,34 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
   await fs.promises.mkdir(thumbCacheDir, { recursive: true });
 
+  // WFS DescribeFeatureType cache (in-memory with optional on-disk backup)
+  const wfsMetaCache = new Map(); // key -> { meta, updatedAt }
+  const wfsMetaCachePath = path.join(runtimeRoot, 'wfs-meta-cache.json');
+  try {
+    const raw = await fs.promises.readFile(wfsMetaCachePath, 'utf8').catch(() => '{}');
+    const parsed = JSON.parse(raw || '{}');
+    for (const [k, v] of Object.entries(parsed || {})) {
+      if (v && v.meta) wfsMetaCache.set(k, { meta: v.meta, updatedAt: Number(v.updatedAt) || Date.now() });
+    }
+  } catch {
+    /* ignore cache load errors */
+  }
+
+  // Origo config/themes/index caches (in-memory). Invalidate on publish/delete.
+  const origoConfigCache = new Map(); // key -> serialized config
+  const origoThemesCache = new Map(); // key -> serialized themes
+  const origoIndexCache = new Map(); // key -> serialized index
+  const clearOrigoCaches = (profileKey) => {
+    if (!profileKey) {
+      origoConfigCache.clear(); origoThemesCache.clear(); origoIndexCache.clear();
+      return;
+    }
+    // remove entries that mention the profileKey
+    for (const k of Array.from(origoConfigCache.keys())) if (k.includes(profileKey)) origoConfigCache.delete(k);
+    for (const k of Array.from(origoThemesCache.keys())) if (k.includes(profileKey)) origoThemesCache.delete(k);
+    for (const k of Array.from(origoIndexCache.keys())) if (k.includes(profileKey)) origoIndexCache.delete(k);
+  };
+
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
     const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
     if (!normalizedBaseUrl) return input;
@@ -3516,6 +3544,16 @@ ${mapIcon}
   // the admin UI and local links always receive runtime-built configs.
   app.get(`/plugins/${pluginSlug}/origo/config.json`, async (req, res) => {
     try {
+      // Try in-memory cache first
+      try {
+        const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
+        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
+        const cacheKey = `config|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
+        const cached = origoConfigCache.get(cacheKey);
+        if (cached) {
+          try { return res.json(JSON.parse(cached)); } catch { /* fall through to rebuild */ }
+        }
+      } catch (_) {}
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
       const allProfiles = await readAllPublishedProfiles();
       const accessible = filterProfilesByAccess(allProfiles, req.user);
@@ -3583,6 +3621,12 @@ ${mapIcon}
       }
       config.backgroundLayers = [];
       config.defaultBackgroundLayers = [];
+      try {
+        const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
+        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
+        const cacheKey = `config|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
+        origoConfigCache.set(cacheKey, JSON.stringify(config));
+      } catch (_) {}
       return res.json(config);
     } catch (e) {
       // fallback to on-disk sanitized config
@@ -3631,6 +3675,15 @@ ${mapIcon}
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
+      // Try in-memory cache first
+      try {
+        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
+        const cacheKey = `themes|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
+        const cached = origoThemesCache.get(cacheKey);
+        if (cached) {
+          try { return res.json(JSON.parse(cached)); } catch { /* fall through */ }
+        }
+      } catch (_) {}
       const allProfiles = await readAllPublishedProfiles();
       let accessible = filterProfilesByAccess(allProfiles, req.user);
       const selectedProfile = profileId ? findProfileMatch(accessible, profileId) : null;
@@ -3643,7 +3696,13 @@ ${mapIcon}
       }
       const qtilerBaseUrl = getRequestBaseUrl(req);
       const themes = await buildQwc2Themes(accessible, qtilerBaseUrl, { defaultTheme: selectedProfile?.projectId || null });
-      return res.json(normalizeThemesForQwc2Assets(themes));
+      const normalized = normalizeThemesForQwc2Assets(themes);
+      try {
+        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
+        const cacheKey = `themes|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
+        origoThemesCache.set(cacheKey, JSON.stringify(normalized));
+      } catch (_) {}
+      return res.json(normalized);
     } catch(err) { console.error('XERR', err);
       try {
         const webRoot = await resolveQwc2WebRoot().catch(()=>'');
@@ -4078,6 +4137,12 @@ ${mapIcon}
     // without them it crashes with `undefined.geometry`.
     const fallback = { attributes: [], geometryName: 'geometry', featureNS: 'http://www.qgis.org/gml' };
     try {
+      const cacheKey = `${String(baseUrl || '')}||${String(projectId || '')}||${String(typeName || '')}`;
+      const cached = wfsMetaCache.get(cacheKey);
+      if (cached && cached.meta) {
+        return cached.meta;
+      }
+
       const url = `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}`
         + `&service=WFS&version=1.1.0&request=DescribeFeatureType`
         + `&typeName=${encodeURIComponent(typeName)}`;
@@ -4115,6 +4180,15 @@ ${mapIcon}
       if (!attrs.length) {
         console.warn(`[Qtiler2Origo] DescribeFeatureType for ${typeName} returned 0 attributes. XML snippet: ${xml.substring(0, 200)}`);
       }
+
+      // Cache result (async write to disk, don't block)
+      try {
+        wfsMetaCache.set(cacheKey, { meta, updatedAt: Date.now() });
+        const serial = {};
+        wfsMetaCache.forEach((v, k) => { serial[k] = { meta: v.meta, updatedAt: v.updatedAt }; });
+        fs.promises.writeFile(wfsMetaCachePath, JSON.stringify(serial, null, 2)).catch(() => {});
+      } catch (_) {}
+
       return meta;
     } catch (err) {
       console.warn(`[Qtiler2Origo] DescribeFeatureType fetch failed for ${typeName}: ${err?.message || err}`);
@@ -4159,6 +4233,15 @@ ${mapIcon}
   };
 
   const buildOrigoIndexConfig = async (profile, baseUrl, req = null) => {
+    // Return cached serialized config when available to avoid rebuilding on each request
+    try {
+      const profileKey = sanitizeFileToken(String(profile?.profileKey || profile?.name || profile?.projectId || ''));
+      const cacheKey = `index|${profileKey}|${String(baseUrl || '')}`;
+      const cached = origoIndexCache.get(cacheKey);
+      if (cached) {
+        try { return JSON.parse(cached); } catch { /* fall through to rebuild */ }
+      }
+    } catch (_) {}
     // Forward caller's auth (cookie + api_key) so server-to-server fetch to
     // /wfs DescribeFeatureType isn't rejected with 401.
     const authHeaders = {};
@@ -4359,6 +4442,15 @@ ${mapIcon}
     // Main map layers — WMS by default, WFS when serveAsWfs===true or editable===true.
     const mainLayers = (profile.layers || []).filter((l) => String(l?.role || 'main') !== 'background');
     const wfsSourceKeys = new Set();
+    // Pre-fetch DescribeFeatureType for all WFS layers in parallel so the loop
+    // below hits warm cache instead of N sequential round-trips on first load.
+    try {
+      const wfsLayers = mainLayers.filter((l) => shouldUseWfsForPublishedLayer(l));
+      await Promise.all(wfsLayers.map((l) => {
+        const pid = normalizeProjectId(l?.sourceProjectId || projectId) || projectId;
+        return fetchWfsLayerMeta(baseUrl, pid, l.name, authHeaders).catch(() => null);
+      }));
+    } catch (_) {}
     for (const layer of mainLayers) {
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
       const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
@@ -4821,6 +4913,11 @@ ${mapIcon}
       };
     }
     if (proj4Defs.length) config.proj4Defs = proj4Defs;
+    try {
+      const profileKey = sanitizeFileToken(String(profile?.profileKey || profile?.name || profile?.projectId || ''));
+      const cacheKey = `index|${profileKey}|${String(baseUrl || '')}`;
+      origoIndexCache.set(cacheKey, JSON.stringify(config));
+    } catch (_) {}
     return config;
   };
 
@@ -6423,6 +6520,7 @@ ${mapIcon}
 
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
+      try { clearOrigoCaches(profileKey); } catch (_) {}
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
       // Thumbnail regeneration is expensive (renders WMS) and must only run
       // when the admin explicitly clicks "Regenerate thumbnail" — never
@@ -6538,6 +6636,7 @@ ${mapIcon}
       parsed.generatedAt = new Date().toISOString();
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(parsed, null, 2), 'utf8');
+      try { clearOrigoCaches(sanitizeFileToken(newKey)); } catch (_) {}
       const sourceThumbPath = publishedThumbnailPath(sourceKey);
       const targetThumbPath = publishedThumbnailPath(newKey);
       try {
@@ -7273,6 +7372,7 @@ ${mapIcon}
 
       await fs.promises.rm(target, { force: true });
   await fs.promises.rm(thumbPath, { force: true }).catch(() => {});
+  try { clearOrigoCaches(sanitizeFileToken(profileName)); } catch (_) {}
 
       // Remove cached thumbnails for this project only when no other published
       // profile still references the same projectId.
