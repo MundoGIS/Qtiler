@@ -1,11 +1,11 @@
-/*
- * Qtiler Stories — admin UI.
+﻿/*
+ * Qtiler Stories â€” admin UI.
  * Portal/CMS editor: pages, blocks, site identity, GDPR, backup/restore.
  * Maps come from Qtiler2Origo, Qtiler2Hajk and Qtiler 3D Eye via the
  * aggregated /plugins/QtilerStories/api/maps endpoint.
  */
 
-/* ── Modal scroll lock ── */
+/* â”€â”€ Modal scroll lock â”€â”€ */
 (function setupModalScrollLock() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const sync = () => {
@@ -22,12 +22,12 @@
   });
 })();
 
-/* ── i18n ── */
+/* â”€â”€ i18n â”€â”€ */
 const QTWC_I18N = {
   en: {
     'QtilerStories.title': 'Qtiler Stories',
     'QtilerStories.subtitle': 'Build public story portals combining maps from Origo, Hajk and 3D Eye.',
-    'QtilerStories.open_portal': 'Open portal ↗',
+    'QtilerStories.open_portal': 'Open portal â†—',
     'QtilerStories.tab_portal': 'Portal',
     'QtilerStories.tab_maps': 'Maps',
     'QtilerStories.tab_log': 'Log',
@@ -51,26 +51,25 @@ const QTWC_I18N = {
     'QtilerStories.portal_save': 'Save portal',
     'QtilerStories.portal_empty': 'Create the first page to turn the maps portal into an editorial landing page.',
     'QtilerStories.portal_templates': 'Page Templates',
-    'QtilerStories.portal_templates_help': 'Start from a polished layout and adapt.',
+
     'QtilerStories.portal_apply_template': 'Apply template',
     'QtilerStories.portal_blocks': 'Story Sections',
-    'QtilerStories.portal_blocks_help': 'Combine hero, text, maps and news sections.',
     'QtilerStories.portal_add_block': 'Add Section',
-    'QtilerStories.portal_page_title': 'Page title',
-    'QtilerStories.portal_page_slug': 'Slug (URL path)',
-    'QtilerStories.portal_page_nav': 'Navigation label',
-    'QtilerStories.portal_page_summary': 'Short summary',
-    'QtilerStories.portal_header_logo': 'Header logo URL',
-    'QtilerStories.portal_header_height': 'Header height (px)',
-    'QtilerStories.portal_show_in_nav': 'Show in navigation menu',
-    'QtilerStories.portal_set_home': 'Use as default portal homepage',
-    'QtilerStories.portal_show_header': 'Show navigation header',
-    'QtilerStories.portal_visibility': 'Page visibility',
+
+
+
+
+
+
+
+
+
+
     'QtilerStories.portal_vis_public': 'Public',
     'QtilerStories.portal_vis_authenticated': 'Authenticated users',
     'QtilerStories.portal_vis_restricted': 'Specific users / roles',
-    'QtilerStories.portal_users': 'Allowed users',
-    'QtilerStories.portal_roles': 'Allowed roles',
+
+
     'QtilerStories.portal_preview': 'Live Preview',
     'QtilerStories.portal_preview_note': 'Desktop view',
     'QtilerStories.portal_device_desktop': 'Desktop',
@@ -86,23 +85,30 @@ const QTWC_I18N = {
     'QtilerStories.portal_backup_exported': 'Portal backup exported.',
     'QtilerStories.portal_backup_imported': 'Portal backup imported ({n} pages).',
     'QtilerStories.delete_page_confirm': 'Delete this page?',
-    'QtilerStories.duplicate': 'Duplicate',
+
     'QtilerStories.delete': 'Delete',
     'QtilerStories.move_up': 'Move up',
     'QtilerStories.move_down': 'Move down',
-    'QtilerStories.remove': 'Remove',
-    'QtilerStories.loading': 'Loading...',
+
+
     'QtilerStories.text_layout_plain': 'Plain text',
     'QtilerStories.text_layout_media_right': 'Text left, image right',
     'QtilerStories.text_layout_media_left': 'Image left, text right',
     'QtilerStories.text_layout_media_top': 'Image on top, text below',
     'QtilerStories.text_image_url': 'Image URL',
     'QtilerStories.text_image_alt': 'Image alt text',
-    'QtilerStories.text_image_browse': 'Browse uploaded…',
+    'QtilerStories.text_image_browse': 'Browse uploadedâ€¦',
+    'QtilerStories.legend_search_placeholder': 'Search imagesâ€¦',
+    'QtilerStories.legend_upload_new': 'Upload newâ€¦',
+    'QtilerStories.legend_library_empty': 'No uploaded images yet. Upload one to reuse it across pages.',
+    'QtilerStories.portal_add_page_hint': 'Creates a blank page with a hero section you can customize.',
+    'QtilerStories.portal_duplicate_page_hint': 'Copies the currently selected page including all its sections and settings.',
+    'QtilerStories.portal_fullscreen_hint': 'Expands the editor to fill the window. Press Esc to exit.',
+    'QtilerStories.portal_open_page_hint': 'Opens the currently selected page in the public portal. Select a page in the list first.',
     'QtilerStories.text_body': 'Body text',
     'QtilerStories.text_body_help': 'Write the story content. Use the toolbar for formatting, images and links.',
-    'QtilerStories.auth_disabled_warning': 'QtilerAuth is not active — visibility rules below have no effect. The portal will be fully public. Enable QtilerAuth to restrict pages by user or role.',
-    'QtilerStories.maps_visibility_warning': 'Some selected maps are not public and will be hidden from anonymous visitors: {maps}. Set them public in QtilerAuth or restrict this page to authenticated users.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth is not active â€” visibility rules below have no effect. The portal will be fully public. Enable QtilerAuth to restrict pages by user or role.',
+
     'QtilerStories.portal_no_users': 'No users available (QtilerAuth disabled or no active users)',
     'QtilerStories.portal_no_roles': 'No roles available',
     'QtilerStories.page_unsaved_hint': 'Unsaved changes',
@@ -121,83 +127,89 @@ const QTWC_I18N = {
   },
   es: {
     'QtilerStories.title': 'Qtiler Stories',
-    'QtilerStories.subtitle': 'Crea portales de historias públicos combinando mapas de Origo, Hajk y 3D Eye.',
-    'QtilerStories.open_portal': 'Abrir portal ↗',
+    'QtilerStories.subtitle': 'Crea portales de historias pÃºblicos combinando mapas de Origo, Hajk y 3D Eye.',
+    'QtilerStories.open_portal': 'Abrir portal â†—',
     'QtilerStories.tab_portal': 'Portal',
     'QtilerStories.tab_maps': 'Mapas',
     'QtilerStories.tab_log': 'Registro',
     'QtilerStories.maps_section': 'Mapas disponibles',
-    'QtilerStories.maps_desc': 'Todos los mapas publicados de Qtiler2Origo, Qtiler2Hajk y Qtiler 3D Eye. Úsalos en tus páginas del portal.',
+    'QtilerStories.maps_desc': 'Todos los mapas publicados de Qtiler2Origo, Qtiler2Hajk y Qtiler 3D Eye. Ãšsalos en tus pÃ¡ginas del portal.',
     'QtilerStories.no_maps': 'No se encontraron mapas publicados. Publica mapas primero en Qtiler2Origo, Qtiler2Hajk o Qtiler 3D Eye.',
-    'QtilerStories.portal_section': 'Páginas del portal',
-    'QtilerStories.portal_desc': 'Crea páginas de aterrizaje editoriales para el portal público, con secciones, mapas destacados y reglas de audiencia.',
-    'QtilerStories.portal_add_page': 'Nueva página',
-    'QtilerStories.portal_duplicate_page': 'Duplicar página',
+    'QtilerStories.portal_section': 'PÃ¡ginas del portal',
+    'QtilerStories.portal_desc': 'Crea pÃ¡ginas de aterrizaje editoriales para el portal pÃºblico, con secciones, mapas destacados y reglas de audiencia.',
+    'QtilerStories.portal_add_page': 'Nueva pÃ¡gina',
+    'QtilerStories.portal_duplicate_page': 'Duplicar pÃ¡gina',
     'QtilerStories.portal_fullscreen': 'Editor a pantalla completa',
-    'QtilerStories.portal_open_page': 'Abrir página',
+    'QtilerStories.portal_open_page': 'Abrir pÃ¡gina',
     'QtilerStories.portal_backup_title': 'Exportar / importar copia del portal',
-    'QtilerStories.portal_backup_pages': 'Páginas del portal a exportar',
+    'QtilerStories.portal_backup_pages': 'PÃ¡ginas del portal a exportar',
     'QtilerStories.portal_backup_maps': 'Mapas publicados a exportar',
     'QtilerStories.portal_backup_export': 'Exportar JSON',
     'QtilerStories.portal_backup_import': 'Importar / restaurar JSON',
-    'QtilerStories.portal_backup_replace_portal': 'Reemplazar páginas del portal',
-    'QtilerStories.portal_backup_help': 'El JSON de copia incluye el contenido del portal seleccionado y las entradas de mapas referenciadas. No incluye cachés de tiles ni proyectos QGIS.',
-    'QtilerStories.portal_pages_list': 'Tus páginas',
+    'QtilerStories.portal_backup_replace_portal': 'Reemplazar pÃ¡ginas del portal',
+    'QtilerStories.portal_backup_help': 'El JSON de copia incluye el contenido del portal seleccionado y las entradas de mapas referenciadas. No incluye cachÃ©s de tiles ni proyectos QGIS.',
+    'QtilerStories.portal_pages_list': 'Tus pÃ¡ginas',
     'QtilerStories.portal_save': 'Guardar portal',
-    'QtilerStories.portal_empty': 'Crea la primera página para convertir el portal de mapas en una página editorial.',
-    'QtilerStories.portal_templates': 'Plantillas de página',
-    'QtilerStories.portal_templates_help': 'Empieza desde un diseño pulido y adáptalo.',
+    'QtilerStories.portal_empty': 'Crea la primera pÃ¡gina para convertir el portal de mapas en una pÃ¡gina editorial.',
+    'QtilerStories.portal_templates': 'Plantillas de pÃ¡gina',
+
     'QtilerStories.portal_apply_template': 'Aplicar plantilla',
     'QtilerStories.portal_blocks': 'Secciones de historia',
-    'QtilerStories.portal_blocks_help': 'Combina secciones hero, texto, mapas y noticias.',
-    'QtilerStories.portal_add_block': 'Añadir sección',
-    'QtilerStories.portal_page_title': 'Título de página',
-    'QtilerStories.portal_page_slug': 'Slug (ruta URL)',
-    'QtilerStories.portal_page_nav': 'Etiqueta de navegación',
-    'QtilerStories.portal_page_summary': 'Resumen corto',
-    'QtilerStories.portal_header_logo': 'URL del logo de cabecera',
-    'QtilerStories.portal_header_height': 'Altura de cabecera (px)',
-    'QtilerStories.portal_show_in_nav': 'Mostrar en menú de navegación',
-    'QtilerStories.portal_set_home': 'Usar como página principal del portal',
-    'QtilerStories.portal_show_header': 'Mostrar cabecera de navegación',
-    'QtilerStories.portal_visibility': 'Visibilidad de página',
-    'QtilerStories.portal_vis_public': 'Pública',
+    'QtilerStories.portal_add_block': 'AÃ±adir secciÃ³n',
+
+
+
+
+
+
+
+
+
+
+    'QtilerStories.portal_vis_public': 'PÃºblica',
     'QtilerStories.portal_vis_authenticated': 'Usuarios autenticados',
-    'QtilerStories.portal_vis_restricted': 'Usuarios / roles específicos',
-    'QtilerStories.portal_users': 'Usuarios permitidos',
-    'QtilerStories.portal_roles': 'Roles permitidos',
+    'QtilerStories.portal_vis_restricted': 'Usuarios / roles especÃ­ficos',
+
+
     'QtilerStories.portal_preview': 'Vista previa en vivo',
     'QtilerStories.portal_preview_note': 'Vista escritorio',
     'QtilerStories.portal_device_desktop': 'Escritorio',
     'QtilerStories.portal_device_tablet': 'Tablet',
-    'QtilerStories.portal_device_mobile': 'Móvil',
-    'QtilerStories.portal_no_blocks_preview': 'Añade una sección para ver la vista previa.',
+    'QtilerStories.portal_device_mobile': 'MÃ³vil',
+    'QtilerStories.portal_no_blocks_preview': 'AÃ±ade una secciÃ³n para ver la vista previa.',
     'QtilerStories.portal_map_display_open': 'Abrir mapa',
     'QtilerStories.activity_log': 'Registro de actividad',
     'QtilerStories.clear': 'Limpiar',
-    'QtilerStories.no_activity': 'Sin actividad aún.',
+    'QtilerStories.no_activity': 'Sin actividad aÃºn.',
     'QtilerStories.log_saved': 'Portal guardado.',
     'QtilerStories.log_error': 'Error: {msg}',
     'QtilerStories.portal_backup_exported': 'Copia del portal exportada.',
-    'QtilerStories.portal_backup_imported': 'Copia del portal importada ({n} páginas).',
-    'QtilerStories.delete_page_confirm': '¿Eliminar esta página?',
-    'QtilerStories.duplicate': 'Duplicar',
+    'QtilerStories.portal_backup_imported': 'Copia del portal importada ({n} pÃ¡ginas).',
+    'QtilerStories.delete_page_confirm': 'Â¿Eliminar esta pÃ¡gina?',
+
     'QtilerStories.delete': 'Eliminar',
     'QtilerStories.move_up': 'Subir',
     'QtilerStories.move_down': 'Bajar',
-    'QtilerStories.remove': 'Quitar',
-    'QtilerStories.loading': 'Cargando...',
+
+
     'QtilerStories.text_layout_plain': 'Solo texto',
     'QtilerStories.text_layout_media_right': 'Texto a la izquierda, imagen a la derecha',
     'QtilerStories.text_layout_media_left': 'Imagen a la izquierda, texto a la derecha',
     'QtilerStories.text_layout_media_top': 'Imagen arriba, texto abajo',
     'QtilerStories.text_image_url': 'URL de imagen',
     'QtilerStories.text_image_alt': 'Texto alternativo de la imagen',
-    'QtilerStories.text_image_browse': 'Elegir subida…',
+    'QtilerStories.text_image_browse': 'Elegir subidaâ€¦',
+    'QtilerStories.legend_search_placeholder': 'Buscar imÃ¡genesâ€¦',
+    'QtilerStories.legend_upload_new': 'Subir nuevaâ€¦',
+    'QtilerStories.legend_library_empty': 'TodavÃ­a no hay imÃ¡genes subidas. Sube una para reutilizarla en las pÃ¡ginas.',
+    'QtilerStories.portal_add_page_hint': 'Crea una pÃ¡gina en blanco con una secciÃ³n hero que puedes personalizar.',
+    'QtilerStories.portal_duplicate_page_hint': 'Copia la pÃ¡gina seleccionada incluyendo todas sus secciones y configuraciÃ³n.',
+    'QtilerStories.portal_fullscreen_hint': 'Expande el editor para llenar la ventana. Pulsa Esc para salir.',
+    'QtilerStories.portal_open_page_hint': 'Abre la pÃ¡gina seleccionada en el portal pÃºblico. Selecciona primero una pÃ¡gina en la lista.',
     'QtilerStories.text_body': 'Texto del cuerpo',
-    'QtilerStories.text_body_help': 'Escribe el contenido de la historia. Usa la barra de herramientas para formato, imágenes y enlaces.',
-    'QtilerStories.auth_disabled_warning': 'QtilerAuth no está activo: las reglas de visibilidad de abajo no tienen efecto. El portal será completamente público. Activa QtilerAuth para restringir páginas por usuario o rol.',
-    'QtilerStories.maps_visibility_warning': 'Algunos mapas seleccionados no son públicos y se ocultarán a visitantes anónimos: {maps}. Márcalos como públicos en QtilerAuth o restringe esta página a usuarios autenticados.',
+    'QtilerStories.text_body_help': 'Escribe el contenido de la historia. Usa la barra de herramientas para formato, imÃ¡genes y enlaces.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth no estÃ¡ activo: las reglas de visibilidad de abajo no tienen efecto. El portal serÃ¡ completamente pÃºblico. Activa QtilerAuth para restringir pÃ¡ginas por usuario o rol.',
+
     'QtilerStories.portal_no_users': 'No hay usuarios disponibles (QtilerAuth desactivado o sin usuarios activos)',
     'QtilerStories.portal_no_roles': 'No hay roles disponibles',
     'QtilerStories.page_unsaved_hint': 'Cambios sin guardar',
@@ -207,7 +219,7 @@ const QTWC_I18N = {
     'QtilerStories.portal_site_header_color2': 'Color de cabecera 2',
     'QtilerStories.portal_site_header_text_color': 'Color de texto de cabecera',
     'QtilerStories.portal_site_header_background_url': 'URL de imagen de fondo de cabecera',
-    'QtilerStories.portal_site_footer_text': 'Texto de pie de página',
+    'QtilerStories.portal_site_footer_text': 'Texto de pie de pÃ¡gina',
     'QtilerStories.portal_site_footer_link_label': 'Etiqueta del enlace de pie',
     'QtilerStories.portal_site_footer_link_url': 'URL del enlace de pie',
     'QtilerStories.portal_site_footer_background_color': 'Color de fondo del pie',
@@ -216,98 +228,104 @@ const QTWC_I18N = {
   },
   sv: {
     'QtilerStories.title': 'Qtiler Stories',
-    'QtilerStories.subtitle': 'Bygg publika berättelseportaler som kombinerar kartor från Origo, Hajk och 3D Eye.',
-    'QtilerStories.open_portal': 'Öppna portalen ↗',
+    'QtilerStories.subtitle': 'Bygg publika berÃ¤ttelseportaler som kombinerar kartor frÃ¥n Origo, Hajk och 3D Eye.',
+    'QtilerStories.open_portal': 'Ã–ppna portalen â†—',
     'QtilerStories.tab_portal': 'Portal',
     'QtilerStories.tab_maps': 'Kartor',
     'QtilerStories.tab_log': 'Logg',
-    'QtilerStories.maps_section': 'Tillgängliga kartor',
-    'QtilerStories.maps_desc': 'Alla publicerade kartor från Qtiler2Origo, Qtiler2Hajk och Qtiler 3D Eye. Använd dem i dina portalsidor.',
-    'QtilerStories.no_maps': 'Inga publicerade kartor hittades. Publicera kartor först i Qtiler2Origo, Qtiler2Hajk eller Qtiler 3D Eye.',
+    'QtilerStories.maps_section': 'TillgÃ¤ngliga kartor',
+    'QtilerStories.maps_desc': 'Alla publicerade kartor frÃ¥n Qtiler2Origo, Qtiler2Hajk och Qtiler 3D Eye. AnvÃ¤nd dem i dina portalsidor.',
+    'QtilerStories.no_maps': 'Inga publicerade kartor hittades. Publicera kartor fÃ¶rst i Qtiler2Origo, Qtiler2Hajk eller Qtiler 3D Eye.',
     'QtilerStories.portal_section': 'Portalsidor',
-    'QtilerStories.portal_desc': 'Skapa redaktionella landningssidor för den publika kartportalen, med sektioner, utvalda kartor och målgruppsregler.',
+    'QtilerStories.portal_desc': 'Skapa redaktionella landningssidor fÃ¶r den publika kartportalen, med sektioner, utvalda kartor och mÃ¥lgruppsregler.',
     'QtilerStories.portal_add_page': 'Ny sida',
     'QtilerStories.portal_duplicate_page': 'Duplicera sida',
-    'QtilerStories.portal_fullscreen': 'Helskärmsredigerare',
-    'QtilerStories.portal_open_page': 'Öppna sida',
+    'QtilerStories.portal_fullscreen': 'HelskÃ¤rmsredigerare',
+    'QtilerStories.portal_open_page': 'Ã–ppna sida',
     'QtilerStories.portal_backup_title': 'Exportera / importera portalbackup',
     'QtilerStories.portal_backup_pages': 'Portalsidor att exportera',
     'QtilerStories.portal_backup_maps': 'Publicerade kartor att exportera',
     'QtilerStories.portal_backup_export': 'Exportera JSON',
-    'QtilerStories.portal_backup_import': 'Importera / återställ JSON',
-    'QtilerStories.portal_backup_replace_portal': 'Ersätt portalsidor',
-    'QtilerStories.portal_backup_help': 'Backup-JSON:en innehåller valt portalinnehåll och refererade publicerade kartor. Den innehåller inte tile-cache eller QGIS-projektfiler.',
+    'QtilerStories.portal_backup_import': 'Importera / Ã¥terstÃ¤ll JSON',
+    'QtilerStories.portal_backup_replace_portal': 'ErsÃ¤tt portalsidor',
+    'QtilerStories.portal_backup_help': 'Backup-JSON:en innehÃ¥ller valt portalinnehÃ¥ll och refererade publicerade kartor. Den innehÃ¥ller inte tile-cache eller QGIS-projektfiler.',
     'QtilerStories.portal_pages_list': 'Dina sidor',
     'QtilerStories.portal_save': 'Spara portal',
-    'QtilerStories.portal_empty': 'Skapa den första sidan för att förvandla kartportalen till en redaktionell landningssida.',
+    'QtilerStories.portal_empty': 'Skapa den fÃ¶rsta sidan fÃ¶r att fÃ¶rvandla kartportalen till en redaktionell landningssida.',
     'QtilerStories.portal_templates': 'Sidmallar',
-    'QtilerStories.portal_templates_help': 'Börja från en färdig layout och anpassa.',
-    'QtilerStories.portal_apply_template': 'Tillämpa mall',
-    'QtilerStories.portal_blocks': 'Berättelsesektioner',
-    'QtilerStories.portal_blocks_help': 'Kombinera hero-, text-, kart- och nyhetssektioner.',
-    'QtilerStories.portal_add_block': 'Lägg till sektion',
-    'QtilerStories.portal_page_title': 'Sidtitel',
-    'QtilerStories.portal_page_slug': 'Slug (URL-sökväg)',
-    'QtilerStories.portal_page_nav': 'Navigeringsetikett',
-    'QtilerStories.portal_page_summary': 'Kort sammanfattning',
-    'QtilerStories.portal_header_logo': 'Logotyp-URL för sidhuvud',
-    'QtilerStories.portal_header_height': 'Sidhuvudets höjd (px)',
-    'QtilerStories.portal_show_in_nav': 'Visa i navigationsmenyn',
-    'QtilerStories.portal_set_home': 'Använd som portalens startsida',
-    'QtilerStories.portal_show_header': 'Visa navigeringssidhuvud',
-    'QtilerStories.portal_visibility': 'Sidans synlighet',
+
+    'QtilerStories.portal_apply_template': 'TillÃ¤mpa mall',
+    'QtilerStories.portal_blocks': 'BerÃ¤ttelsesektioner',
+    'QtilerStories.portal_add_block': 'LÃ¤gg till sektion',
+
+
+
+
+
+
+
+
+
+
     'QtilerStories.portal_vis_public': 'Publik',
-    'QtilerStories.portal_vis_authenticated': 'Autentiserade användare',
-    'QtilerStories.portal_vis_restricted': 'Specifika användare / roller',
-    'QtilerStories.portal_users': 'Tillåtna användare',
-    'QtilerStories.portal_roles': 'Tillåtna roller',
-    'QtilerStories.portal_preview': 'Liveförhandsvisning',
+    'QtilerStories.portal_vis_authenticated': 'Autentiserade anvÃ¤ndare',
+    'QtilerStories.portal_vis_restricted': 'Specifika anvÃ¤ndare / roller',
+
+
+    'QtilerStories.portal_preview': 'LivefÃ¶rhandsvisning',
     'QtilerStories.portal_preview_note': 'Skrivbordsvy',
     'QtilerStories.portal_device_desktop': 'Skrivbord',
     'QtilerStories.portal_device_tablet': 'Surfplatta',
     'QtilerStories.portal_device_mobile': 'Mobil',
-    'QtilerStories.portal_no_blocks_preview': 'Lägg till en sektion för att se förhandsvisningen.',
-    'QtilerStories.portal_map_display_open': 'Öppna karta',
+    'QtilerStories.portal_no_blocks_preview': 'LÃ¤gg till en sektion fÃ¶r att se fÃ¶rhandsvisningen.',
+    'QtilerStories.portal_map_display_open': 'Ã–ppna karta',
     'QtilerStories.activity_log': 'Aktivitetslogg',
     'QtilerStories.clear': 'Rensa',
-    'QtilerStories.no_activity': 'Ingen aktivitet ännu.',
+    'QtilerStories.no_activity': 'Ingen aktivitet Ã¤nnu.',
     'QtilerStories.log_saved': 'Portal sparad.',
     'QtilerStories.log_error': 'Fel: {msg}',
     'QtilerStories.portal_backup_exported': 'Portalbackup exporterad.',
     'QtilerStories.portal_backup_imported': 'Portalbackup importerad ({n} sidor).',
     'QtilerStories.delete_page_confirm': 'Ta bort denna sida?',
-    'QtilerStories.duplicate': 'Duplicera',
+
     'QtilerStories.delete': 'Ta bort',
     'QtilerStories.move_up': 'Flytta upp',
     'QtilerStories.move_down': 'Flytta ner',
-    'QtilerStories.remove': 'Ta bort',
-    'QtilerStories.loading': 'Laddar...',
+
+
     'QtilerStories.text_layout_plain': 'Endast text',
-    'QtilerStories.text_layout_media_right': 'Text till vänster, bild till höger',
-    'QtilerStories.text_layout_media_left': 'Bild till vänster, text till höger',
-    'QtilerStories.text_layout_media_top': 'Bild ovanpå, text nedanför',
+    'QtilerStories.text_layout_media_right': 'Text till vÃ¤nster, bild till hÃ¶ger',
+    'QtilerStories.text_layout_media_left': 'Bild till vÃ¤nster, text till hÃ¶ger',
+    'QtilerStories.text_layout_media_top': 'Bild ovanpÃ¥, text nedanfÃ¶r',
     'QtilerStories.text_image_url': 'Bild-URL',
     'QtilerStories.text_image_alt': 'Bildens alt-text',
-    'QtilerStories.text_image_browse': 'Välj uppladdad…',
-    'QtilerStories.text_body': 'Brödtext',
-    'QtilerStories.text_body_help': 'Skriv berättelsens innehåll. Använd verktygsfältet för formatering, bilder och länkar.',
-    'QtilerStories.auth_disabled_warning': 'QtilerAuth är inte aktivt — synlighetsreglerna nedan har ingen effekt. Portalen blir helt publik. Aktivera QtilerAuth för att begränsa sidor per användare eller roll.',
-    'QtilerStories.maps_visibility_warning': 'Vissa valda kartor är inte publika och döljs för anonyma besökare: {maps}. Gör dem publika i QtilerAuth eller begränsa denna sida till autentiserade användare.',
-    'QtilerStories.portal_no_users': 'Inga användare tillgängliga (QtilerAuth inaktivt eller inga aktiva användare)',
-    'QtilerStories.portal_no_roles': 'Inga roller tillgängliga',
-    'QtilerStories.page_unsaved_hint': 'Osparade ändringar',
-    'QtilerStories.portal_site_header_height': 'Sidhuvudets höjd',
+    'QtilerStories.text_image_browse': 'VÃ¤lj uppladdadâ€¦',
+    'QtilerStories.legend_search_placeholder': 'SÃ¶k bilderâ€¦',
+    'QtilerStories.legend_upload_new': 'Ladda upp nyâ€¦',
+    'QtilerStories.legend_library_empty': 'Inga uppladdade bilder Ã¤nnu. Ladda upp en fÃ¶r att Ã¥teranvÃ¤nda den pÃ¥ sidor.',
+    'QtilerStories.portal_add_page_hint': 'Skapar en tom sida med en hero-sektion som du kan anpassa.',
+    'QtilerStories.portal_duplicate_page_hint': 'Kopierar den valda sidan inklusive alla dess sektioner och instÃ¤llningar.',
+    'QtilerStories.portal_fullscreen_hint': 'Expanderar redigeraren till att fylla fÃ¶nstret. Tryck Esc fÃ¶r att avsluta.',
+    'QtilerStories.portal_open_page_hint': 'Ã–ppnar den valda sidan i den publika portalen. VÃ¤lj fÃ¶rst en sida i listan.',
+    'QtilerStories.text_body': 'BrÃ¶dtext',
+    'QtilerStories.text_body_help': 'Skriv berÃ¤ttelsens innehÃ¥ll. AnvÃ¤nd verktygsfÃ¤ltet fÃ¶r formatering, bilder och lÃ¤nkar.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth Ã¤r inte aktivt â€” synlighetsreglerna nedan har ingen effekt. Portalen blir helt publik. Aktivera QtilerAuth fÃ¶r att begrÃ¤nsa sidor per anvÃ¤ndare eller roll.',
+
+    'QtilerStories.portal_no_users': 'Inga anvÃ¤ndare tillgÃ¤ngliga (QtilerAuth inaktivt eller inga aktiva anvÃ¤ndare)',
+    'QtilerStories.portal_no_roles': 'Inga roller tillgÃ¤ngliga',
+    'QtilerStories.page_unsaved_hint': 'Osparade Ã¤ndringar',
+    'QtilerStories.portal_site_header_height': 'Sidhuvudets hÃ¶jd',
     'QtilerStories.portal_site_header_font': 'Sidhuvudets teckensnitt',
-    'QtilerStories.portal_site_header_color1': 'Sidhuvudsfärg 1',
-    'QtilerStories.portal_site_header_color2': 'Sidhuvudsfärg 2',
-    'QtilerStories.portal_site_header_text_color': 'Textfärg i sidhuvud',
-    'QtilerStories.portal_site_header_background_url': 'URL för sidhuvudets bakgrundsbild',
+    'QtilerStories.portal_site_header_color1': 'SidhuvudsfÃ¤rg 1',
+    'QtilerStories.portal_site_header_color2': 'SidhuvudsfÃ¤rg 2',
+    'QtilerStories.portal_site_header_text_color': 'TextfÃ¤rg i sidhuvud',
+    'QtilerStories.portal_site_header_background_url': 'URL fÃ¶r sidhuvudets bakgrundsbild',
     'QtilerStories.portal_site_footer_text': 'Sidfotstext',
-    'QtilerStories.portal_site_footer_link_label': 'Sidfotslänkens etikett',
-    'QtilerStories.portal_site_footer_link_url': 'Sidfotslänkens URL',
-    'QtilerStories.portal_site_footer_background_color': 'Sidfotens bakgrundsfärg',
-    'QtilerStories.portal_site_footer_text_color': 'Sidfotens textfärg',
-    'QtilerStories.portal_site_footer_link_color': 'Sidfotslänkens färg',
+    'QtilerStories.portal_site_footer_link_label': 'SidfotslÃ¤nkens etikett',
+    'QtilerStories.portal_site_footer_link_url': 'SidfotslÃ¤nkens URL',
+    'QtilerStories.portal_site_footer_background_color': 'Sidfotens bakgrundsfÃ¤rg',
+    'QtilerStories.portal_site_footer_text_color': 'Sidfotens textfÃ¤rg',
+    'QtilerStories.portal_site_footer_link_color': 'SidfotslÃ¤nkens fÃ¤rg',
   }
 };
 // Derived locales share the Swedish base where no dedicated translation exists.
@@ -350,7 +368,7 @@ function applyI18n() {
   });
 }
 
-/* ── API helper ── */
+/* â”€â”€ API helper â”€â”€ */
 async function api(url, options = {}) {
   const opts = { credentials: 'include', headers: {}, ...options };
   if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
@@ -373,7 +391,7 @@ async function api(url, options = {}) {
   return payload;
 }
 
-/* ── Activity log ── */
+/* â”€â”€ Activity log â”€â”€ */
 const logContainer = document.getElementById('logContainer');
 const clearLogBtn = document.getElementById('clearLogBtn');
 
@@ -393,7 +411,7 @@ clearLogBtn?.addEventListener('click', () => {
   logContainer.innerHTML = `<p class="log-empty">${escapeHtml(t('QtilerStories.no_activity'))}</p>`;
 });
 
-/* ── State ── */
+/* â”€â”€ State â”€â”€ */
 let portalPagesState = { homePageSlug: '', site: {}, gdpr: {}, pages: [] };
 let selectedPortalPageId = '';
 let portalPreviewDevice = 'desktop';
@@ -421,7 +439,7 @@ function updatePortalDirtyBadge() {
   if (badge) badge.hidden = !portalDirty;
 }
 
-/* ── DOM refs ── */
+/* â”€â”€ DOM refs â”€â”€ */
 const portalAddPageBtn = document.getElementById('portalAddPageBtn');
 const portalDuplicatePageBtn = document.getElementById('portalDuplicatePageBtn');
 const portalToggleFullscreenBtn = document.getElementById('portalToggleFullscreenBtn');
@@ -491,7 +509,7 @@ const portalGdprAcceptLabel = document.getElementById('portalGdprAcceptLabel');
 const portalGdprRejectLabel = document.getElementById('portalGdprRejectLabel');
 const portalGdprManageLabel = document.getElementById('portalGdprManageLabel');
 
-/* ── Portal state helpers ── */
+/* â”€â”€ Portal state helpers â”€â”€ */
 function slugifyPortalValue(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 }
@@ -602,7 +620,7 @@ function buildPortalTemplate(templateKey) {
   };
 }
 
-/* ── Portal rendering ── */
+/* â”€â”€ Portal rendering â”€â”€ */
 function getPortalBlockTypeLabel(type) {
   const labels = { hero: 'Hero', text: 'Text', maps: 'Maps', cards: 'Cards', social: 'Social links' };
   return labels[type] || type;
@@ -649,12 +667,12 @@ function renderPortalPageList() {
     <div class="portal-pages-list__item${page.id === selectedPortalPageId ? ' is-active' : ''}" data-portal-select="${escapeHtml(page.id)}">
       <button type="button" class="portal-pages-list__select" data-portal-select="${escapeHtml(page.id)}">
         <strong>${escapeHtml(page.title || page.slug)}</strong>
-        <small>${escapeHtml(getPortalAccessLabel(page.visibility?.access))} · ${(page.blocks || []).length} sections</small>
+        <small>${escapeHtml(getPortalAccessLabel(page.visibility?.access))} Â· ${(page.blocks || []).length} sections</small>
       </button>
       <div class="portal-pages-list__actions">
-        <button type="button" title="${escapeHtml(t('QtilerStories.move_up'))}" data-portal-move="up" data-portal-page-id="${escapeHtml(page.id)}" ${index === 0 ? 'disabled' : ''}>▲</button>
-        <button type="button" title="${escapeHtml(t('QtilerStories.move_down'))}" data-portal-move="down" data-portal-page-id="${escapeHtml(page.id)}" ${index === pages.length - 1 ? 'disabled' : ''}>▼</button>
-        <button type="button" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-delete-page="${escapeHtml(page.id)}">×</button>
+        <button type="button" title="${escapeHtml(t('QtilerStories.move_up'))}" data-portal-move="up" data-portal-page-id="${escapeHtml(page.id)}" ${index === 0 ? 'disabled' : ''}>â–²</button>
+        <button type="button" title="${escapeHtml(t('QtilerStories.move_down'))}" data-portal-move="down" data-portal-page-id="${escapeHtml(page.id)}" ${index === pages.length - 1 ? 'disabled' : ''}>â–¼</button>
+        <button type="button" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-delete-page="${escapeHtml(page.id)}">Ã—</button>
       </div>
     </div>
   `).join('');
@@ -676,7 +694,7 @@ function findPublishedMapProfile(token) {
   return publishedMaps.find((m) => m.profileKey === key || m.projectId === key || m.name === key) || null;
 }
 
-/* ── Portal editor: page fields ── */
+/* â”€â”€ Portal editor: page fields â”€â”€ */
 function updatePortalPageField(field, value) {
   const page = getSelectedPortalPage();
   if (!page) return;
@@ -769,7 +787,7 @@ function renderPortalEditor() {
   setIfNotActive(portalGdprManageLabel, gdpr.manageLabel || '');
 }
 
-/* ── Blocks editor ── */
+/* â”€â”€ Blocks editor â”€â”€ */
 function getPortalBlockTypeOptionsHtml(selected) {
   return ['hero', 'text', 'maps', 'cards', 'social'].map((type) =>
     `<option value="${type}"${type === selected ? ' selected' : ''}>${escapeHtml(getPortalBlockTypeLabel(type))}</option>`
@@ -827,8 +845,8 @@ function updatePortalItemField(blockId, itemIndex, field, value) {
 }
 
 function getPortalBlockTypeIcon(type) {
-  const icons = { hero: '🎯', text: '📝', maps: '🗺️', cards: '🗂️', social: '🔗' };
-  return icons[type] || '📄';
+  const icons = { hero: 'ðŸŽ¯', text: 'ðŸ“', maps: 'ðŸ—ºï¸', cards: 'ðŸ—‚ï¸', social: 'ðŸ”—' };
+  return icons[type] || 'ðŸ“„';
 }
 
 function getPortalBlockTypeDesc(type) {
@@ -847,7 +865,7 @@ function renderBlockInserter(insertAtIndex) {
   return `
     <div class="block-inserter" data-insert-at="${insertAtIndex}">
       <button type="button" class="block-inserter__toggle" title="Add section here">
-        <span class="block-inserter__plus">＋</span>
+        <span class="block-inserter__plus">ï¼‹</span>
         <span class="block-inserter__label">Add section</span>
       </button>
       <div class="block-inserter__menu" hidden>
@@ -873,7 +891,7 @@ function renderPortalBlocksList() {
     portalBlocksList.innerHTML = `
       <div class="portal-empty-blocks">
         <p>This page has no sections yet.</p>
-        <p class="help">Add your first section below — start with a Hero to introduce the page, then add text, maps or cards.</p>
+        <p class="help">Add your first section below â€” start with a Hero to introduce the page, then add text, maps or cards.</p>
       </div>
       ${renderBlockInserter(0)}`;
     return;
@@ -894,11 +912,11 @@ function renderPortalBlocksList() {
             <small>${escapeHtml(blockSummary)}</small>
           </span>
           <span class="portal-block__actions">
-            <button type="button" title="${escapeHtml(t('QtilerStories.move_up'))}" data-portal-block-move="up" data-portal-block-id="${escapeHtml(block.id)}" ${index === 0 ? 'disabled' : ''}>▲</button>
-            <button type="button" title="${escapeHtml(t('QtilerStories.move_down'))}" data-portal-block-move="down" data-portal-block-id="${escapeHtml(block.id)}" ${index === blocks.length - 1 ? 'disabled' : ''}>▼</button>
-            <button type="button" class="is-danger" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-block-delete="${escapeHtml(block.id)}">×</button>
+            <button type="button" title="${escapeHtml(t('QtilerStories.move_up'))}" data-portal-block-move="up" data-portal-block-id="${escapeHtml(block.id)}" ${index === 0 ? 'disabled' : ''}>â–²</button>
+            <button type="button" title="${escapeHtml(t('QtilerStories.move_down'))}" data-portal-block-move="down" data-portal-block-id="${escapeHtml(block.id)}" ${index === blocks.length - 1 ? 'disabled' : ''}>â–¼</button>
+            <button type="button" class="is-danger" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-block-delete="${escapeHtml(block.id)}">Ã—</button>
           </span>
-          <span class="portal-block__chevron">▾</span>
+          <span class="portal-block__chevron">â–¾</span>
         </button>
         <div class="portal-block__body" data-block-body="${escapeHtml(block.id)}">
           <div class="portal-meta-grid">
@@ -922,7 +940,7 @@ function renderPortalBlocksList() {
             <div class="field">
               <label class="label">Background image URL</label>
               <div class="control" style="display:flex;gap:6px">
-                <input class="input" type="text" value="${escapeHtml(block.backgroundUrl || '')}" data-portal-block-field="backgroundUrl" data-portal-block-id="${escapeHtml(block.id)}" placeholder="https://… or /plugins/QtilerStories/…" />
+                <input class="input" type="text" value="${escapeHtml(block.backgroundUrl || '')}" data-portal-block-field="backgroundUrl" data-portal-block-id="${escapeHtml(block.id)}" placeholder="https://â€¦ or /plugins/QtilerStories/â€¦" />
                 <button type="button" class="button is-small" data-browse-story-image="${escapeHtml(block.id)}" data-target-field="backgroundUrl">${escapeHtml(t('QtilerStories.text_image_browse'))}</button>
               </div>
             </div>
@@ -1003,7 +1021,7 @@ function renderPortalBlocksList() {
                       <input class="input is-small" placeholder="Button label" value="${escapeHtml(item.label || '')}" data-portal-item-field="label" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <input class="input is-small" placeholder="Meta (small label)" value="${escapeHtml(item.meta || '')}" data-portal-item-field="meta" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <input class="input is-small" placeholder="Image URL" value="${escapeHtml(item.imageUrl || '')}" data-portal-item-field="imageUrl" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
-                      <button type="button" class="button is-small is-danger is-light" data-portal-item-delete data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}">×</button>
+                      <button type="button" class="button is-small is-danger is-light" data-portal-item-delete data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}">Ã—</button>
                     </div>
                   </div>
                 `).join('')}
@@ -1044,7 +1062,7 @@ function getPortalBlockSummary(block) {
   return '';
 }
 
-/* ── Rich text (Quill) for story text blocks ── */
+/* â”€â”€ Rich text (Quill) for story text blocks â”€â”€ */
 let quillInstances = {};
 
 function initRichTextEditors() {
@@ -1219,7 +1237,7 @@ function openStoryImagePicker(onPick) {
   });
 }
 
-/* ── Preview ── */
+/* â”€â”€ Preview â”€â”€ */
 function renderPortalPreview() {
   if (!portalPreviewHost) return;
   const page = getSelectedPortalPage();
@@ -1286,7 +1304,7 @@ function renderPortalPreview() {
   }).join('')}</div></div>`;
 }
 
-/* ── Portal persist ── */
+/* â”€â”€ Portal persist â”€â”€ */
 let portalPersistTimer = null;
 function queuePortalPersist() {
   markPortalDirty();
@@ -1310,7 +1328,7 @@ async function loadPortalPages() {
   renderPortalEditor();
 }
 
-/* ── Maps catalog ── */
+/* â”€â”€ Maps catalog â”€â”€ */
 async function loadPublishedMaps() {
   try {
     const payload = await api('/plugins/QtilerStories/api/maps');
@@ -1345,14 +1363,14 @@ function renderMapsList() {
           <span class="badge badge--muted">${escapeHtml(item.source || '?')}</span>
         </div>
         <div class="actions">
-          <a class="button ghost small" href="${escapeHtml(item.launchUrl || '#')}" target="_blank" rel="noreferrer">Open ↗</a>
+          <a class="button ghost small" href="${escapeHtml(item.launchUrl || '#')}" target="_blank" rel="noreferrer">Open â†—</a>
         </div>
       </div>
     </article>
   `).join('');
 }
 
-/* ── Event handlers ── */
+/* â”€â”€ Event handlers â”€â”€ */
 
 // Tab switching
 document.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
@@ -1774,7 +1792,7 @@ portalImportBackupInput?.addEventListener('change', async () => {
   }
 });
 
-/* ── Init ── */
+/* â”€â”€ Init â”€â”€ */
 (async function init() {
   applyI18n();
   try {
