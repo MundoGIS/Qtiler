@@ -64,6 +64,14 @@ const QTWC_I18N = {
     'Qtiler2Hajk.logo_active': 'Active',
     'Qtiler2Hajk.logo_updated_at': 'Logo updated: {date}',
     'Qtiler2Hajk.logo_select_file': 'Select a file first.',
+    'Qtiler2Hajk.legend_library_title': 'Legend icons',
+    'Qtiler2Hajk.legend_library_help': 'Upload PNG or SVG icons once. They stay available for every published map. Raster files are cropped to 24×24 so they fit the Hajk legend.',
+    'Qtiler2Hajk.legend_library_file': 'PNG or SVG file',
+    'Qtiler2Hajk.legend_library_upload': 'Upload icon',
+    'Qtiler2Hajk.legend_library_delete': 'Delete',
+    'Qtiler2Hajk.legend_library_select_file': 'Select a PNG or SVG file first.',
+    'Qtiler2Hajk.wms_legend_regen': 'Recreate thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail recreated for "{layer}".',
     'Qtiler2Hajk.profiles_section': 'Published maps',
     'Qtiler2Hajk.profiles_desc': 'Manage generated profiles and launch links for Hajk (webmap).',
     'Qtiler2Hajk.publish_new': 'New map',
@@ -128,6 +136,23 @@ const QTWC_I18N = {
     'Qtiler2Hajk.preflight_ok': 'Map check passed. Projects, layers and backgrounds are available.',
     'Qtiler2Hajk.save_draft': 'Save draft',
     'Qtiler2Hajk.draft_saved': '✓ Draft saved',
+    'Qtiler2Hajk.draft_restore_msg': 'A saved draft exists for this map (saved {date}). Restore it and continue where you left off?',
+    'Qtiler2Hajk.draft_restored': 'Draft restored.',
+    'Qtiler2Hajk.draft_save_failed': 'Could not save the draft: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'Lantmäteriet Search returns DEMO data — no API key configured on the server (set LANTMATERI_API_KEY in .env).',
+    'Qtiler2Hajk.thumb_missing': 'No thumbnail',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'You have unpublished changes in the map editor. Close anyway and lose them?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'QGIS SVG icons',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Uploaded icons',
+    'Qtiler2Hajk.legend_upload_new': 'Upload new…',
+    'Qtiler2Hajk.legend_pick_title': 'Choose legend icon',
+    'Qtiler2Hajk.legend_search_placeholder': 'Search icons…',
+    'Qtiler2Hajk.legend_delete_in_use': 'This icon is used by: {layers}. Delete it anyway?',
+    'Qtiler2Hajk.legend_delete_confirm': 'Delete this icon? It will no longer be available in the library.',
+    'Qtiler2Hajk.legend_current_map': 'current map',
+    'Qtiler2Hajk.legend_library_empty': 'No uploaded icons yet.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Legend icon uploaded.',
+    'Qtiler2Hajk.log_legend_deleted': 'Legend icon deleted.',
     'Qtiler2Hajk.preview_btn': 'Preview',
     'Qtiler2Hajk.cancel': 'Cancel',
     'Qtiler2Hajk.no_layers': 'No layers found.',
@@ -652,6 +677,14 @@ const QTWC_I18N = {
     'Qtiler2Hajk.logo_active': 'Activo',
     'Qtiler2Hajk.logo_updated_at': 'Logo actualizado: {date}',
     'Qtiler2Hajk.logo_select_file': 'Selecciona un archivo primero.',
+    'Qtiler2Hajk.legend_library_title': 'Iconos de leyenda',
+    'Qtiler2Hajk.legend_library_help': 'Sube PNG o SVG una vez. Quedan disponibles para todos los mapas publicados. Las imágenes raster se recortan a 24×24 para la leyenda de Hajk.',
+    'Qtiler2Hajk.legend_library_file': 'Archivo PNG o SVG',
+    'Qtiler2Hajk.legend_library_upload': 'Subir icono',
+    'Qtiler2Hajk.legend_library_delete': 'Eliminar',
+    'Qtiler2Hajk.legend_library_select_file': 'Selecciona primero un PNG o SVG.',
+    'Qtiler2Hajk.wms_legend_regen': 'Recrear thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail recreado para "{layer}".',
     'Qtiler2Hajk.profiles_section': 'Mapas publicados',
     'Qtiler2Hajk.profiles_desc': 'Gestiona perfiles generados y enlaces de lanzamiento para Hajk (webmap).',
     'Qtiler2Hajk.publish_new': 'Nuevo mapa',
@@ -716,6 +749,23 @@ const QTWC_I18N = {
     'Qtiler2Hajk.preflight_ok': 'La comprobación pasó. Los proyectos, capas y fondos están disponibles.',
     'Qtiler2Hajk.save_draft': 'Guardar borrador',
     'Qtiler2Hajk.draft_saved': '✓ Borrador guardado',
+    'Qtiler2Hajk.draft_restore_msg': 'Existe un borrador guardado de este mapa (guardado {date}). ¿Restaurarlo y continuar donde lo dejaste?',
+    'Qtiler2Hajk.draft_restored': 'Borrador restaurado.',
+    'Qtiler2Hajk.draft_save_failed': 'No se pudo guardar el borrador: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'La búsqueda de Lantmäteriet devuelve datos DEMO: no hay clave de API configurada en el servidor (define LANTMATERI_API_KEY en .env).',
+    'Qtiler2Hajk.thumb_missing': 'Sin miniatura',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'Tienes cambios sin publicar en el editor de mapa. ¿Cerrar de todos modos y perderlos?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'SVG de QGIS',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Iconos subidos',
+    'Qtiler2Hajk.legend_upload_new': 'Subir nuevo…',
+    'Qtiler2Hajk.legend_pick_title': 'Elegir icono de leyenda',
+    'Qtiler2Hajk.legend_search_placeholder': 'Buscar iconos…',
+    'Qtiler2Hajk.legend_delete_in_use': 'Este icono lo usan: {layers}. ¿Eliminarlo de todos modos?',
+    'Qtiler2Hajk.legend_delete_confirm': '¿Eliminar este icono? Ya no estará disponible en la biblioteca.',
+    'Qtiler2Hajk.legend_current_map': 'mapa actual',
+    'Qtiler2Hajk.legend_library_empty': 'Todavía no hay iconos subidos.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Icono de leyenda subido.',
+    'Qtiler2Hajk.log_legend_deleted': 'Icono de leyenda eliminado.',
     'Qtiler2Hajk.preview_btn': 'Vista previa',
     'Qtiler2Hajk.cancel': 'Cancelar',
     'Qtiler2Hajk.no_layers': 'No se encontraron capas.',
@@ -1240,6 +1290,14 @@ const QTWC_I18N = {
     'Qtiler2Hajk.logo_active': 'Aktiv',
     'Qtiler2Hajk.logo_updated_at': 'Logotyp uppdaterad: {date}',
     'Qtiler2Hajk.logo_select_file': 'Välj en fil först.',
+    'Qtiler2Hajk.legend_library_title': 'Legendikoner',
+    'Qtiler2Hajk.legend_library_help': 'Ladda upp PNG eller SVG en gång. De finns sedan tillgängliga för alla publicerade kartor. Rasterbilder beskärs till 24×24 för Hajks legend.',
+    'Qtiler2Hajk.legend_library_file': 'PNG- eller SVG-fil',
+    'Qtiler2Hajk.legend_library_upload': 'Ladda upp ikon',
+    'Qtiler2Hajk.legend_library_delete': 'Ta bort',
+    'Qtiler2Hajk.legend_library_select_file': 'Välj först en PNG- eller SVG-fil.',
+    'Qtiler2Hajk.wms_legend_regen': 'Återskapa thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail återskapad för "{layer}".',
     'Qtiler2Hajk.profiles_section': 'Publicerade kartor',
     'Qtiler2Hajk.profiles_desc': 'Hantera genererade profiler och startlänkar för Hajk (webmap).',
     'Qtiler2Hajk.publish_new': 'Ny karta',
@@ -1304,6 +1362,23 @@ const QTWC_I18N = {
     'Qtiler2Hajk.preflight_ok': 'Kartkontrollen gick igenom. Projekt, lager och bakgrunder är tillgängliga.',
     'Qtiler2Hajk.save_draft': 'Spara utkast',
     'Qtiler2Hajk.draft_saved': '✓ Utkast sparat',
+    'Qtiler2Hajk.draft_restore_msg': 'Ett sparat utkast finns för denna karta (sparad {date}). Återställa det och fortsätta där du slutade?',
+    'Qtiler2Hajk.draft_restored': 'Utkast återställt.',
+    'Qtiler2Hajk.draft_save_failed': 'Kunde inte spara utkastet: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'Lantmäteriet-sökning returnerar DEMO-data — ingen API-nyckel konfigurerad på servern (sätt LANTMATERI_API_KEY i .env).',
+    'Qtiler2Hajk.thumb_missing': 'Ingen miniatyr',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'Du har opublicerade ändringar i kartredigeraren. Stäng ändå och förlora dem?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'QGIS SVG-ikoner',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Uppladdade ikoner',
+    'Qtiler2Hajk.legend_upload_new': 'Ladda upp ny…',
+    'Qtiler2Hajk.legend_pick_title': 'Välj legendikon',
+    'Qtiler2Hajk.legend_search_placeholder': 'Sök ikoner…',
+    'Qtiler2Hajk.legend_delete_in_use': 'Denna ikon används av: {layers}. Ta bort den ändå?',
+    'Qtiler2Hajk.legend_delete_confirm': 'Ta bort denna ikon? Den kommer inte längre att finnas i biblioteket.',
+    'Qtiler2Hajk.legend_current_map': 'aktuell karta',
+    'Qtiler2Hajk.legend_library_empty': 'Inga uppladdade ikoner ännu.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Legendikon uppladdad.',
+    'Qtiler2Hajk.log_legend_deleted': 'Legendikon borttagen.',
     'Qtiler2Hajk.preview_btn': 'Förhandsgranska',
     'Qtiler2Hajk.cancel': 'Avbryt',
     'Qtiler2Hajk.no_layers': 'Inga lager hittades.',
@@ -3136,6 +3211,33 @@ function geometryFamily(geometryType) {
   return 'generic';
 }
 
+// Render a small legend preview for a layer row: WFS style SVG sample when a
+// style is configured, uploaded/QGIS icon when one was picked for WMS, or the
+// generated WMS thumbnail as fallback.
+function layerStylePreviewHtml(layer, rule, modeHint) {
+  const serveWfs = String(modeHint || '').toUpperCase() === 'WFS' || rule?.serveAsWfs === true;
+  const geom = rule?.geometryType || layer?.geometry;
+  if (serveWfs) {
+    if (rule?.wfsStyle) {
+      try {
+        const rules = typeof origoStyleToRules === 'function'
+          ? origoStyleToRules(Array.isArray(rule.wfsStyle) ? rule.wfsStyle : [rule.wfsStyle])
+          : [];
+        const first = Array.isArray(rules) && rules.length ? rules[0] : {};
+        const svg = rulePreviewSampleSvg(first || {}, geometryFamily(geom));
+        if (svg) return `<span class="Qtiler2Hajk-layer-style-preview">${svg}</span>`;
+      } catch {}
+    }
+    return `<span class="Qtiler2Hajk-layer-style-preview Qtiler2Hajk-layer-style-preview--pending">WFS</span>`;
+  }
+  const manual = String(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
+  if (manual) return `<img class="Qtiler2Hajk-wms-legend-preview" src="${escapeHtml(manual)}" alt="" loading="lazy" />`;
+  const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+  const name = String(layer?.name || '').trim();
+  if (!pid || !name) return `<span class="Qtiler2Hajk-wms-legend-empty">${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</span>`;
+  return `<img class="Qtiler2Hajk-wms-legend-preview" src="/plugins/Qtiler2Hajk/api/thumbnail/${encodeURIComponent(pid)}?LAYERS=${encodeURIComponent(name)}&LEGEND=1" alt="" loading="lazy" />`;
+}
+
 function clampNumber(value, min, max, fallback) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
@@ -4745,10 +4847,12 @@ function renderPublishedProfiles(items) {
     
     const projectId = escapeHtml(row.projectId || '');
     const thumbUrl = String(row.thumbnailUrl || '').trim();
+    const thumbMissingBadge = thumbUrl ? '' : `<span class="badge badge--warning" title="${escapeHtml(t('Qtiler2Hajk.regen_thumb_title'))}">⚠ ${escapeHtml(t('Qtiler2Hajk.thumb_missing'))}</span>`;
     return `
       <article class="published-item">
         <div class="published-item__preview">
           <img src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" />
+          ${thumbMissingBadge}
         </div>
         <div class="published-item__content">
           <div class="published-item__meta">
@@ -4818,6 +4922,12 @@ async function loadStatus() {
   currentStatus = await api('/plugins/Qtiler2Hajk/api/status');
   syncUI();
   renderPortalEditor();
+  loadLegendLibrary().catch(() => {});
+  // Warn once per page load if Lantmäteriet is running on DEMO data.
+  if (currentStatus?.lantmateriDemo && !loadStatus._lmvWarned) {
+    loadStatus._lmvWarned = true;
+    addLog('⚠ ' + t('Qtiler2Hajk.lmv_demo_warning'), 'error');
+  }
 }
 
 async function loadPublishedProfiles() {
@@ -5057,42 +5167,40 @@ function renderLayerChecklist(container, layers, rules = {}) {
     const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
     const layerTitle = String(publishState.layerTitles?.[layerKey] || '').trim();
     const defaultTitle = String(layer.title || layer.name || '').trim() || layer.name;
-    
-    let styleButton = '';
+
+    // Unified legend preview: always rendered large so the user sees the
+    // effective symbology (WFS style / uploaded icon / QGIS SVG / WMS thumb).
+    const preview = isMainLayerList ? layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS') : '';
+
+    let modeControls = '';
     if (isVectorLayer) {
-      const wfsColor = rule.serveAsWfs ? 'is-success' : 'is-light';
-      styleButton = `
-        <div class="Qtiler2Hajk-layer-row__styletools">
-          <label class="button is-small ${wfsColor}" style="margin-bottom:0">
-            <input type="checkbox" style="margin-right:6px" data-wfs-toggle="${escapeHtml(layerKey)}" ${rule.serveAsWfs ? 'checked' : ''} />
-            WFS
-          </label>
-          <button type="button" class="button is-small is-info is-light" data-style-layer="${escapeHtml(layerKey)}">${rule.wfsStyle ? t('Qtiler2Hajk.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Hajk.wfs_style_no') || 'Config. estilo'}</button>
+      // Segmented WMS/WFS toggle + style config button (opens WFS style editor
+      // for WFS layers, unified legend icon picker for WMS layers).
+      const mode = rule.serveAsWfs ? 'wfs' : 'wms';
+      modeControls = `
+        <div class="Qtiler2Hajk-mode-switch" role="group" aria-label="WMS/WFS">
+          <button type="button" class="Qtiler2Hajk-mode-switch__btn${mode === 'wms' ? ' is-active' : ''}" data-layer-mode="wms" data-layer-key="${escapeHtml(layerKey)}">WMS</button>
+          <button type="button" class="Qtiler2Hajk-mode-switch__btn${mode === 'wfs' ? ' is-active' : ''}" data-layer-mode="wfs" data-layer-key="${escapeHtml(layerKey)}">WFS</button>
         </div>
+        <button type="button" class="button is-small is-info is-light Qtiler2Hajk-mode-switch__config" data-style-layer="${escapeHtml(layerKey)}">${rule.serveAsWfs
+          ? (rule.wfsStyle ? t('Qtiler2Hajk.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Hajk.wfs_style_no') || 'Config. estilo')
+          : escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</button>
+      `;
+    } else if (isMainLayerList && !layer.isTheme) {
+      // Raster/non-vector layer: WMS only, but still offer legend icon choice.
+      modeControls = `
+        <span class="Qtiler2Hajk-mode-switch Qtiler2Hajk-mode-switch--static" title="WMS only">WMS</span>
+        <button type="button" class="button is-small is-info is-light Qtiler2Hajk-mode-switch__config" data-style-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</button>
       `;
     }
 
+    // WMS legend controls: regenerate thumbnail + clear custom icon.
     let wmsLegendControls = '';
     if (isMainLayerList && !layer.isTheme) {
-      // Keep this block in the DOM (hidden, not removed) when WFS is selected
-      // so toggling WMS/WFS doesn't change the row's flex width and shift
-      // the other action buttons left/right.
-      const mode = String(rule.wmsLegendMode || 'auto').toLowerCase() === 'manual' ? 'manual' : 'auto';
-      const manualLegend = String(rule.wmsLegendUrl || rule.wmsLegendIcon || rule.legendIcon || '').trim();
-      const preview = manualLegend
-        ? `<img src="${escapeHtml(manualLegend)}" alt="" loading="lazy" class="Qtiler2Hajk-wms-legend-preview" />`
-        : `<span class="Qtiler2Hajk-wms-legend-empty">${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</span>`;
       wmsLegendControls = `
         <div class="Qtiler2Hajk-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_help'))}">
-          <select class="select is-small" data-wms-legend-mode="${escapeHtml(layerKey)}">
-            <option value="auto"${mode === 'auto' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</option>
-            <option value="manual"${mode === 'manual' ? ' selected' : ''}>${escapeHtml(t('Qtiler2Hajk.wms_legend_manual'))}</option>
-          </select>
-          <button type="button" class="button is-small is-light" data-wms-legend-pick="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_pick'))}</button>
-
-          <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.wms_legend_clear'))}</button>
-          <input class="input is-small" type="text" data-wms-legend-url="${escapeHtml(layerKey)}" value="${escapeHtml(manualLegend)}" placeholder="${escapeHtml(t('Qtiler2Hajk.wms_legend_url'))}" />
-          ${preview}
+          <button type="button" class="button is-small is-light" data-wms-legend-regen="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_regen') || 'Recreate thumbnail')}">↻</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_clear'))}">✕</button>
         </div>
       `;
     }
@@ -5129,13 +5237,14 @@ function renderLayerChecklist(container, layers, rules = {}) {
       : '';
     const actionCells = isMainLayerList
       ? `
+        <div class="Qtiler2Hajk-layer-row__preview">${preview}</div>
         <div class="Qtiler2Hajk-layer-row__actions">
           <div class="Qtiler2Hajk-layer-row__toggles">${includeControl}${visibleControl}</div>
           <div class="Qtiler2Hajk-layer-row__title">${titleControl}</div>
-          <div class="Qtiler2Hajk-layer-row__mode">${styleButton}${wmsLegendControls}</div>
+          <div class="Qtiler2Hajk-layer-row__mode">${modeControls}${wmsLegendControls}</div>
         </div>
       `
-      : styleButton;
+      : modeControls;
     const mainContentTag = isMainLayerList ? 'div' : 'label';
     return `
       <div class="Qtiler2Hajk-layer-row${isMainLayerList ? ' Qtiler2Hajk-layer-row--main' : ''}" data-layer-row="${escapeHtml(layerKey)}">
@@ -6064,6 +6173,10 @@ function bindSearchSourceEvents() {
 }
 
 /* ── Publish editor ── */
+let publishEditorDirty = false;
+function markEditorClean() { publishEditorDirty = false; }
+function markEditorDirty() { publishEditorDirty = true; }
+
 function openPublishModal() {
   if (publishModal) {
     publishModal.hidden = false;
@@ -6076,8 +6189,18 @@ function openPublishModal() {
   setPublishModalTab('layers');
   renderPublishConfigSummary();
   updatePublishModalFullscreenButton();
+  // Any user edit inside the modal marks the editor as dirty.
+  if (publishModal && !publishModal.dataset.dirtyBound) {
+    publishModal.dataset.dirtyBound = '1';
+    publishModal.addEventListener('input', markEditorDirty);
+    publishModal.addEventListener('change', markEditorDirty);
+  }
 }
-function closePublishModal() {
+function closePublishModal({ force = false } = {}) {
+  if (!force && publishEditorDirty) {
+    if (!window.confirm(t('Qtiler2Hajk.unsaved_changes_confirm'))) return;
+  }
+  publishEditorDirty = false;
   if (publishModal) publishModal.hidden = true;
   if (publishModal) publishModal.classList.remove('publish-editor--fullscreen');
   document.body.classList.remove('publish-editor-open');
@@ -6374,6 +6497,9 @@ async function preparePublishModal(editProfileId = null) {
   // Sync tool card visual classes
   syncToolCardClasses();
   openPublishModal();
+  // Offer to restore a server-side draft saved for this map (if any).
+  maybeRestoreDraft(editProfileId).catch(() => {});
+  markEditorClean();
 }
 
 /* ══════════════════════════════════════════
@@ -6779,6 +6905,83 @@ removeLogoBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── Legend icon library: upload from Setup, delete with in-use warning ──
+const legendLibraryUploadBtn = document.getElementById('legendLibraryUploadBtn');
+const legendLibraryFileInput = document.getElementById('legendLibraryFileInput');
+const legendLibraryGrid = document.getElementById('legendLibraryGrid');
+
+legendLibraryUploadBtn?.addEventListener('click', async () => {
+  const file = legendLibraryFileInput?.files?.[0];
+  if (!file) { addLog(t('Qtiler2Hajk.legend_library_select_file'), 'error'); return; }
+  legendLibraryUploadBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('image', file, file.name || 'legend.png');
+    await api('/plugins/Qtiler2Hajk/api/legend-library', { method: 'POST', body });
+    if (legendLibraryFileInput) legendLibraryFileInput.value = '';
+    addLog(t('Qtiler2Hajk.log_legend_uploaded'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    legendLibraryUploadBtn.disabled = false;
+  }
+});
+
+legendLibraryGrid?.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest('[data-legend-library-delete]');
+  if (!button) return;
+  const id = String(button.getAttribute('data-legend-library-delete') || '').trim();
+  if (!id) return;
+
+  // Warn if the icon is referenced by layers in ANY published map (server-side
+  // scan) or in the map currently open in the editor (in-memory draft state).
+  let usageText = '';
+  try {
+    const usagePayload = await api(`/plugins/Qtiler2Hajk/api/legend-library/${encodeURIComponent(id)}/usage`);
+    const usage = Array.isArray(usagePayload?.usage) ? usagePayload.usage : [];
+    if (usage.length) {
+      const parts = usage.map((u) => {
+        const layers = Array.isArray(u.layers) ? u.layers.slice(0, 4).join(', ') : '';
+        return `${u.name || u.profileKey}${layers ? ` (${layers}${u.layers.length > 4 ? '…' : ''})` : ''}`;
+      });
+      usageText = parts.slice(0, 5).join('; ') + (parts.length > 5 ? '; …' : '');
+    }
+  } catch { /* usage endpoint unavailable — fall back to local check only */ }
+
+  const item = (legendLibraryItems || []).find((it) => String(it?.id) === id);
+  const itemUrl = String(item?.url || '').trim();
+  if (itemUrl) {
+    const stripStamp = (url) => String(url || '').split('?')[0];
+    const itemBase = stripStamp(itemUrl);
+    const localLayers = [];
+    for (const [key, rule] of Object.entries(publishState.mainRules || {})) {
+      const ref = stripStamp(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '');
+      if (ref && ref === itemBase) localLayers.push(String(rule?.title || key).trim());
+    }
+    if (localLayers.length) {
+      usageText += (usageText ? ' · ' : '') + `${t('Qtiler2Hajk.legend_current_map')}: ${localLayers.slice(0, 4).join(', ')}${localLayers.length > 4 ? '…' : ''}`;
+    }
+  }
+
+  const confirmMsg = usageText
+    ? t('Qtiler2Hajk.legend_delete_in_use', { layers: usageText })
+    : t('Qtiler2Hajk.legend_delete_confirm');
+  if (!window.confirm(confirmMsg)) return;
+
+  button.disabled = true;
+  try {
+    await api(`/plugins/Qtiler2Hajk/api/legend-library/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    addLog(t('Qtiler2Hajk.log_legend_deleted'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+    button.disabled = false;
+  }
+});
+
 openPublishModalBtn?.addEventListener('click', async () => {
   if (!isDetachedMapEditor && openDetachedEditorWindow('map')) return;
   openPublishModalBtn.disabled = true;
@@ -6915,20 +7118,41 @@ selectNoneProjectLayersBtn?.addEventListener('click', () => {
 projectLayersList?.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
-  const pickButton = target.closest('button[data-wms-legend-pick]');
-  if (pickButton) {
-    const layerKey = String(pickButton.getAttribute('data-wms-legend-pick') || '').trim();
+  // Segmented WMS/WFS mode switch
+  const modeBtn = target.closest('button[data-layer-mode]');
+  if (modeBtn) {
+    const layerKey = String(modeBtn.getAttribute('data-layer-key') || '').trim();
+    const mode = String(modeBtn.getAttribute('data-layer-mode') || '').trim().toLowerCase();
+    if (!layerKey || (mode !== 'wms' && mode !== 'wfs')) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].serveAsWfs = mode === 'wfs';
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    renderLayerAssignments();
+    schedulePreviewRefresh();
+    return;
+  }
+  // Regenerate WMS thumbnail
+  const regenButton = target.closest('button[data-wms-legend-regen]');
+  if (regenButton) {
+    const layerKey = String(regenButton.getAttribute('data-wms-legend-regen') || '').trim();
     if (!layerKey) return;
-    openSvgPicker((url) => {
-      publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
-      publishState.mainRules[layerKey].wmsLegendMode = 'manual';
-      publishState.mainRules[layerKey].wmsLegendIcon = url;
-      publishState.mainRules[layerKey].wmsLegendUrl = url;
-      const checkedNames = getCheckedLayerNames(projectLayersList);
-      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
-      setCheckedLayerNames(projectLayersList, checkedNames);
-      schedulePreviewRefresh();
-    });
+    const layer = (getAllPublishLayers() || []).find((l) => getLayerKey(l) === layerKey);
+    const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+    const layerName = String(layer?.name || '').trim();
+    if (!pid || !layerName) return;
+    regenButton.disabled = true;
+    api(`/plugins/Qtiler2Hajk/api/thumbnail/regenerate/${encodeURIComponent(pid)}/layer/${encodeURIComponent(layerName)}`, { method: 'POST' })
+      .then(() => {
+        addLog(t('Qtiler2Hajk.log_layer_thumb_regen', { layer: layerName }) || `Thumbnail recreated for "${layerName}".`, 'ok');
+        const checkedNames = getCheckedLayerNames(projectLayersList);
+        renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+        setCheckedLayerNames(projectLayersList, checkedNames);
+        schedulePreviewRefresh();
+      })
+      .catch((err) => addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error'))
+      .finally(() => { regenButton.disabled = false; });
     return;
   }
   const clearButton = target.closest('button[data-wms-legend-clear]');
@@ -6949,7 +7173,23 @@ projectLayersList?.addEventListener('click', (event) => {
   if (!button) return;
   const layerName = String(button.getAttribute('data-style-layer') || '').trim();
   if (!layerName) return;
-  openStyleEditor(layerName);
+  // Unified legend picker: WFS layers open the full style editor, WMS layers
+  // open the shared icon picker (uploaded library + QGIS SVG + upload new).
+  const rule = publishState.mainRules[layerName] || {};
+  if (rule.serveAsWfs === true) {
+    openStyleEditor(layerName);
+    return;
+  }
+  openLegendLibraryPicker((url) => {
+    publishState.mainRules[layerName] = publishState.mainRules[layerName] || { searchable: false, editable: false };
+    publishState.mainRules[layerName].wmsLegendMode = 'manual';
+    publishState.mainRules[layerName].wmsLegendIcon = url;
+    publishState.mainRules[layerName].wmsLegendUrl = url;
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    schedulePreviewRefresh();
+  });
 });
 
 defaultBackgroundList?.addEventListener('change', (event) => {
@@ -6976,32 +7216,95 @@ defaultBackgroundList?.addEventListener('change', (event) => {
   }
 });
 
-saveDraftBtn?.addEventListener('click', () => {
+saveDraftBtn?.addEventListener('click', async () => {
+  const origText = saveDraftBtn.textContent;
+  saveDraftBtn.disabled = true;
   try {
-    const draftKey = 'qtiler2origo-draft-' + String(publishState.editingProfileId || publishName?.value || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
-    localStorage.setItem(draftKey, JSON.stringify({
-      mainRules: publishState.mainRules,
-      layerTitles: publishState.layerTitles,
-      extraLayers: publishState.extraLayers,
-      backgrounds: publishState.backgrounds,
-      features: publishState.features,
-      controlsOptions: publishState.controlsOptions,
-      hajkConfig: publishState.hajkConfig,
-      editingProfileId: publishState.editingProfileId,
-      name: publishName?.value || '',
-      description: publishDescription?.value || '',
-      projectId: publishProjectSelect?.value || '',
-      savedAt: new Date().toISOString()
-    }));
-    const origText = saveDraftBtn.textContent;
+    await saveDraftToServer();
     saveDraftBtn.textContent = t('Qtiler2Hajk.draft_saved') || '✓ Guardado';
-    saveDraftBtn.disabled = true;
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.draft_save_failed', { msg: err?.message || err }), 'error');
+  } finally {
     setTimeout(() => {
       saveDraftBtn.textContent = origText;
       saveDraftBtn.disabled = false;
     }, 2500);
-  } catch (e) { /* localStorage quota or serialization error */ }
+  }
 });
+
+// ── Server-side drafts ─────────────────────────────────────────────────────
+function draftIdForCurrentEditor() {
+  return String(publishState.editingProfileId || publishName?.value || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+}
+
+async function saveDraftToServer() {
+  const draftId = draftIdForCurrentEditor();
+  const { body } = buildPublishApiBody();
+  await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`, {
+    method: 'PUT',
+    body: { ...body, name: publishName?.value || '', projectId: publishProjectSelect?.value || '' }
+  });
+  return draftId;
+}
+
+async function fetchDraftFromServer(draftId) {
+  try {
+    return await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`);
+  } catch {
+    return null;
+  }
+}
+
+async function deleteDraftFromServer(draftId) {
+  try { await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' }); } catch {}
+}
+
+async function maybeRestoreDraft(editProfileId) {
+  const draftId = String(editProfileId || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  const draft = await fetchDraftFromServer(draftId);
+  if (!draft || !draft.savedAt) return false;
+  const when = new Date(draft.savedAt).toLocaleString();
+  const restore = window.confirm(t('Qtiler2Hajk.draft_restore_msg', { date: when }));
+  if (!restore) {
+    await deleteDraftFromServer(draftId);
+    return true;
+  }
+  try {
+    applyDraftPayload(draft);
+    addLog(t('Qtiler2Hajk.draft_restored'), 'ok');
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  }
+  return true;
+}
+
+function applyDraftPayload(draft) {
+  if (!draft || typeof draft !== 'object') return;
+  if (publishName && draft.name) publishName.value = String(draft.name);
+  if (publishDescription && typeof draft.description === 'string') publishDescription.value = draft.description;
+  if (draft.layerRules && typeof draft.layerRules === 'object') {
+    publishState.mainRules = JSON.parse(JSON.stringify(draft.layerRules));
+  }
+  if (Array.isArray(draft.backgrounds)) {
+    for (const bg of draft.backgrounds) {
+      const opt = (publishState.backgroundOptions || []).find((o) => o && o.key === bg?.key);
+      if (opt && bg?.imageUrl && !String(bg.imageUrl).startsWith('/plugins/Qtiler2Hajk/api/thumbnail/')) {
+        opt.customImageUrl = bg.imageUrl;
+      }
+    }
+    try { renderDefaultBackgroundOptions(); } catch {}
+  }
+  if (draft.defaultBackgroundKey) publishState.defaultBackgroundKey = String(draft.defaultBackgroundKey);
+  if (Array.isArray(draft.controls) && controlsJsonInput) {
+    controlsJsonInput.value = JSON.stringify(draft.controls, null, 2);
+    try { syncCheckboxesFromControls(draft.controls); } catch {}
+  }
+  if (draft.center && centerInput) centerInput.value = JSON.stringify(draft.center);
+  if (typeof draft.zoom === 'number' && zoomInput) zoomInput.value = draft.zoom;
+  if (Array.isArray(draft.extent) && extentInput) extentInput.value = JSON.stringify(draft.extent);
+  try { renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules); } catch {}
+  try { renderPublishConfigSummary(); } catch {}
+}
 
 previewFooterBtn?.addEventListener('click', () => {
   setPublishModalTab('config');
@@ -7058,7 +7361,9 @@ function buildPublishApiBody() {
     name: item.type === 'layer' ? item.name : null,
     isTheme: item.type === 'layer' ? item.isTheme === true : false,
     themeName: item.type === 'layer' ? item.themeName || null : null,
-    isDefault: item.key === publishState.defaultBackgroundKey
+    isDefault: item.key === publishState.defaultBackgroundKey,
+    // include custom image URL if the admin selected one
+    imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
   }));
   const layerRules = {};
   selectedLayers.forEach((layer) => {
@@ -7125,8 +7430,16 @@ preflightPublishBtn?.addEventListener('click', async () => {
   preflightPublishBtn.textContent = t('Qtiler2Hajk.preflight_checking');
   try {
     const { body } = buildPublishApiBody();
-    await api('/plugins/Qtiler2Hajk/api/publish', { method: 'POST', body: { ...body, dryRun: true } });
-    addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+    const result = await api('/plugins/Qtiler2Hajk/api/publish', { method: 'POST', body: { ...body, dryRun: true } });
+    const checks = Array.isArray(result?.checks) ? result.checks : [];
+    if (!checks.length) {
+      addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+    } else {
+      for (const check of checks) {
+        addLog(`${check.severity === 'error' ? '✗' : '⚠'} ${check.message || check.code}`, check.severity === 'error' ? 'error' : 'info');
+      }
+      if (result?.ok) addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+    }
   } catch (err) {
     if (err?.field === 'name') {
       if (publishNameError) { publishNameError.textContent = err.message; publishNameError.style.display = ''; }
@@ -7203,7 +7516,9 @@ publishNowBtn?.addEventListener('click', async () => {
     name: item.type === 'layer' ? item.name : null,
     isTheme: item.type === 'layer' ? item.isTheme === true : false,
     themeName: item.type === 'layer' ? item.themeName || null : null,
-    isDefault: item.key === publishState.defaultBackgroundKey
+    isDefault: item.key === publishState.defaultBackgroundKey,
+    // include custom image URL if the admin selected one
+    imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
   }));
   const layerRules = {};
   selectedLayers.forEach((layer) => {
@@ -7264,6 +7579,9 @@ publishNowBtn?.addEventListener('click', async () => {
       }
     });
     addLog(t('Qtiler2Hajk.log_published', { id: mapName }), 'ok');
+    // Published successfully: remove any saved draft for this map and close.
+    await deleteDraftFromServer(draftIdForCurrentEditor());
+    markEditorClean();
     closePublishModal();
     void Promise.allSettled([loadStatus(), loadPublishedProfiles()]).then(() => {
       notifyPublishedProfilesChanged();
@@ -9106,6 +9424,175 @@ function origoStyleToRules(styleDef) {
   return out.length ? out : [defaultRule(currentLayerGeomFamily)];
 }
 
+/* ── Legend icon library (uploaded PNG/SVG, shared across maps) ── */
+let legendLibraryItems = [];
+
+async function loadLegendLibrary() {
+  try {
+    const payload = await api('/plugins/Qtiler2Hajk/api/legend-library');
+    legendLibraryItems = Array.isArray(payload?.items) ? payload.items : [];
+  } catch {
+    legendLibraryItems = [];
+  }
+  renderLegendLibraryGrid();
+  return legendLibraryItems;
+}
+
+function renderLegendLibraryGrid() {
+  const grid = document.getElementById('legendLibraryGrid');
+  const badge = document.getElementById('legendLibraryBadge');
+  if (badge) badge.textContent = String(legendLibraryItems.length);
+  if (!grid) return;
+  if (!legendLibraryItems.length) {
+    grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+    return;
+  }
+  grid.innerHTML = legendLibraryItems.map((item) => `
+    <div class="Qtiler2Hajk-legend-library-item">
+      <img src="${escapeHtml(item.url)}" alt="" />
+      <span title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || item.fileName || '')}</span>
+      <button type="button" class="button is-small is-danger is-light" data-legend-library-delete="${escapeHtml(item.id)}">${escapeHtml(t('Qtiler2Hajk.legend_library_delete') || 'Delete')}</button>
+    </div>
+  `).join('');
+}
+
+// Unified legend icon picker: uploaded icons + QGIS SVG + upload new,
+// shared between WMS and WFS layers.
+function openLegendLibraryPicker(targetCallback) {
+  let modal = document.getElementById('Qtiler2HajkLegendPicker');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'Qtiler2HajkLegendPicker';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-background" data-close-legend-picker></div>
+      <div class="modal-card Qtiler2Hajk-legend-picker__card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">${escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</p>
+          <button type="button" class="delete" aria-label="close" data-close-legend-picker></button>
+        </header>
+        <section class="modal-card-body">
+          <div class="Qtiler2Hajk-legend-picker__toolbar">
+            <div class="Qtiler2Hajk-legend-picker__tabs">
+              <button type="button" class="button is-small" data-legend-tab="library">${escapeHtml(t('Qtiler2Hajk.legend_pick_uploaded'))}</button>
+              <button type="button" class="button is-small" data-legend-tab="qgis">${escapeHtml(t('Qtiler2Hajk.legend_pick_qgis_svg'))}</button>
+            </div>
+            <input class="input is-small Qtiler2Hajk-legend-picker__search" type="search" placeholder="${escapeHtml(t('Qtiler2Hajk.legend_search_placeholder'))}" />
+            <button type="button" class="button is-small is-primary" data-legend-upload>${escapeHtml(t('Qtiler2Hajk.legend_upload_new'))}</button>
+          </div>
+          <div class="Qtiler2Hajk-legend-picker__grid" data-legend-grid></div>
+        </section>
+      </div>`;
+    document.body.appendChild(modal);
+    modal._state = { tab: 'library', filter: '', svgCats: [] };
+
+    const grid = modal.querySelector('[data-legend-grid]');
+    const searchInput = modal.querySelector('.Qtiler2Hajk-legend-picker__search');
+
+    const renderGrid = () => {
+      const st = modal._state;
+      const f = String(st.filter || '').toLowerCase();
+      if (st.tab === 'library') {
+        const items = (legendLibraryItems || []).filter((item) => {
+          if (!f) return true;
+          return String(item.name || item.fileName || '').toLowerCase().includes(f);
+        });
+        if (!items.length) {
+          grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+          return;
+        }
+        grid.innerHTML = items.map((item) => `
+          <button type="button" class="Qtiler2Hajk-legend-pick" data-legend-pick="${escapeHtml(item.url)}" title="${escapeHtml(item.name || '')}">
+            <img src="${escapeHtml(item.url)}" alt="" />
+            <span>${escapeHtml(item.name || '')}</span>
+          </button>
+        `).join('');
+        return;
+      }
+      const icons = [];
+      for (const cat of (st.svgCats || [])) {
+        for (const ic of (cat.icons || [])) {
+          const label = `${cat.name}/${ic.name}`;
+          if (f && !label.toLowerCase().includes(f)) continue;
+          icons.push({ url: ic.url, label, name: ic.name });
+        }
+      }
+      if (!icons.length) {
+        grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+        return;
+      }
+      grid.innerHTML = icons.map((ic) => `
+        <button type="button" class="Qtiler2Hajk-legend-pick" data-legend-pick="${escapeHtml(ic.url)}" title="${escapeHtml(ic.label)}">
+          <img src="${escapeHtml(ic.url)}" alt="" loading="lazy" />
+          <span>${escapeHtml(ic.label)}</span>
+        </button>
+      `).join('');
+    };
+
+    modal._renderGrid = renderGrid;
+
+    modal.querySelectorAll('[data-legend-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        modal._state.tab = btn.getAttribute('data-legend-tab');
+        modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b === btn));
+        if (modal._state.tab === 'qgis' && !modal._state.svgCats.length) {
+          loadSvgLibrary().then((cats) => { modal._state.svgCats = cats || []; renderGrid(); });
+          return;
+        }
+        renderGrid();
+      });
+    });
+
+    searchInput.addEventListener('input', () => {
+      modal._state.filter = searchInput.value;
+      renderGrid();
+    });
+
+    modal.querySelector('[data-legend-upload]').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const body = new FormData();
+          body.append('image', file, file.name || 'legend.png');
+          await api('/plugins/Qtiler2Hajk/api/legend-library', { method: 'POST', body });
+          addLog(t('Qtiler2Hajk.log_legend_uploaded'), 'ok');
+          await loadLegendLibrary();
+          modal._state.tab = 'library';
+          modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === 'library'));
+          renderGrid();
+        } catch (err) {
+          addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+        }
+      }, { once: true });
+      input.click();
+    });
+
+    modal.addEventListener('click', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      if (el.hasAttribute('data-close-legend-picker')) modal.classList.remove('is-active');
+      const pick = el.closest('[data-legend-pick]');
+      if (pick) {
+        const url = String(pick.getAttribute('data-legend-pick') || '').trim();
+        const cb = modal._pickCb;
+        modal.classList.remove('is-active');
+        if (url && typeof cb === 'function') cb(url);
+      }
+    });
+  }
+  modal._pickCb = targetCallback;
+  modal._state.filter = '';
+  const searchInput = modal.querySelector('.Qtiler2Hajk-legend-picker__search');
+  if (searchInput) searchInput.value = '';
+  modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === modal._state.tab));
+  modal.classList.add('is-active');
+  loadLegendLibrary().then(() => modal._renderGrid());
+}
+
 function loadLayerFields(projectId, layerName) {
   if (!projectId || !layerName) return Promise.resolve({ fields: [], geometryType: '' });
   return fetch(`/Qtiler2Hajk/layer-fields?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`)
@@ -10003,7 +10490,8 @@ function generateMapConfigJson() {
       name: item.type === 'layer' ? item.name : null,
       isTheme: item.type === 'layer' ? item.isTheme === true : false,
       themeName: item.type === 'layer' ? item.themeName || null : null,
-      isDefault: item.key === publishState.defaultBackgroundKey
+      isDefault: item.key === publishState.defaultBackgroundKey,
+      imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
     }));
 
     let controls = [];

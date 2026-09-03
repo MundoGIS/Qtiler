@@ -148,6 +148,24 @@
             <button id="removeLogoBtn" class="button" disabled data-i18n="Qtiler2Hajk.remove_logo">Remove logo</button>
           </div>
         </section>
+
+        <section id="legendLibrarySection" class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2Hajk.legend_library_title">Legend icons</h2>
+            <span id="legendLibraryBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2Hajk.legend_library_help">Upload PNG or SVG icons once. They stay available for every published map. Raster files are cropped to 24×24 so they fit the Hajk legend.</p>
+          <div class="grid grid--logo">
+            <label>
+              <span data-i18n="Qtiler2Hajk.legend_library_file">PNG or SVG file</span>
+              <input id="legendLibraryFileInput" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="legendLibraryUploadBtn" class="button primary" type="button" data-i18n="Qtiler2Hajk.legend_library_upload">Upload icon</button>
+          </div>
+          <div id="legendLibraryGrid" class="Qtiler2Hajk-legend-library-grid"></div>
+        </section>
       </div>
 
       <div class="tab-panel tab-panel--active" data-panel="maps">

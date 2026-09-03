@@ -814,6 +814,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const portalAssetsRoot = path.join(runtimeRoot, 'portal-assets');
+  const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
+  const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
+  const draftsRoot = path.join(runtimeRoot, 'drafts');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const projectsDir = resolveRepoPath('qgisprojects');
@@ -838,6 +841,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
   await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
+  await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+  await fs.promises.mkdir(draftsRoot, { recursive: true });
+
+  // WFS DescribeFeatureType cache (in-memory with on-disk backup)
+  const wfsMetaCache = new Map(); // key -> { meta, updatedAt }
+  const wfsMetaCachePath = path.join(runtimeRoot, 'wfs-meta-cache.json');
+  try {
+    const raw = await fs.promises.readFile(wfsMetaCachePath, 'utf8').catch(() => '{}');
+    const parsed = JSON.parse(raw || '{}');
+    for (const [k, v] of Object.entries(parsed || {})) {
+      if (v && v.meta) wfsMetaCache.set(k, { meta: v.meta, updatedAt: Number(v.updatedAt) || Date.now() });
+    }
+  } catch {
+    /* ignore cache load errors */
+  }
+  const persistWfsMetaCache = () => {
+    const serial = {};
+    wfsMetaCache.forEach((v, k) => { serial[k] = { meta: v.meta, updatedAt: v.updatedAt }; });
+    fs.promises.writeFile(wfsMetaCachePath, JSON.stringify(serial, null, 2)).catch(() => {});
+  };
 
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
     const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
@@ -1145,6 +1168,81 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       cb(null, true);
     }
   });
+
+  // ── Legend icon library (uploaded PNG/SVG used as legend icons for layers) ──
+  const LEGEND_SWATCH_SIZE = 24;
+  const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
+  const MAX_LEGEND_LIBRARY_BYTES = 2 * 1024 * 1024;
+
+  const legendLibraryUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_LEGEND_LIBRARY_BYTES },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
+      if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(ext)) {
+        return cb(new Error('invalid_legend_library_extension'));
+      }
+      cb(null, true);
+    }
+  });
+
+  const legendLibraryPublicUrl = (fileName, stamp = '') => {
+    const safe = sanitizeFileToken(fileName || '');
+    if (!safe) return '';
+    return `/plugins/${pluginSlug}/legend-library/${encodeURIComponent(safe)}${stamp ? `?v=${encodeURIComponent(String(stamp))}` : ''}`;
+  };
+
+  const readLegendLibraryIndex = async () => {
+    try {
+      const raw = await fs.promises.readFile(legendLibraryIndexPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.items) ? parsed.items : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeLegendLibraryIndex = async (items) => {
+    await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+    await fs.promises.writeFile(legendLibraryIndexPath, JSON.stringify({ items }, null, 2), 'utf8');
+  };
+
+  const cropLegendLibraryBuffer = async (buffer, ext) => {
+    if (ext === '.svg') return { buffer, ext: '.svg', mime: 'image/svg+xml' };
+    const png = await sharp(buffer)
+      .resize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE, {
+        fit: 'contain',
+        background: { r: 255, g: 255, b: 255, alpha: 0 }
+      })
+      .png()
+      .toBuffer();
+    return { buffer: png, ext: '.png', mime: 'image/png' };
+  };
+
+  const listLegendLibraryItems = async () => {
+    const items = await readLegendLibraryIndex();
+    const out = [];
+    for (const item of items) {
+      const fileName = sanitizeFileToken(item?.fileName || '');
+      if (!fileName) continue;
+      const filePath = path.join(legendLibraryRoot, fileName);
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (!stat.isFile() || stat.size <= 0) continue;
+        out.push({
+          id: String(item.id || fileName),
+          name: String(item.name || fileName),
+          fileName,
+          url: legendLibraryPublicUrl(fileName, stat.mtimeMs),
+          mime: String(item.mime || ''),
+          createdAt: item.createdAt || new Date(stat.mtimeMs).toISOString()
+        });
+      } catch {
+        /* missing file */
+      }
+    }
+    return out;
+  };
 
   const readState = async () => {
     const state = await stateStore.read();
@@ -4086,6 +4184,12 @@ ${mapIcon}
     // without them it crashes with `undefined.geometry`.
     const fallback = { attributes: [], geometryName: 'geometry', featureNS: 'http://www.qgis.org/gml' };
     try {
+      const cacheKey = `${String(baseUrl || '')}||${String(projectId || '')}||${String(typeName || '')}`;
+      const cached = wfsMetaCache.get(cacheKey);
+      if (cached && cached.meta) {
+        return cached.meta;
+      }
+
       const url = `${baseUrl}/wfs?project=${encodeURIComponent(projectId)}`
         + `&service=WFS&version=1.1.0&request=DescribeFeatureType`
         + `&typeName=${encodeURIComponent(typeName)}`;
@@ -4123,6 +4227,13 @@ ${mapIcon}
       if (!attrs.length) {
         console.warn(`[Qtiler2Hajk] DescribeFeatureType for ${typeName} returned 0 attributes. XML snippet: ${xml.substring(0, 200)}`);
       }
+
+      // Cache result (async write to disk, don't block)
+      try {
+        wfsMetaCache.set(cacheKey, { meta, updatedAt: Date.now() });
+        persistWfsMetaCache();
+      } catch (_) {}
+
       return meta;
     } catch (err) {
       console.warn(`[Qtiler2Hajk] DescribeFeatureType fetch failed for ${typeName}: ${err?.message || err}`);
@@ -4538,13 +4649,15 @@ ${mapIcon}
 
   const getHajkLegendStyleEntries = (styleDef, layer = {}) => {
     if (!Array.isArray(styleDef)) return [];
-    const geometryType = String(layer?.geometryType || '').toLowerCase();
     const entries = [];
     for (const ruleGroup of styleDef) {
       const groupEntries = Array.isArray(ruleGroup) ? ruleGroup : [ruleGroup];
       for (const entry of groupEntries) {
         if (!entry || typeof entry !== 'object' || entry.text) continue;
-        if (entry.icon || entry.circle || entry.fill || entry.stroke || geometryType.includes('polygon')) entries.push(entry);
+        // Include any rule that carries visible symbology (icon/circle/fill/
+        // stroke). The old `|| geometryType.includes('polygon')` catch-all
+        // silently dropped stroke-only rules on non-polygon layers.
+        if (entry.icon || entry.circle || entry.fill || entry.stroke) entries.push(entry);
       }
     }
     return entries;
@@ -5385,22 +5498,19 @@ ${mapIcon}
            let vectorLegend = '';
            let vectorSldText = '';
            let qtilerStyleRules = [];
-           try {
-             const legendEntries = getHajkLegendStyleEntries(fullVectorStyle, l);
-             const hasMultiRuleLegend = legendEntries.length > 1;
-             styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l);
-             scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode);
-             qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl);
-             vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl);
-             vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
-             vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon;
-             vectorSldText = qtilerStyleRules.length ? '' : (styleOptions.icon ? '' : toHajkVectorSldText(fullVectorStyle, l, baseUrl));
-           } catch (err) {
-             console.error('[Qtiler2Hajk] WFS style/legend build failed:', l?.name || l?.id || '', err?.stack || err);
-             styleOptions = toHajkVectorStyleOptions(null, l);
-             vectorLegendIcon = toHajkVectorLegendIcon(styleOptions);
-             vectorLegend = vectorLegendIcon;
-           }
+           // Each helper is wrapped individually so a failure in one (e.g. an
+           // unusual style shape) does not blank out the rest. Previously a
+           // single catch reset ALL options to defaults, which is why custom
+           // styles sometimes disappeared from the legend.
+           const legendEntries = (() => { try { return getHajkLegendStyleEntries(fullVectorStyle, l); } catch { return []; } })();
+           const hasMultiRuleLegend = legendEntries.length > 1;
+           try { styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l); } catch (e) { console.warn('[Qtiler2Hajk] styleOptions failed for', l?.name || l?.id || '', e?.message || e); styleOptions = toHajkVectorStyleOptions(null, l); }
+           try { scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode); } catch (e) { console.warn('[Qtiler2Hajk] scaleZoom failed for', l?.name || l?.id || '', e?.message || e); scaleZoomOptions = {}; }
+           try { qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] qtilerStyleRules failed for', l?.name || l?.id || '', e?.message || e); qtilerStyleRules = []; }
+           try { vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] ruleLegendIcon failed for', l?.name || l?.id || '', e?.message || e); vectorRuleLegendIcon = ''; }
+           vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
+           try { vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon; } catch (e) { console.warn('[Qtiler2Hajk] ruleLegend failed for', l?.name || l?.id || '', e?.message || e); vectorLegend = vectorLegendIcon; }
+           try { vectorSldText = qtilerStyleRules.length ? '' : (styleOptions.icon ? '' : toHajkVectorSldText(fullVectorStyle, l, baseUrl)); } catch (e) { console.warn('[Qtiler2Hajk] sldText failed for', l?.name || l?.id || '', e?.message || e); vectorSldText = ''; }
            const searchId = `${hajkLayerId}_search`;
            const namedAttributes = getNamedInfoclickAttributes(l.attributes);
            const displayFieldNames = namedAttributes.map((a) => a.name).filter(Boolean);
@@ -6942,6 +7052,12 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     const installed = await hasQwc2Install();
     const branding = await getBrandingStatus();
     const authCatalog = readAuthCatalog();
+    // Lantmäteriet runs in DEMO/MOCK mode when no API key is configured;
+    // surface that to the admin UI so the Search control isn't enabled
+    // blindly against fake data.
+    const lantmateriDemo = !(process.env.LANTMATERI_API_KEY
+      || process.env.LANTMATERI_FASTIGHET_API_KEY
+      || process.env.LANTMATERI_CLIENT_ID);
     res.json({
       plugin: pluginSlug,
       installed,
@@ -6950,6 +7066,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       version: state.version,
       standalonePort: state.standalonePort,
       installedAt: state.installedAt,
+      lantmateriDemo,
       lastSyncAt: state.lastSyncAt,
       lastError: state.lastError,
       branding,
@@ -7079,6 +7196,183 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       res.json({ status: 'logo_removed', branding });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'logo_remove_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // ── Legend icon library routes ──
+  app.use(`/plugins/${pluginSlug}/legend-library`, express.static(legendLibraryRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '7d',
+    index: false
+  }));
+
+  app.get(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, async (_req, res) => {
+    try {
+      const items = await listLegendLibraryItems();
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Report which published profiles/layers reference a given legend icon, so
+  // the admin UI can warn before deleting an icon that is in use anywhere.
+  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = String(req.params?.id || '').trim();
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const items = await listLegendLibraryItems();
+      const item = items.find((it) => String(it.id) === id);
+      if (!item) return res.status(404).json({ error: 'not_found' });
+      const stripStamp = (url) => String(url || '').split('?')[0];
+      const itemUrlBase = stripStamp(item.url);
+      const profiles = await readAllPublishedProfiles();
+      const usage = [];
+      for (const profile of profiles) {
+        const layers = [];
+        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
+          if (ref && ref === itemUrlBase) {
+            layers.push(String(layer?.title || layer?.name || '').trim());
+          }
+        }
+        if (layers.length) {
+          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
+        }
+      }
+      res.json({ id, name: item.name, usage });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, (req, res) => {
+    legendLibraryUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const msg = String(err?.message || err || 'legend_library_upload_failed');
+        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'legend_library_too_large', details: `max_bytes_${MAX_LEGEND_LIBRARY_BYTES}` });
+        }
+        if (msg.includes('invalid_legend_library_extension')) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        return res.status(400).json({ error: 'legend_library_upload_failed', details: msg });
+      }
+      try {
+        const uploaded = req.file;
+        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
+          return res.status(400).json({ error: 'legend_library_file_required' });
+        }
+        const origExt = path.extname(String(uploaded.originalname || '')).toLowerCase();
+        if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(origExt)) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        const cropped = await cropLegendLibraryBuffer(uploaded.buffer, origExt);
+        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'legend'), origExt)).slice(0, 80) || 'legend';
+        const fileName = `${Date.now()}-${stem}${cropped.ext}`;
+        const targetPath = path.join(legendLibraryRoot, fileName);
+        await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+        await fs.promises.writeFile(targetPath, cropped.buffer);
+        const item = {
+          id: fileName,
+          name: path.basename(String(uploaded.originalname || fileName)),
+          fileName,
+          mime: cropped.mime,
+          createdAt: nowIso()
+        };
+        const items = await readLegendLibraryIndex();
+        items.unshift(item);
+        await writeLegendLibraryIndex(items);
+        return res.status(201).json({
+          status: 'uploaded',
+          item: { ...item, url: legendLibraryPublicUrl(fileName, Date.now()) }
+        });
+      } catch (uploadErr) {
+        return res.status(500).json({ error: 'legend_library_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const items = await readLegendLibraryIndex();
+      const idx = items.findIndex((it) => String(it?.id || '') === id);
+      if (idx === -1) return res.status(404).json({ error: 'not_found' });
+      const [removed] = items.splice(idx, 1);
+      await writeLegendLibraryIndex(items);
+      const fileName = sanitizeFileToken(removed?.fileName || id);
+      if (fileName) {
+        await fs.promises.rm(path.join(legendLibraryRoot, fileName), { force: true }).catch(() => {});
+      }
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // ── Drafts: save/restore in-progress publish editor state server-side ──
+  app.get(`/plugins/${pluginSlug}/api/drafts`, portalEditorOnly, async (_req, res) => {
+    try {
+      const entries = await fs.promises.readdir(draftsRoot).catch(() => []);
+      const drafts = [];
+      for (const fileName of entries) {
+        if (!fileName.toLowerCase().endsWith('.json')) continue;
+        try {
+          const raw = await fs.promises.readFile(path.join(draftsRoot, fileName), 'utf8');
+          const parsed = JSON.parse(raw || '{}');
+          drafts.push({
+            id: fileName.replace(/\.json$/i, ''),
+            name: String(parsed?.name || '').trim(),
+            projectId: String(parsed?.projectId || '').trim(),
+            savedAt: String(parsed?.savedAt || '').trim()
+          });
+        } catch { /* skip malformed */ }
+      }
+      drafts.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+      res.json({ drafts });
+    } catch (err) {
+      res.status(500).json({ error: 'drafts_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const raw = await fs.promises.readFile(path.join(draftsRoot, `${id}.json`), 'utf8');
+      res.type('application/json');
+      return res.send(raw);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return res.status(404).json({ error: 'draft_not_found' });
+      res.status(500).json({ error: 'draft_read_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const payload = (req.body && typeof req.body === 'object') ? req.body : {};
+      payload.savedAt = nowIso();
+      await fs.promises.mkdir(draftsRoot, { recursive: true });
+      await fs.promises.writeFile(path.join(draftsRoot, `${id}.json`), JSON.stringify(payload, null, 2), 'utf8');
+      res.json({ status: 'saved', id, savedAt: payload.savedAt });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      await fs.promises.rm(path.join(draftsRoot, `${id}.json`), { force: true });
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_delete_failed', details: String(err?.message || err) });
     }
   });
 
@@ -7337,7 +7631,35 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         });
       }
       if (req.body?.dryRun === true) {
-        return res.json({ ok: true, dryRun: true, issues: [] });
+        // Real preflight: verify project files exist on disk, the cache index
+        // is generated (needed for extents/CRS), and report which layers are
+        // missing from it so the admin knows what would render blank.
+        const checks = [];
+        const projects = await listProjectsFromDisk(projectsDir).catch(() => []);
+        const byProject = new Map();
+        for (const entry of layerEntries) {
+          const pid = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
+          if (!byProject.has(pid)) byProject.set(pid, []);
+          byProject.get(pid).push(String(entry?.name || '').trim());
+        }
+        for (const [pid, names] of byProject.entries()) {
+          const proj = projects.find((p) => String(p.id) === pid);
+          if (!proj) {
+            checks.push({ severity: 'error', code: 'project_not_found', message: `Project "${pid}" was not found on disk.`, projectId: pid });
+            continue;
+          }
+          const cacheIndex = await readCacheIndex(pid).catch(() => null);
+          if (!cacheIndex || !Array.isArray(cacheIndex.layers) || !cacheIndex.layers.length) {
+            checks.push({ severity: 'warning', code: 'cache_index_missing', message: `Project "${pid}" has no generated cache index. Run project cache generation so extents, CRS and thumbnails work.`, projectId: pid });
+            continue;
+          }
+          const cachedNames = new Set(cacheIndex.layers.map((l) => String(l?.name || l?.layer || '').trim()).filter(Boolean));
+          const missing = names.filter((n) => n && !cachedNames.has(n));
+          if (missing.length) {
+            checks.push({ severity: 'warning', code: 'layers_not_in_cache', message: `Layers missing from the cache index of "${pid}": ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` (+${missing.length - 5} more)` : ''}`, projectId: pid });
+          }
+        }
+        return res.json({ ok: !checks.some((c) => c.severity === 'error'), dryRun: true, issues: [], checks });
       }
       // QtilerAuth's "Layer permissions" editor is where admins actually mark
       // a layer searchable + pick its search attribute (wfsSearchable in
@@ -9148,8 +9470,11 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       res.json({ results: fulltextResults, result_counts: counts });
     } catch(err) { console.error('XERR', err);
       console.error('/Qtiler2Hajk/search API Error:', err);
+      // Surface failures so the client can tell "no results" apart from
+      // "search backend broken" (previously both returned empty arrays).
+      res.status(500);
       if (req.query.origo || req._forceOrigo) return res.json([]);
-      res.json({ results: [], result_counts: [] });
+      res.json({ results: [], result_counts: [], error: 'search_failed', details: String(err?.message || err) });
     }
   };
   app.get('/Qtiler2Hajk/search', searchHandler);
