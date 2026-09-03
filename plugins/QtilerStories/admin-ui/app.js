@@ -106,6 +106,18 @@ const QTWC_I18N = {
     'QtilerStories.portal_no_users': 'No users available (QtilerAuth disabled or no active users)',
     'QtilerStories.portal_no_roles': 'No roles available',
     'QtilerStories.page_unsaved_hint': 'Unsaved changes',
+    'QtilerStories.portal_site_header_height': 'Header height',
+    'QtilerStories.portal_site_header_font': 'Header font',
+    'QtilerStories.portal_site_header_color1': 'Header color 1',
+    'QtilerStories.portal_site_header_color2': 'Header color 2',
+    'QtilerStories.portal_site_header_text_color': 'Header text color',
+    'QtilerStories.portal_site_header_background_url': 'Header background image URL',
+    'QtilerStories.portal_site_footer_text': 'Footer text',
+    'QtilerStories.portal_site_footer_link_label': 'Footer link label',
+    'QtilerStories.portal_site_footer_link_url': 'Footer link URL',
+    'QtilerStories.portal_site_footer_background_color': 'Footer background color',
+    'QtilerStories.portal_site_footer_text_color': 'Footer text color',
+    'QtilerStories.portal_site_footer_link_color': 'Footer link color',
   },
   es: {
     'QtilerStories.title': 'Qtiler Stories',
@@ -189,6 +201,18 @@ const QTWC_I18N = {
     'QtilerStories.portal_no_users': 'No hay usuarios disponibles (QtilerAuth desactivado o sin usuarios activos)',
     'QtilerStories.portal_no_roles': 'No hay roles disponibles',
     'QtilerStories.page_unsaved_hint': 'Cambios sin guardar',
+    'QtilerStories.portal_site_header_height': 'Altura de cabecera',
+    'QtilerStories.portal_site_header_font': 'Fuente de cabecera',
+    'QtilerStories.portal_site_header_color1': 'Color de cabecera 1',
+    'QtilerStories.portal_site_header_color2': 'Color de cabecera 2',
+    'QtilerStories.portal_site_header_text_color': 'Color de texto de cabecera',
+    'QtilerStories.portal_site_header_background_url': 'URL de imagen de fondo de cabecera',
+    'QtilerStories.portal_site_footer_text': 'Texto de pie de página',
+    'QtilerStories.portal_site_footer_link_label': 'Etiqueta del enlace de pie',
+    'QtilerStories.portal_site_footer_link_url': 'URL del enlace de pie',
+    'QtilerStories.portal_site_footer_background_color': 'Color de fondo del pie',
+    'QtilerStories.portal_site_footer_text_color': 'Color de texto del pie',
+    'QtilerStories.portal_site_footer_link_color': 'Color del enlace del pie',
   },
   sv: {
     'QtilerStories.title': 'Qtiler Stories',
@@ -272,6 +296,18 @@ const QTWC_I18N = {
     'QtilerStories.portal_no_users': 'Inga användare tillgängliga (QtilerAuth inaktivt eller inga aktiva användare)',
     'QtilerStories.portal_no_roles': 'Inga roller tillgängliga',
     'QtilerStories.page_unsaved_hint': 'Osparade ändringar',
+    'QtilerStories.portal_site_header_height': 'Sidhuvudets höjd',
+    'QtilerStories.portal_site_header_font': 'Sidhuvudets teckensnitt',
+    'QtilerStories.portal_site_header_color1': 'Sidhuvudsfärg 1',
+    'QtilerStories.portal_site_header_color2': 'Sidhuvudsfärg 2',
+    'QtilerStories.portal_site_header_text_color': 'Textfärg i sidhuvud',
+    'QtilerStories.portal_site_header_background_url': 'URL för sidhuvudets bakgrundsbild',
+    'QtilerStories.portal_site_footer_text': 'Sidfotstext',
+    'QtilerStories.portal_site_footer_link_label': 'Sidfotslänkens etikett',
+    'QtilerStories.portal_site_footer_link_url': 'Sidfotslänkens URL',
+    'QtilerStories.portal_site_footer_background_color': 'Sidfotens bakgrundsfärg',
+    'QtilerStories.portal_site_footer_text_color': 'Sidfotens textfärg',
+    'QtilerStories.portal_site_footer_link_color': 'Sidfotslänkens färg',
   }
 };
 // Derived locales share the Swedish base where no dedicated translation exists.
@@ -790,12 +826,56 @@ function updatePortalItemField(blockId, itemIndex, field, value) {
   renderPortalPreview();
 }
 
+function getPortalBlockTypeIcon(type) {
+  const icons = { hero: '🎯', text: '📝', maps: '🗺️', cards: '🗂️', social: '🔗' };
+  return icons[type] || '📄';
+}
+
+function getPortalBlockTypeDesc(type) {
+  const descs = {
+    hero: 'Big banner with title, subtitle and call-to-action',
+    text: 'Rich text with optional image beside or above',
+    maps: 'Gallery of published maps (cards, embedded or links)',
+    cards: 'Grid of small info cards with title, text and link',
+    social: 'Row of social/link buttons with icons'
+  };
+  return descs[type] || '';
+}
+
+function renderBlockInserter(insertAtIndex) {
+  const types = ['hero', 'text', 'maps', 'cards', 'social'];
+  return `
+    <div class="block-inserter" data-insert-at="${insertAtIndex}">
+      <button type="button" class="block-inserter__toggle" title="Add section here">
+        <span class="block-inserter__plus">＋</span>
+        <span class="block-inserter__label">Add section</span>
+      </button>
+      <div class="block-inserter__menu" hidden>
+        ${types.map((type) => `
+          <button type="button" class="block-inserter__option" data-insert-type="${type}" data-insert-at="${insertAtIndex}">
+            <span class="block-inserter__option-icon">${getPortalBlockTypeIcon(type)}</span>
+            <span class="block-inserter__option-text">
+              <strong>${escapeHtml(getPortalBlockTypeLabel(type))}</strong>
+              <small>${escapeHtml(getPortalBlockTypeDesc(type))}</small>
+            </span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderPortalBlocksList() {
   if (!portalBlocksList) return;
   const page = getSelectedPortalPage();
   const blocks = Array.isArray(page?.blocks) ? page.blocks : [];
   if (!blocks.length) {
-    portalBlocksList.innerHTML = `<p class="help">${escapeHtml(t('QtilerStories.portal_no_blocks_preview'))}</p>`;
+    portalBlocksList.innerHTML = `
+      <div class="portal-empty-blocks">
+        <p>This page has no sections yet.</p>
+        <p class="help">Add your first section below — start with a Hero to introduce the page, then add text, maps or cards.</p>
+      </div>
+      ${renderBlockInserter(0)}`;
     return;
   }
   portalBlocksList.innerHTML = blocks.map((block, index) => {
@@ -804,17 +884,23 @@ function renderPortalBlocksList() {
       const sel = (block.profileKeys || []).includes(key) ? ' selected' : '';
       return `<option value="${escapeHtml(key)}"${sel}>[${escapeHtml(m.source || '?')}] ${escapeHtml(m.name || key)}</option>`;
     }).join('');
+    const blockSummary = getPortalBlockSummary(block);
     return `
       <div class="portal-block" data-portal-block="${escapeHtml(block.id)}">
-        <div class="portal-block__head">
-          <span class="portal-block__type">${escapeHtml(getPortalBlockTypeLabel(block.type))}</span>
-          <div class="portal-block__head-actions">
+        <button type="button" class="portal-block__head" data-block-toggle="${escapeHtml(block.id)}" aria-expanded="true">
+          <span class="portal-block__icon">${getPortalBlockTypeIcon(block.type)}</span>
+          <span class="portal-block__title">
+            <strong>${escapeHtml(block.title || getPortalBlockTypeLabel(block.type))}</strong>
+            <small>${escapeHtml(blockSummary)}</small>
+          </span>
+          <span class="portal-block__actions">
             <button type="button" title="${escapeHtml(t('QtilerStories.move_up'))}" data-portal-block-move="up" data-portal-block-id="${escapeHtml(block.id)}" ${index === 0 ? 'disabled' : ''}>▲</button>
             <button type="button" title="${escapeHtml(t('QtilerStories.move_down'))}" data-portal-block-move="down" data-portal-block-id="${escapeHtml(block.id)}" ${index === blocks.length - 1 ? 'disabled' : ''}>▼</button>
-            <button type="button" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-block-delete="${escapeHtml(block.id)}">×</button>
-          </div>
-        </div>
-        <div class="portal-block__body">
+            <button type="button" class="is-danger" title="${escapeHtml(t('QtilerStories.delete'))}" data-portal-block-delete="${escapeHtml(block.id)}">×</button>
+          </span>
+          <span class="portal-block__chevron">▾</span>
+        </button>
+        <div class="portal-block__body" data-block-body="${escapeHtml(block.id)}">
           <div class="portal-meta-grid">
             <div class="field">
               <label class="label">Type</label>
@@ -822,32 +908,35 @@ function renderPortalBlocksList() {
             </div>
             <div class="field">
               <label class="label">Title</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" placeholder="${escapeHtml(getPortalBlockTypeLabel(block.type))}" /></div>
             </div>
             ${block.type === 'hero' ? `
             <div class="field">
               <label class="label">Eyebrow</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.eyebrow || '')}" data-portal-block-field="eyebrow" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.eyebrow || '')}" data-portal-block-field="eyebrow" data-portal-block-id="${escapeHtml(block.id)}" placeholder="Small text above the title" /></div>
             </div>
-            <div class="field">
-              <label class="label">Subtitle (rich text HTML)</label>
-              <div class="control"><textarea class="textarea" rows="2" data-portal-block-field="subtitle" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.subtitle || '')}</textarea></div>
+            <div class="field" style="grid-column:1/-1">
+              <label class="label">Subtitle</label>
+              <div class="control"><textarea class="textarea QtilerStories-richtext" rows="3" data-portal-block-field="subtitle" data-portal-block-id="${escapeHtml(block.id)}" data-richtext="1">${escapeHtml(block.subtitle || '')}</textarea></div>
             </div>
             <div class="field">
               <label class="label">Background image URL</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.backgroundUrl || '')}" data-portal-block-field="backgroundUrl" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control" style="display:flex;gap:6px">
+                <input class="input" type="text" value="${escapeHtml(block.backgroundUrl || '')}" data-portal-block-field="backgroundUrl" data-portal-block-id="${escapeHtml(block.id)}" placeholder="https://… or /plugins/QtilerStories/…" />
+                <button type="button" class="button is-small" data-browse-story-image="${escapeHtml(block.id)}" data-target-field="backgroundUrl">${escapeHtml(t('QtilerStories.text_image_browse'))}</button>
+              </div>
             </div>
             <div class="field">
               <label class="label">CTA label</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.ctaLabel || '')}" data-portal-block-field="ctaLabel" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.ctaLabel || '')}" data-portal-block-field="ctaLabel" data-portal-block-id="${escapeHtml(block.id)}" placeholder="Explore the map" /></div>
             </div>
             <div class="field">
               <label class="label">CTA URL</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.ctaUrl || '')}" data-portal-block-field="ctaUrl" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.ctaUrl || '')}" data-portal-block-field="ctaUrl" data-portal-block-id="${escapeHtml(block.id)}" placeholder="/QtilerStories/maps" /></div>
             </div>` : ''}
             ${block.type === 'text' ? `
             <div class="field" style="grid-column:1/-1">
-              <label class="label">${escapeHtml(t('QtilerStories.text_layout_plain'))}</label>
+              <label class="label">Layout</label>
               <div class="control"><div class="select is-fullwidth"><select data-portal-block-field="textLayout" data-portal-block-id="${escapeHtml(block.id)}">
                 <option value="plain"${(block.textLayout || 'plain') === 'plain' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_plain'))}</option>
                 <option value="media-right"${block.textLayout === 'media-right' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_media_right'))}</option>
@@ -860,7 +949,7 @@ function renderPortalBlocksList() {
               <label class="label">${escapeHtml(t('QtilerStories.text_image_url'))}</label>
               <div class="control" style="display:flex;gap:6px">
                 <input class="input" type="text" value="${escapeHtml(block.imageUrl || '')}" data-portal-block-field="imageUrl" data-portal-block-id="${escapeHtml(block.id)}" />
-                <button type="button" class="button is-small" data-browse-story-image="${escapeHtml(block.id)}">${escapeHtml(t('QtilerStories.text_image_browse'))}</button>
+                <button type="button" class="button is-small" data-browse-story-image="${escapeHtml(block.id)}" data-target-field="imageUrl">${escapeHtml(t('QtilerStories.text_image_browse'))}</button>
               </div>
             </div>
             <div class="field">
@@ -875,31 +964,32 @@ function renderPortalBlocksList() {
             ${block.type === 'maps' ? `
             <div class="field">
               <label class="label">Intro</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.intro || '')}" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.intro || '')}" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}" placeholder="Short intro shown above the maps" /></div>
             </div>
             <div class="field">
               <label class="label">Layout</label>
               <div class="control"><div class="select is-fullwidth"><select data-portal-block-field="layout" data-portal-block-id="${escapeHtml(block.id)}">
-                <option value="grid"${block.layout === 'grid' ? ' selected' : ''}>Grid</option>
-                <option value="featured"${block.layout === 'featured' ? ' selected' : ''}>Featured</option>
+                <option value="grid"${block.layout === 'grid' ? ' selected' : ''}>Grid (equal cards)</option>
+                <option value="featured"${block.layout === 'featured' ? ' selected' : ''}>Featured (first map larger)</option>
               </select></div></div>
             </div>
             <div class="field">
               <label class="label">Display mode</label>
               <div class="control"><div class="select is-fullwidth"><select data-portal-block-field="displayMode" data-portal-block-id="${escapeHtml(block.id)}">
-                <option value="card"${block.displayMode === 'card' ? ' selected' : ''}>Card (thumbnail)</option>
-                <option value="embed"${block.displayMode === 'embed' ? ' selected' : ''}>Embedded map</option>
-                <option value="open"${block.displayMode === 'open' ? ' selected' : ''}>Open link</option>
+                <option value="card"${block.displayMode === 'card' ? ' selected' : ''}>Card with thumbnail (opens in new tab)</option>
+                <option value="embed"${block.displayMode === 'embed' ? ' selected' : ''}>Embedded map (interactive, in the page)</option>
+                <option value="open"${block.displayMode === 'open' ? ' selected' : ''}>Title + description + open link</option>
               </select></div></div>
             </div>
             <div class="field" style="grid-column:1/-1">
               <label class="label">Maps</label>
+              <p class="help">Pick the maps to show in this section. The badge shows which viewer published each map (Origo / Hajk / 3D Eye).</p>
               <div class="control"><select class="input portal-multiselect" multiple size="5" data-portal-block-field="profileKeys" data-portal-block-id="${escapeHtml(block.id)}" data-value-kind="multi-option">${mapsOptions}</select></div>
             </div>` : ''}
             ${(block.type === 'cards' || block.type === 'social') ? `
             <div class="field">
               <label class="label">Intro</label>
-              <div class="control"><input class="input" type="text" value="${escapeHtml(block.intro || '')}" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.intro || '')}" data-portal-block-field="intro" data-portal-block-id="${escapeHtml(block.id)}" placeholder="Short intro shown above the cards" /></div>
             </div>
             <div class="field" style="grid-column:1/-1">
               <label class="label">Items</label>
@@ -910,8 +1000,8 @@ function renderPortalBlocksList() {
                       <input class="input is-small" placeholder="Title" value="${escapeHtml(item.title || '')}" data-portal-item-field="title" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <input class="input is-small" placeholder="Text" value="${escapeHtml(item.text || '')}" data-portal-item-field="text" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <input class="input is-small" placeholder="URL" value="${escapeHtml(item.url || '')}" data-portal-item-field="url" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
-                      <input class="input is-small" placeholder="Label" value="${escapeHtml(item.label || '')}" data-portal-item-field="label" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
-                      <input class="input is-small" placeholder="Meta" value="${escapeHtml(item.meta || '')}" data-portal-item-field="meta" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
+                      <input class="input is-small" placeholder="Button label" value="${escapeHtml(item.label || '')}" data-portal-item-field="label" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
+                      <input class="input is-small" placeholder="Meta (small label)" value="${escapeHtml(item.meta || '')}" data-portal-item-field="meta" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <input class="input is-small" placeholder="Image URL" value="${escapeHtml(item.imageUrl || '')}" data-portal-item-field="imageUrl" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}" />
                       <button type="button" class="button is-small is-danger is-light" data-portal-item-delete data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${i}">×</button>
                     </div>
@@ -923,13 +1013,35 @@ function renderPortalBlocksList() {
             <div class="field">
               <label class="label">Visibility</label>
               <div class="control"><div class="select is-fullwidth"><select data-portal-block-field="visibility.access" data-portal-block-id="${escapeHtml(block.id)}">${getPortalVisibilityOptionsHtml(block.visibility?.access || 'inherit', true)}</select></div></div>
+              <p class="help">Inherit follows the page visibility. Override to show or hide just this section.</p>
             </div>
           </div>
         </div>
       </div>
+      ${renderBlockInserter(index + 1)}
     `;
   }).join('');
   initRichTextEditors();
+}
+
+function getPortalBlockSummary(block) {
+  if (!block) return '';
+  if (block.type === 'maps') {
+    const n = (block.profileKeys || []).length;
+    return n ? `${n} map${n === 1 ? '' : 's'} selected` : 'No maps selected';
+  }
+  if (block.type === 'cards' || block.type === 'social') {
+    const n = (block.items || []).length;
+    return n ? `${n} item${n === 1 ? '' : 's'}` : 'No items';
+  }
+  if (block.type === 'text') {
+    const words = String(block.body || '').replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+    return words ? `${words} words` : 'Empty text';
+  }
+  if (block.type === 'hero') {
+    return block.subtitle ? 'With subtitle' : 'No subtitle';
+  }
+  return '';
 }
 
 /* ── Rich text (Quill) for story text blocks ── */
@@ -1421,17 +1533,65 @@ portalApplyTemplateBtn?.addEventListener('click', () => {
   queuePortalPersist();
 });
 
-// Blocks
+// Blocks: adding is done via the inserter between blocks (renderBlockInserter).
+// The old standalone "Add Section" button is kept as a no-op-safe fallback.
 portalAddBlockBtn?.addEventListener('click', () => {
   const page = getSelectedPortalPage();
   if (!page) return;
-  page.blocks = [...(page.blocks || []), createDefaultPortalBlock('text')];
+  page.blocks = [...(page.blocks || []), createDefaultPortalBlock('hero')];
   renderPortalBlocksList();
   renderPortalPreview();
   queuePortalPersist();
 });
 
 portalBlocksList?.addEventListener('click', (event) => {
+  // Block collapse/expand toggle (click on the head chevron/title area)
+  const toggleHead = event.target.closest('[data-block-toggle]');
+  if (toggleHead && !event.target.closest('[data-portal-block-move],[data-portal-block-delete]')) {
+    const blockId = toggleHead.getAttribute('data-block-toggle');
+    const body = portalBlocksList.querySelector(`[data-block-body="${CSS.escape(blockId)}"]`);
+    const expanded = toggleHead.getAttribute('aria-expanded') !== 'false';
+    toggleHead.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    if (body) body.hidden = expanded;
+    return;
+  }
+  // Inserter: open the type menu
+  const inserterToggle = event.target.closest('.block-inserter__toggle');
+  if (inserterToggle) {
+    const menu = inserterToggle.parentElement?.querySelector('.block-inserter__menu');
+    if (menu) {
+      const isOpen = !menu.hidden;
+      portalBlocksList.querySelectorAll('.block-inserter__menu').forEach((m) => { m.hidden = true; });
+      menu.hidden = isOpen;
+    }
+    return;
+  }
+  // Inserter: pick a block type
+  const insertOption = event.target.closest('[data-insert-type]');
+  if (insertOption) {
+    const type = insertOption.getAttribute('data-insert-type');
+    const atIndex = Number(insertOption.getAttribute('data-insert-at'));
+    const page = getSelectedPortalPage();
+    if (!page || !type) return;
+    page.blocks = Array.isArray(page.blocks) ? page.blocks : [];
+    page.blocks.splice(Math.max(0, Math.min(atIndex, page.blocks.length)), 0, createDefaultPortalBlock(type));
+    renderPortalBlocksList();
+    renderPortalPreview();
+    queuePortalPersist();
+    return;
+  }
+  // Browse story image for a specific field (hero background, text image)
+  const browseBtn = event.target.closest('[data-browse-story-image]');
+  if (browseBtn) {
+    const blockId = browseBtn.getAttribute('data-browse-story-image');
+    const targetField = browseBtn.getAttribute('data-target-field') || 'imageUrl';
+    openStoryImagePicker((url) => {
+      if (!url) return;
+      updatePortalBlockField(blockId, targetField, url);
+      renderPortalBlocksList();
+    });
+    return;
+  }
   const moveBtn = event.target.closest('[data-portal-block-move]');
   if (moveBtn) {
     const page = getSelectedPortalPage();

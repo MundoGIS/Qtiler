@@ -642,6 +642,11 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
     next();
   }, express.static(path.join(process.cwd(), 'plugins', pluginSlug, 'admin-ui')));
 
+  app.use(`/plugins/${pluginSlug}/public`, express.static(path.join(process.cwd(), 'plugins', pluginSlug, 'public'), {
+    fallthrough: false,
+    index: false
+  }));
+
   app.get(`/plugins/${pluginSlug}/admin`, (_req, res) => {
     res.redirect(`/plugins/${pluginSlug}/admin-ui/`);
   });

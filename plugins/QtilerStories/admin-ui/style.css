@@ -103,6 +103,250 @@
   justify-self: end;
 }
 
+/* ── WordPress-style block editor ── */
+
+/* Collapsible block card */
+.portal-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  margin-bottom: 0;
+  transition: box-shadow 0.15s;
+}
+
+.portal-block:hover {
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
+}
+
+.portal-block__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.portal-block__head:hover {
+  background: #f1f5f9;
+}
+
+.portal-block__icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.portal-block__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.portal-block__title strong {
+  font-size: 0.88rem;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.portal-block__title small {
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.portal-block__actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.portal-block__actions button {
+  appearance: none;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: #475569;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.portal-block__actions button:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.portal-block__actions button.is-danger {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.portal-block__actions button.is-danger:hover {
+  background: #fef2f2;
+}
+
+.portal-block__actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.portal-block__chevron {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  margin-left: 2px;
+}
+
+.portal-block__head[aria-expanded="false"] .portal-block__chevron {
+  transform: rotate(-90deg);
+}
+
+.portal-block__body {
+  padding: 14px 16px;
+}
+
+/* Block inserter between blocks */
+.block-inserter {
+  position: relative;
+  margin: 6px 0;
+}
+
+.block-inserter__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.block-inserter__toggle:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.block-inserter__plus {
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.block-inserter__label {
+  flex: 1;
+}
+
+.block-inserter__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.block-inserter__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.1s;
+}
+
+.block-inserter__option:last-child {
+  border-bottom: none;
+}
+
+.block-inserter__option:hover {
+  background: #f8fafc;
+}
+
+.block-inserter__option-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.block-inserter__option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.block-inserter__option-text strong {
+  font-size: 0.88rem;
+  color: #1e293b;
+}
+
+.block-inserter__option-text small {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+/* Empty blocks state */
+.portal-empty-blocks {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+  margin-bottom: 8px;
+}
+
+.portal-empty-blocks p {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.portal-empty-blocks .help {
+  color: var(--muted);
+  font-weight: 400;
+  margin: 0;
+}
+
 body {
   margin: 0;
   font-family: "Manrope", "Segoe UI", "Noto Sans", sans-serif;
