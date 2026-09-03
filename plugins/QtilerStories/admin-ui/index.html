@@ -82,6 +82,7 @@
           <div class="card-header-row">
             <h2 data-i18n="QtilerStories.portal_section">Portal pages</h2>
             <span id="portalPagesBadge" class="badge badge--muted">0</span>
+            <span id="portalDirtyBadge" class="badge badge--warning" hidden data-i18n="QtilerStories.page_unsaved_hint">Unsaved changes</span>
           </div>
           <p class="help" data-i18n="QtilerStories.portal_desc">Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.</p>
           <div class="actions">
@@ -217,6 +218,7 @@
 
                   <!-- PAGE TAB 3: Security -->
                   <div id="pPanelSecurity" class="page-portal-panel" style="display:none;">
+                    <p id="portalAuthWarning" class="notification is-warning is-light" style="margin-bottom:1rem" hidden></p>
                     <div class="portal-meta-grid portal-meta-grid--audience card-box" style="padding:1rem; border:1px solid var(--line); border-radius:8px;">
                       <div class="field">
                         <label class="label" for="portalPageVisibility" data-i18n="QtilerStories.portal_visibility">Page visibility</label>

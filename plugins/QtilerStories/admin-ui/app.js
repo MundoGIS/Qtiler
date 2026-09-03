@@ -91,7 +91,21 @@ const QTWC_I18N = {
     'QtilerStories.move_up': 'Move up',
     'QtilerStories.move_down': 'Move down',
     'QtilerStories.remove': 'Remove',
-    'QtilerStories.loading': 'Loading...'
+    'QtilerStories.loading': 'Loading...',
+    'QtilerStories.text_layout_plain': 'Plain text',
+    'QtilerStories.text_layout_media_right': 'Text left, image right',
+    'QtilerStories.text_layout_media_left': 'Image left, text right',
+    'QtilerStories.text_layout_media_top': 'Image on top, text below',
+    'QtilerStories.text_image_url': 'Image URL',
+    'QtilerStories.text_image_alt': 'Image alt text',
+    'QtilerStories.text_image_browse': 'Browse uploaded…',
+    'QtilerStories.text_body': 'Body text',
+    'QtilerStories.text_body_help': 'Write the story content. Use the toolbar for formatting, images and links.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth is not active — visibility rules below have no effect. The portal will be fully public. Enable QtilerAuth to restrict pages by user or role.',
+    'QtilerStories.maps_visibility_warning': 'Some selected maps are not public and will be hidden from anonymous visitors: {maps}. Set them public in QtilerAuth or restrict this page to authenticated users.',
+    'QtilerStories.portal_no_users': 'No users available (QtilerAuth disabled or no active users)',
+    'QtilerStories.portal_no_roles': 'No roles available',
+    'QtilerStories.page_unsaved_hint': 'Unsaved changes',
   },
   es: {
     'QtilerStories.title': 'Qtiler Stories',
@@ -160,7 +174,21 @@ const QTWC_I18N = {
     'QtilerStories.move_up': 'Subir',
     'QtilerStories.move_down': 'Bajar',
     'QtilerStories.remove': 'Quitar',
-    'QtilerStories.loading': 'Cargando...'
+    'QtilerStories.loading': 'Cargando...',
+    'QtilerStories.text_layout_plain': 'Solo texto',
+    'QtilerStories.text_layout_media_right': 'Texto a la izquierda, imagen a la derecha',
+    'QtilerStories.text_layout_media_left': 'Imagen a la izquierda, texto a la derecha',
+    'QtilerStories.text_layout_media_top': 'Imagen arriba, texto abajo',
+    'QtilerStories.text_image_url': 'URL de imagen',
+    'QtilerStories.text_image_alt': 'Texto alternativo de la imagen',
+    'QtilerStories.text_image_browse': 'Elegir subida…',
+    'QtilerStories.text_body': 'Texto del cuerpo',
+    'QtilerStories.text_body_help': 'Escribe el contenido de la historia. Usa la barra de herramientas para formato, imágenes y enlaces.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth no está activo: las reglas de visibilidad de abajo no tienen efecto. El portal será completamente público. Activa QtilerAuth para restringir páginas por usuario o rol.',
+    'QtilerStories.maps_visibility_warning': 'Algunos mapas seleccionados no son públicos y se ocultarán a visitantes anónimos: {maps}. Márcalos como públicos en QtilerAuth o restringe esta página a usuarios autenticados.',
+    'QtilerStories.portal_no_users': 'No hay usuarios disponibles (QtilerAuth desactivado o sin usuarios activos)',
+    'QtilerStories.portal_no_roles': 'No hay roles disponibles',
+    'QtilerStories.page_unsaved_hint': 'Cambios sin guardar',
   },
   sv: {
     'QtilerStories.title': 'Qtiler Stories',
@@ -229,7 +257,21 @@ const QTWC_I18N = {
     'QtilerStories.move_up': 'Flytta upp',
     'QtilerStories.move_down': 'Flytta ner',
     'QtilerStories.remove': 'Ta bort',
-    'QtilerStories.loading': 'Laddar...'
+    'QtilerStories.loading': 'Laddar...',
+    'QtilerStories.text_layout_plain': 'Endast text',
+    'QtilerStories.text_layout_media_right': 'Text till vänster, bild till höger',
+    'QtilerStories.text_layout_media_left': 'Bild till vänster, text till höger',
+    'QtilerStories.text_layout_media_top': 'Bild ovanpå, text nedanför',
+    'QtilerStories.text_image_url': 'Bild-URL',
+    'QtilerStories.text_image_alt': 'Bildens alt-text',
+    'QtilerStories.text_image_browse': 'Välj uppladdad…',
+    'QtilerStories.text_body': 'Brödtext',
+    'QtilerStories.text_body_help': 'Skriv berättelsens innehåll. Använd verktygsfältet för formatering, bilder och länkar.',
+    'QtilerStories.auth_disabled_warning': 'QtilerAuth är inte aktivt — synlighetsreglerna nedan har ingen effekt. Portalen blir helt publik. Aktivera QtilerAuth för att begränsa sidor per användare eller roll.',
+    'QtilerStories.maps_visibility_warning': 'Vissa valda kartor är inte publika och döljs för anonyma besökare: {maps}. Gör dem publika i QtilerAuth eller begränsa denna sida till autentiserade användare.',
+    'QtilerStories.portal_no_users': 'Inga användare tillgängliga (QtilerAuth inaktivt eller inga aktiva användare)',
+    'QtilerStories.portal_no_roles': 'Inga roller tillgängliga',
+    'QtilerStories.page_unsaved_hint': 'Osparade ändringar',
   }
 };
 // Derived locales share the Swedish base where no dedicated translation exists.
@@ -321,6 +363,27 @@ let selectedPortalPageId = '';
 let portalPreviewDevice = 'desktop';
 let publishedMaps = []; // aggregated from all viewer plugins
 let portalEditorFullscreen = false;
+let currentStatus = null; // /api/status payload (includes authActive + authCatalog)
+let portalDirty = false;
+
+function getAuthCatalog() {
+  return currentStatus?.authCatalog || { users: [], roles: [] };
+}
+
+function markPortalDirty() {
+  portalDirty = true;
+  updatePortalDirtyBadge();
+}
+
+function markPortalClean() {
+  portalDirty = false;
+  updatePortalDirtyBadge();
+}
+
+function updatePortalDirtyBadge() {
+  const badge = document.getElementById('portalDirtyBadge');
+  if (badge) badge.hidden = !portalDirty;
+}
 
 /* ── DOM refs ── */
 const portalAddPageBtn = document.getElementById('portalAddPageBtn');
@@ -623,6 +686,17 @@ function renderPortalEditor() {
   if (portalPageIsHome) portalPageIsHome.checked = portalPagesState.homePageSlug === page.slug;
   if (portalPageShowHeader) portalPageShowHeader.checked = page.showHeader !== false;
 
+  // Populate user/role pickers from QtilerAuth catalog; warn if auth is off.
+  const authCatalog = getAuthCatalog();
+  const authActive = currentStatus?.authActive === true;
+  const authWarning = document.getElementById('portalAuthWarning');
+  if (authWarning) {
+    authWarning.textContent = authActive ? '' : t('QtilerStories.auth_disabled_warning');
+    authWarning.hidden = authActive;
+  }
+  if (portalPageUsersCatalog) portalPageUsersCatalog.innerHTML = renderPortalMultiSelectOptions(authCatalog.users, page.visibility?.users, t('QtilerStories.portal_no_users'));
+  if (portalPageRolesCatalog) portalPageRolesCatalog.innerHTML = renderPortalMultiSelectOptions(authCatalog.roles, page.visibility?.roles, t('QtilerStories.portal_no_roles'));
+
   renderPortalBlocksList();
   renderPortalPreview();
 
@@ -773,8 +847,30 @@ function renderPortalBlocksList() {
             </div>` : ''}
             ${block.type === 'text' ? `
             <div class="field" style="grid-column:1/-1">
-              <label class="label">Body (rich text HTML)</label>
-              <div class="control"><textarea class="textarea" rows="4" data-portal-block-field="body" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(block.body || '')}</textarea></div>
+              <label class="label">${escapeHtml(t('QtilerStories.text_layout_plain'))}</label>
+              <div class="control"><div class="select is-fullwidth"><select data-portal-block-field="textLayout" data-portal-block-id="${escapeHtml(block.id)}">
+                <option value="plain"${(block.textLayout || 'plain') === 'plain' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_plain'))}</option>
+                <option value="media-right"${block.textLayout === 'media-right' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_media_right'))}</option>
+                <option value="media-left"${block.textLayout === 'media-left' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_media_left'))}</option>
+                <option value="media-top"${block.textLayout === 'media-top' ? ' selected' : ''}>${escapeHtml(t('QtilerStories.text_layout_media_top'))}</option>
+              </select></div></div>
+            </div>
+            ${(block.textLayout && block.textLayout !== 'plain') ? `
+            <div class="field">
+              <label class="label">${escapeHtml(t('QtilerStories.text_image_url'))}</label>
+              <div class="control" style="display:flex;gap:6px">
+                <input class="input" type="text" value="${escapeHtml(block.imageUrl || '')}" data-portal-block-field="imageUrl" data-portal-block-id="${escapeHtml(block.id)}" />
+                <button type="button" class="button is-small" data-browse-story-image="${escapeHtml(block.id)}">${escapeHtml(t('QtilerStories.text_image_browse'))}</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">${escapeHtml(t('QtilerStories.text_image_alt'))}</label>
+              <div class="control"><input class="input" type="text" value="${escapeHtml(block.imageAlt || '')}" data-portal-block-field="imageAlt" data-portal-block-id="${escapeHtml(block.id)}" /></div>
+            </div>` : ''}
+            <div class="field" style="grid-column:1/-1">
+              <label class="label">${escapeHtml(t('QtilerStories.text_body'))}</label>
+              <p class="help">${escapeHtml(t('QtilerStories.text_body_help'))}</p>
+              <div class="control"><textarea class="textarea QtilerStories-richtext" rows="6" data-portal-block-field="body" data-portal-block-id="${escapeHtml(block.id)}" data-richtext="1">${escapeHtml(block.body || '')}</textarea></div>
             </div>` : ''}
             ${block.type === 'maps' ? `
             <div class="field">
@@ -833,6 +929,182 @@ function renderPortalBlocksList() {
       </div>
     `;
   }).join('');
+  initRichTextEditors();
+}
+
+/* ── Rich text (Quill) for story text blocks ── */
+let quillInstances = {};
+
+function initRichTextEditors() {
+  if (typeof Quill === 'undefined') return;
+  const richTextareas = portalBlocksList?.querySelectorAll('textarea[data-richtext="1"]');
+  if (!richTextareas) return;
+  richTextareas.forEach((textarea) => {
+    if (textarea.dataset.quillInitialized) return;
+    const container = document.createElement('div');
+    container.className = 'quill-editor-container';
+    container.style.backgroundColor = 'white';
+    container.style.color = 'black';
+    textarea.style.display = 'none';
+    textarea.parentNode.insertBefore(container, textarea.nextSibling);
+
+    const quill = new Quill(container, {
+      theme: 'snow',
+      modules: {
+        toolbar: {
+          container: [
+            [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'script': 'sub' }, { 'script': 'super' }],
+            ['blockquote', 'code-block'],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+            [{ 'indent': '-1' }, { 'indent': '+1' }],
+            [{ 'direction': 'rtl' }],
+            [{ 'align': [] }],
+            ['link', 'image', 'video'],
+            ['clean']
+          ],
+          handlers: {
+            image() { selectAndInsertStoryImage(this.quill); }
+          }
+        }
+      }
+    });
+
+    const initialHtml = textarea.value || '';
+    if (initialHtml) {
+      quill.clipboard.dangerouslyPasteHTML(0, initialHtml, 'silent');
+    } else {
+      quill.setText('', 'silent');
+    }
+
+    quill.on('text-change', () => {
+      textarea.value = quill.root.innerHTML;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      markPortalDirty();
+    });
+
+    textarea.dataset.quillInitialized = 'true';
+    const id = textarea.getAttribute('data-portal-block-id');
+    const field = textarea.getAttribute('data-portal-block-field');
+    quillInstances[id + '-' + field] = quill;
+  });
+}
+
+// Story image picker: opens a small modal listing uploaded story assets with
+// an "upload new" option, then inserts the chosen image into the Quill editor.
+function selectAndInsertStoryImage(quill) {
+  openStoryImagePicker((url) => {
+    if (!url) return;
+    const range = quill.getSelection(true);
+    quill.insertEmbed(range?.index ?? quill.getLength(), 'image', url, 'user');
+    quill.setSelection((range?.index ?? quill.getLength()) + 1, 0, 'silent');
+  });
+}
+
+let storyAssetsCache = null;
+async function fetchStoryAssets() {
+  try {
+    const payload = await api('/plugins/QtilerStories/api/story-assets');
+    storyAssetsCache = Array.isArray(payload?.items) ? payload.items : [];
+  } catch {
+    storyAssetsCache = [];
+  }
+  return storyAssetsCache;
+}
+
+function openStoryImagePicker(onPick) {
+  let modal = document.getElementById('QtilerStoriesImagePicker');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'QtilerStoriesImagePicker';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-background" data-close-story-picker></div>
+      <div class="modal-card QtilerStories-legend-picker__card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">${escapeHtml(t('QtilerStories.text_image_browse'))}</p>
+          <button type="button" class="delete" aria-label="close" data-close-story-picker></button>
+        </header>
+        <section class="modal-card-body">
+          <div class="QtilerStories-legend-picker__toolbar">
+            <input class="input is-small QtilerStories-legend-picker__search" type="search" placeholder="${escapeHtml(t('QtilerStories.legend_search_placeholder'))}" />
+            <button type="button" class="button is-small is-primary" data-story-upload>${escapeHtml(t('QtilerStories.legend_upload_new'))}</button>
+          </div>
+          <div class="QtilerStories-legend-picker__grid" data-story-grid></div>
+        </section>
+      </div>`;
+    document.body.appendChild(modal);
+    const grid = modal.querySelector('[data-story-grid]');
+    const searchInput = modal.querySelector('.QtilerStories-legend-picker__search');
+
+    const renderGrid = () => {
+      const f = String(searchInput.value || '').toLowerCase();
+      const items = (storyAssetsCache || []).filter((item) => !f || String(item.fileName || '').toLowerCase().includes(f));
+      if (!items.length) {
+        grid.innerHTML = `<p class="help">${escapeHtml(t('QtilerStories.legend_library_empty'))}</p>`;
+        return;
+      }
+      grid.innerHTML = items.map((item) => `
+        <button type="button" class="QtilerStories-legend-pick" data-story-pick="${escapeHtml(item.url)}" title="${escapeHtml(item.fileName || '')}">
+          <img src="${escapeHtml(item.url)}" alt="" loading="lazy" />
+          <span>${escapeHtml(item.fileName || '')}</span>
+        </button>
+      `).join('');
+    };
+
+    searchInput.addEventListener('input', renderGrid);
+
+    modal.querySelector('[data-story-upload]').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.png,.jpg,.jpeg,.svg,.webp,.gif,image/png,image/jpeg,image/svg+xml,image/webp,image/gif';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const body = new FormData();
+          body.append('image', file, file.name || 'image.png');
+          await api('/plugins/QtilerStories/api/story-assets/image', { method: 'POST', body });
+          await fetchStoryAssets();
+          renderGrid();
+        } catch (err) {
+          addLog(t('QtilerStories.log_error', { msg: err.message }), 'error');
+        }
+      }, { once: true });
+      input.click();
+    });
+
+    modal.addEventListener('click', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      if (el.hasAttribute('data-close-story-picker')) modal.classList.remove('is-active');
+      const pick = el.closest('[data-story-pick]');
+      if (pick) {
+        const url = String(pick.getAttribute('data-story-pick') || '').trim();
+        modal.classList.remove('is-active');
+        if (url && typeof modal._pickCb === 'function') modal._pickCb(url);
+      }
+    });
+  }
+  modal._pickCb = onPick;
+  if (searchInput) searchInput.value = '';
+  modal.classList.add('is-active');
+  fetchStoryAssets().then(() => {
+    const grid = modal.querySelector('[data-story-grid]');
+    if (!grid) return;
+    const items = storyAssetsCache || [];
+    grid.innerHTML = items.length
+      ? items.map((item) => `
+        <button type="button" class="QtilerStories-legend-pick" data-story-pick="${escapeHtml(item.url)}" title="${escapeHtml(item.fileName || '')}">
+          <img src="${escapeHtml(item.url)}" alt="" loading="lazy" />
+          <span>${escapeHtml(item.fileName || '')}</span>
+        </button>
+      `).join('')
+      : `<p class="help">${escapeHtml(t('QtilerStories.legend_library_empty'))}</p>`;
+  });
 }
 
 /* ── Preview ── */
@@ -869,7 +1141,18 @@ function renderPortalPreview() {
       return `<section class="portal-preview__hero"${bg}><div class="portal-preview__eyebrow">${escapeHtml(block.eyebrow || '')}</div><h1>${escapeHtml(block.title || page.title)}</h1><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.subtitle || '')}</div>${block.ctaLabel ? `<a class="portal-preview__cta" href="${escapeHtml(block.ctaUrl || '#')}">${escapeHtml(block.ctaLabel)}</a>` : ''}</section>`;
     }
     if (block.type === 'text') {
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.body || '')}</div></section>`;
+      const imgHtml = block.imageUrl ? `<img src="${escapeHtml(block.imageUrl)}" alt="${escapeHtml(block.imageAlt || '')}" loading="lazy" />` : '';
+      const textHtml = `<div class="portal-preview__richtext">${sanitizePortalRichHtml(block.body || '')}</div>`;
+      if (block.textLayout === 'media-right') {
+        return `<section class="portal-preview__section portal-preview__section--media-right"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__text-split"><div class="portal-preview__text-main">${textHtml}</div>${imgHtml ? `<figure class="portal-preview__text-media">${imgHtml}</figure>` : ''}</div></section>`;
+      }
+      if (block.textLayout === 'media-left') {
+        return `<section class="portal-preview__section portal-preview__section--media-left"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__text-split"><figure class="portal-preview__text-media">${imgHtml}</figure><div class="portal-preview__text-main">${textHtml}</div></div></section>`;
+      }
+      if (block.textLayout === 'media-top') {
+        return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${imgHtml ? `<figure class="portal-preview__text-media portal-preview__text-media--top">${imgHtml}</figure>` : ''}${textHtml}</section>`;
+      }
+      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${textHtml}</section>`;
     }
     if (block.type === 'maps') {
       const cards = (block.profileKeys || []).map((token) => findPublishedMapProfile(token)).filter(Boolean);
@@ -894,12 +1177,14 @@ function renderPortalPreview() {
 /* ── Portal persist ── */
 let portalPersistTimer = null;
 function queuePortalPersist() {
+  markPortalDirty();
   clearTimeout(portalPersistTimer);
   portalPersistTimer = setTimeout(() => { savePortalPages().catch(() => {}); }, 1200);
 }
 
 async function savePortalPages() {
   await api('/plugins/QtilerStories/api/portal-pages', { method: 'POST', body: portalPagesState });
+  markPortalClean();
   addLog(t('QtilerStories.log_saved'), 'ok');
 }
 
@@ -1333,8 +1618,12 @@ portalImportBackupInput?.addEventListener('change', async () => {
 (async function init() {
   applyI18n();
   try {
+    // Load status first so the auth catalog + warnings are available when
+    // the portal editor renders its visibility pickers.
+    try { currentStatus = await api('/plugins/QtilerStories/api/status'); } catch { currentStatus = null; }
     await Promise.allSettled([loadPortalPages(), loadPublishedMaps()]);
     renderPortalEditor();
+    markPortalClean();
   } catch (err) {
     addLog(t('QtilerStories.log_error', { msg: err.message }), 'error');
   }

@@ -59,6 +59,11 @@
     .portal-section__intro { color: #475569; line-height: 1.7; margin: 0 0 1rem; }
     .portal-richtext { color: #334155; line-height: 1.75; white-space: pre-wrap; }
     .portal-richtext img { max-width: 100%; height: auto; border-radius: 8px; }
+    .portal-text-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+    .portal-text-media { margin: 0; border-radius: 14px; overflow: hidden; background: #f1f5f9; }
+    .portal-text-media img { width: 100%; height: auto; display: block; }
+    .portal-text-media--top { margin-bottom: 1.25rem; }
+    @media (max-width: 700px) { .portal-text-split { grid-template-columns: 1fr; } }
     .portal-cards, .portal-social, .portal-maps { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .portal-card, .portal-social-link, .portal-map-card { border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: 1rem; box-shadow: 0 12px 24px rgba(15,23,42,0.05); }
     .portal-card p, .portal-map-card p { color: #475569; }
@@ -93,9 +98,38 @@
     .empty-state { padding: 4rem 2rem; text-align: center; }
     .empty-state h2 { font-family: "Fraunces", Georgia, serif; color: #0f172a; }
     .empty-state p { color: #64748b; max-width: 460px; margin: 0.5rem auto 0; }
+    .login-modal .box { max-width: 380px; margin: 0 auto; }
+    .auth-bar .button { border-color: rgba(255,255,255,0.4); color: inherit; background: rgba(255,255,255,0.12); }
+    .auth-bar .button:hover { background: rgba(255,255,255,0.22); }
   </style>
 </head>
 <body>
+  <!-- Login modal -->
+  <div id="login-modal" class="modal login-modal">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <div class="box">
+        <h2 class="title is-5 has-text-centered">Sign in</h2>
+        <form id="login-form">
+          <div class="field">
+            <label class="label is-small">Username</label>
+            <div class="control"><input class="input" id="login-user" type="text" autocomplete="username" required></div>
+          </div>
+          <div class="field">
+            <label class="label is-small">Password</label>
+            <div class="control"><input class="input" id="login-pass" type="password" autocomplete="current-password" required></div>
+          </div>
+          <p id="login-err" class="help is-danger" style="display:none;"></p>
+          <div class="field is-grouped is-grouped-right" style="margin-top:1rem;">
+            <p class="control"><button type="button" id="btn-cancel-login" class="button is-light">Cancel</button></p>
+            <p class="control"><button type="submit" class="button is-link">Login</button></p>
+          </div>
+        </form>
+      </div>
+    </div>
+    <button class="modal-close is-large" id="btn-close-login" aria-label="close"></button>
+  </div>
+
   <!-- Header -->
   <section class="hero is-portal" id="portalHero">
     <div class="hero-body">

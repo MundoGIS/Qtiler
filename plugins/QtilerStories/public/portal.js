@@ -95,6 +95,79 @@
     }
   }
 
+  /* ── Auth: login/logout against QtilerAuth when active ── */
+  function renderAuthBar(payload) {
+    const authBar = $('#authBar');
+    if (!authBar) return;
+    if (!payload || !payload.authActive) {
+      authBar.innerHTML = '';
+      authBar.style.display = 'none';
+      return;
+    }
+    authBar.style.display = '';
+    if (payload.user) {
+      const name = escapeHtml(payload.user.username || payload.user.id || 'user');
+      authBar.innerHTML = `<span class="user-name">${name}</span><button type="button" class="button is-small" id="btn-logout">Sign out</button>`;
+      $('#btn-logout')?.addEventListener('click', doLogout);
+    } else {
+      authBar.innerHTML = `<button type="button" class="button is-small" id="btn-login">Sign in</button>`;
+      $('#btn-login')?.addEventListener('click', openLoginModal);
+    }
+  }
+
+  function openLoginModal() {
+    const modal = $('#login-modal');
+    const errEl = $('#login-err');
+    if (!modal) return;
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    const userEl = $('#login-user');
+    const passEl = $('#login-pass');
+    if (userEl) userEl.value = '';
+    if (passEl) passEl.value = '';
+    modal.classList.add('is-active');
+    setTimeout(() => userEl?.focus(), 50);
+  }
+
+  function closeLoginModal() {
+    $('#login-modal')?.classList.remove('is-active');
+  }
+
+  async function doLogin(ev) {
+    ev.preventDefault();
+    const userEl = $('#login-user');
+    const passEl = $('#login-pass');
+    const errEl = $('#login-err');
+    const username = String(userEl?.value || '').trim();
+    const password = String(passEl?.value || '');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      closeLoginModal();
+      await init();
+    } catch (err) {
+      if (errEl) {
+        errEl.textContent = `Login failed: ${err.message}`;
+        errEl.style.display = '';
+      }
+    }
+  }
+
+  async function doLogout() {
+    try {
+      await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch { /* ignore */ }
+    await init();
+  }
+
   function applyGdpr(gdpr) {
     const banner = $('#cookieBanner');
     if (!banner || !gdpr?.enabled) return;
@@ -175,7 +248,20 @@
       return `<section class="portal-section portal-section--hero"${bg}><div class="portal-section__body"><div class="portal-section__eyebrow">${escapeHtml(block.eyebrow || '')}</div><h2>${escapeHtml(block.title || '')}</h2><div class="portal-richtext">${sanitizeRichHtml(block.subtitle || '')}</div>${block.ctaLabel ? `<a class="portal-cta" href="${escapeHtml(sanitizeUrl(block.ctaUrl))}">${escapeHtml(block.ctaLabel)}</a>` : ''}</div></section>`;
     }
     if (type === 'text') {
-      return `<section class="portal-section"><div class="portal-section__body"><h2>${escapeHtml(block.title || '')}</h2><div class="portal-richtext">${sanitizeRichHtml(block.body || '')}</div></div></section>`;
+      const imgHtml = block.imageUrl
+        ? `<img src="${escapeHtml(sanitizeUrl(block.imageUrl))}" alt="${escapeHtml(block.imageAlt || '')}" loading="lazy" />`
+        : '';
+      const textHtml = `<div class="portal-richtext">${sanitizeRichHtml(block.body || '')}</div>`;
+      if (block.textLayout === 'media-right') {
+        return `<section class="portal-section"><div class="portal-section__body"><h2>${escapeHtml(block.title || '')}</h2><div class="portal-text-split">${textHtml}${imgHtml ? `<figure class="portal-text-media">${imgHtml}</figure>` : ''}</div></div></section>`;
+      }
+      if (block.textLayout === 'media-left') {
+        return `<section class="portal-section"><div class="portal-section__body"><h2>${escapeHtml(block.title || '')}</h2><div class="portal-text-split">${imgHtml ? `<figure class="portal-text-media">${imgHtml}</figure>` : ''}${textHtml}</div></div></section>`;
+      }
+      if (block.textLayout === 'media-top') {
+        return `<section class="portal-section"><div class="portal-section__body"><h2>${escapeHtml(block.title || '')}</h2>${imgHtml ? `<figure class="portal-text-media portal-text-media--top">${imgHtml}</figure>` : ''}${textHtml}</div></section>`;
+      }
+      return `<section class="portal-section"><div class="portal-section__body"><h2>${escapeHtml(block.title || '')}</h2>${textHtml}</div></section>`;
     }
     if (type === 'maps') {
       const keys = Array.isArray(block.profileKeys) ? block.profileKeys : [];
@@ -244,6 +330,7 @@
       applySiteIdentity(data.site || {}, data.logoUrl || '');
       applyGdpr(data.gdpr || {});
       renderNav(data.portal || {}, data.portal?.currentPage?.slug || '');
+      renderAuthBar(data);
 
       if (!host) return;
       const isMapsMode = window.location.pathname.endsWith('/maps');
@@ -258,6 +345,13 @@
       }
     }
   }
+
+  // Login modal listeners
+  $('#login-form')?.addEventListener('submit', doLogin);
+  $('#btn-close-login')?.addEventListener('click', closeLoginModal);
+  $('#btn-cancel-login')?.addEventListener('click', closeLoginModal);
+  $('#login-modal .modal-background')?.addEventListener('click', closeLoginModal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLoginModal(); });
 
   init();
 })();

@@ -14,7 +14,8 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { readProjectAccessFromDb } from '../../lib/authDb.js';
+import multer from 'multer';
+import { readProjectAccessFromDb, getAuthDb } from '../../lib/authDb.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
 const nowIso = () => new Date().toISOString();
@@ -32,14 +33,31 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
   const runtimeRoot = path.join(dataDir, 'stories');
   const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const brandingRoot = path.join(runtimeRoot, 'branding');
+  const storyAssetsRoot = path.join(runtimeRoot, 'story-assets');
 
   await fs.promises.mkdir(runtimeRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
+  await fs.promises.mkdir(storyAssetsRoot, { recursive: true });
 
   const stateStore = registerStore('state.json', {
     logoFile: null,
     logoUpdatedAt: null
   });
+
+  const readAuthCatalog = () => {
+    if (!isAuthActive()) return { users: [], roles: [] };
+    try {
+      const dataRoot = path.resolve(dataDir, '..');
+      const db = getAuthDb(dataRoot);
+      const rows = db.prepare('SELECT username, role FROM users WHERE status = ? ORDER BY username COLLATE NOCASE').all('active');
+      const users = rows.map((row) => String(row?.username || '').trim()).filter(Boolean);
+      const roles = Array.from(new Set(rows.map((row) => String(row?.role || '').trim()).filter(Boolean)));
+      return { users, roles };
+    } catch (err) {
+      console.warn('[QtilerStories] auth catalog unavailable:', err?.message || err);
+      return { users: [], roles: [] };
+    }
+  };
 
   const readState = async () => {
     const state = await stateStore.read();
@@ -48,6 +66,22 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
       logoUpdatedAt: state?.logoUpdatedAt || null
     };
   };
+
+  /* ── Story assets (images for rich text / cards / heroes) ── */
+  const MAX_STORY_IMAGE_BYTES = 10 * 1024 * 1024;
+  const ALLOWED_STORY_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
+
+  const storyImageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_STORY_IMAGE_BYTES },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
+      if (!ALLOWED_STORY_IMAGE_EXTENSIONS.has(ext)) {
+        return cb(new Error('invalid_story_image_extension'));
+      }
+      cb(null, true);
+    }
+  });
 
   /* ── Auth helpers ─────────────────────────────────────────────────────── */
   const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
@@ -239,6 +273,73 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
 
   const buildPortalPageUrl = (slug) => `/QtilerStories/portal/${encodeURIComponent(String(slug || '').trim())}`;
 
+  /* ── Story assets routes (must come after portalEditorOnly is defined) ── */
+  app.use(`/plugins/${pluginSlug}/story-assets`, express.static(storyAssetsRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '7d',
+    index: false
+  }));
+
+  app.get(`/plugins/${pluginSlug}/api/story-assets`, portalEditorOnly, async (_req, res) => {
+    try {
+      const files = await fs.promises.readdir(storyAssetsRoot, { withFileTypes: true });
+      const items = [];
+      for (const f of files) {
+        if (!f.isFile()) continue;
+        const ext = path.extname(f.name).toLowerCase();
+        if (!ALLOWED_STORY_IMAGE_EXTENSIONS.has(ext)) continue;
+        try {
+          const stat = await fs.promises.stat(path.join(storyAssetsRoot, f.name));
+          items.push({
+            fileName: f.name,
+            url: `/plugins/${pluginSlug}/story-assets/${encodeURIComponent(f.name)}`,
+            size: stat.size,
+            mtime: stat.mtime.toISOString()
+          });
+        } catch { /* ignore */ }
+      }
+      items.sort((a, b) => (b.mtime || '').localeCompare(a.mtime || ''));
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'story_assets_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/story-assets/image`, portalEditorOnly, (req, res) => {
+    storyImageUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const msg = String(err?.message || err || 'story_image_upload_failed');
+        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'story_image_too_large', details: `max_bytes_${MAX_STORY_IMAGE_BYTES}` });
+        }
+        if (msg.includes('invalid_story_image_extension')) {
+          return res.status(400).json({ error: 'invalid_story_image_extension' });
+        }
+        return res.status(400).json({ error: 'story_image_upload_failed', details: msg });
+      }
+      try {
+        const uploaded = req.file;
+        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
+          return res.status(400).json({ error: 'story_image_required' });
+        }
+        const ext = path.extname(String(uploaded.originalname || '')).toLowerCase();
+        if (!ALLOWED_STORY_IMAGE_EXTENSIONS.has(ext)) {
+          return res.status(400).json({ error: 'invalid_story_image_extension' });
+        }
+        const stem = path.basename(String(uploaded.originalname || 'image'), ext).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'image';
+        const fileName = `${Date.now()}-${stem}${ext}`;
+        const targetPath = path.join(storyAssetsRoot, fileName);
+        await fs.promises.mkdir(storyAssetsRoot, { recursive: true });
+        await fs.promises.writeFile(targetPath, uploaded.buffer);
+        const url = `/plugins/${pluginSlug}/story-assets/${encodeURIComponent(fileName)}`;
+        return res.status(201).json({ status: 'uploaded', url });
+      } catch (uploadErr) {
+        return res.status(500).json({ error: 'story_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
+  });
+
   /* ── Branding ─────────────────────────────────────────────────────────── */
   const getLogoPublicUrl = async () => {
     const state = await readState();
@@ -339,7 +440,9 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
       installed: true,
       pages: portalState.pages.length,
       logoFile: state.logoFile,
-      logoUpdatedAt: state.logoUpdatedAt
+      logoUpdatedAt: state.logoUpdatedAt,
+      authActive: isAuthActive(),
+      authCatalog: readAuthCatalog()
     });
   });
 
@@ -479,6 +582,26 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
       let logoUrl = null;
       try { logoUrl = await getLogoPublicUrl(); } catch { logoUrl = null; }
       if (!logoUrl) logoUrl = '/css/images/Qtiler.png';
+
+      // Warn when a public page references maps the visitor can't access —
+      // the map would silently be missing from cards/galleries otherwise.
+      const warnings = [];
+      if (currentPage && !req.user) {
+        const inaccessible = allMaps
+          .filter((m) => {
+            const pid = String(m.projectId || '').trim();
+            return pid && !userCanAccessProject(req, pid);
+          })
+          .map((m) => m.name || m.profileKey)
+          .filter(Boolean);
+        if (inaccessible.length) {
+          warnings.push({
+            code: 'maps_not_public',
+            message: `${inaccessible.length} map(s) on this page are not accessible to anonymous visitors: ${inaccessible.slice(0, 5).join(', ')}${inaccessible.length > 5 ? '…' : ''}`
+          });
+        }
+      }
+
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.json({
         authActive,
@@ -487,6 +610,7 @@ export const register = async ({ app, security, dataDir, registerStore }) => {
         items: allMaps,
         gdpr: state.gdpr,
         site: state.site || { title: '', subtitle: '', footerLink: '', footerText: '' },
+        warnings,
         portal: {
           homePageSlug: state.homePageSlug,
           pages: visiblePages.map((page) => ({
