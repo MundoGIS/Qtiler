@@ -1,0 +1,59 @@
+{
+  "homePageSlug": "page",
+  "site": {
+    "headerColor2": "#147b33"
+  },
+  "gdpr": {
+    "enabled": false,
+    "companyName": "",
+    "privacyUrl": "",
+    "cookiePolicyUrl": "",
+    "contactUrl": "",
+    "bannerTitle": "",
+    "bannerText": "",
+    "acceptLabel": "",
+    "rejectLabel": "",
+    "manageLabel": ""
+  },
+  "pages": [
+    {
+      "id": "page_mtlkpu3d_xbrq82",
+      "slug": "page",
+      "title": "New page",
+      "navLabel": "New page",
+      "summary": "",
+      "showInNav": true,
+      "showHeader": true,
+      "headerLogoUrl": "",
+      "headerHeight": 120,
+      "visibility": {
+        "access": "public",
+        "users": [],
+        "roles": []
+      },
+      "blocks": [
+        {
+          "id": "hero_mtlkpu3d_xu04vh",
+          "type": "hero",
+          "title": "",
+          "eyebrow": "",
+          "subtitle": "",
+          "body": "",
+          "intro": "",
+          "backgroundUrl": "",
+          "ctaLabel": "",
+          "ctaUrl": "",
+          "layout": "",
+          "displayMode": "",
+          "profileKeys": [],
+          "items": [],
+          "visibility": {
+            "access": "inherit",
+            "users": [],
+            "roles": []
+          }
+        }
+      ]
+    }
+  ]
+}
