@@ -8943,14 +8943,17 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       const filename = String(req.params?.filename || '').replace(/[/\\]/g, '');
-      if (!projectId || !filename || !/\.(tif|tiff)$/i.test(filename)) {
+      if (!projectId || !filename || projectId.includes('..') ||
+          !/\.(tif|tiff)$/i.test(filename)) {
         return res.status(400).json({ error: 'invalid_request' });
       }
-      // Resolve the file from the known project directories.
+      // Resolve the file from the known project directories, ensuring the
+      // resolved path cannot escape projectsDir (defense against traversal).
+      const resolvedRoot = path.resolve(projectsDir) + path.sep;
       const candidates = [
-        path.join(projectsDir, projectId, filename),
-        path.join(projectsDir, projectId, projectId, filename)
-      ];
+        path.resolve(path.join(projectsDir, projectId, filename)),
+        path.resolve(path.join(projectsDir, projectId, projectId, filename))
+      ].filter((c) => c.startsWith(resolvedRoot));
       let filePath = null;
       for (const c of candidates) {
         try { await fs.promises.access(c, fs.constants.R_OK); filePath = c; break; } catch { /* not found */ }
