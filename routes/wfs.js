@@ -791,7 +791,11 @@ export const registerWfsRoutes = ({
           getQueryCI(req, 'VERSION') || getQueryCI(req, 'version'),
           getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
         );
+        // Prefer the API key from a request header (never logged/cached the way
+        // query strings are) and only fall back to query params for GIS clients
+        // (e.g. QGIS) that cannot send custom headers.
         const reqApiKey = String(
+          req.headers['x-api-key'] ||
           getQueryCI(req, 'api_key') ||
           getQueryCI(req, 'apikey') ||
           getQueryCI(req, 'apiKey') ||
