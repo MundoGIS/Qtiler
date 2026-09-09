@@ -182,38 +182,40 @@ REM  Step 0: Choose install/update mode and locate any previous runtime data
 REM ----------------------------------------------------------------------
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1"`) do set "QTILER_PREVIOUS_ROOT=%%I"
 
+set "QTILER_GUI_CONFIG=%QTILER_ROOT%\temp\qtiler-installer-config.txt"
+if not exist "%QTILER_ROOT%\temp" mkdir "%QTILER_ROOT%\temp" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-installer-gui.ps1" -Root "%QTILER_ROOT%" -OutputPath "%QTILER_GUI_CONFIG%" -DefaultPreviousRoot "%QTILER_PREVIOUS_ROOT%"
+if errorlevel 2 (
+    echo Installation cancelled by user.
+    exit /b 1
+)
+if errorlevel 1 (
+    echo ERROR: The graphical installer could not start.
+    pause
+    exit /b 1
+)
+for /f "usebackq tokens=1,* delims==" %%A in ("%QTILER_GUI_CONFIG%") do (
+    if /i "%%A"=="QTILER_SETUP_MODE" set "QTILER_SETUP_MODE=%%B"
+    if /i "%%A"=="QTILER_INSTALL_MODE" set "QTILER_INSTALL_MODE=%%B"
+    if /i "%%A"=="QTILER_PREVIOUS_ROOT" set "QTILER_PREVIOUS_ROOT=%%B"
+    if /i "%%A"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME=%%B"
+    if /i "%%A"=="QGIS_ROOT" set "QGIS_ROOT=%%B"
+    if /i "%%A"=="QTILER_PORT" set "QTILER_PORT=%%B"
+    if /i "%%A"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%%B"
+    if /i "%%A"=="QTILER_ADMIN_PASSWORD" set "QTILER_ADMIN_PASSWORD=%%B"
+)
+del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
+if /i "%QTILER_SETUP_MODE%"=="update" if not defined QTILER_PREVIOUS_ROOT (
+    echo ERROR: Update mode requires an existing Qtiler folder.
+    pause
+    exit /b 1
+)
+if /i "%QTILER_SETUP_MODE%"=="update" set "QTILER_ADMIN_PASSWORD_PRESERVE=1"
+>>"%QTILER_INSTALL_LOG%" echo Graphical installer settings loaded. Mode=%QTILER_SETUP_MODE%, profile=%QTILER_INSTALL_MODE%.
+
 if defined QTILER_PREVIOUS_ROOT (
     >>"%QTILER_INSTALL_LOG%" echo Existing Qtiler service detected at %QTILER_PREVIOUS_ROOT%.
-    echo Existing Qtiler Windows service detected.
-    echo   Current service root: %QTILER_PREVIOUS_ROOT%
-    echo   This installer root:  %QTILER_ROOT%
-    echo.
-    echo U = Update existing installation, preserve .env, users, licenses, uploaded projects, cache and plugin data.
-    echo N = New/replacement installation from this folder.
-    choice /C UN /N /M "Choose update or new install [U/N]: "
-    if errorlevel 2 (
-        set "QTILER_SETUP_MODE=new"
-    ) else (
-        set "QTILER_SETUP_MODE=update"
-    )
-    >>"%QTILER_INSTALL_LOG%" echo Setup mode selected: !QTILER_SETUP_MODE!.
 )
-
-if not defined QTILER_PREVIOUS_ROOT (
-    echo No existing Qtiler Windows service was detected.
-    echo.
-    echo N = New installation from this folder.
-    echo U = Update an existing installation from another folder and preserve its runtime data.
-    choice /C NU /N /M "Choose new install or update [N/U]: "
-    if errorlevel 2 (
-        set "QTILER_SETUP_MODE=update"
-    ) else (
-        set "QTILER_SETUP_MODE=new"
-    )
-    >>"%QTILER_INSTALL_LOG%" echo No existing Qtiler service detected. Setup mode selected: !QTILER_SETUP_MODE!.
-)
-
-if /i "%QTILER_SETUP_MODE%"=="update" if not defined QTILER_PREVIOUS_ROOT goto ask_previous_root
 goto previous_root_ok
 
 :ask_previous_root
@@ -276,6 +278,7 @@ if /i "%QTILER_SETUP_MODE%"=="update" if exist "%QTILER_PREVIOUS_ROOT%\.env" (
 if not defined QTILER_SERVICE_NAME_DEFAULT set "QTILER_SERVICE_NAME_DEFAULT=QTiler"
 
 :ask_service_name
+if defined QTILER_GUI_CONFIG goto service_name_ok
 echo [Qtiler] Waiting for Windows service name input...
 >>"%QTILER_INSTALL_LOG%" echo Step 0a: waiting for Windows service name input. Default=%QTILER_SERVICE_NAME_DEFAULT%.
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Choose the Windows Service name for this Qtiler installation.' + [Environment]::NewLine + [Environment]::NewLine + 'Use a unique name if this server will host more than one Qtiler instance.' + [Environment]::NewLine + 'Allowed characters: letters, numbers, spaces, dot, underscore and hyphen.' + [Environment]::NewLine + [Environment]::NewLine + 'Default: %QTILER_SERVICE_NAME_DEFAULT%', 'Qtiler Installer - Windows Service Name', '%QTILER_SERVICE_NAME_DEFAULT%')"`) do set "QTILER_SERVICE_NAME=%%I"
@@ -295,17 +298,21 @@ echo Selected Windows service name: %QTILER_SERVICE_NAME%
 >>"%QTILER_INSTALL_LOG%" echo Selected Windows service name: %QTILER_SERVICE_NAME%.
 echo.
 
+:service_name_ok
+
 if /i "%QTILER_SETUP_MODE%"=="update" (
     echo.
     echo IMPORTANT: Update mode will stop the Qtiler Windows service and back up user runtime data before continuing.
     echo Bundled Qtiler plugins will be updated from this package. Custom plugins and plugin user data will be preserved.
     echo Do not close this installer while the update is running. Closing the window can leave the service stopped or runtime data only partially copied.
-    choice /C YN /N /M "Continue with update mode? [Y/N]: "
-    if errorlevel 2 (
-        echo Update cancelled by user before any update changes were applied.
-        >>"%QTILER_INSTALL_LOG%" echo Update cancelled by user before service stop/runtime backup.
-        pause
-        exit /b 1
+    if not defined QTILER_GUI_CONFIG (
+        choice /C YN /N /M "Continue with update mode? [Y/N]: "
+        if errorlevel 2 (
+            echo Update cancelled by user before any update changes were applied.
+            >>"%QTILER_INSTALL_LOG%" echo Update cancelled by user before service stop/runtime backup.
+            pause
+            exit /b 1
+        )
     )
     echo.
     echo [Qtiler] Stopping existing service before preserving runtime state...
@@ -355,6 +362,7 @@ REM ----------------------------------------------------------------------
 REM  Step 1: Ask for QGIS Desktop installation path (popup window)
 REM ----------------------------------------------------------------------
 :ask_qgis
+if defined QTILER_GUI_CONFIG goto qgis_gui_input
 echo [Qtiler] Waiting for QGIS Desktop folder input...
 echo A QGIS path dialog should be open. If it is hidden, check behind this installer window.
 >>"%QTILER_INSTALL_LOG%" echo Step 1: waiting for QGIS Desktop folder input dialog.
@@ -370,6 +378,8 @@ if not defined QGIS_ROOT (
 REM Strip surrounding quotes and trailing slash
 set "QGIS_ROOT=%QGIS_ROOT:"=%"
 if "%QGIS_ROOT:~-1%"=="\" set "QGIS_ROOT=%QGIS_ROOT:~0,-1%"
+
+:qgis_gui_input
 
 echo Selected QGIS folder: %QGIS_ROOT%
 >>"%QTILER_INSTALL_LOG%" echo Selected QGIS folder: %QGIS_ROOT%.
@@ -428,6 +438,7 @@ if exist "%QTILER_ROOT%\.env" (
 )
 
 :ask_port
+if defined QTILER_GUI_CONFIG goto port_gui_input
 echo [Qtiler] Waiting for HTTP port input...
 >>"%QTILER_INSTALL_LOG%" echo Step 1b: waiting for HTTP port input dialog. Default=%QTILER_PORT_DEFAULT%.
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('Please choose the HTTP port Qtiler should use.' + [Environment]::NewLine + [Environment]::NewLine + 'Use a free TCP port between 1 and 65535.' + [Environment]::NewLine + 'Default: %QTILER_PORT_DEFAULT%' + [Environment]::NewLine + [Environment]::NewLine + 'Examples: 3000, 3080, 8080', 'Qtiler Installer - HTTP Port', '%QTILER_PORT_DEFAULT%')"`) do set "QTILER_PORT=%%I"
@@ -441,6 +452,8 @@ if not defined QTILER_PORT (
 
 set "QTILER_PORT=%QTILER_PORT: =%"
 set "QTILER_PORT=%QTILER_PORT:"=%"
+
+:port_gui_input
 for /f "delims=0123456789" %%A in ("%QTILER_PORT%") do set "QTILER_PORT_INVALID=%%A"
 if defined QTILER_PORT_INVALID goto invalid_port
 if "%QTILER_PORT%"=="" goto invalid_port
@@ -478,6 +491,7 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 1c: Ask for installation profile and public IIS/HTTPS settings
 REM ----------------------------------------------------------------------
+if defined QTILER_GUI_CONFIG goto gui_profile_values
 echo Installation profile:
 echo   T = Test installation
 echo   P = Production installation
@@ -513,6 +527,23 @@ if /i "%QTILER_INSTALL_MODE%"=="production" (
     )
 ) else (
     set "QTILER_PUBLIC_URL=http://localhost:%QTILER_PORT%"
+)
+goto install_profile_ok
+
+:gui_profile_values
+set "QTILER_BEHIND_IIS=0"
+set "QTILER_HTTPS=0"
+set "QTILER_TRUST_PROXY_VALUE=loopback"
+set "QTILER_ENABLE_HSTS_VALUE=0"
+set "QTILER_CORS_ALLOWED_ORIGINS_VALUE="
+set "QTILER_CORS_ALLOW_CREDENTIALS_VALUE=0"
+if not defined QTILER_PUBLIC_URL set "QTILER_PUBLIC_URL=http://localhost:%QTILER_PORT%"
+if /i "%QTILER_INSTALL_MODE%"=="production" if /i not "%QTILER_PUBLIC_URL:~0,16%"=="http://localhost" (
+    set "QTILER_BEHIND_IIS=1"
+    set "QTILER_HTTPS=1"
+    set "QTILER_ENABLE_HSTS_VALUE=1"
+    set "QTILER_CORS_ALLOWED_ORIGINS_VALUE=%QTILER_PUBLIC_URL%"
+    set "QTILER_CORS_ALLOW_CREDENTIALS_VALUE=1"
 )
 goto install_profile_ok
 
@@ -569,6 +600,7 @@ if /i "%QTILER_SETUP_MODE%"=="update" if defined QTILER_EXISTING_ADMIN_PASSWORD 
 )
 
 :ask_admin_password
+if defined QTILER_GUI_CONFIG goto admin_password_ok
 echo [Qtiler] Waiting for initial QtilerAuth admin password input...
 >>"%QTILER_INSTALL_LOG%" echo Step 1d: waiting for initial QtilerAuth admin password dialogs.
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName Microsoft.VisualBasic; Add-Type -AssemblyName System.Windows.Forms; $pattern='^[A-Za-z0-9._@#+=-]{8,128}$'; while ($true) { $p=[Microsoft.VisualBasic.Interaction]::InputBox('Choose the initial QtilerAuth administrator password.' + [Environment]::NewLine + [Environment]::NewLine + 'Username: admin' + [Environment]::NewLine + 'Allowed characters: letters, numbers, . _ @ # + = -' + [Environment]::NewLine + 'Length: 8-128 characters' + [Environment]::NewLine + [Environment]::NewLine + 'You will see this password again at the end so you can copy and store it.', 'Qtiler Installer - Admin Password', ''); if ([string]::IsNullOrWhiteSpace($p)) { exit 2 }; $c=[Microsoft.VisualBasic.Interaction]::InputBox('Confirm the initial QtilerAuth administrator password.', 'Qtiler Installer - Confirm Admin Password', ''); if ($p -ne $c) { [System.Windows.Forms.MessageBox]::Show('The passwords do not match. Please try again.', 'Qtiler Installer - Password Mismatch', 'OK', 'Error') > $null; continue }; if ($p -notmatch $pattern) { [System.Windows.Forms.MessageBox]::Show('The password must be 8-128 characters and may only contain letters, numbers, . _ @ # + = -', 'Qtiler Installer - Invalid Password', 'OK', 'Error') > $null; continue }; Write-Output $p; exit 0 }"`) do set "QTILER_ADMIN_PASSWORD=%%I"
@@ -648,17 +680,17 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 4: Install Qtiler npm dependencies
 REM ----------------------------------------------------------------------
-echo [Qtiler] Installing Node.js dependencies ^(npm install^)...
->>"%QTILER_INSTALL_LOG%" echo Step 4: running npm.cmd install --omit=dev --no-audit --no-fund.
-call npm.cmd install --omit=dev --no-audit --no-fund
+echo [Qtiler] Installing Node.js dependencies ^(npm ci^)...
+>>"%QTILER_INSTALL_LOG%" echo Step 4: running npm.cmd ci --omit=dev --no-audit --no-fund.
+call npm.cmd ci --omit=dev --no-audit --no-fund
 if errorlevel 1 (
-    echo ERROR: npm install failed.
-    >>"%QTILER_INSTALL_LOG%" echo ERROR: npm install failed with exit code %errorlevel%.
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm install failed while installing Qtiler dependencies.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%' + [Environment]::NewLine + [Environment]::NewLine + 'Also verify internet access, npm access, disk space and antivirus restrictions.', 'Qtiler Installer - Dependency Install Failed', 'OK', 'Error')" >nul
+    echo ERROR: npm ci failed.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: npm ci failed with exit code %errorlevel%.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm ci failed while installing the locked Qtiler dependencies.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%' + [Environment]::NewLine + [Environment]::NewLine + 'Also verify that package-lock.json is present, internet access works, and antivirus is not blocking npm.', 'Qtiler Installer - Dependency Install Failed', 'OK', 'Error')" >nul
     pause
     exit /b 1
 )
->>"%QTILER_INSTALL_LOG%" echo npm install completed successfully.
+>>"%QTILER_INSTALL_LOG%" echo npm ci completed successfully.
 echo.
 
 REM ----------------------------------------------------------------------

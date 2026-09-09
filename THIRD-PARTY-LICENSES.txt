@@ -1,11 +1,25 @@
 ===============================================================================
 THIRD-PARTY LICENSES
 ===============================================================================
-Qtiler (c) 2025 MundoGIS — Licensed under MPL-2.0
+Qtiler core (c) 2025 MundoGIS — Licensed under MPL-2.0
 
-This file lists third-party software used by Qtiler.
-It does NOT cover Qtiler plugins (QtilerAuth, VectorTiles, Qrigo,
-ProjectSearch, QuantizedMesh), which are commercially licensed by MundoGIS.
+This file lists third-party software included in, bundled with, or installed
+for Qtiler core. It does not replace the license files distributed with those
+components.
+
+The bundled Qtiler plugins are licensed separately:
+    * QtilerAuth is proprietary and commercial under
+        plugins/QtilerAuth/LICENSE_QtilerAuth.txt.
+    * Qrigo, Qtiler-3D-eye, Qtiler2Hajk, Qtiler2Origo, Qtiler2qwc and
+        QtilerStories are distributed under MPL-2.0 with their own LICENSE files.
+
+MPL-2.0 permits commercial distribution. It does not permit relicensing
+covered MPL files as proprietary; modified MPL files must retain their MPL
+license and required notices. QtilerAuth is kept as a separate plugin and its
+proprietary license applies only to that plugin's own material.
+
+This is a technical inventory, not legal advice. Final licensing decisions
+for a commercial product should be reviewed by qualified counsel.
 
 
 ===============================================================================
@@ -32,8 +46,9 @@ Usage:       Qtiler spawns Python scripts (extract_info.py, generate_cache.py,
              search_layer.py) that import qgis.core to read QGIS project files
              and render map tiles. QGIS is NOT bundled with Qtiler; the user
              must install QGIS separately. The Python scripts run as separate
-             processes and are licensed under MPL-2.0, which is compatible with
-             GPL per MPL-2.0 Section 3.3 ("Larger Work").
+             processes. The exact licensing consequences depend on the QGIS
+             distribution and how a customer combines the programs; this file
+             does not make a blanket GPL/MPL compatibility determination.
 
 Note:        No QGIS source code is included in or modified by Qtiler.
 
@@ -56,6 +71,13 @@ License:     BSD 2-Clause
 Copyright:   Origo contributors
 Website:     https://github.com/origo-map/origo
 Version:     Bundled in public/Thirdparty/origo/
+
+The Origo bundle also contains third-party components with their own notices,
+including MIT and Apache-2.0 licensed code (for example Awesomplete, jsPDF,
+Font Awesome/Material assets and Esri-related code). Their copyright and
+license notices remain in the bundled JavaScript/CSS files and must not be
+removed when redistributing the bundle. The BSD-2-Clause entry above covers
+Origo itself, not every component inside its distribution bundle.
 
 BSD 2-Clause License:
 Redistribution and use in source and binary forms, with or without
@@ -123,7 +145,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 License:     GNU Lesser General Public License v3 (LGPL-3.0)
 Copyright:   CSI Foxbyte
 Source:      https://github.com/csi-FOXBYTE/mesh-dem-to-terrain
-Location:    ThirdParty/mesh-dem-to-terrain/
+Location:    ThirdParty/mesh-dem-to-terrain/ or
+             plugins/QuantizedMesh/vendor/mesh-dem-to-terrain/
 
 Usage:       Used by the QuantizedMesh plugin for terrain tile generation.
              LGPL-3.0 permits linking without requiring the main application
@@ -133,27 +156,37 @@ Usage:       Used by the QuantizedMesh plugin for terrain tile generation.
 ===============================================================================
 8. Node.js Dependencies (npm)
 ===============================================================================
-The following are direct production dependencies of Qtiler.
-All transitive dependencies use MIT, ISC, BSD, or Apache-2.0 compatible
-licenses unless noted.
+The following are the direct production dependencies recorded in the current
+package-lock.json. Exact versions are shown because Qtiler installs with
+`npm ci`.
 
 Package              Version     License
 -------              -------     -------
-adm-zip              ^0.5.12     MIT
-bcryptjs             ^2.4.3      MIT
-better-sqlite3       ^12.8.0     MIT
-cookie-parser        ^1.4.6      MIT
-cors                 ^2.8.5      MIT
-dotenv               ^17.2.3     BSD-2-Clause
-ejs                  ^3.1.10     Apache-2.0
-express              ^5.1.0      MIT
-helmet               ^8.1.0      MIT
-jsonwebtoken         ^9.0.2      MIT
-multer               ^1.4.5      MIT
-node-windows         ^1.0.0      MIT
-ol                   ^10.8.0     BSD-2-Clause
-ol-mapbox-style      ^13.4.0     BSD-2-Clause
-yauzl                ^3.2.0      MIT
+adm-zip              0.5.16      MIT
+archiver             7.0.1       MIT
+bcryptjs             2.4.3       MIT
+better-sqlite3       12.8.0      MIT
+cookie-parser        1.4.7       MIT
+cors                 2.8.5       MIT
+dotenv               17.2.3      BSD-2-Clause
+ejs                  3.1.10      Apache-2.0
+express              5.1.0       MIT
+helmet               8.1.0       MIT
+jsonwebtoken         9.0.2       MIT
+multer               1.4.5-lts.2 MIT
+node-windows         1.0.0-beta.8 MIT
+ol                   10.8.0      BSD-2-Clause
+ol-mapbox-style      13.4.0      BSD-2-Clause
+proj4                2.20.8      MIT
+sharp                0.34.5      Apache-2.0
+yauzl                3.2.0       MIT
+
+Important transitive notice: sharp distributes platform-specific libvips
+packages under LGPL-3.0-or-later (and some combined Apache-2.0/LGPL/MIT
+metadata). Those notices and license texts from the installed packages must
+be retained when distributing the corresponding sharp binaries. The complete
+transitive tree is locked in package-lock.json; this summary is not a
+replacement for retaining each package's LICENSE/NOTICE files.
 
 
 ===============================================================================
@@ -162,7 +195,20 @@ yauzl                ^3.2.0      MIT
 License:     MIT
 Source:      https://github.com/proj4js/proj4js
 
-Usage:       Coordinate transformation library used with Proj4Leaflet.
+Usage:       Coordinate transformation library used with Proj4Leaflet and
+             Qtiler map/project code.
+
+
+===============================================================================
+10. QtilerAuth licensing boundary
+===============================================================================
+QtilerAuth is a MundoGIS proprietary plugin, not a third-party dependency.
+Its terms are in plugins/QtilerAuth/LICENSE_QtilerAuth.txt. The plugin uses
+permissively licensed Qtiler runtime dependencies such as bcryptjs,
+jsonwebtoken and better-sqlite3; those third-party licenses do not make
+QtilerAuth itself open source and do not prevent commercial licensing of the
+plugin. QtilerAuth's commercial license must not remove or override the
+copyright and license notices of Qtiler core, MPL plugins, or npm packages.
 
 
 ===============================================================================

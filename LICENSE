@@ -2,7 +2,18 @@ This Source Code Form is subject to the terms of the Mozilla Public License, v. 
 If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 Copyright (C) 2025 MundoGIS.
-All rights reserved.
-
 Developed by MundoGIS for the Qtiler project.
 For inquiries, contact: support@mundogis.se
+
+This license applies to Qtiler core and to files marked MPL-2.0 in the
+Qtiler plugin directories. It does not apply to QtilerAuth, which is a
+separate proprietary plugin distributed under:
+
+	plugins/QtilerAuth/LICENSE_QtilerAuth.txt
+
+QtilerAuth must not be used to relicense or restrict the rights granted by
+the MPL-2.0 files. Third-party components remain subject to their own
+copyright notices and license terms listed in THIRD-PARTY-LICENSES.txt.
+
+Commercial distribution of Qtiler is permitted under the MPL-2.0, provided
+that the MPL-2.0 source-code, notice, and attribution requirements are met.
