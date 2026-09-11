@@ -81,6 +81,10 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $progressForm.Controls.Add($progressClose)
   $progressClose.Add_Click({ $progressForm.Close() })
 
+  $script:installLogPosition = 0
+  if ($InstallLog -and (Test-Path -LiteralPath $InstallLog)) {
+    $script:installLogPosition = (Get-Item -LiteralPath $InstallLog).Length
+  }
   $timer = New-Object System.Windows.Forms.Timer
   $timer.Interval = 350
   $timer.Add_Tick({
@@ -105,7 +109,21 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
       }
     }
     if ($InstallLog -and (Test-Path -LiteralPath $InstallLog)) {
-      $errorLine = Get-Content -LiteralPath $InstallLog -Tail 30 -ErrorAction SilentlyContinue | Where-Object { $_ -match 'ERROR:' } | Select-Object -Last 1
+      $logLength = (Get-Item -LiteralPath $InstallLog -ErrorAction SilentlyContinue).Length
+      if ($logLength -lt $script:installLogPosition) { $script:installLogPosition = 0 }
+      $errorLine = $null
+      if ($logLength -gt $script:installLogPosition) {
+        $stream = [System.IO.File]::Open($InstallLog, 'Open', 'Read', 'ReadWrite')
+        try {
+          [void]$stream.Seek($script:installLogPosition, 'Begin')
+          $reader = New-Object System.IO.StreamReader($stream)
+          try { $newLogText = $reader.ReadToEnd() } finally { $reader.Dispose() }
+          $script:installLogPosition = $logLength
+          $errorLine = $newLogText -split '\r?\n' | Where-Object { $_ -match 'ERROR:' } | Select-Object -Last 1
+        } finally {
+          $stream.Dispose()
+        }
+      }
       if ($errorLine -and $progressClose.Enabled -eq $false) {
         $progressPhase.Text = 'Installation needs attention'
         $progressDetail.Text = $errorLine.Trim()
@@ -124,7 +142,7 @@ $logoPath = Join-Path $Root 'public\css\images\MGIS-logo_azul.png'
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Qtiler Installer - MundoGIS'
 $form.StartPosition = 'CenterScreen'
-$form.Size = New-Object System.Drawing.Size(690, 650)
+$form.Size = New-Object System.Drawing.Size(690, 690)
 $form.MinimumSize = $form.Size
 $form.MaximizeBox = $false
 $form.FormBorderStyle = 'FixedDialog'
@@ -161,7 +179,7 @@ $header.Controls.Add($subtitle)
 
 $panel = New-Object System.Windows.Forms.Panel
 $panel.Location = New-Object System.Drawing.Point(26, 124)
-$panel.Size = New-Object System.Drawing.Size(620, 420)
+$panel.Size = New-Object System.Drawing.Size(620, 460)
 $form.Controls.Add($panel)
 
 function Add-Label([string] $text, [int] $x, [int] $y) {
@@ -205,8 +223,28 @@ $previousRoot.Enabled = $false
 Add-Label 'Windows service name' 8 128
 $serviceName = Add-TextBox 'QTiler' 205 125
 
+function Find-QgisInstallation {
+  $searchRoots = New-Object System.Collections.Generic.List[string]
+  foreach ($knownRoot in @($env:QGIS_ROOT, 'C:\OSGeo4W', 'C:\OSGeo4W64')) {
+    if (-not [string]::IsNullOrWhiteSpace($knownRoot)) { $searchRoots.Add($knownRoot) }
+  }
+  foreach ($parent in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, 'C:\')) {
+    if ([string]::IsNullOrWhiteSpace($parent) -or -not (Test-Path -LiteralPath $parent -PathType Container)) { continue }
+    Get-ChildItem -LiteralPath $parent -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match '^(QGIS( |_)\d|OSGeo4W)' } |
+      ForEach-Object { $searchRoots.Add($_.FullName) }
+  }
+  foreach ($candidate in ($searchRoots | Select-Object -Unique)) {
+    $resolverOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'tools\resolve-qgis-installation.ps1') -Path $candidate 2>$null
+    foreach ($line in $resolverOutput) {
+      if ($line -match '^QGIS_ROOT=(.+)$') { return $Matches[1] }
+    }
+  }
+  return ''
+}
+
 Add-Label 'QGIS Desktop folder' 8 168
-$qgisRoot = Add-TextBox 'C:\Program Files\QGIS 3.40' 205 165 315
+$qgisRoot = Add-TextBox (Find-QgisInstallation) 205 165 315
 $browseQgis = New-Object System.Windows.Forms.Button
 $browseQgis.Text = 'Browse...'
 $browseQgis.Location = New-Object System.Drawing.Point(525, 164)
@@ -214,6 +252,11 @@ $browseQgis.Size = New-Object System.Drawing.Size(70, 27)
 $browseQgis.UseVisualStyleBackColor = $true
 $browseQgis.AccessibleName = 'Browse for the QGIS Desktop folder'
 $panel.Controls.Add($browseQgis)
+$qgisStatus = New-Object System.Windows.Forms.Label
+$qgisStatus.Text = 'Select a QGIS 3.x installation folder.'
+$qgisStatus.Location = New-Object System.Drawing.Point(205, 194)
+$qgisStatus.Size = New-Object System.Drawing.Size(390, 22)
+$panel.Controls.Add($qgisStatus)
 $browseQgis.Add_Click({
   $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
   $dialog.Description = 'Select the QGIS Desktop installation folder.'
@@ -225,18 +268,18 @@ $browseQgis.Add_Click({
   }
 })
 
-Add-Label 'HTTP port' 8 208
-$port = Add-TextBox '3000' 205 205 120
+Add-Label 'HTTP port' 8 232
+$port = Add-TextBox '3000' 205 229 120
 
-Add-Label 'Public HTTPS URL' 8 248
-$publicUrl = Add-TextBox '' 205 245
+Add-Label 'Public HTTPS URL' 8 272
+$publicUrl = Add-TextBox '' 205 269
 
-Add-Label 'Admin password' 8 288
-$password = Add-TextBox '' 205 285 315
+Add-Label 'Admin password' 8 312
+$password = Add-TextBox '' 205 309 315
 $password.UseSystemPasswordChar = $true
 $showPassword = New-Object System.Windows.Forms.Button
 $showPassword.Text = 'Show'
-$showPassword.Location = New-Object System.Drawing.Point(525, 284)
+$showPassword.Location = New-Object System.Drawing.Point(525, 308)
 $showPassword.Size = New-Object System.Drawing.Size(70, 27)
 $showPassword.UseVisualStyleBackColor = $true
 $showPassword.AccessibleName = 'Show or hide administrator password'
@@ -249,13 +292,13 @@ $showPassword.Add_Click({
 $hint = New-Object System.Windows.Forms.Label
 $hint.Text = 'Production can use a public HTTPS URL. Leave it blank for local HTTP.'
 $hint.ForeColor = [System.Drawing.Color]::FromArgb(80, 95, 105)
-$hint.Location = New-Object System.Drawing.Point(205, 320)
+$hint.Location = New-Object System.Drawing.Point(205, 344)
 $hint.Size = New-Object System.Drawing.Size(390, 42)
 $panel.Controls.Add($hint)
 
 $licenseLink = New-Object System.Windows.Forms.LinkLabel
 $licenseLink.Text = 'Read the Qtiler license terms'
-$licenseLink.Location = New-Object System.Drawing.Point(205, 366)
+$licenseLink.Location = New-Object System.Drawing.Point(205, 390)
 $licenseLink.Size = New-Object System.Drawing.Size(240, 22)
 $licenseLink.LinkColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
 $licenseLink.ActiveLinkColor = [System.Drawing.Color]::FromArgb(0, 71, 145)
@@ -272,7 +315,7 @@ $panel.Controls.Add($licenseLink)
 
 $licenseAccepted = New-Object System.Windows.Forms.CheckBox
 $licenseAccepted.Text = 'I accept the Qtiler license terms and third-party notices.'
-$licenseAccepted.Location = New-Object System.Drawing.Point(205, 394)
+$licenseAccepted.Location = New-Object System.Drawing.Point(205, 418)
 $licenseAccepted.Size = New-Object System.Drawing.Size(390, 36)
 $licenseAccepted.Checked = $false
 $panel.Controls.Add($licenseAccepted)
@@ -300,6 +343,11 @@ function Update-InstallerState {
 
   if (-not $qgisReady) {
     $licenseAccepted.Checked = $false
+    $qgisStatus.Text = 'No compatible QGIS 3.x runtime was found in this folder.'
+    $qgisStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 45)
+  } else {
+    $qgisStatus.Text = 'QGIS 3.x and its Python runtime are ready.'
+    $qgisStatus.ForeColor = [System.Drawing.Color]::FromArgb(30, 125, 75)
   }
 
   $ok.Enabled = $qgisReady -and $licenseAccepted.Checked
@@ -315,12 +363,12 @@ $licenseAccepted.Add_CheckedChanged({ Update-InstallerState })
 $cancel = New-Object System.Windows.Forms.Button
 $cancel.Text = 'Cancel'
 $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-$cancel.Location = New-Object System.Drawing.Point(430, 565)
+$cancel.Location = New-Object System.Drawing.Point(430, 605)
 $cancel.Size = New-Object System.Drawing.Size(100, 32)
 $form.Controls.Add($cancel)
 $ok = New-Object System.Windows.Forms.Button
 $ok.Text = 'Continue'
-$ok.Location = New-Object System.Drawing.Point(540, 565)
+$ok.Location = New-Object System.Drawing.Point(540, 605)
 $ok.Size = New-Object System.Drawing.Size(105, 32)
 $ok.Enabled = $false
 $form.Controls.Add($ok)

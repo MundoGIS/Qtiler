@@ -3,16 +3,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$inputPath = [System.IO.Path]::GetFullPath($Path.Trim().Trim('"').TrimEnd('\'))
+$inputPath = [System.IO.Path]::GetFullPath($Path.Trim().Trim('"'))
+$driveRoot = [System.IO.Path]::GetPathRoot($inputPath)
+if ($inputPath -ne $driveRoot) { $inputPath = $inputPath.TrimEnd('\') }
 $candidates = New-Object System.Collections.Generic.List[string]
-$leaf = Split-Path -Leaf $inputPath
-if ($leaf -match '^qgis(-ltr)?$') {
-  $candidates.Add((Split-Path -Parent (Split-Path -Parent $inputPath)))
-}
-if ((Split-Path -Leaf (Split-Path -Parent $inputPath)) -eq 'apps') {
-  $candidates.Add((Split-Path -Parent (Split-Path -Parent $inputPath)))
+$probe = $inputPath
+for ($level = 0; $level -lt 5; $level++) {
+  if ((Test-Path (Join-Path $probe 'apps') -PathType Container) -and
+      (Test-Path (Join-Path $probe 'bin') -PathType Container)) {
+    $candidates.Add($probe)
+  }
+  $parent = Split-Path -Parent $probe
+  if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $probe) { break }
+  $probe = $parent
 }
 $candidates.Add($inputPath)
+$ancestor = $inputPath
+for ($level = 0; $level -lt 5; $level++) {
+  $parent = Split-Path -Parent $ancestor
+  if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $ancestor) { break }
+  $candidates.Add($parent)
+  $ancestor = $parent
+}
+if (Test-Path -LiteralPath $inputPath -PathType Container) {
+  Get-ChildItem -LiteralPath $inputPath -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^(QGIS|OSGeo4W)' } |
+    ForEach-Object { $candidates.Add($_.FullName) }
+}
 
 foreach ($root in ($candidates | Select-Object -Unique)) {
   if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
@@ -21,9 +38,13 @@ foreach ($root in ($candidates | Select-Object -Unique)) {
     (Join-Path $root 'apps\qgis')
   )
   $prefixes += @(Get-ChildItem (Join-Path $root 'apps\qgis*') -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
-  if ($leaf -match '^qgis(-ltr)?$' -and $root -eq $inputPath) { $prefixes = @($root) }
+  if ((Split-Path -Leaf $root) -match '^qgis(-ltr)?$') { $prefixes = @($root) + $prefixes }
   foreach ($prefix in ($prefixes | Select-Object -Unique)) {
-    if (-not (Test-Path (Join-Path $prefix 'python') -PathType Container)) { continue }
+    $hasQgisRuntime = (Test-Path (Join-Path $prefix 'python') -PathType Container) -or
+      (Test-Path (Join-Path $prefix 'bin\qgis-bin.exe') -PathType Leaf) -or
+      (Test-Path (Join-Path $root 'bin\qgis-bin.exe') -PathType Leaf) -or
+      (Test-Path (Join-Path $root 'bin\qgis-bin-ltr.exe') -PathType Leaf)
+    if (-not $hasQgisRuntime) { continue }
     $pythonCandidates = @(
       (Join-Path $root 'bin\python.exe'),
       (Join-Path $root 'bin\python3.exe')

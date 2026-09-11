@@ -243,7 +243,14 @@ if /i "%QTILER_SETUP_MODE%"=="update" set "QTILER_ADMIN_PASSWORD_PRESERVE=1"
 
 del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
 >"%QTILER_PROGRESS_LOG%" echo Preparing installation^|5^|Starting the Qtiler installation wizard.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$args = @('-NoProfile','-ExecutionPolicy','Bypass','-File','%QTILER_ROOT%\tools\qtiler-installer-gui.ps1','-Root','%QTILER_ROOT%','-OutputPath','%QTILER_PROGRESS_LOG%','-ProgressLog','%QTILER_PROGRESS_LOG%','-InstallLog','%QTILER_INSTALL_LOG%'); Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden" >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$args = @('-NoProfile','-ExecutionPolicy','Bypass','-File','%QTILER_ROOT%\tools\qtiler-installer-gui.ps1','-Root','%QTILER_ROOT%','-OutputPath','%QTILER_PROGRESS_LOG%','-ProgressLog','%QTILER_PROGRESS_LOG%','-InstallLog','%QTILER_INSTALL_LOG%'); Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal" >nul
+if errorlevel 1 (
+    echo ERROR: The installation progress window could not be started.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: The installation progress window could not be started.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The installation progress window could not be started.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop instead of continuing invisibly.', 'Qtiler Installer - Progress Window Error', 'OK', 'Error')" >nul
+    pause
+    exit /b 1
+)
 
 if defined QTILER_PREVIOUS_ROOT (
     >>"%QTILER_INSTALL_LOG%" echo Existing Qtiler service detected at %QTILER_PREVIOUS_ROOT%.
