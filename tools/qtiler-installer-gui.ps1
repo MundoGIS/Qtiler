@@ -351,20 +351,28 @@ $ok.Add_Click({
     return
   }
   $lines = @(
-    'QTILER_SETUP_MODE=' + $(if ($mode.SelectedIndex -eq 1) { 'update' } else { 'new' }),
-    'QTILER_INSTALL_MODE=' + $(if ($deploymentType.SelectedIndex -eq 1) { 'production' } else { 'test' }),
-    'QTILER_PREVIOUS_ROOT=' + $previousRoot.Text.Trim(),
-    'QTILER_SERVICE_NAME=' + $serviceName.Text.Trim(),
-    'QGIS_ROOT=' + $resolvedQgis['QGIS_ROOT'],
-    'QGIS_PREFIX_DIR=' + $resolvedQgis['QGIS_PREFIX'],
-    'QGIS_PYTHON_EXE=' + $resolvedQgis['PYTHON_EXE'],
-    'OSGEO4W_BIN=' + $resolvedQgis['OSGEO4W_BIN'],
-    'QTILER_PORT=' + $port.Text.Trim(),
-    'QTILER_PUBLIC_URL=' + $publicUrl.Text.Trim(),
-    'QTILER_ADMIN_PASSWORD=' + $password.Text,
-    'QTILER_LICENSE_ACCEPTED=' + $(if ($licenseAccepted.Checked) { '1' } else { '0' })
+    ('QTILER_SETUP_MODE=' + $(if ($mode.SelectedIndex -eq 1) { 'update' } else { 'new' }))
+    ('QTILER_INSTALL_MODE=' + $(if ($deploymentType.SelectedIndex -eq 1) { 'production' } else { 'test' }))
+    ('QTILER_PREVIOUS_ROOT=' + $previousRoot.Text.Trim())
+    ('QTILER_SERVICE_NAME=' + $serviceName.Text.Trim())
+    ('QGIS_ROOT=' + $resolvedQgis['QGIS_ROOT'])
+    ('QGIS_PREFIX_DIR=' + $resolvedQgis['QGIS_PREFIX'])
+    ('QGIS_PYTHON_EXE=' + $resolvedQgis['PYTHON_EXE'])
+    ('OSGEO4W_BIN=' + $resolvedQgis['OSGEO4W_BIN'])
+    ('QTILER_PORT=' + $port.Text.Trim())
+    ('QTILER_PUBLIC_URL=' + $publicUrl.Text.Trim())
+    ('QTILER_ADMIN_PASSWORD=' + $password.Text)
+    'QTILER_LICENSE_ACCEPTED=1'
   )
-  Set-Content -LiteralPath $OutputPath -Value $lines -Encoding UTF8
+  [System.IO.File]::WriteAllLines($OutputPath, [string[]]$lines, [System.Text.Encoding]::ASCII)
+  $writtenLines = [System.IO.File]::ReadAllLines($OutputPath, [System.Text.Encoding]::ASCII)
+  if ($writtenLines.Count -ne $lines.Count -or
+      -not ($writtenLines -match '^QTILER_SETUP_MODE=(new|update)$') -or
+      -not ($writtenLines -contains 'QTILER_LICENSE_ACCEPTED=1')) {
+    [System.Windows.Forms.MessageBox]::Show('The installer could not save a valid configuration file. No changes were made to the system.', 'Qtiler Installer - Configuration Error', 'OK', 'Error') | Out-Null
+    Remove-Item -LiteralPath $OutputPath -Force -ErrorAction SilentlyContinue
+    return
+  }
   $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
   $form.Close()
 })

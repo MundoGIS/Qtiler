@@ -154,7 +154,8 @@ echo   Node.js: checked before QGIS setup and installed automatically if missing
 echo   QGIS Desktop: you will be asked for a QGIS 3.x folder after setup mode is selected
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Preflight OK.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$child = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID); $handle = (Get-Process -Id $child.ParentProcessId -ErrorAction SilentlyContinue).MainWindowHandle; if ($handle) { $type = 'using System; using System.Runtime.InteropServices; public static class QtilerWindow { [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); }'; Add-Type -TypeDefinition $type; [QtilerWindow]::ShowWindow($handle, 0) | Out-Null }" >nul 2>&1
+echo [Qtiler] Continuing in this window. Progress and npm installation output will be visible here.
+echo.
 goto preflight_ok
 
 :missing_installer_files
@@ -216,20 +217,11 @@ if %QTILER_GUI_WAIT_SECONDS% GEQ 60 (
 )
 goto wait_for_gui_config
 :gui_config_loaded
-for /f "usebackq tokens=1,* delims==" %%A in ("%QTILER_GUI_CONFIG%") do (
-    if /i "%%A"=="QTILER_SETUP_MODE" set "QTILER_SETUP_MODE=%%B"
-    if /i "%%A"=="QTILER_INSTALL_MODE" set "QTILER_INSTALL_MODE=%%B"
-    if /i "%%A"=="QTILER_PREVIOUS_ROOT" set "QTILER_PREVIOUS_ROOT=%%B"
-    if /i "%%A"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME=%%B"
-    if /i "%%A"=="QGIS_ROOT" set "QGIS_ROOT=%%B"
-    if /i "%%A"=="QGIS_PREFIX_DIR" set "QGIS_PREFIX_DIR=%%B"
-    if /i "%%A"=="QGIS_PYTHON_EXE" set "QGIS_PYTHON_EXE=%%B"
-    if /i "%%A"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%%B"
-    if /i "%%A"=="QTILER_PORT" set "QTILER_PORT=%%B"
-    if /i "%%A"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%%B"
-    if /i "%%A"=="QTILER_ADMIN_PASSWORD" set "QTILER_ADMIN_PASSWORD=%%B"
-    if /i "%%A"=="QTILER_LICENSE_ACCEPTED" set "QTILER_LICENSE_ACCEPTED=%%B"
-)
+set "QTILER_SETUP_MODE="
+set "QTILER_INSTALL_MODE="
+set "QTILER_LICENSE_ACCEPTED=0"
+for /f "usebackq tokens=1,* delims==" %%A in ("%QTILER_GUI_CONFIG%") do call :read_gui_setting "%%A" "%%B"
+>>"%QTILER_INSTALL_LOG%" echo GUI configuration parsed. Mode=%QTILER_SETUP_MODE%, profile=%QTILER_INSTALL_MODE%, licenseAccepted=%QTILER_LICENSE_ACCEPTED%, qgisRoot=%QGIS_ROOT%.
 if /i not "%QTILER_SETUP_MODE%"=="new" if /i not "%QTILER_SETUP_MODE%"=="update" (
     echo ERROR: The installer did not return a valid mode. The setup cannot continue safely.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Qtiler installer returned an invalid setup mode.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop safely instead of continuing with incomplete configuration.', 'Qtiler Installer - Invalid Setup Mode', 'OK', 'Error')" >nul
@@ -242,7 +234,7 @@ if /i "%QTILER_SETUP_MODE%"=="update" if not defined QTILER_PREVIOUS_ROOT (
     exit /b 1
 )
 if /i "%QTILER_LICENSE_ACCEPTED%" NEQ "1" (
-    echo ERROR: The user did not accept the Qtiler license terms.
+    echo ERROR: You must accept the Qtiler license terms to continue.
     pause
     exit /b 1
 )
@@ -1021,9 +1013,40 @@ echo.
 endlocal
 exit /b 0
 
+:read_gui_setting
+set "QTILER_GUI_KEY=%~1"
+set "QTILER_GUI_VALUE=%~2"
+if /i "%QTILER_GUI_KEY%"=="QTILER_SETUP_MODE" set "QTILER_SETUP_MODE=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_INSTALL_MODE" set "QTILER_INSTALL_MODE=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_PREVIOUS_ROOT" set "QTILER_PREVIOUS_ROOT=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QGIS_ROOT" set "QGIS_ROOT=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QGIS_PREFIX_DIR" set "QGIS_PREFIX_DIR=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QGIS_PYTHON_EXE" set "QGIS_PYTHON_EXE=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_PORT" set "QTILER_PORT=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_ADMIN_PASSWORD" set "QTILER_ADMIN_PASSWORD=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_LICENSE_ACCEPTED" set "QTILER_LICENSE_ACCEPTED=%QTILER_GUI_VALUE%"
+exit /b 0
+
 :write_progress
 if not defined QTILER_PROGRESS_LOG exit /b 0
 >>"%QTILER_PROGRESS_LOG%" echo %~1^|%~2^|%~3
+set "QTILER_PROGRESS_LABEL=%~1"
+set "QTILER_PROGRESS_VALUE=%~2"
+if not defined QTILER_PROGRESS_VALUE set "QTILER_PROGRESS_VALUE=0"
+set /a QTILER_PROGRESS_BAR_FILLED=QTILER_PROGRESS_VALUE*20/100
+set "QTILER_PROGRESS_BAR="
+for /L %%I in (1,1,20) do (
+    if %%I LEQ %QTILER_PROGRESS_BAR_FILLED% (
+        set "QTILER_PROGRESS_BAR=!QTILER_PROGRESS_BAR!#"
+    ) else (
+        set "QTILER_PROGRESS_BAR=!QTILER_PROGRESS_BAR!."
+    )
+)
+echo [Qtiler] [%QTILER_PROGRESS_BAR%] %QTILER_PROGRESS_VALUE%%% - %~3
+echo %QTILER_PROGRESS_LABEL%: %~3
 exit /b 0
 
 :ensure_node
