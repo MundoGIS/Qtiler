@@ -40,6 +40,7 @@ foreach ($root in ($candidates | Select-Object -Unique)) {
   $prefixes += @(Get-ChildItem (Join-Path $root 'apps\qgis*') -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
   if ((Split-Path -Leaf $root) -match '^qgis(-ltr)?$') { $prefixes = @($root) + $prefixes }
   foreach ($prefix in ($prefixes | Select-Object -Unique)) {
+    if (-not (Test-Path -LiteralPath $prefix -PathType Container)) { continue }
     $hasQgisRuntime = (Test-Path (Join-Path $prefix 'python') -PathType Container) -or
       (Test-Path (Join-Path $prefix 'bin\qgis-bin.exe') -PathType Leaf) -or
       (Test-Path (Join-Path $root 'bin\qgis-bin.exe') -PathType Leaf) -or

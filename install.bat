@@ -427,55 +427,35 @@ echo Selected QGIS folder: %QGIS_ROOT%
 >>"%QTILER_INSTALL_LOG%" echo Selected QGIS folder: %QGIS_ROOT%.
 echo.
 
-REM Validate QGIS Python. Supports standalone QGIS, OSGeo4W and wrapper launchers.
-if not defined QGIS_PYTHON_EXE (
-    for /f "usebackq tokens=1,* delims==" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\resolve-qgis-installation.ps1" -Path "%QGIS_ROOT%" 2^>nul`) do (
-        if /i "%%A"=="QGIS_ROOT" set "QGIS_ROOT=%%B"
-        if /i "%%A"=="QGIS_PREFIX" set "QGIS_PREFIX_DIR=%%B"
-        if /i "%%A"=="PYTHON_EXE" set "QGIS_PYTHON_EXE=%%B"
-        if /i "%%A"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%%B"
-    )
-)
-if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python.exe"
-if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python3.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python3.exe"
-if not defined QGIS_PYTHON_EXE (
-    for /d %%D in ("%QGIS_ROOT%\apps\Python*") do if exist "%%~fD\python.exe" set "QGIS_PYTHON_EXE=%%~fD\python.exe"
-)
-if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python-qgis-ltr.bat" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python-qgis-ltr.bat"
-if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python-qgis.bat" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python-qgis.bat"
-if not defined QGIS_PYTHON_EXE (
-    set /a QGIS_VALIDATION_ATTEMPTS+=1
-    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: QGIS Python not found under %QGIS_ROOT% (attempt %QGIS_VALIDATION_ATTEMPTS%).
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QGIS Python was not found under:' + [Environment]::NewLine + '%QGIS_ROOT%' + [Environment]::NewLine + [Environment]::NewLine + 'Qtiler accepts OSGeo4W style bin\python.exe and standalone QGIS apps\Python*\python.exe layouts.' + [Environment]::NewLine + [Environment]::NewLine + 'Please select a valid QGIS 3.x installation folder.', 'Qtiler Installer - Invalid Path', 'OK', 'Error')" >nul
-    if "%QGIS_VALIDATION_ATTEMPTS%" GTR "1" (
-        echo.
-        echo ERROR: The selected QGIS folder is not valid. The installer will stop now to avoid a repeated loop.
-        echo Please choose a valid QGIS 3.x installation folder and run install.bat again.
-        echo.
-        pause
-        exit /b 1
-    )
-    goto ask_qgis
-)
+REM Resolve QGIS again in the elevated process and parse a plain text result.
+set "QGIS_RESOLVE_RESULT=%QTILER_ROOT%\temp\qtiler-qgis-resolved.txt"
+if exist "%QGIS_RESOLVE_RESULT%" del /q "%QGIS_RESOLVE_RESULT%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\resolve-qgis-installation.ps1" -Path "%QGIS_ROOT%" >"%QGIS_RESOLVE_RESULT%" 2>>"%QTILER_INSTALL_LOG%"
+if errorlevel 1 goto qgis_validation_failed
+set "QGIS_ROOT="
+set "QGIS_PREFIX_DIR="
+set "QGIS_PYTHON_EXE="
+set "OSGEO4W_BIN="
+for /f "usebackq tokens=1,* delims==" %%A in ("%QGIS_RESOLVE_RESULT%") do call :read_gui_setting "%%A" "%%B"
+del /q "%QGIS_RESOLVE_RESULT%" >nul 2>&1
+if not defined QGIS_ROOT goto qgis_validation_failed
+if not defined QGIS_PREFIX_DIR goto qgis_validation_failed
+if not defined QGIS_PYTHON_EXE goto qgis_validation_failed
+if not exist "%QGIS_PYTHON_EXE%" goto qgis_validation_failed
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:PYTHONHOME = (Get-ChildItem (Join-Path '%QGIS_ROOT%' 'apps\Python*') -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName); $env:PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; $env:PATH = '%QGIS_ROOT%\bin;%QGIS_PREFIX_DIR%\bin;' + $env:PATH; & '%QGIS_PYTHON_EXE%' -c 'import qgis; print(qgis.__file__)'" >>"%QTILER_INSTALL_LOG%" 2>&1
+if errorlevel 1 goto qgis_validation_failed
+goto qgis_validation_ok
 
-REM Resolve QGIS prefix (apps\qgis or apps\qgis-ltr)
-if not defined QGIS_PREFIX_DIR if exist "%QGIS_ROOT%\apps\qgis-ltr\python" set "QGIS_PREFIX_DIR=%QGIS_ROOT%\apps\qgis-ltr"
-if not defined QGIS_PREFIX_DIR if exist "%QGIS_ROOT%\apps\qgis\python" set "QGIS_PREFIX_DIR=%QGIS_ROOT%\apps\qgis"
+:qgis_validation_failed
+call :write_progress "Error" 28 "QGIS validation failed. Check the selected QGIS 3.x folder and installer log."
+echo ERROR: QGIS Python could not be validated.
+>>"%QTILER_INSTALL_LOG%" echo ERROR: QGIS validation failed for the selected folder.
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QGIS Python could not be validated.' + [Environment]::NewLine + [Environment]::NewLine + 'Select the QGIS 3.x installation root, for example C:\QGIS_344 or C:\Program Files\QGIS 3.40.' + [Environment]::NewLine + [Environment]::NewLine + 'Details are available in:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - QGIS Validation Failed', 'OK', 'Error')" >nul
+pause
+exit /b 1
 
-if not defined QGIS_PREFIX_DIR (
-    set /a QGIS_VALIDATION_ATTEMPTS+=1
-    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: apps\qgis or apps\qgis-ltr prefix not found under %QGIS_ROOT% (attempt %QGIS_VALIDATION_ATTEMPTS%).
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QGIS apps folder not found under:' + [Environment]::NewLine + '%QGIS_ROOT%\apps' + [Environment]::NewLine + [Environment]::NewLine + 'Please select a valid QGIS 3.x installation folder.', 'Qtiler Installer - Invalid Path', 'OK', 'Error')" >nul
-    if "%QGIS_VALIDATION_ATTEMPTS%" GTR "1" (
-        echo.
-        echo ERROR: The selected QGIS folder is not valid. The installer will stop now to avoid a repeated loop.
-        echo Please choose a valid QGIS 3.x installation folder and run install.bat again.
-        echo.
-        pause
-        exit /b 1
-    )
-    goto ask_qgis
-)
+:qgis_validation_ok
+call :write_progress "QGIS ready" 34 "QGIS 3.x and its Python runtime were validated successfully."
 
 REM Detect QGIS major version from qgis-bin.exe metadata
 set "QGIS_MAJOR=0"
@@ -1029,7 +1009,9 @@ if /i "%QTILER_GUI_KEY%"=="QTILER_PREVIOUS_ROOT" set "QTILER_PREVIOUS_ROOT=%QTIL
 if /i "%QTILER_GUI_KEY%"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QGIS_ROOT" set "QGIS_ROOT=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QGIS_PREFIX_DIR" set "QGIS_PREFIX_DIR=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QGIS_PREFIX" set "QGIS_PREFIX_DIR=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QGIS_PYTHON_EXE" set "QGIS_PYTHON_EXE=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="PYTHON_EXE" set "QGIS_PYTHON_EXE=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QTILER_PORT" set "QTILER_PORT=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%QTILER_GUI_VALUE%"
