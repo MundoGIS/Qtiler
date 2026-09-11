@@ -84,6 +84,7 @@ set "QTILER_SERVICE_NAME=QTiler"
 set "QTILER_SERVICE_NAME_DEFAULT=QTiler"
 set "QTILER_VERSION=unknown"
 set "QTILER_PREVIOUS_VERSION="
+set "QGIS_VALIDATION_ATTEMPTS=0"
 
 echo ================================================================
 echo                    Qtiler Installer by MundoGIS
@@ -135,6 +136,7 @@ if not exist "%QTILER_ROOT%\service\install-service.js" goto missing_installer_f
 if not exist "%QTILER_ROOT%\service\uninstall-service.js" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\run_qgis_python.bat" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtilerauth-install-policy.mjs" goto missing_installer_files
+if not exist "%QTILER_ROOT%\tools\resolve-qgis-installation.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtiler-service.ps1" goto missing_installer_files
@@ -152,6 +154,7 @@ echo   Node.js: checked before QGIS setup and installed automatically if missing
 echo   QGIS Desktop: you will be asked for a QGIS 3.x folder after setup mode is selected
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Preflight OK.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$child = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $PID); $handle = (Get-Process -Id $child.ParentProcessId -ErrorAction SilentlyContinue).MainWindowHandle; if ($handle) { $type = 'using System; using System.Runtime.InteropServices; public static class QtilerWindow { [DllImport(' + [char]34 + 'user32.dll' + [char]34 + ')] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); }'; Add-Type -TypeDefinition $type; [QtilerWindow]::ShowWindow($handle, 0) | Out-Null }" >nul 2>&1
 goto preflight_ok
 
 :missing_installer_files
@@ -183,39 +186,77 @@ REM ----------------------------------------------------------------------
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1"`) do set "QTILER_PREVIOUS_ROOT=%%I"
 
 set "QTILER_GUI_CONFIG=%QTILER_ROOT%\temp\qtiler-installer-config.txt"
+set "QTILER_PROGRESS_LOG=%QTILER_ROOT%\temp\qtiler-install-progress.txt"
+if exist "%QTILER_GUI_CONFIG%" del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
 if not exist "%QTILER_ROOT%\temp" mkdir "%QTILER_ROOT%\temp" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-installer-gui.ps1" -Root "%QTILER_ROOT%" -OutputPath "%QTILER_GUI_CONFIG%" -DefaultPreviousRoot "%QTILER_PREVIOUS_ROOT%"
 if errorlevel 2 (
     echo Installation cancelled by user.
+    >>"%QTILER_INSTALL_LOG%" echo User cancelled the installer GUI before configuration was returned.
     exit /b 1
 )
 if errorlevel 1 (
     echo ERROR: The graphical installer could not start.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The graphical installer failed to start or crashed before returning a valid configuration.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop so the system is left in a safe state instead of hanging.', 'Qtiler Installer - GUI Startup Failed', 'OK', 'Error')" >nul
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: GUI could not start or crashed before returning configuration.
     pause
     exit /b 1
 )
+set "QTILER_GUI_WAIT_SECONDS=0"
+:wait_for_gui_config
+if exist "%QTILER_GUI_CONFIG%" goto gui_config_loaded
+timeout /t 2 /nobreak >nul
+set /a QTILER_GUI_WAIT_SECONDS+=2
+if %QTILER_GUI_WAIT_SECONDS% GEQ 60 (
+    echo ERROR: The installer GUI did not return a valid configuration in time.
+    echo This usually means the form stalled, crashed, or failed to validate the QGIS path.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Qtiler installer did not return a valid configuration within the expected time.' + [Environment]::NewLine + [Environment]::NewLine + 'This usually means the form stalled, crashed, or the QGIS validation failed.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will exit safely without leaving the system in an incomplete state.', 'Qtiler Installer - GUI Timeout', 'OK', 'Error')" >nul
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: GUI watchdog timed out waiting for configuration file after 60 seconds.
+    exit /b 1
+)
+goto wait_for_gui_config
+:gui_config_loaded
 for /f "usebackq tokens=1,* delims==" %%A in ("%QTILER_GUI_CONFIG%") do (
     if /i "%%A"=="QTILER_SETUP_MODE" set "QTILER_SETUP_MODE=%%B"
     if /i "%%A"=="QTILER_INSTALL_MODE" set "QTILER_INSTALL_MODE=%%B"
     if /i "%%A"=="QTILER_PREVIOUS_ROOT" set "QTILER_PREVIOUS_ROOT=%%B"
     if /i "%%A"=="QTILER_SERVICE_NAME" set "QTILER_SERVICE_NAME=%%B"
     if /i "%%A"=="QGIS_ROOT" set "QGIS_ROOT=%%B"
+    if /i "%%A"=="QGIS_PREFIX_DIR" set "QGIS_PREFIX_DIR=%%B"
+    if /i "%%A"=="QGIS_PYTHON_EXE" set "QGIS_PYTHON_EXE=%%B"
+    if /i "%%A"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%%B"
     if /i "%%A"=="QTILER_PORT" set "QTILER_PORT=%%B"
     if /i "%%A"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%%B"
     if /i "%%A"=="QTILER_ADMIN_PASSWORD" set "QTILER_ADMIN_PASSWORD=%%B"
+    if /i "%%A"=="QTILER_LICENSE_ACCEPTED" set "QTILER_LICENSE_ACCEPTED=%%B"
 )
-del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
+if /i not "%QTILER_SETUP_MODE%"=="new" if /i not "%QTILER_SETUP_MODE%"=="update" (
+    echo ERROR: The installer did not return a valid mode. The setup cannot continue safely.
+    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Qtiler installer returned an invalid setup mode.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer will stop safely instead of continuing with incomplete configuration.', 'Qtiler Installer - Invalid Setup Mode', 'OK', 'Error')" >nul
+    pause
+    exit /b 1
+)
 if /i "%QTILER_SETUP_MODE%"=="update" if not defined QTILER_PREVIOUS_ROOT (
     echo ERROR: Update mode requires an existing Qtiler folder.
     pause
     exit /b 1
 )
+if /i "%QTILER_LICENSE_ACCEPTED%" NEQ "1" (
+    echo ERROR: The user did not accept the Qtiler license terms.
+    pause
+    exit /b 1
+)
 if /i "%QTILER_SETUP_MODE%"=="update" set "QTILER_ADMIN_PASSWORD_PRESERVE=1"
->>"%QTILER_INSTALL_LOG%" echo Graphical installer settings loaded. Mode=%QTILER_SETUP_MODE%, profile=%QTILER_INSTALL_MODE%.
+>>"%QTILER_INSTALL_LOG%" echo Graphical installer settings loaded. Mode=%QTILER_SETUP_MODE%, profile=%QTILER_INSTALL_MODE%, licenseAccepted=%QTILER_LICENSE_ACCEPTED%.
+
+del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
+>"%QTILER_PROGRESS_LOG%" echo Preparing installation^|5^|Starting the Qtiler installation wizard.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$args = @('-NoProfile','-ExecutionPolicy','Bypass','-File','%QTILER_ROOT%\tools\qtiler-installer-gui.ps1','-Root','%QTILER_ROOT%','-OutputPath','%QTILER_PROGRESS_LOG%','-ProgressLog','%QTILER_PROGRESS_LOG%','-InstallLog','%QTILER_INSTALL_LOG%'); Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden" >nul
 
 if defined QTILER_PREVIOUS_ROOT (
     >>"%QTILER_INSTALL_LOG%" echo Existing Qtiler service detected at %QTILER_PREVIOUS_ROOT%.
 )
+call :write_progress "Preparing installation" 10 "Configuration accepted. Preparing the selected Qtiler setup."
 goto previous_root_ok
 
 :ask_previous_root
@@ -352,6 +393,7 @@ if /i "%QTILER_SETUP_MODE%"=="update" (
 REM ----------------------------------------------------------------------
 REM  Step 0b: Ensure Node.js (latest LTS) is installed before QGIS setup
 REM ----------------------------------------------------------------------
+call :write_progress "Checking requirements" 16 "Checking Node.js, Windows services and local prerequisites."
 call :ensure_node
 if errorlevel 1 (
     pause
@@ -361,6 +403,7 @@ if errorlevel 1 (
 REM ----------------------------------------------------------------------
 REM  Step 1: Ask for QGIS Desktop installation path (popup window)
 REM ----------------------------------------------------------------------
+call :write_progress "Validating QGIS" 28 "Locating the QGIS Python environment and validating QGIS 3.x."
 :ask_qgis
 if defined QTILER_GUI_CONFIG goto qgis_gui_input
 echo [Qtiler] Waiting for QGIS Desktop folder input...
@@ -385,30 +428,53 @@ echo Selected QGIS folder: %QGIS_ROOT%
 >>"%QTILER_INSTALL_LOG%" echo Selected QGIS folder: %QGIS_ROOT%.
 echo.
 
-REM Validate QGIS python.exe. OSGeo4W commonly uses bin\python.exe; standalone
-REM QGIS builds commonly keep Python under apps\Python*\python.exe.
-set "QGIS_PYTHON_EXE="
-if exist "%QGIS_ROOT%\bin\python.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python.exe"
-if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python3.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python3.exe"
+REM Validate QGIS Python. Supports standalone QGIS, OSGeo4W and wrapper launchers.
 if not defined QGIS_PYTHON_EXE (
-    for /d %%D in ("%QGIS_ROOT%\apps\Python*") do (
-        if exist "%%~fD\python.exe" set "QGIS_PYTHON_EXE=%%~fD\python.exe"
+    for /f "usebackq tokens=1,* delims==" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\resolve-qgis-installation.ps1" -Path "%QGIS_ROOT%" 2^>nul`) do (
+        if /i "%%A"=="QGIS_ROOT" set "QGIS_ROOT=%%B"
+        if /i "%%A"=="QGIS_PREFIX" set "QGIS_PREFIX_DIR=%%B"
+        if /i "%%A"=="PYTHON_EXE" set "QGIS_PYTHON_EXE=%%B"
+        if /i "%%A"=="OSGEO4W_BIN" set "OSGEO4W_BIN=%%B"
     )
 )
+if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python.exe"
+if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python3.exe" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python3.exe"
 if not defined QGIS_PYTHON_EXE (
-    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: QGIS Python not found under %QGIS_ROOT%.
+    for /d %%D in ("%QGIS_ROOT%\apps\Python*") do if exist "%%~fD\python.exe" set "QGIS_PYTHON_EXE=%%~fD\python.exe"
+)
+if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python-qgis-ltr.bat" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python-qgis-ltr.bat"
+if not defined QGIS_PYTHON_EXE if exist "%QGIS_ROOT%\bin\python-qgis.bat" set "QGIS_PYTHON_EXE=%QGIS_ROOT%\bin\python-qgis.bat"
+if not defined QGIS_PYTHON_EXE (
+    set /a QGIS_VALIDATION_ATTEMPTS+=1
+    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: QGIS Python not found under %QGIS_ROOT% (attempt %QGIS_VALIDATION_ATTEMPTS%).
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QGIS Python was not found under:' + [Environment]::NewLine + '%QGIS_ROOT%' + [Environment]::NewLine + [Environment]::NewLine + 'Qtiler accepts OSGeo4W style bin\python.exe and standalone QGIS apps\Python*\python.exe layouts.' + [Environment]::NewLine + [Environment]::NewLine + 'Please select a valid QGIS 3.x installation folder.', 'Qtiler Installer - Invalid Path', 'OK', 'Error')" >nul
+    if "%QGIS_VALIDATION_ATTEMPTS%" GTR "1" (
+        echo.
+        echo ERROR: The selected QGIS folder is not valid. The installer will stop now to avoid a repeated loop.
+        echo Please choose a valid QGIS 3.x installation folder and run install.bat again.
+        echo.
+        pause
+        exit /b 1
+    )
     goto ask_qgis
 )
 
 REM Resolve QGIS prefix (apps\qgis or apps\qgis-ltr)
-set "QGIS_PREFIX_DIR="
-if exist "%QGIS_ROOT%\apps\qgis-ltr\python" set "QGIS_PREFIX_DIR=%QGIS_ROOT%\apps\qgis-ltr"
+if not defined QGIS_PREFIX_DIR if exist "%QGIS_ROOT%\apps\qgis-ltr\python" set "QGIS_PREFIX_DIR=%QGIS_ROOT%\apps\qgis-ltr"
 if not defined QGIS_PREFIX_DIR if exist "%QGIS_ROOT%\apps\qgis\python" set "QGIS_PREFIX_DIR=%QGIS_ROOT%\apps\qgis"
 
 if not defined QGIS_PREFIX_DIR (
-    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: apps\qgis or apps\qgis-ltr prefix not found under %QGIS_ROOT%.
+    set /a QGIS_VALIDATION_ATTEMPTS+=1
+    >>"%QTILER_INSTALL_LOG%" echo Invalid QGIS folder: apps\qgis or apps\qgis-ltr prefix not found under %QGIS_ROOT% (attempt %QGIS_VALIDATION_ATTEMPTS%).
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QGIS apps folder not found under:' + [Environment]::NewLine + '%QGIS_ROOT%\apps' + [Environment]::NewLine + [Environment]::NewLine + 'Please select a valid QGIS 3.x installation folder.', 'Qtiler Installer - Invalid Path', 'OK', 'Error')" >nul
+    if "%QGIS_VALIDATION_ATTEMPTS%" GTR "1" (
+        echo.
+        echo ERROR: The selected QGIS folder is not valid. The installer will stop now to avoid a repeated loop.
+        echo Please choose a valid QGIS 3.x installation folder and run install.bat again.
+        echo.
+        pause
+        exit /b 1
+    )
     goto ask_qgis
 )
 
@@ -627,6 +693,7 @@ REM  Step 2: Update .env so Qtiler service can locate QGIS at runtime
 REM          Preserves existing keys (tuning, secrets, etc.). A timestamped
 REM          backup is created before any modification.
 REM ----------------------------------------------------------------------
+call :write_progress "Writing configuration" 43 "Saving the QGIS, service, port and security settings."
 echo [Qtiler] Updating .env (preserving existing values) ...
 >>"%QTILER_INSTALL_LOG%" echo Step 2: updating .env.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -673,6 +740,7 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 3: Node.js was checked before QGIS and profile setup
 REM ----------------------------------------------------------------------
+call :write_progress "Installing dependencies" 58 "Installing the locked production dependency tree with npm ci."
 >>"%QTILER_INSTALL_LOG%" echo Step 3: Node.js and npm were checked before interactive setup.
 echo Node.js and npm are ready.
 echo.
@@ -696,6 +764,7 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 4b: Apply QtilerAuth licensing policy
 REM ----------------------------------------------------------------------
+call :write_progress "Preparing QtilerAuth" 69 "Creating or preserving the QtilerAuth trial and license state."
 echo [Qtiler] Applying QtilerAuth licensing policy...
 >>"%QTILER_INSTALL_LOG%" echo Step 4b: applying QtilerAuth licensing policy.
 if not exist data mkdir data >nul 2>&1
@@ -723,6 +792,7 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 5: Install Qtiler as a Windows service
 REM ----------------------------------------------------------------------
+call :write_progress "Registering Windows service" 78 "Installing the Qtiler Windows service definition."
 echo [Qtiler] Stopping existing Windows service if it is already running...
 >>"%QTILER_INSTALL_LOG%" echo Step 5: stopping existing Qtiler Windows service if present. Requested service name: %QTILER_SERVICE_NAME%.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action stop -ServiceName "%QTILER_SERVICE_NAME%"
@@ -777,6 +847,7 @@ echo.
 REM ----------------------------------------------------------------------
 REM  Step 5b: Start the Windows service and wait until HTTP is really ready
 REM ----------------------------------------------------------------------
+call :write_progress "Starting Qtiler" 87 "Starting the Windows service and initializing Qtiler."
 echo [Qtiler] Starting Windows service...
 >>"%QTILER_INSTALL_LOG%" echo Step 5b: starting Qtiler Windows service %QTILER_SERVICE_NAME%.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action start -ServiceName "%QTILER_SERVICE_NAME%"
@@ -789,6 +860,7 @@ if errorlevel 1 (
 )
 
 echo [Qtiler] Waiting for Qtiler HTTP endpoint to become ready on port %QTILER_PORT%...
+call :write_progress "Checking readiness" 94 "Waiting for Qtiler and QtilerAuth to respond on the configured port."
 >>"%QTILER_INSTALL_LOG%" echo Step 5b: waiting for HTTP readiness on port %QTILER_PORT%.
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$rootUrl = 'http://127.0.0.1:%QTILER_PORT%/';" ^
@@ -897,6 +969,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
 REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
+call :write_progress "Completed" 100 "Qtiler is installed and the Windows service is ready."
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "Add-Type -AssemblyName System.Windows.Forms;" ^
     "$balloon = [char]::ConvertFromUtf32(0x1F388); $party = [char]::ConvertFromUtf32(0x1F389);" ^
@@ -945,8 +1018,12 @@ echo  plugin, please contact support@mundogis.se.
 echo ================================================================
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Install completed successfully.
-pause
 endlocal
+exit /b 0
+
+:write_progress
+if not defined QTILER_PROGRESS_LOG exit /b 0
+>>"%QTILER_PROGRESS_LOG%" echo %~1^|%~2^|%~3
 exit /b 0
 
 :ensure_node
