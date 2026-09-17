@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Origo maps</title>
+  <title>Hajk maps</title>
   <style>
-    :root { --ink:#172033; --muted:#5b6678; --line:#dce3ec; --surface:#fff; --bg:#edf3f7; --brand:#005f73; --accent:#ee9b00; }
+    :root { --ink:#172033; --muted:#5b6678; --line:#dce3ec; --surface:#fff; --brand:#1d4ed8; --accent:#f59e0b; }
     * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; color:var(--ink); background:linear-gradient(155deg,#eaf3f4 0,#f7f9fb 42%,#edf1f7 100%); font-family:"Segoe UI",sans-serif; }
-    .topbar { min-height:88px; padding:18px clamp(20px,5vw,72px); display:flex; align-items:center; gap:18px; color:#fff; background:#073b4c; border-bottom:5px solid var(--accent); }
+    body { margin:0; min-height:100vh; color:var(--ink); background:linear-gradient(155deg,#e9f0fb 0,#f8fafc 42%,#edf2f4 100%); font-family:"Segoe UI",sans-serif; }
+    .topbar { min-height:88px; padding:18px clamp(20px,5vw,72px); display:flex; align-items:center; gap:18px; color:#fff; background:#17324d; border-bottom:5px solid var(--accent); }
     .logo { width:54px; height:54px; object-fit:contain; border-radius:6px; padding:5px; background:#fff; }
     .brand { min-width:0; }
-    .brand small { display:block; margin-bottom:3px; color:#b9d8dd; font-size:.72rem; font-weight:700; text-transform:uppercase; }
+    .brand small { display:block; margin-bottom:3px; color:#c7d9eb; font-size:.72rem; font-weight:700; text-transform:uppercase; }
     h1 { margin:0; font-size:clamp(1.5rem,3vw,2.25rem); letter-spacing:0; }
     .top-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
     .top-actions button { color:#fff; border:1px solid rgba(255,255,255,.45); border-radius:6px; padding:8px 12px; background:transparent; cursor:pointer; font:inherit; font-weight:650; }
-    .dialog-backdrop { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:20px; background:rgba(7,59,76,.46); }
+    .dialog-backdrop { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:20px; background:rgba(23,50,77,.46); }
     .dialog { width:min(390px,100%); padding:24px; border-radius:8px; background:#fff; box-shadow:0 20px 60px rgba(23,32,51,.25); }
     .dialog h2 { margin:0 0 8px; }
     .dialog p { color:var(--muted); }
@@ -34,9 +34,9 @@
     .search input { width:100%; border:1px solid #bac6d4; border-radius:6px; padding:10px 12px; background:#fff; color:var(--ink); font:inherit; }
     .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:18px; }
     .card { display:flex; min-height:100%; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 10px 26px rgba(23,32,51,.08); }
-    .media { position:relative; aspect-ratio:16/9; overflow:hidden; background:#dfe9ee; }
+    .media { position:relative; aspect-ratio:16/9; overflow:hidden; background:#dde7f3; }
     .media img { width:100%; height:100%; display:block; object-fit:cover; }
-    .placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#476675; background:repeating-linear-gradient(135deg,#dce9ed 0,#dce9ed 12px,#e7f0f2 12px,#e7f0f2 24px); font-weight:700; }
+    .placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#405d78; background:repeating-linear-gradient(135deg,#dce7f2 0,#dce7f2 12px,#e8eff7 12px,#e8eff7 24px); font-weight:700; }
     .content { display:flex; flex:1; flex-direction:column; padding:17px; }
     .content h3 { margin:0 0 7px; font-size:1.05rem; }
     .content p { margin:0 0 18px; color:var(--muted); line-height:1.5; }
@@ -48,15 +48,15 @@
     @media (max-width:700px) { .topbar { align-items:flex-start; } .top-actions { display:none; } .tools { align-items:stretch; flex-direction:column; } }
   </style>
 </head>
-<body data-plugin="Qtiler2Origo" data-viewer="Origo">
+<body data-plugin="Qtiler2Hajk" data-viewer="Hajk">
   <header class="topbar">
     <img id="logo" class="logo" alt="" />
-    <div class="brand"><small>Qtiler map gallery</small><h1>Origo maps</h1></div>
+    <div class="brand"><small>Qtiler map gallery</small><h1>Hajk maps</h1></div>
     <div class="top-actions"><button id="authLink" type="button">Sign in</button></div>
   </header>
   <main>
     <div class="tools">
-      <div class="intro"><h2 id="count">Published maps</h2><p>Select a map to open it in Origo.</p></div>
+      <div class="intro"><h2 id="count">Published maps</h2><p>Select a map to open it in Hajk.</p></div>
       <div class="search"><label for="filter">Search maps</label><input id="filter" type="search" placeholder="Title or description" autocomplete="off" /></div>
     </div>
     <div id="gallery" class="grid" aria-live="polite"><div class="empty">Loading maps...</div></div>
@@ -86,7 +86,7 @@
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const launchUrl = (item) => {
       try { const url = new URL(item.launchUrl || '', location.origin); url.protocol = location.protocol; url.host = location.host; return url.toString(); }
-      catch { return `/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(item.profileKey || '')}`; }
+      catch { return `/Qtiler2Hajk/maps/?qtiler_profile=${encodeURIComponent(item.profileKey || '')}`; }
     };
     function render() {
       const query = filter.value.trim().toLowerCase();

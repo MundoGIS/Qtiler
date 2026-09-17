@@ -1,6 +1,7 @@
 {
   "enabled": [
     "Qtiler2Origo",
-    "QtilerAuth"
+    "QtilerAuth",
+    "Qtiler2Hajk"
   ]
 }

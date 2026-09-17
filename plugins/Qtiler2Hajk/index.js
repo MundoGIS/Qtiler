@@ -23,20 +23,15 @@ import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { createJsonStore } from '../../lib/jsonStore.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
 
-const DEFAULT_REPO = process.env.QTILER_ORIGO_REPO || process.env.QTWC_QWC2_REPO || 'origo-map/origo';
-const DEFAULT_VERSION = process.env.QTILER_ORIGO_VERSION || process.env.QTWC_QWC2_VERSION || 'v2.10.0';
-const DEFAULT_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 3089);
-const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTILER_ORIGO_AUTOSTART || process.env.QTWC_QWC2_AUTOSTART || '0').toLowerCase());
-const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
+const DEFAULT_REPO = process.env.QTILER_HAJK_REPO || 'hajkmap/hajk';
+const DEFAULT_VERSION = process.env.QTILER_HAJK_VERSION || 'v4.3.0';
+const DEFAULT_STANDALONE_PORT = Number(process.env.QTILER_HAJK_PORT || 3090);
+const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTILER_HAJK_AUTOSTART || '0').toLowerCase());
+const ENV_STANDALONE_PORT = Number(process.env.QTILER_HAJK_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const MAX_MANUAL_THUMBNAIL_BYTES = 10 * 1024 * 1024;
-const MAX_BACKGROUND_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_LEGEND_LIBRARY_BYTES = 2 * 1024 * 1024;
-const LEGEND_SWATCH_SIZE = 24;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 const ALLOWED_MANUAL_THUMBNAIL_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
-const ALLOWED_BACKGROUND_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
-const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 // Thumbnail generation calls this server's own /wms endpoint internally; use
 // the local loopback + real listening port instead of PUBLIC_BASE_URL so it
 // never depends on external DNS/IIS/reverse-proxy reachability.
@@ -273,12 +268,6 @@ const normalizeBackgroundSelection = ({
       isDefault: item.isDefault === true
     };
 
-    // Preserve a custom uploaded background image from this plugin's library.
-    const imageUrl = String(item.imageUrl || '').trim();
-    if (imageUrl && imageUrl.startsWith('/plugins/Qtiler2Origo/background-assets/')) {
-      option.imageUrl = imageUrl;
-    }
-
     if (type === 'layer') {
       const sourceProjectId = normalizeProjectId(item.sourceProjectId || '');
       const name = String(item.name || '').trim();
@@ -342,7 +331,7 @@ const normalizeBackgroundSelection = ({
 const buildDownloadUrl = (repo, version) => {
   const safeRepo = String(repo || DEFAULT_REPO).trim();
   const safeVersion = String(version || DEFAULT_VERSION).trim();
-  return `https://github.com/${safeRepo}/archive/refs/tags/${safeVersion}.zip`;
+  return `https://github.com/${safeRepo}/releases/download/${safeVersion}/hajk-${safeVersion}-simple.zip`;
 };
 
 const fetchGitHubReleases = (repo, { includePrerelease = false, maxResults = 20 } = {}) => new Promise((resolve, reject) => {
@@ -372,14 +361,20 @@ const fetchGitHubReleases = (repo, { includePrerelease = false, maxResults = 20 
           if (!includePrerelease && r.prerelease) return false;
           return true;
         });
-        resolve(filtered.map((r) => ({
-          tag: r.tag_name,
-          name: r.name || r.tag_name,
-          prerelease: !!r.prerelease,
-          published: r.published_at || r.created_at || null,
-          assetUrl: r.zipball_url || null,
-          assetSize: 0
-        })));
+        resolve(filtered.map((r) => {
+          let expectedName = `hajk-${r.tag_name}-simple.zip`;
+          let a = (r.assets || []).find((a) => a.name === expectedName);
+          // Fallback if exactly that name is not found but there is another zip
+          if (!a) a = (r.assets || []).find((a) => a.name.endsWith('-simple.zip'));
+          return {
+            tag: r.tag_name,
+            name: r.name || r.tag_name,
+            prerelease: !!r.prerelease,
+            published: r.published_at || r.created_at || null,
+            assetUrl: a ? a.browser_download_url : (r.zipball_url || null),
+            assetSize: a ? a.size : 0
+          };
+        }));
       } catch(err) { console.error('XERR', err);
         reject(err);
       }
@@ -587,7 +582,7 @@ function _showLmvBanner() {
     || process.env.LANTMATERI_CLIENT_ID);
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════════╗');
-  console.log('║  Qtiler2Origo · Lantmäteriet-kontroll                            ║');
+  console.log('║  Qtiler2Hajk · Lantmäteriet-kontroll                            ║');
   console.log('║  ⚠ ENDAST FÖR DEN SVENSKA MARKNADEN / SWEDISH MARKET ONLY        ║');
   console.log('║  Kräver giltigt avtal med Lantmäteriet (api.lantmateriet.se)     ║');
   if (!hasKey) {
@@ -794,7 +789,7 @@ const fetchMarkdata = async (lon, lat) => {
 };
 
 export const register = async ({ app, security, dataDir, baseDir, registerStore }) => {
-  const pluginSlug = 'Qtiler2Origo';
+  const pluginSlug = 'Qtiler2Hajk';
   const adminUiDir = path.join(baseDir, 'admin-ui');
   const clientDir = path.join(baseDir, 'client');
   const repoRootCandidates = Array.from(new Set([
@@ -813,16 +808,14 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const workspaceRoot = path.dirname(resolveRepoPath('qgisprojects'));
   const cacheRoot = resolveRepoPath('cache');
   const dataRoot = path.resolve(dataDir, '..');
-  const runtimeRoot = path.join(dataDir, 'origo');
+  const runtimeRoot = path.join(dataDir, 'hajk');
   const installRoot = path.join(runtimeRoot, 'current');
   const publishedRoot = path.join(runtimeRoot, 'published');
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
-  const backgroundAssetsRoot = path.join(runtimeRoot, 'background-assets');
   const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
   const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
   const draftsRoot = path.join(runtimeRoot, 'drafts');
-  const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const projectsDir = resolveRepoPath('qgisprojects');
   let standaloneServer = null;
@@ -845,12 +838,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedRoot, { recursive: true });
   await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
-  await fs.promises.mkdir(backgroundAssetsRoot, { recursive: true });
   await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
-  await fs.promises.mkdir(thumbCacheDir, { recursive: true });
   await fs.promises.mkdir(draftsRoot, { recursive: true });
 
-  // WFS DescribeFeatureType cache (in-memory with optional on-disk backup)
+  // WFS DescribeFeatureType cache (in-memory with on-disk backup)
   const wfsMetaCache = new Map(); // key -> { meta, updatedAt }
   const wfsMetaCachePath = path.join(runtimeRoot, 'wfs-meta-cache.json');
   try {
@@ -862,20 +853,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   } catch {
     /* ignore cache load errors */
   }
-
-  // Origo config/themes/index caches (in-memory). Invalidate on publish/delete.
-  const origoConfigCache = new Map(); // key -> serialized config
-  const origoThemesCache = new Map(); // key -> serialized themes
-  const origoIndexCache = new Map(); // key -> serialized index
-  const clearOrigoCaches = (profileKey) => {
-    if (!profileKey) {
-      origoConfigCache.clear(); origoThemesCache.clear(); origoIndexCache.clear();
-      return;
-    }
-    // remove entries that mention the profileKey
-    for (const k of Array.from(origoConfigCache.keys())) if (k.includes(profileKey)) origoConfigCache.delete(k);
-    for (const k of Array.from(origoThemesCache.keys())) if (k.includes(profileKey)) origoThemesCache.delete(k);
-    for (const k of Array.from(origoIndexCache.keys())) if (k.includes(profileKey)) origoIndexCache.delete(k);
+  const persistWfsMetaCache = () => {
+    const serial = {};
+    wfsMetaCache.forEach((v, k) => { serial[k] = { meta: v.meta, updatedAt: v.updatedAt }; });
+    fs.promises.writeFile(wfsMetaCachePath, JSON.stringify(serial, null, 2)).catch(() => {});
   };
 
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
@@ -899,6 +880,143 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     res.type('application/json');
     return res.send(rebased);
   };
+
+  const patchHajkRuntimeVectorIcons = async () => {
+    const candidates = [];
+    const walk = async (dir) => {
+      let entries;
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (/\.js$/i.test(entry.name)) {
+          candidates.push(full);
+        }
+      }
+    };
+
+    await walk(installRoot);
+    let patched = 0;
+    let already = 0;
+    const anchor = 'legendIcon:e.legendIcon,lineColor:e.lineColor';
+    const iconAnchor = 'legendIcon:e.legendIcon,icon:e.icon,lineColor:e.lineColor';
+    const legacyReplacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
+    const replacement = 'legendIcon:e.legendIcon,icon:e.icon,symbolXOffset:e.symbolXOffset,symbolYOffset:e.symbolYOffset,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
+    const sldFallbackAnchor = 'catch(n){const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const sldFallbackLegacyReplacement = 'catch(n){this.config.icon&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const sldFallbackReplacement = 'catch(n){(this.config.qtilerStyleRules||this.config.icon)&&this.layer.setStyle(this.createStyle());const r=this.layer.get("caption"),i=this.layer.get("name");console.info(`Error applying SLD style to layer.';
+    const qtilerRulesStyleAnchor = '(e.icon||e.lineColor||e.lineWidth||e.fillColor||e.lineStyle)&&this.layer.setStyle(this.createStyle())';
+    const qtilerRulesStyleReplacement = '(e.qtilerStyleRules||e.icon||e.lineColor||e.lineWidth||e.fillColor||e.lineStyle)&&this.layer.setStyle(this.createStyle())';
+    const qtilerRulesAnchor = 'function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesLegacyReplacement = 'const U=this.config.qtilerStyleRules||[];function Q($){if(!Array.isArray(U)||!U.length)return null;const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):void 0,te=String(Q==null?"":Q),oe=String(Z.value==null?"":Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:null}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesOldNormalizerReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){$=String($==null?"":$).trim();for(let G=0;G<2;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));return $}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):$&&$.getProperties?$.getProperties()[Z.property]:void 0,te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerRulesReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){if($&&typeof $=="object")try{$=JSON.stringify($)}catch{}$=String($==null?"":$).trim();for(let G=0;G<3;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));($.startsWith("\\\\\\\"")&&$.endsWith("\\\\\\\""))&&($=$.slice(2,-2));return $.replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'")}function W($,G){if(!$||!G)return;let Z=$.get?$.get(G):void 0;if(Z!==void 0&&Z!==null)return Z;const Q=$.getProperties?$.getProperties():{};if(Object.prototype.hasOwnProperty.call(Q,G))return Q[G];const te=String(G).toLowerCase(),oe=Object.keys(Q).find(Ee=>String(Ee).toLowerCase()===te);return oe?Q[oe]:void 0}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=W($,Z.property),te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}})||U[0];return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number.isFinite(Number(G.anchorX))?Number(G.anchorX):.5,Number.isFinite(Number(G.anchorY))?Number(G.anchorY):.5]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const simpleIconAnchor = 'function Y(){return new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
+    const simpleIconReplacement = 'function Y(){return Number.isFinite(Number(a))&&Number.isFinite(Number(l))&&Math.abs(Number(a))<=1&&Math.abs(Number(l))<=1?new vl({src:n,scale:D,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number(a),Number(l)]}):new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
+    const qtilerRulesReturnAnchor = 'return[new ur(X())]}}class';
+    const qtilerRulesReturnReplacement = 'return U.length?Q:[new ur(X())]}}class';
+    const editRefreshPattern = /refreshLayer\(e\)\{.*?\}parseWFSTresponse\(e\)\{/;
+    const editRefreshReplacement = 'refreshLayer(e){const t=[],n=i=>{if(!i)return;const s=i.getLayers;if(typeof s=="function"){s().getArray().forEach(n);return}t.push(i)},o=i=>{const s=i&&i.getSource?i.getSource():null;if(!s)return;typeof s.refresh=="function"?s.refresh():s.changed(),typeof s.updateParams=="function"&&s.updateParams({time:Date.now()})};this.map.getLayers().getArray().forEach(n);const i=t.find(s=>{const a=s&&s.getSource?s.getSource():null;if(!a||typeof a.getParams!="function")return!1;const l=a.getParams()||{},n=Array.isArray(l.LAYERS)?l.LAYERS[0]:l.LAYERS;if(typeof n!="string")return!1;const r=String(e||"").split(":").pop(),u=n.split(":").pop();return e===n||r===u});if(i)o(i);else {const r=String(e||"").split(":").pop(),u=t.find(s=>{if(!s||typeof s.get!=="function")return!1;return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)});if(u)o(u);else for(const s of t){const a=s&&s.getSource?s.getSource():null,l=a&&typeof a.getUrl=="function"?a.getUrl():"";a&&(typeof a.refresh=="function"||typeof a.changed=="function")&&String(l||"").match(/(?:^|[?&/])wfs(?:[?&/]|$)/i)&&o(s)}}this.map.updateSize()}parseWFSTresponse(e){';
+    for (const filePath of candidates) {
+      let raw;
+      try {
+        raw = await fs.promises.readFile(filePath, 'utf8');
+      } catch {
+        continue;
+      }
+      let next = raw;
+      if (/\b(?:EditModel|CollectorModel)-[^/\\]+\.js$/i.test(filePath)) {
+        if (next.includes('const t=[],n=i=>')) {
+          already++;
+        } else if (editRefreshPattern.test(next)) {
+          next = next.replace(editRefreshPattern, editRefreshReplacement);
+          patched++;
+        }
+      }
+      if (!raw.includes('createStyle(e){const n=this.config.icon')) {
+        if (next !== raw) await fs.promises.writeFile(filePath, next, 'utf8');
+        continue;
+      }
+      if (next.includes(replacement)) {
+        already++;
+      } else {
+        if (next.includes(legacyReplacement)) {
+          const legacyReplacementCount = next.split(legacyReplacement).length - 1;
+          next = next.split(legacyReplacement).join(replacement);
+          patched += legacyReplacementCount;
+        }
+        const activeAnchor = next.includes(iconAnchor) ? iconAnchor : anchor;
+        const count = next.split(activeAnchor).length - 1;
+        if (count > 0) {
+          next = next.split(activeAnchor).join(replacement);
+          patched += count;
+        }
+      }
+      if (!next.includes(simpleIconReplacement)) {
+        const simpleIconCount = next.split(simpleIconAnchor).length - 1;
+        if (simpleIconCount > 0) {
+          next = next.split(simpleIconAnchor).join(simpleIconReplacement);
+          patched += simpleIconCount;
+        }
+      }
+      if (next.includes(qtilerRulesOldNormalizerReplacement) && !next.includes('slice(2,-2)')) {
+        const oldNormalizerCount = next.split(qtilerRulesOldNormalizerReplacement).length - 1;
+        next = next.split(qtilerRulesOldNormalizerReplacement).join(qtilerRulesReplacement);
+        patched += oldNormalizerCount;
+      }
+      if (!next.includes('function z($)')) {
+        const legacyRulesCount = next.split(qtilerRulesLegacyReplacement).length - 1;
+        if (legacyRulesCount > 0) {
+          next = next.split(qtilerRulesLegacyReplacement).join(qtilerRulesReplacement);
+          patched += legacyRulesCount;
+        }
+        const rulesCount = legacyRulesCount > 0 ? 0 : (next.split(qtilerRulesAnchor).length - 1);
+        if (rulesCount > 0) {
+          next = next.split(qtilerRulesAnchor).join(qtilerRulesReplacement);
+          patched += rulesCount;
+        }
+      }
+      if (next.includes(qtilerRulesAnchor) || !next.includes('return U.length?Q:[new ur(X())]')) {
+        const returnCount = next.split(qtilerRulesReturnAnchor).length - 1;
+        if (returnCount > 0) {
+          next = next.split(qtilerRulesReturnAnchor).join(qtilerRulesReturnReplacement);
+          patched += returnCount;
+        }
+      }
+      if (!next.includes(qtilerRulesStyleReplacement)) {
+        const styleTriggerCount = next.split(qtilerRulesStyleAnchor).length - 1;
+        if (styleTriggerCount > 0) {
+          next = next.split(qtilerRulesStyleAnchor).join(qtilerRulesStyleReplacement);
+          patched += styleTriggerCount;
+        }
+      }
+      if (!next.includes(sldFallbackReplacement)) {
+        const legacyFallbackCount = next.split(sldFallbackLegacyReplacement).length - 1;
+        if (legacyFallbackCount > 0) {
+          next = next.split(sldFallbackLegacyReplacement).join(sldFallbackReplacement);
+          patched += legacyFallbackCount;
+        }
+        const fallbackCount = legacyFallbackCount > 0 ? 0 : (next.split(sldFallbackAnchor).length - 1);
+        if (fallbackCount > 0) {
+          next = next.split(sldFallbackAnchor).join(sldFallbackReplacement);
+          patched += fallbackCount;
+        }
+      }
+      if (next !== raw) {
+        await fs.promises.writeFile(filePath, next, 'utf8');
+      }
+    }
+    if (patched || already) {
+      console.log(`[${pluginSlug}] Hajk runtime vector icon patch: patched=${patched}, already=${already}`);
+    }
+  };
+
+  await patchHajkRuntimeVectorIcons();
 
   const adminOnly = ensureAdmin(security);
   const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
@@ -1014,10 +1132,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   });
   const readLmvStoredProducts = () => lmvStatements.list.all().map(lmvRowToProduct).filter(Boolean);
 
-  // Public alias: rewrite `/Qtiler2Origo/maps/...` to the installed viewer.
+  // Public alias: rewrite `/Qtiler2Hajk/maps/...` to the installed viewer.
   // Keeping this stable preserves existing published map links and IIS rules.
-  const mapsAlias = '/Qtiler2Origo/maps';
-  const origoMount = `/plugins/${pluginSlug}/origo`;
+  const mapsAlias = '/Qtiler2Hajk/maps';
+  const origoMount = `/plugins/${pluginSlug}/hajk`;
   app.use((req, res, next) => {
     const url = req.url || '';
     const queryIndex = url.indexOf('?');
@@ -1060,17 +1178,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   });
 
-  const backgroundImageUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_BACKGROUND_IMAGE_BYTES },
-    fileFilter: (_req, file, cb) => {
-      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
-      if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
-        return cb(new Error('invalid_background_image_extension'));
-      }
-      cb(null, true);
-    }
-  });
+  // ── Legend icon library (uploaded PNG/SVG used as legend icons for layers) ──
+  const LEGEND_SWATCH_SIZE = 24;
+  const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
+  const MAX_LEGEND_LIBRARY_BYTES = 2 * 1024 * 1024;
 
   const legendLibraryUpload = multer({
     storage: multer.memoryStorage(),
@@ -1085,7 +1196,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   });
 
   const legendLibraryPublicUrl = (fileName, stamp = '') => {
-    const safe = sanitizeFileToken(fileName);
+    const safe = sanitizeFileToken(fileName || '');
     if (!safe) return '';
     return `/plugins/${pluginSlug}/legend-library/${encodeURIComponent(safe)}${stamp ? `?v=${encodeURIComponent(String(stamp))}` : ''}`;
   };
@@ -1142,32 +1253,17 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return out;
   };
 
-  const removeCachedLayerThumbnails = async (projectId, layerName) => {
-    const safePid = sanitizeFileToken(projectId);
-    const layerToken = sanitizeFileToken(String(layerName || '').replace(/,/g, '_'));
-    if (!safePid || !layerToken) return 0;
-    let removed = 0;
-    const entries = await fs.promises.readdir(thumbCacheDir).catch(() => []);
-    await Promise.all(entries.map(async (name) => {
-      if (!name.startsWith(`${safePid}_`) || !name.toLowerCase().endsWith('.jpg')) return;
-      if (!name.includes(layerToken)) return;
-      try {
-        await fs.promises.unlink(path.join(thumbCacheDir, name));
-        removed += 1;
-      } catch (_) {}
-    }));
-    return removed;
-  };
-
   const readState = async () => {
     const state = await stateStore.read();
     const storedPort = Number(state?.standalonePort || DEFAULT_STANDALONE_PORT);
     const standalonePort = Number.isFinite(ENV_STANDALONE_PORT) && ENV_STANDALONE_PORT > 0
       ? ENV_STANDALONE_PORT
       : storedPort;
+    const storedRepo = String(state?.repo || DEFAULT_REPO).trim();
+    const storedVersion = String(state?.version || DEFAULT_VERSION).trim();
     return {
-      repo: String(state?.repo || DEFAULT_REPO),
-      version: String(state?.version || DEFAULT_VERSION),
+      repo: /(^|\/)origo/i.test(storedRepo) ? DEFAULT_REPO : storedRepo,
+      version: /^v2\./i.test(storedVersion) ? DEFAULT_VERSION : storedVersion,
       installPath: String(state?.installPath || installRoot),
       standalonePort,
       installedAt: state?.installedAt || null,
@@ -1263,7 +1359,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     for (const candidate of candidates) {
       try {
         await fs.promises.access(path.join(candidate, 'index.html'), fs.constants.R_OK);
-        await fs.promises.access(path.join(candidate, 'js', 'origo.js'), fs.constants.R_OK);
         return candidate;
       } catch {
         // try next candidate
@@ -1370,6 +1465,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       return null;
     }
   };
+  const resolvePublishedThumbnailTarget = (profile) => {
+    const fallbackProjectId = normalizeProjectId(profile?.projectId || '');
+    const mainLayers = (Array.isArray(profile?.layers) ? profile.layers : [])
+      .filter((layer) => layer?.role === 'main')
+      .map((layer) => ({
+        projectId: normalizeProjectId(layer?.sourceProjectId || fallbackProjectId) || fallbackProjectId,
+        name: String(layer?.name || '').trim()
+      }))
+      .filter((entry) => entry.projectId && entry.name);
+    if (!mainLayers.length) {
+      return { projectId: fallbackProjectId, mainLayerNames: [] };
+    }
+    const primaryProjectId = mainLayers[0].projectId;
+    return {
+      projectId: primaryProjectId,
+      mainLayerNames: mainLayers
+        .filter((entry) => entry.projectId === primaryProjectId)
+        .map((entry) => entry.name)
+    };
+  };
   const resolvePublishedProfileRecord = async (profileToken) => {
     const directKey = sanitizeFileToken(profileToken);
     if (directKey) {
@@ -1385,11 +1500,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   };
   const regeneratePublishedThumbnail = async ({ profileKey, profile, baseUrl, cookieHeader, apiKey = '', authorization = '', clearCaches = true }) => {
     const safeProfileKey = sanitizeFileToken(profileKey || profile?.profileKey || profile?.name || '');
-    const projectId = normalizeProjectId(profile?.projectId || '');
-    const mainLayerNames = (Array.isArray(profile?.layers) ? profile.layers : [])
-      .filter((layer) => layer?.role === 'main')
-      .map((layer) => String(layer?.name || '').trim())
-      .filter(Boolean);
+    const thumbnailTarget = resolvePublishedThumbnailTarget(profile);
+    const projectId = thumbnailTarget.projectId;
+    const mainLayerNames = thumbnailTarget.mainLayerNames;
     if (!safeProfileKey || !projectId || !mainLayerNames.length) return null;
     const background = getDefaultPublishedBackground(profile);
     if (clearCaches) {
@@ -1452,8 +1565,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const baseLaunch = baseUrl ? baseUrl.replace(/\/+$/,'') : '';
         const profileKey = fileName.replace(/\.json$/i, '');
         const standaloneLaunch = baseLaunch
-          ? `${baseLaunch}/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
-          : `/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
+          ? `${baseLaunch}/Qtiler2Hajk/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`
+          : `/Qtiler2Hajk/maps/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`;
         const thumbnailMeta = await readPublishedThumbnailMeta(profileKey);
         rows.push({
           projectId,
@@ -1506,6 +1619,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       projects
     };
   };
+
+  // Standalone server support removed — no-op placeholders kept for compatibility
+  const stopStandaloneServer = async () => { /* removed */ };
 
   const nodeUrl = await import('url');
 
@@ -1580,6 +1696,45 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
 
     return [...ids];
+  };
+
+  const collectPreviewProjectIds = (payload) => {
+    const ids = new Set();
+    const add = (value) => {
+      const projectId = normalizeProjectId(value || '');
+      if (projectId) ids.add(projectId);
+    };
+    add(payload?.project);
+    add(payload?.bgProject);
+
+    const rawLayers = String(payload?.layers || '').trim();
+    if (rawLayers) {
+      try {
+        const parsedLayers = JSON.parse(rawLayers);
+        if (Array.isArray(parsedLayers)) {
+          for (const layer of parsedLayers) {
+            if (layer && typeof layer === 'object') add(layer.sourceProjectId || payload?.project);
+          }
+        }
+      } catch {
+        for (const token of rawLayers.split(',')) {
+          const text = String(token || '').trim();
+          if (!text) continue;
+          if (text.includes('::')) add(text.slice(0, text.indexOf('::')));
+          else add(payload?.project);
+        }
+      }
+    }
+
+    return [...ids];
+  };
+
+  const userCanAccessProjectIds = (projectIds, user) => {
+    if (!isAuthActive()) return true;
+    const ids = Array.isArray(projectIds) ? projectIds : [];
+    if (!ids.length) return false;
+    const snapshot = readAccessSnapshot(dataRoot);
+    return ids.every((projectId) => userCanAccessProject(snapshot, user || null, projectId));
   };
 
   const filterProfilesByAccess = (profiles, user) => {
@@ -1873,6 +2028,37 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return issues;
   };
 
+  const findLantmateriControlEntry = (controlsInput) => {
+    let controls = controlsInput;
+    if (typeof controlsInput === 'string' && controlsInput.trim()) {
+      try { controls = JSON.parse(controlsInput); } catch { controls = []; }
+    }
+    const list = Array.isArray(controls) ? controls : [];
+    return list.find((item) => item && item.name === 'lantmaterisearch') || null;
+  };
+
+  const getLantmateriOptionsFromControls = (controlsInput) => {
+    const ctrl = findLantmateriControlEntry(controlsInput);
+    return ctrl?.options && typeof ctrl.options === 'object' ? ctrl.options : {};
+  };
+
+  const buildLantmateriControlBootstrap = async (controlsInput) => {
+    try {
+      // Only inject the control script when the admin actually enabled it for
+      // this map. The frontend uses window.LANTMATERI_ENABLED to decide
+      // whether to mount the button against the real Hajk map.
+      const ctrl = findLantmateriControlEntry(controlsInput);
+      if (!ctrl) return '';
+      const controlPath = path.join(baseDir, 'origo-controls', 'lantmateri-search.js');
+      const controlJs = await fs.promises.readFile(controlPath, 'utf8');
+      const options = ctrl.options && typeof ctrl.options === 'object' ? ctrl.options : {};
+      return `<script>window.LANTMATERI_CONFIG = ${JSON.stringify(options)}; window.LANTMATERI_ENABLED = true;</script>\n<script>\n${controlJs}\n</script>`;
+    } catch (err) {
+      console.error('[Qtiler2Hajk] Failed to inject Lantmateriet control:', err);
+      return '';
+    }
+  };
+
   /**
    * Read project-level layer flags (e.g. wfsEditable/wfsSearchable)
    * from cache/<project>/project-config.json.
@@ -1891,16 +2077,24 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   };
 
-  const resolveLayerFlagEntry = (flags, layerName) => {
-    const name = String(layerName || '').trim();
-    if (!name || !flags || typeof flags !== 'object') return null;
-    const direct = flags[name] && typeof flags[name] === 'object' ? flags[name] : null;
-    if (direct) return direct;
-    const safeName = safeLayerNameForWfs(name);
-    for (const [key, value] of Object.entries(flags || {})) {
-      if (safeLayerNameForWfs(key) === safeName && value && typeof value === 'object') return value;
+  /**
+   * Read per-layer search config (searchAttribute/idAttribute/hintText) saved
+   * by QtilerAuth's "Layer permissions" editor at
+   * data/searchable-layers/<projectId>.json. This is the ONLY place that
+   * carries the actual chosen search attribute - the wfsSearchable boolean
+   * alone (from readProjectLayerFlags) doesn't say which field to search.
+   */
+  const readSearchableLayerConfig = async (projectId) => {
+    const safeName = sanitizeFileToken(projectId);
+    if (!safeName) return [];
+    const cfgPath = path.join(dataRoot, 'searchable-layers', `${safeName}.json`);
+    try {
+      const raw = await fs.promises.readFile(cfgPath, 'utf8');
+      const parsed = JSON.parse(raw || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
     }
-    return null;
   };
 
   /**
@@ -1925,8 +2119,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   /**
    * Generate or return a cached WMS thumbnail for a project + layers combo.
-   * Saves to data/Qtiler2Origo/thumbs/<projectId>_<hash>.jpg.
+   * Saves to data/Qtiler2Hajk/thumbs/<projectId>_<hash>.jpg.
    */
+  const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const thumbPendingRequests = new Map(); // key -> Promise (in-flight requests)
   const normalizeThumbnailBackground = (input) => {
     const source = input && typeof input === 'object' ? input : {};
@@ -1951,7 +2146,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       : bg?.type === 'osm'
         ? '|bg:osm'
         : '';
-    const hash = sanitizeFileToken(`${layerKey}${bgKey}|s500k`.replace(/,/g, '_')) || '_all';
+    const hash = sanitizeFileToken(`${layerKey}${bgKey}`.replace(/,/g, '_')) || '_all';
     return {
       safePid,
       hash,
@@ -1984,7 +2179,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             proxyRes.on('data', (chunk) => chunks.push(chunk));
             proxyRes.on('end', () => {
               const snippet = Buffer.concat(chunks).toString('utf8').slice(0, 500);
-              console.warn(`[Qtiler2Origo] thumbnail WMS fetch got non-image response (status ${proxyRes.statusCode}, content-type "${contentType}") for ${imageUrl}: ${snippet}`);
+              console.warn(`[Qtiler2Hajk] thumbnail WMS fetch got non-image response (status ${proxyRes.statusCode}, content-type "${contentType}") for ${imageUrl}: ${snippet}`);
               resolve(null);
             });
             proxyRes.on('error', () => resolve(null));
@@ -1999,15 +2194,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
       });
       proxyReq.setTimeout(120_000, () => {
-        console.warn(`[Qtiler2Origo] thumbnail WMS fetch timed out after 120s for ${imageUrl}`);
+        console.warn(`[Qtiler2Hajk] thumbnail WMS fetch timed out after 120s for ${imageUrl}`);
         try { proxyReq.destroy(new Error('thumbnail request timed out')); } catch (_) {}
       });
       proxyReq.on('error', (err) => {
-        console.warn(`[Qtiler2Origo] thumbnail WMS fetch error for ${imageUrl}: ${err?.message || err}`);
+        console.warn(`[Qtiler2Hajk] thumbnail WMS fetch error for ${imageUrl}: ${err?.message || err}`);
         resolve(null);
       });
     } catch (err) {
-      console.warn(`[Qtiler2Origo] thumbnail WMS fetch setup error for ${imageUrl}: ${err?.message || err}`);
+      console.warn(`[Qtiler2Hajk] thumbnail WMS fetch setup error for ${imageUrl}: ${err?.message || err}`);
       resolve(null);
     }
   });
@@ -2125,32 +2320,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       const padY = height * 0.12;
       return [minx - padX, miny - padY, maxx + padX, maxy + padY];
     };
-    // Nationwide WMS thumbs look empty at full extent. Crop around the
-    // centroid to ~1:500000 (280x160 @ 96 dpi) so legend icons show detail.
-    const cropExtentToDetailScale = (extentBbox, crsCode) => {
-      if (!Array.isArray(extentBbox) || extentBbox.length < 4) return extentBbox;
-      const [minx, miny, maxx, maxy] = extentBbox.map(Number);
-      if (![minx, miny, maxx, maxy].every(Number.isFinite) || !(maxx > minx) || !(maxy > miny)) return extentBbox;
-      const thumbW = 280;
-      const thumbH = 160;
-      const metersPerPx = (500000 * 0.0254) / 96;
-      let halfW = (thumbW * metersPerPx) / 2;
-      let halfH = (thumbH * metersPerPx) / 2;
-      const crs = String(crsCode || '').trim().toUpperCase();
-      if (crs === 'EPSG:4326' || crs === 'EPSG:4258' || crs === 'CRS:84') {
-        const lat = (miny + maxy) / 2;
-        const mPerDegLat = 111320;
-        const mPerDegLon = Math.max(1e-6, 111320 * Math.cos((lat * Math.PI) / 180));
-        halfW /= mPerDegLon;
-        halfH /= mPerDegLat;
-      }
-      const layerW = maxx - minx;
-      const layerH = maxy - miny;
-      if (layerW <= halfW * 2 && layerH <= halfH * 2) return extentBbox;
-      const cx = (minx + maxx) / 2;
-      const cy = (miny + maxy) / 2;
-      return [cx - halfW, cy - halfH, cx + halfW, cy + halfH];
-    };
     let bbox = null;
     let bboxWgs84 = null;
     let crs = null;
@@ -2182,10 +2351,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       crs = extent?.crs || 'EPSG:3857';
     }
     if (!crs) crs = 'EPSG:3857';
-    if (requestedLayers.length === 1) {
-      bbox = cropExtentToDetailScale(bbox, crs);
-      if (bboxWgs84) bboxWgs84 = cropExtentToDetailScale(bboxWgs84, 'EPSG:4326');
-    }
     const promise = new Promise((resolve) => {
       (async () => {
         try {
@@ -2374,7 +2539,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const shouldEnableAuthUi = authActive && authRequired;
 
     // Set service URLs from tool config, or clear demo defaults
-    baseConfig.searchServiceUrl = '/Qtiler2Origo/search';
+    baseConfig.searchServiceUrl = '/Qtiler2Hajk/search';
     baseConfig.searchDataServiceUrl = '';
     baseConfig.editServiceUrl = '/wfs';
     baseConfig.mapInfoServiceUrl = '/wms';
@@ -2392,20 +2557,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         if (features[featureKey] === false) {
           pluginNames.forEach((name) => disabledPlugins.add(name));
         }
-      }
-    }
-
-    // Routing and DXF export need explicit backend service URLs in our
-    // deployment. If left empty, keeping the plugins visible creates a
-    // production-ready-looking UI that cannot actually complete the action.
-    if (!String(tc.routingServiceUrl || '').trim()) {
-      for (const name of (FEATURE_PLUGIN_MAP.routing || [])) {
-        disabledPlugins.add(name);
-      }
-    }
-    if (!String(tc.dxfExportServiceUrl || '').trim()) {
-      for (const name of (FEATURE_PLUGIN_MAP.dxfExport || [])) {
-        disabledPlugins.add(name);
       }
     }
 
@@ -2592,7 +2743,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
     // Force-clear any external service endpoints that may point to demo or
     // local test services (e.g. :8088) to avoid client-side CORS/connection errors.
-    baseConfig.searchServiceUrl = '/Qtiler2Origo/search';
+    baseConfig.searchServiceUrl = '/Qtiler2Hajk/search';
     baseConfig.searchDataServiceUrl = '';
     if (typeof baseConfig.editServiceUrl !== 'string' || !baseConfig.editServiceUrl.trim()) baseConfig.editServiceUrl = '/wfs';
     if (typeof baseConfig.mapInfoServiceUrl !== 'string' || !baseConfig.mapInfoServiceUrl.trim()) baseConfig.mapInfoServiceUrl = '/wms';
@@ -2673,7 +2824,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               Title: 'OpenStreetMap contributors',
               OnlineResource: 'https://www.openstreetmap.org/copyright'
             },
-            // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
+            // QWC2 prepends /Qtiler2Hajk/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /img/...
             thumbnail: '../../../../img/mapthumbs/mapnik.jpg',
             tileSize: [256, 256]
@@ -2715,8 +2866,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
         if (presetId && hasPresetMatrices) {
           const safeName = `wmts:${bg.sourceProjectId}/${isThemeBackground ? `theme:${bgThemeName}` : bgName}`;
-          // Use the on-demand tile route that accepts raw project/layer names
-          // and caches generated tiles on first request.
           const wmtsUrl = isThemeBackground
             ? buildThemeWmtsUrl(qtilerBaseUrl, bg.sourceProjectId, bgThemeName, true)
             : `${qtilerBaseUrl}/wmts/${encodeURIComponent(bg.sourceProjectId)}/${encodeURIComponent(wmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`;
@@ -2737,7 +2886,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             resolutions,
             tileSize: [256, 256],
             bbox: { crs: 'EPSG:4326', bounds: bgExtent?.wgs84 || [-180, -90, 180, 90] },
-            // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
+            // QWC2 prepends /Qtiler2Hajk/webmap/assets to thumbnail paths.
             // Use an assets-relative path that resolves to /plugins/...
             thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(wmsLayerName)}?project=${encodeURIComponent(bg.sourceProjectId)}`
           });
@@ -2872,7 +3021,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const bgResult = await buildBackgroundLayers(profile, qtilerBaseUrl);
     const searchEnabled = profile.features?.search !== false;
     // QWC2 only ships 4 built-in providers: coordinates, nominatim, qgis, fulltext.
-    // We expose our /Qtiler2Origo/search endpoint via the `fulltext` provider; the
+    // We expose our /Qtiler2Hajk/search endpoint via the `fulltext` provider; the
     // `params.default` array becomes the `filter` query string sent to the
     // backend, which we use to identify the dataset (theme id).
     const localSearchProvider = { provider: 'fulltext', params: { default: [projectId] } };
@@ -2915,9 +3064,9 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       // given zoom it renders through QGIS; subsequent requests for the same
       // combo are served instantly from disk.
       tiled: true,
-      // QWC2 prepends /Qtiler2Origo/webmap/assets to thumbnail paths.
+      // QWC2 prepends /Qtiler2Hajk/webmap/assets to thumbnail paths.
       // Use an assets-relative path that resolves to /plugins/...
-      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}${buildPublishedThumbnailQuery({ mainLayerNames: mainLayers.map((l) => String(l.name || '').trim()).filter(Boolean), background: getDefaultPublishedBackground(profile) })}`
+      thumbnail: `../../../../plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(resolvePublishedThumbnailTarget(profile).projectId || projectId)}${buildPublishedThumbnailQuery({ mainLayerNames: resolvePublishedThumbnailTarget(profile).mainLayerNames, background: getDefaultPublishedBackground(profile) })}`
     };
 
     // If this profile has view3d enabled, add map3d so QWC2 shows the 3D button.
@@ -2947,7 +3096,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
               .filter((e) => /\.(tif|tiff)$/i.test(e))
               .sort((a, b) => scoreTerrainFile(b) - scoreTerrainFile(a) || a.localeCompare(b))[0];
             if (tif) {
-              const terrainUrl = `${qtilerBaseUrl}/Qtiler2Origo/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
+              const terrainUrl = `${qtilerBaseUrl}/Qtiler2Hajk/terrain/${encodeURIComponent(projectId)}/${encodeURIComponent(tif)}`;
               return { url: terrainUrl, crs: projectCrs };
             }
           }
@@ -3040,7 +3189,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         }
       }
     } catch (err) {
-      console.warn(`[Qtiler2Origo] Could not load print layouts for ${projectId}:`, err?.message || err);
+      console.warn(`[Qtiler2Hajk] Could not load print layouts for ${projectId}:`, err?.message || err);
     }
 
     return { item, bgLayersGlobal: bgResult.global };
@@ -3072,7 +3221,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return {
       themes: {
         title: 'root',
-        searchServiceUrl: `${qtilerBaseUrl}/Qtiler2Origo/search`,
+        searchServiceUrl: `${qtilerBaseUrl}/Qtiler2Hajk/search`,
         subdirs: [],
         items,
         defaultTheme: defaultTheme || firstId,
@@ -3267,6 +3416,11 @@ ${mapIcon}
 </div></body></html>`;
   };
 
+  // startStandaloneServer removed — QWC2 served from same-origin under /Qtiler2Hajk/webmap
+  const startStandaloneServer = async (_port) => { return { port: null }; };
+
+  const maybeAutoStartStandalone = async () => { /* removed */ };
+
   app.use(`/plugins/${pluginSlug}/admin-ui`, (req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -3323,18 +3477,8 @@ ${mapIcon}
   });
   // Serve dynamic, sanitized config/themes for the plugin-local QWC2 path so
   // the admin UI and local links always receive runtime-built configs.
-  app.get(`/plugins/${pluginSlug}/origo/config.json`, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/hajk/config.json`, async (req, res) => {
     try {
-      // Try in-memory cache first
-      try {
-        const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
-        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
-        const cacheKey = `config|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
-        const cached = origoConfigCache.get(cacheKey);
-        if (cached) {
-          try { return res.json(JSON.parse(cached)); } catch { /* fall through to rebuild */ }
-        }
-      } catch (_) {}
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
       const allProfiles = await readAllPublishedProfiles();
       const accessible = filterProfilesByAccess(allProfiles, req.user);
@@ -3376,7 +3520,7 @@ ${mapIcon}
 
       // Final sanitation
       config = config || {};
-      config.searchServiceUrl = '/Qtiler2Origo/search';
+      config.searchServiceUrl = '/Qtiler2Hajk/search';
       config.searchDataServiceUrl = '';
       if (typeof config.editServiceUrl !== 'string' || !config.editServiceUrl.trim()) config.editServiceUrl = '/wfs';
       if (typeof config.mapInfoServiceUrl !== 'string' || !config.mapInfoServiceUrl.trim()) config.mapInfoServiceUrl = '/wms';
@@ -3402,12 +3546,6 @@ ${mapIcon}
       }
       config.backgroundLayers = [];
       config.defaultBackgroundLayers = [];
-      try {
-        const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
-        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
-        const cacheKey = `config|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
-        origoConfigCache.set(cacheKey, JSON.stringify(config));
-      } catch (_) {}
       return res.json(config);
     } catch (e) {
       // fallback to on-disk sanitized config
@@ -3417,7 +3555,7 @@ ${mapIcon}
         const raw = await fs.promises.readFile(path.join(webRoot, 'config.json'), 'utf8');
         let base = {};
         try { base = JSON.parse(raw); } catch { base = {}; }
-        base.searchServiceUrl = '/Qtiler2Origo/search';
+        base.searchServiceUrl = '/Qtiler2Hajk/search';
         base.searchDataServiceUrl = '';
         if (typeof base.editServiceUrl !== 'string' || !base.editServiceUrl.trim()) base.editServiceUrl = '/wfs';
         if (typeof base.mapInfoServiceUrl !== 'string' || !base.mapInfoServiceUrl.trim()) base.mapInfoServiceUrl = '/wms';
@@ -3450,21 +3588,12 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/origo/themes.json`, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/hajk/themes.json`, async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
-      // Try in-memory cache first
-      try {
-        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
-        const cacheKey = `themes|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
-        const cached = origoThemesCache.get(cacheKey);
-        if (cached) {
-          try { return res.json(JSON.parse(cached)); } catch { /* fall through */ }
-        }
-      } catch (_) {}
       const allProfiles = await readAllPublishedProfiles();
       let accessible = filterProfilesByAccess(allProfiles, req.user);
       const selectedProfile = profileId ? findProfileMatch(accessible, profileId) : null;
@@ -3477,13 +3606,7 @@ ${mapIcon}
       }
       const qtilerBaseUrl = getRequestBaseUrl(req);
       const themes = await buildQwc2Themes(accessible, qtilerBaseUrl, { defaultTheme: selectedProfile?.projectId || null });
-      const normalized = normalizeThemesForQwc2Assets(themes);
-      try {
-        const profileKey = sanitizeFileToken(String(profileId || '').trim() || '');
-        const cacheKey = `themes|${profileKey}|${String(getRequestBaseUrl(req) || '')}`;
-        origoThemesCache.set(cacheKey, JSON.stringify(normalized));
-      } catch (_) {}
-      return res.json(normalized);
+      return res.json(normalizeThemesForQwc2Assets(themes));
     } catch(err) { console.error('XERR', err);
       try {
         const webRoot = await resolveQwc2WebRoot().catch(()=>'');
@@ -3498,8 +3621,11 @@ ${mapIcon}
     const { stateId, payload } = await resolvePreviewRequestPayload(req);
     const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
+    if (!userCanAccessProjectIds(collectPreviewProjectIds(payload), req.user)) {
+      return res.status(req.user ? 403 : 401).type('html').send(buildNoAccessPage(true, !!req.user, req.user || null));
+    }
     const webRoot = await resolveQwc2WebRoot().catch(() => '');
-    if (!webRoot) return res.status(503).json({ error: 'origo_not_installed' });
+    if (!webRoot) return res.status(503).json({ error: 'hajk_not_installed' });
     const layers = String(payload.layers || '').trim();
     const bgProject = String(payload.bgProject || '').trim();
     const bgLayer = String(payload.bgLayer || '').trim();
@@ -3528,118 +3654,61 @@ ${mapIcon}
         ];
     const cfgQs = cfgParams.filter(Boolean).join('&');
     const configUrl = `${baseUrl}/plugins/${pluginSlug}/api/preview-config.json?${cfgQs}`;
-    // <base> tag makes all relative paths (SVG, img, etc.) resolve from the Origo build root
-    const base = `/plugins/${pluginSlug}/origo/`;
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<base href="${base}">
-<title>Preview \u2013 ${projectId.replace(/[<>"&']/g, '')}</title>
-<link href="css/style.css" rel="stylesheet">
-<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">
-<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}${origoLegendIconCss}</style>
-</head>
-<body>
-<div id="app-wrapper"></div>
-<script src="js/origo.js"></script>
-<script>
-  console.log('[DEBUG] Inline script executed');
-  (function(window) {
-    console.log('[DEBUG] Inside IIFE');
-    
-    function LantmateriSearch(options) {
-      console.log('[DEBUG] LantmateriSearch constructor called');
-      options = options || {};
-      
-      return {
-        onInit: function(viewerInstance) {
-          console.log('[DEBUG] LantmateriSearch onInit called');
-        },
-        render: function() {
-          console.log('[DEBUG] LantmateriSearch render called');
-          return document.createElement('div');
-        }
-      };
+    let html = await fs.promises.readFile(path.join(webRoot, 'index.html'), 'utf8');
+    const safeTitle = projectId.replace(/[<>"&']/g, '');
+    html = html.replace(/<title>[^<]*<\/title>/i, `<title>Hajk Preview - ${safeTitle}</title>`);
+    const previewBase = `<base href="/plugins/${pluginSlug}/hajk/">`;
+    if (/<head(\s[^>]*)?>/i.test(html)) {
+      html = html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n  ${previewBase}`);
     }
-    
-    window.LantmateriSearch = LantmateriSearch;
-    console.log('[DEBUG] LantmateriSearch registered to window');
-  })(window);
-</script>
-<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>
-<script>
-  function notifyParent(type, message) {
-    try { window.parent.postMessage({ type: type, message: message }, '*'); } catch (e) {}
+    const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
+    const lantmateriScript = await buildLantmateriControlBootstrap(payload.controls);
+    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+    const previewShim = `<script>
+(function() {
+  var previewConfigUrl = ${JSON.stringify(configUrl)};
+  var originalFetch = window.fetch.bind(window);
+  function rememberConfig(response) {
+    try {
+      response.clone().json().then(function(cfg) {
+        window.__QTILER2HAJK_CONFIG = cfg;
+        try { window.dispatchEvent(new CustomEvent('qtiler2hajk-config-loaded', { detail: cfg })); } catch (_) {}
+      }).catch(function() {});
+    } catch (_) {}
+    return response;
   }
-  function stringifyErrorDetail(detail, fallback) {
-    if (detail == null || detail === '') return fallback;
-    if (typeof detail === 'string') return detail;
-    try { return JSON.stringify(detail); } catch (e) { return String(detail); }
+  function jsonResponse(value) {
+    return Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } }));
   }
+  window.fetch = function(input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (/appConfig\\.json(?:\\?|$)/.test(url)) {
+      return jsonResponse({
+        mapserviceBase: '',
+        defaultMap: 'simpleMapAndLayersConfig',
+        availableTools: ['LayerSwitcher', 'Search', 'Print', 'Measurer', 'InfoDialog', 'Coordinates', 'Sketch', 'Edit', 'PropertyChecker', 'Routing', 'Bookmarks', 'Anchor', 'Location', 'StreetView', 'LayerComparer', 'Buffer', 'DocumentHandler', 'Informative', 'Export', 'TimeSlider'],
+        loadErrorTitle: 'Error',
+        loadErrorMessage: 'Map could not be loaded.'
+      });
+    }
+    if (/(?:preview-config|simpleMapAndLayersConfig)\\.json(?:\\?|$)/.test(url)) {
+      return originalFetch(previewConfigUrl, Object.assign({ credentials: 'same-origin' }, init || {})).then(rememberConfig);
+    }
+    return originalFetch(input, init);
+  };
   window.addEventListener('error', function(ev) {
-    notifyParent('origo-error', stringifyErrorDetail(ev && (ev.message || ev.error), 'Runtime error while loading Interactive Map.'));
+    try { window.parent.postMessage({ type: 'hajk-error', message: ev && (ev.message || ev.error) }, '*'); } catch (_) {}
   });
   window.addEventListener('unhandledrejection', function(ev) {
-    var reason = ev && ev.reason;
-    notifyParent('origo-error', stringifyErrorDetail(reason && (reason.message || reason.error || reason), 'Unhandled promise rejection while loading Interactive Map.'));
+    try { window.parent.postMessage({ type: 'hajk-error', message: ev && ev.reason }, '*'); } catch (_) {}
   });
-  // IMPORTANT: do NOT pass the config URL to Origo() directly. Origo's
-  // loadResources() appends "${'$'}{urlParams.map}.json" to any URL it receives;
-  // if the URL has no "#map=..." fragment, urlParams.map is undefined and
-  // the resulting fetch becomes ".../preview-config.json?...&bgLayer=NAME/undefined.json"
-  // which corrupts query params (Express then sees bgLayer with "/undefined.json"
-  // appended). Fetch the JSON ourselves and pass the parsed object instead.
-  fetch(${JSON.stringify(configUrl)}, { credentials: 'same-origin' })
-    .then(function(r) {
-      if (!r.ok) {
-        return r.text().then(function(text) {
-          throw new Error(text || ('Preview config failed (' + r.status + ')'));
-        });
-      }
-      return r.json().then(function(cfg) {
-        if (cfg && typeof cfg === 'object' && (cfg.error || cfg.details || cfg.message)) {
-          throw new Error(cfg.error || cfg.details || cfg.message);
-        }
-        return cfg;
-      });
-    })
-    .then(function(cfg) {
-      return window.Qtiler2OrigoOrigoBoot.bootOrigo(cfg);
-    })
-    .then(function(origoApp) {
-      window.origoApp = origoApp;
-      var refreshMapSize = function() {
-        try {
-          var viewer = typeof origoApp.api === 'function' ? origoApp.api() : null;
-          var map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
-          if (map && typeof map.updateSize === 'function') map.updateSize();
-        } catch (e) {}
-      };
-      requestAnimationFrame(function() {
-        requestAnimationFrame(refreshMapSize);
-      });
-      window.addEventListener('resize', refreshMapSize);
-      try {
-        var ro = new ResizeObserver(function() { refreshMapSize(); });
-        ro.observe(document.documentElement);
-        ro.observe(document.body);
-        ro.observe(document.getElementById('app-wrapper'));
-      } catch (e) {}
-      origoApp.on('load', function() {
-        refreshMapSize();
-        try { window.parent.postMessage({ type: 'origo-loaded' }, '*'); } catch(e){}
-      });
-    })
-    .catch(function(err) {
-      var detail = stringifyErrorDetail(err && (err.message || err), 'Failed to load preview config.');
-      notifyParent('origo-error', detail);
-      document.body.innerHTML = '<pre style="padding:1em;color:#b00;white-space:pre-wrap">Failed to load preview config: ' + detail.replace(/[&<>]/g, function(ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]; }) + '</pre>';
-    });
-</script>
-</body>
-</html>`;
+})();
+</script>`;
+    if (html.includes(previewBase)) {
+      html = html.replace(previewBase, `${previewBase}\n${previewShim}\n${patternFillScript}`);
+    } else {
+      html = html.includes('</head>') ? html.replace(/<\/head>/i, `${previewShim}\n${patternFillScript}\n</head>`) : `${previewBase}\n${previewShim}\n${patternFillScript}\n${html}`;
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(html);
   });
@@ -3790,34 +3859,20 @@ ${mapIcon}
       const preset = JSON.parse(raw);
       return normalizePreset(preset, match);
     } catch (err) {
-      console.warn(`[Qtiler2Origo] Failed to load tile grid for project "${projectId}":`, err?.message || err);
+      console.warn(`[Qtiler2Hajk] Failed to load tile grid for project "${projectId}":`, err?.message || err);
       return null;
     }
   };
 
-  // ── buildOrigoIndexConfig: build Origo index.json from a published profile ──
+  // ── buildHajkIndexConfig: build Hajk config from a published profile ──
   // Walk an Origo style array and rewrite icon.src URLs that point to
   // /qgis-svg/* to use the colorizer endpoint when an icon.color is set.
   // This is needed because OL Icon `color` doesn't tint SVGs whose paths
   // already have explicit fill attributes.
-  const normalizeOrigoIconStyle = (icon) => {
-    if (!icon || typeof icon !== 'object') return icon;
-    const out = { ...icon };
-    const src = String(out.src || '').trim();
-    if (/\.svg(?:\?|$)/i.test(src) && !Array.isArray(out.imgSize)) {
-      out.imgSize = [480, 480];
-    }
-    if (out.scale != null) {
-      const scale = Number(out.scale);
-      if (Number.isFinite(scale) && scale > 0) out.scale = scale;
-      else delete out.scale;
-    }
-    return out;
-  };
-
-  const rewriteSvgIconColors = (style) => {
+  const rewriteSvgIconColors = (style, baseUrl = '') => {
     try {
       const cloned = JSON.parse(JSON.stringify(style));
+      const normalizedBaseUrl = String(baseUrl || '').replace(/\/+$/, '');
       const visit = (node) => {
         if (!node || typeof node !== 'object') return;
         if (Array.isArray(node)) { node.forEach(visit); return; }
@@ -3833,9 +3888,9 @@ ${mapIcon}
           } else {
             node.icon.src = colored;
           }
-        }
-        if (node.icon && typeof node.icon === 'object') {
-          node.icon = normalizeOrigoIconStyle(node.icon);
+          if (normalizedBaseUrl && node.icon.src.startsWith('/')) {
+            node.icon.src = `${normalizedBaseUrl}${node.icon.src}`;
+          }
         }
         for (const k of Object.keys(node)) visit(node[k]);
       };
@@ -3843,39 +3898,6 @@ ${mapIcon}
       return cloned;
     } catch { return style; }
   };
-
-  const resolveManualWmsLegendUrl = (layer, fallbackUrl = '') => {
-    if (!layer || typeof layer !== 'object') return fallbackUrl || '';
-    const mode = String(layer.wmsLegendMode || 'auto').trim().toLowerCase();
-    const raw = String(layer.wmsLegendUrl || layer.wmsLegendIcon || layer.legendIcon || '').trim();
-    if (['manual', 'svg', 'library'].includes(mode) && raw) return raw;
-    return fallbackUrl || '';
-  };
-
-  const buildManualWmsLegendIconUrl = (rawUrl, baseUrl) => {
-    const raw = String(rawUrl || '').trim();
-    if (!raw) return '';
-    if (raw.startsWith('/plugins/') || raw.startsWith('/qgis-svg') || raw.startsWith('/qtiler-symbology')) return raw;
-    return `${baseUrl}/plugins/${pluginSlug}/api/legend-icon?src=${encodeURIComponent(raw)}`;
-  };
-
-  const buildWmsLegendGraphicUrl = (baseUrl, projectId, layerName) => {
-    const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
-    const name = String(layerName || '').trim();
-    if (!baseUrl || !pid || !name) return '';
-    return `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(pid)}?LAYERS=${encodeURIComponent(name)}&LEGEND=1`;
-  };
-
-  const origoLegendIconCss = `
-.o-map .legend-icon img,
-.o-map .legend-icon img.cover,
-.o-map img.extendedlegend {
-  object-fit: contain !important;
-  object-position: left center;
-  width: 100%;
-  height: 100%;
-}
-`;
 
   const normalizeInfoclickAttributes = (attrs) => {
     return (Array.isArray(attrs) ? attrs : [])
@@ -3900,11 +3922,67 @@ ${mapIcon}
       .filter(Boolean);
   };
 
+  const getNamedInfoclickAttributes = (attrs) => normalizeInfoclickAttributes(attrs)
+    .filter((attr) => attr && typeof attr === 'object' && String(attr.name || '').trim());
+
+  const toHajkEditableField = (attribute) => {
+    const fieldName = String(attribute?.name || '').trim();
+    if (!fieldName) return null;
+    const qtilerType = String(attribute?.type || 'text').trim().toLowerCase();
+    const typeMap = {
+      dropdown: 'lista',
+      checkbox: 'boolean',
+      date: 'datum',
+      datetime: 'date-time',
+      number: 'nummer',
+      integer: 'heltal',
+      url: 'url'
+    };
+    let textType = typeMap[qtilerType] || 'fritext';
+    const values = Array.isArray(attribute?.options)
+      ? Array.from(new Set(attribute.options.map((value) => String(value ?? '').trim()).filter(Boolean)))
+      : [];
+    if (textType === 'lista' && !values.length) textType = 'fritext';
+    return {
+      name: fieldName,
+      alias: String(attribute?.title || fieldName).trim() || fieldName,
+      textType,
+      ...(textType === 'lista' ? { values } : {}),
+      hidden: qtilerType === 'hidden'
+    };
+  };
+
+  const hajkInfoboxPlaceholder = (value) => String(value == null ? '' : value)
+    .replace(/\{\{\s*([A-Za-z_][\w.-]*)\s*\}\}/g, '{$1}');
+
+  const buildHajkInfobox = (attrs) => {
+    const normalized = normalizeInfoclickAttributes(attrs);
+    if (!normalized.length) return '';
+    return normalized
+      .map((attr) => {
+        if (attr && typeof attr === 'object' && String(attr.html || '').trim()) {
+          return hajkInfoboxPlaceholder(attr.html);
+        }
+        const name = String(attr?.name || '').trim();
+        if (!name) return '';
+        return `**${attr.title || name}:** {${name}}`;
+      })
+      .filter(Boolean)
+      .join('  \n');
+  };
+
+  const hasHtmlInfoclickRows = (layers) => (Array.isArray(layers) ? layers : [])
+    .some((layer) => normalizeInfoclickAttributes(layer?.attributes).some((attr) => String(attr?.html || '').trim()));
+
   const shouldUseWfsForPublishedLayer = (layerLike, fallbackEditable = false) => {
     if (!layerLike || typeof layerLike !== 'object') return fallbackEditable === true;
+    // Hajk search sources are built from the same WFS/vector path as editable
+    // layers. If a layer is marked searchable but stays on the WMS path,
+    // layersConfig.wfslayers stays empty and the search tool never appears.
+    if (layerLike.editable === true || layerLike.searchable === true || fallbackEditable === true) return true;
     if (layerLike.serveAsWfs === true) return true;
     if (layerLike.serveAsWfs === false) return false;
-    return layerLike.editable === true || fallbackEditable === true;
+    return false;
   };
 
   // Fetch WFS DescribeFeatureType and parse attributes, geometry column and
@@ -3929,7 +4007,7 @@ ${mapIcon}
         + `&typeName=${encodeURIComponent(typeName)}`;
       const r = await fetch(url, { headers: authHeaders });
       if (!r.ok) {
-        console.warn(`[Qtiler2Origo] DescribeFeatureType ${r.status} for ${typeName} on project ${projectId}. Editor will use fallback attribute. URL=${url}`);
+        console.warn(`[Qtiler2Hajk] DescribeFeatureType ${r.status} for ${typeName} on project ${projectId}. Editor will use fallback attribute. URL=${url}`);
         return fallback;
       }
       const xml = await r.text();
@@ -3959,20 +4037,18 @@ ${mapIcon}
       }
       meta.attributes = attrs;
       if (!attrs.length) {
-        console.warn(`[Qtiler2Origo] DescribeFeatureType for ${typeName} returned 0 attributes. XML snippet: ${xml.substring(0, 200)}`);
+        console.warn(`[Qtiler2Hajk] DescribeFeatureType for ${typeName} returned 0 attributes. XML snippet: ${xml.substring(0, 200)}`);
       }
 
       // Cache result (async write to disk, don't block)
       try {
         wfsMetaCache.set(cacheKey, { meta, updatedAt: Date.now() });
-        const serial = {};
-        wfsMetaCache.forEach((v, k) => { serial[k] = { meta: v.meta, updatedAt: v.updatedAt }; });
-        fs.promises.writeFile(wfsMetaCachePath, JSON.stringify(serial, null, 2)).catch(() => {});
+        persistWfsMetaCache();
       } catch (_) {}
 
       return meta;
     } catch (err) {
-      console.warn(`[Qtiler2Origo] DescribeFeatureType fetch failed for ${typeName}: ${err?.message || err}`);
+      console.warn(`[Qtiler2Hajk] DescribeFeatureType fetch failed for ${typeName}: ${err?.message || err}`);
       return fallback;
     }
   };
@@ -3985,13 +4061,19 @@ ${mapIcon}
   };
 
   const extractRuntimePatternStyle = (styleDef, layer) => {
-    const rawPattern = String(layer?.designerOptions?.fillPattern || '').trim().toLowerCase();
+    const rule = unwrapPrimaryStyleRule(styleDef);
+    const embeddedPatternStyle = rule && rule.qtilerPatternStyle && typeof rule.qtilerPatternStyle === 'object'
+      ? rule.qtilerPatternStyle
+      : null;
+    const designerOptions = layer?.designerOptions && typeof layer.designerOptions === 'object'
+      ? layer.designerOptions
+      : embeddedPatternStyle;
+    const rawPattern = String(designerOptions?.fillPattern || '').trim().toLowerCase();
     const pattern = rawPattern === 'diagonal' ? 'slash' : rawPattern;
     if (!['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) return null;
     const geometryType = String(layer?.geometryType || '').trim().toLowerCase();
     if (geometryType && !geometryType.includes('polygon')) return null;
     if (!Array.isArray(styleDef) || styleDef.length !== 1 || !Array.isArray(styleDef[0]) || styleDef[0].length !== 1) return null;
-    const rule = unwrapPrimaryStyleRule(styleDef);
     if (!rule || rule.filter || rule.circle || rule.icon || rule.regularShape || !rule.stroke) return null;
     const defaultAngle = pattern === 'backslash'
       ? 135
@@ -4006,23 +4088,604 @@ ${mapIcon}
       strokeColor: String(rule?.stroke?.color || 'rgba(37, 99, 235, 1)'),
       strokeWidth: Number(rule?.stroke?.width || 1),
       lineDash: Array.isArray(rule?.stroke?.lineDash) ? rule.stroke.lineDash.map(Number).filter(Number.isFinite) : [],
-      angle: Number.isFinite(Number(layer?.designerOptions?.fillPatternAngle)) ? Number(layer.designerOptions.fillPatternAngle) : defaultAngle,
-      spacing: Number.isFinite(Number(layer?.designerOptions?.fillPatternSpacing)) ? Number(layer.designerOptions.fillPatternSpacing) : 10,
-      size: Number.isFinite(Number(layer?.designerOptions?.fillPatternSize)) ? Number(layer.designerOptions.fillPatternSize) : 2.5,
-      transparentBackground: layer?.designerOptions?.fillPatternTransparent === true
+      angle: Number.isFinite(Number(designerOptions?.fillPatternAngle)) ? Number(designerOptions.fillPatternAngle) : defaultAngle,
+      spacing: Number.isFinite(Number(designerOptions?.fillPatternSpacing)) ? Number(designerOptions.fillPatternSpacing) : 10,
+      size: Number.isFinite(Number(designerOptions?.fillPatternSize)) ? Number(designerOptions.fillPatternSize) : 2.5,
+      transparentBackground: designerOptions?.fillPatternTransparent === true
     };
   };
 
-  const buildOrigoIndexConfig = async (profile, baseUrl, req = null) => {
-    // Return cached serialized config when available to avoid rebuilding on each request
-    try {
-      const profileKey = sanitizeFileToken(String(profile?.profileKey || profile?.name || profile?.projectId || ''));
-      const cacheKey = `index|${profileKey}|${String(baseUrl || '')}`;
-      const cached = origoIndexCache.get(cacheKey);
-      if (cached) {
-        try { return JSON.parse(cached); } catch { /* fall through to rebuild */ }
+  const DEFAULT_POINT_ICON_SIZE = 24;
+  const MIN_POINT_ICON_SIZE = 16;
+  const MAX_POINT_ICON_SIZE = 120;
+  const clampPointIconSize = (value, fallback = DEFAULT_POINT_ICON_SIZE) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.max(MIN_POINT_ICON_SIZE, Math.min(MAX_POINT_ICON_SIZE, n));
+  };
+
+  const hajkPointSizeFromIconScale = (scale) => {
+    const n = Number(scale);
+    if (!Number.isFinite(n) || n <= 0) return DEFAULT_POINT_ICON_SIZE;
+    return clampPointIconSize(n * 480, DEFAULT_POINT_ICON_SIZE);
+  };
+
+  const hajkMapPointSizeFromIconScale = (scale) => {
+    const n = Number(scale);
+    if (!Number.isFinite(n) || n <= 0) return 8;
+    return Math.max(0.05, Math.min(8, n * 8));
+  };
+
+  const metersPerUnitForProjection = (projCode = '') => String(projCode).toUpperCase() === 'EPSG:4326' ? 111319.49079327358 : 1;
+
+  const scaleDenominatorToResolution = (denominator, projCode = '') => {
+    const value = Number(denominator);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return (value * 0.00028) / metersPerUnitForProjection(projCode);
+  };
+
+  const firstZoomAtOrBelowResolution = (resolutions, targetResolution) => {
+    if (!Array.isArray(resolutions) || !Number.isFinite(targetResolution) || targetResolution <= 0) return null;
+    for (let index = 0; index < resolutions.length; index++) {
+      const resolution = Number(resolutions[index]);
+      if (Number.isFinite(resolution) && resolution <= targetResolution) return index;
+    }
+    return resolutions.length ? resolutions.length - 1 : null;
+  };
+
+  const lastZoomAtOrAboveResolution = (resolutions, targetResolution) => {
+    if (!Array.isArray(resolutions) || !Number.isFinite(targetResolution) || targetResolution <= 0) return null;
+    let found = null;
+    for (let index = 0; index < resolutions.length; index++) {
+      const resolution = Number(resolutions[index]);
+      if (Number.isFinite(resolution) && resolution >= targetResolution) found = index;
+    }
+    return found;
+  };
+
+  const toHajkVectorScaleZoomOptions = (styleDef, resolutions, projCode = '') => {
+    const rule = unwrapPrimaryStyleRule(styleDef);
+    const out = {};
+    const maxScaleResolution = scaleDenominatorToResolution(rule?.maxScale, projCode);
+    const minScaleResolution = scaleDenominatorToResolution(rule?.minScale, projCode);
+    const minZoom = firstZoomAtOrBelowResolution(resolutions, maxScaleResolution);
+    const maxZoom = lastZoomAtOrAboveResolution(resolutions, minScaleResolution);
+    if (minZoom !== null) out.minZoom = minZoom;
+    if (maxZoom !== null) out.maxZoom = maxZoom;
+    if (out.minZoom != null && out.maxZoom != null && out.maxZoom < out.minZoom) delete out.maxZoom;
+    return out;
+  };
+
+  const toHajkVectorStyleOptions = (styleDef, layer = {}) => {
+    const rule = unwrapPrimaryStyleRule(styleDef);
+    const geometryType = String(layer?.geometryType || '').toLowerCase();
+    const out = {};
+    const numberOrNull = (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    const colorOrNull = (value) => (typeof value === 'string' && value.trim()) ? value.trim() : null;
+
+    if (rule && typeof rule === 'object') {
+      const icon = rule.icon || rule.image || null;
+      if (icon && typeof icon === 'object' && typeof icon.src === 'string' && icon.src.trim()) {
+        out.icon = icon.src.trim();
+        const scale = numberOrNull(icon.scale);
+        if (scale !== null && scale > 0) out.pointSize = hajkMapPointSizeFromIconScale(scale);
+        else out.pointSize = 8;
+        if (Array.isArray(icon.anchor) && Number.isFinite(Number(icon.anchor[0])) && Number.isFinite(Number(icon.anchor[1]))) {
+          out.symbolXOffset = Number(icon.anchor[0]);
+          out.symbolYOffset = Number(icon.anchor[1]);
+        }
       }
-    } catch (_) {}
+      const circle = rule.circle || null;
+      if (circle && typeof circle === 'object') {
+        const radius = numberOrNull(circle.radius);
+        if (radius !== null && radius > 0) out.pointSize = clampPointIconSize(radius * 2);
+        if (!out.fillColor) out.fillColor = colorOrNull(circle.fill?.color);
+        if (!out.lineColor) out.lineColor = colorOrNull(circle.stroke?.color);
+        if (!out.lineWidth) out.lineWidth = numberOrNull(circle.stroke?.width);
+      }
+      if (!out.fillColor) out.fillColor = colorOrNull(rule.fill?.color);
+      if (!out.lineColor) out.lineColor = colorOrNull(rule.stroke?.color);
+      if (!out.lineWidth) out.lineWidth = numberOrNull(rule.stroke?.width);
+      const lineDash = Array.isArray(rule.stroke?.lineDash) ? rule.stroke.lineDash.map(Number).filter(Number.isFinite) : [];
+      if (lineDash.length) out.lineStyle = lineDash.length > 1 && lineDash[0] <= lineDash[1] ? 'dot' : 'dash';
+    }
+
+    if (geometryType.includes('point') && !out.icon) out.pointSize = clampPointIconSize(out.pointSize, DEFAULT_POINT_ICON_SIZE);
+    if (!out.fillColor && geometryType.includes('polygon')) out.fillColor = 'rgba(59, 130, 246, 0.25)';
+    if (!out.lineColor && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineColor = '#2563eb';
+    if (!out.lineWidth && (geometryType.includes('line') || geometryType.includes('polygon'))) out.lineWidth = 2;
+    return Object.fromEntries(Object.entries(out).filter(([, value]) => value !== null && value !== undefined && value !== ''));
+  };
+
+  const xmlEscape = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const normalizeSldColor = (value, fallback = '#000000') => {
+    const raw = String(value || '').trim();
+    if (!raw) return { color: fallback, opacity: null };
+    const hex = raw.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if (hex) {
+      const h = hex[1].length === 3
+        ? hex[1].split('').map((ch) => ch + ch).join('')
+        : hex[1];
+      return { color: `#${h}`, opacity: null };
+    }
+    const rgba = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+    if (rgba) {
+      const toHex = (n) => Math.max(0, Math.min(255, Math.round(Number(n) || 0))).toString(16).padStart(2, '0');
+      const opacity = rgba[4] == null ? null : Math.max(0, Math.min(1, Number(rgba[4])));
+      return { color: `#${toHex(rgba[1])}${toHex(rgba[2])}${toHex(rgba[3])}`, opacity };
+    }
+    return { color: raw, opacity: null };
+  };
+
+  const sldCssParameter = (name, value) => {
+    if (value === null || value === undefined || value === '') return '';
+    return `<CssParameter name="${xmlEscape(name)}">${xmlEscape(value)}</CssParameter>`;
+  };
+
+  const sldFill = (fill, fallbackColor = 'rgba(59,130,246,0.25)') => {
+    const { color, opacity } = normalizeSldColor(fill?.color || fallbackColor, '#3b82f6');
+    return `<Fill>${sldCssParameter('fill', color)}${opacity != null ? sldCssParameter('fill-opacity', opacity) : ''}</Fill>`;
+  };
+
+  const sldStroke = (stroke, fallbackColor = '#2563eb', fallbackWidth = 1) => {
+    const { color, opacity } = normalizeSldColor(stroke?.color || fallbackColor, fallbackColor);
+    const width = Number.isFinite(Number(stroke?.width)) ? Number(stroke.width) : fallbackWidth;
+    const dash = Array.isArray(stroke?.lineDash) && stroke.lineDash.length
+      ? stroke.lineDash.map((v) => Number(v)).filter(Number.isFinite).join(' ')
+      : '';
+    return `<Stroke>${sldCssParameter('stroke', color)}${opacity != null ? sldCssParameter('stroke-opacity', opacity) : ''}${sldCssParameter('stroke-width', width)}${dash ? sldCssParameter('stroke-dasharray', dash) : ''}</Stroke>`;
+  };
+
+  const sldLabel = (text) => {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    const parts = [];
+    let idx = 0;
+    const re = /\{\{\s*([A-Za-z_][\w.-]*)\s*\}\}/g;
+    let match;
+    while ((match = re.exec(raw)) !== null) {
+      if (match.index > idx) parts.push(xmlEscape(raw.slice(idx, match.index)));
+      parts.push(`<ogc:PropertyName>${xmlEscape(match[1])}</ogc:PropertyName>`);
+      idx = match.index + match[0].length;
+    }
+    if (idx < raw.length) parts.push(xmlEscape(raw.slice(idx)));
+    return parts.length ? parts.join('') : xmlEscape(raw);
+  };
+
+  const sldFilter = (filter) => {
+    const raw = String(filter || '').trim();
+    if (!raw) return '';
+    const m = raw.match(/^\[([^\]]+)\]\s*(==|!=|>=|<=|>|<|LIKE)\s*(.+)$/i);
+    if (!m) return '';
+    const field = m[1].trim();
+    const op = m[2].toUpperCase();
+    let literal = m[3].trim();
+    if ((literal.startsWith("'") && literal.endsWith("'")) || (literal.startsWith('"') && literal.endsWith('"'))) {
+      literal = literal.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+    }
+    if ((literal.startsWith("'") && literal.endsWith("'")) || (literal.startsWith('"') && literal.endsWith('"'))) {
+      literal = literal.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+    }
+    const prop = `<ogc:PropertyName>${xmlEscape(field)}</ogc:PropertyName>`;
+    const lit = `<ogc:Literal>${xmlEscape(literal)}</ogc:Literal>`;
+    const comparison = {
+      '==': 'PropertyIsEqualTo',
+      '!=': 'PropertyIsNotEqualTo',
+      '>': 'PropertyIsGreaterThan',
+      '>=': 'PropertyIsGreaterThanOrEqualTo',
+      '<': 'PropertyIsLessThan',
+      '<=': 'PropertyIsLessThanOrEqualTo'
+    }[op];
+    if (op === 'LIKE') {
+      return `<ogc:Filter><ogc:PropertyIsLike wildCard="%" singleChar="_" escapeChar="\\">${prop}${lit}</ogc:PropertyIsLike></ogc:Filter>`;
+    }
+    if (!comparison) return '';
+    return `<ogc:Filter><ogc:${comparison}>${prop}${lit}</ogc:${comparison}></ogc:Filter>`;
+  };
+
+  const parseQtilerRuleFilter = (filter) => {
+    const raw = String(filter || '').trim();
+    if (!raw) return null;
+    const match = raw.match(/^\[([^\]]+)\]\s*(==|!=|>=|<=|>|<|LIKE)\s*(.+)$/i);
+    if (!match) return null;
+    let value = match[3].trim();
+    for (let index = 0; index < 2; index++) {
+      if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+        value = value.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+      }
+    }
+    if (value.startsWith('\\"') && value.endsWith('\\"')) {
+      value = value.slice(2, -2);
+    }
+    value = value.replace(/\\"/g, '"').replace(/\\'/g, "'");
+    return {
+      property: match[1].trim(),
+      operator: match[2].toUpperCase(),
+      value
+    };
+  };
+
+  const toHajkRuntimeStyleRules = (styleDef, baseUrl = '') => {
+    const entries = getHajkLegendStyleEntries(styleDef, {});
+    return entries
+      .map((entry) => {
+        if (!entry?.icon || typeof entry.icon !== 'object' || !entry.icon.src) return null;
+        const filter = parseQtilerRuleFilter(entry.filter);
+        const fromScale = Number(entry.icon.scale) > 0 ? hajkMapPointSizeFromIconScale(entry.icon.scale) : null;
+        const explicitPointSize = Number(entry.pointSize);
+        const pointSize = fromScale ?? (Number.isFinite(explicitPointSize) ? explicitPointSize : DEFAULT_POINT_ICON_SIZE);
+        return {
+          ...(filter || {}),
+          icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
+          pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
+          anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
+          anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5,
+          symbolXOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolXOffset || ''),
+          symbolYOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolYOffset || '')
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const sldScale = (rule) => {
+    const parts = [];
+    const minDenominator = Number(rule?.minScale);
+    const maxDenominator = Number(rule?.maxScale);
+    if (Number.isFinite(minDenominator) && minDenominator > 0) {
+      parts.push(`<MinScaleDenominator>${xmlEscape(minDenominator)}</MinScaleDenominator>`);
+    }
+    if (Number.isFinite(maxDenominator) && maxDenominator > 0) {
+      parts.push(`<MaxScaleDenominator>${xmlEscape(maxDenominator)}</MaxScaleDenominator>`);
+    }
+    return parts.join('');
+  };
+
+  const toHajkVectorSldText = (styleDef, layer = {}, baseUrl = '') => {
+    if (!Array.isArray(styleDef) || !styleDef.length) return '';
+    const geometryType = String(layer?.geometryType || '').toLowerCase();
+    const rules = [];
+    const addSymbolizerRule = (entry, symbolizer, suffix) => {
+      if (!symbolizer) return;
+      const title = entry?.legendLabel || entry?.label || layer?.title || layer?.name || 'Style';
+      const name = `${String(layer?.style || layer?.name || 'rule').replace(/[^A-Za-z0-9_]/g, '_')}_${rules.length + 1}${suffix ? '_' + suffix : ''}`;
+      rules.push(`<Rule><Name>${xmlEscape(name)}</Name><Title>${xmlEscape(title)}</Title>${sldFilter(entry?.filter)}${sldScale(entry)}${symbolizer}</Rule>`);
+    };
+
+    for (const ruleGroup of styleDef) {
+      const entries = Array.isArray(ruleGroup) ? ruleGroup : [ruleGroup];
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') continue;
+        if (entry.text && typeof entry.text === 'object') {
+          const fill = normalizeSldColor(entry.text.fill?.color || '#000000', '#000000');
+          const stroke = normalizeSldColor(entry.text.stroke?.color || '#ffffff', '#ffffff');
+          const fontSize = String(entry.text.font || '').match(/(\d+(?:\.\d+)?)px/)?.[1] || '12';
+          const label = sldLabel(entry.text.text);
+          if (label) {
+            const symbolizer = `<TextSymbolizer><Label>${label}</Label><Font>${sldCssParameter('font-family', 'sans-serif')}${sldCssParameter('font-size', fontSize)}</Font><Fill>${sldCssParameter('fill', fill.color)}${fill.opacity != null ? sldCssParameter('fill-opacity', fill.opacity) : ''}</Fill><Halo><Radius>${xmlEscape(entry.text.stroke?.width || 2)}</Radius><Fill>${sldCssParameter('fill', stroke.color)}${stroke.opacity != null ? sldCssParameter('fill-opacity', stroke.opacity) : ''}</Fill></Halo></TextSymbolizer>`;
+            addSymbolizerRule(entry, symbolizer, 'label');
+          }
+          continue;
+        }
+
+        if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
+          const explicitPointSize = numberOrNull(entry.pointSize);
+          const fromScale = (Number(entry.icon.scale) || 0) > 0
+            ? hajkPointSizeFromIconScale(entry.icon.scale)
+            : DEFAULT_POINT_ICON_SIZE;
+          const size = clampPointIconSize(explicitPointSize ?? fromScale, DEFAULT_POINT_ICON_SIZE);
+
+          let iconHref = String(entry.icon.src || '').trim();
+          if (iconHref.startsWith('/qgis-svg/') || iconHref.startsWith('/qtiler-symbology-svg/')) {
+            iconHref = `${baseUrl.replace(/\/+$/, '')}${iconHref}`;
+          }
+
+          const iconFormat = /\.png(?:\?|$)/i.test(iconHref)
+            ? 'image/png'
+            : (/\.jpe?g(?:\?|$)/i.test(iconHref) ? 'image/jpeg' : 'image/svg+xml');
+
+          const symbolizer = `<PointSymbolizer><Graphic><ExternalGraphic><OnlineResource xlink:type="simple" xlink:href="${xmlEscape(iconHref)}"/><Format>${iconFormat}</Format></ExternalGraphic><Size>${xmlEscape(size)}</Size></Graphic></PointSymbolizer>`;
+          addSymbolizerRule(entry, symbolizer, 'icon');
+          continue;
+        }
+
+        if (entry.circle && typeof entry.circle === 'object') {
+          const radius = Math.max(1, Number(entry.circle.radius) || 5);
+          const symbolizer = `<PointSymbolizer><Graphic><Mark><WellKnownName>circle</WellKnownName>${sldFill(entry.circle.fill, '#3b82f6')}${sldStroke(entry.circle.stroke, '#2563eb', 1)}</Mark><Size>${xmlEscape(radius * 2)}</Size></Graphic></PointSymbolizer>`;
+          addSymbolizerRule(entry, symbolizer, 'circle');
+          continue;
+        }
+
+        if (entry.fill || geometryType.includes('polygon')) {
+          const symbolizer = `<PolygonSymbolizer>${entry.fill ? sldFill(entry.fill) : ''}${entry.stroke ? sldStroke(entry.stroke, '#2563eb', 1) : ''}</PolygonSymbolizer>`;
+          addSymbolizerRule(entry, symbolizer, 'polygon');
+          continue;
+        }
+
+        if (entry.stroke) {
+          const symbolizer = `<LineSymbolizer>${sldStroke(entry.stroke, '#2563eb', 2)}</LineSymbolizer>`;
+          addSymbolizerRule(entry, symbolizer, 'line');
+        }
+      }
+    }
+
+    if (!rules.length) return '';
+    const styleName = String(layer?.style || 'Default Styler');
+    const layerName = String(layer?.name || styleName);
+    return `<?xml version="1.0" encoding="UTF-8"?><StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xlink="http://www.w3.org/1999/xlink"><NamedLayer><Name>${xmlEscape(layerName)}</Name><UserStyle><Name>${xmlEscape(styleName)}</Name><Title>${xmlEscape(layer?.title || layerName)}</Title><FeatureTypeStyle>${rules.join('')}</FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+  };
+
+  const makeLayerThumbnailUrl = (baseUrl, layerName, projectId) => {
+    const name = String(layerName || '').trim();
+    const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
+    if (!baseUrl || !name || !pid) return '';
+    return `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(name)}?project=${encodeURIComponent(pid)}`;
+  };
+
+  const makeWmsLegendUrl = (baseUrl, layerName, projectId, options = {}) => {
+    const name = String(layerName || '').trim();
+    const pid = normalizeProjectId(projectId || '') || String(projectId || '').trim();
+    if (!baseUrl || !name || !pid) return '';
+    const wait = options.wait === true ? '&QTILER_WAIT_LEGEND=1' : '';
+    return `${baseUrl}/wms?project=${encodeURIComponent(pid)}&SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.0.0&FORMAT=image/png&LAYER=${encodeURIComponent(name)}${wait}`;
+  };
+
+  const svgAttr = (value) => String(value == null ? '' : value).replace(/[<>&"']/g, '');
+
+  const svgDataUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+  const toHajkVectorLegendIcon = (styleOptions = {}) => {
+    if (styleOptions.icon) return styleOptions.icon;
+    const fill = svgAttr(styleOptions.fillColor || 'rgba(255,255,255,0)');
+    const stroke = svgAttr(styleOptions.lineColor || '#2563eb');
+    const width = Math.max(1, Number(styleOptions.lineWidth) || 2);
+    const dash = styleOptions.lineStyle === 'dot' ? '2 4' : (styleOptions.lineStyle === 'dash' ? '8 4' : '');
+    const dashAttr = dash ? ` stroke-dasharray="${dash}"` : '';
+    if (styleOptions.fillColor) {
+      return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="5" y="6" width="22" height="20" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="${width}"${dashAttr}/></svg>`);
+    }
+    if (styleOptions.pointSize) {
+      const radius = Math.max(3, Math.min(12, Number(styleOptions.pointSize) / 2 || 5));
+      return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/></svg>`);
+    }
+    return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M5 22 L27 10" fill="none" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round"${dashAttr}/></svg>`);
+  };
+
+  const getHajkLegendStyleEntries = (styleDef, layer = {}) => {
+    if (!Array.isArray(styleDef)) return [];
+    const entries = [];
+    for (const ruleGroup of styleDef) {
+      const groupEntries = Array.isArray(ruleGroup) ? ruleGroup : [ruleGroup];
+      for (const entry of groupEntries) {
+        if (!entry || typeof entry !== 'object' || entry.text) continue;
+        // Include any rule that carries visible symbology (icon/circle/fill/
+        // stroke). The old `|| geometryType.includes('polygon')` catch-all
+        // silently dropped stroke-only rules on non-polygon layers.
+        if (entry.icon || entry.circle || entry.fill || entry.stroke) entries.push(entry);
+      }
+    }
+    return entries;
+  };
+
+  const legendDashAttr = (lineDash) => {
+    const dash = Array.isArray(lineDash) ? lineDash.map(Number).filter(Number.isFinite) : [];
+    return dash.length && dash[0] > 0 ? ` stroke-dasharray="${dash.join(' ')}"` : '';
+  };
+
+  const legendPatternFill = (fill, stroke, strokeWidth, patternMeta = null, rowIndex = 0) => {
+    const rawPattern = String(patternMeta?.fillPattern || '').trim().toLowerCase();
+    const pattern = rawPattern === 'diagonal' ? 'slash' : rawPattern;
+    if (!['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) return { defs: '', fill };
+    const defaultAngle = pattern === 'backslash' ? 135 : pattern === 'horizontal' ? 0 : pattern === 'vertical' ? 90 : 45;
+    const spacing = Math.max(4, Math.min(32, Number(patternMeta?.fillPatternSpacing) || 10));
+    const angle = Math.max(0, Math.min(180, Number(patternMeta?.fillPatternAngle) || defaultAngle));
+    const dotSize = Math.max(1, Math.min(12, Number(patternMeta?.fillPatternSize) || 2.5));
+    const id = `hajk-legend-pattern-${rowIndex}-${pattern}-${spacing}-${angle}-${dotSize}`.replace(/[^a-z0-9_-]/gi, '-');
+    let content = '';
+    if (pattern === 'dots') {
+      content = `<circle cx="${spacing / 2}" cy="${spacing / 2}" r="${dotSize}" fill="${svgAttr(stroke)}" />`;
+    } else {
+      const lineStrokeWidth = Math.max(0.6, Number(strokeWidth) || 1);
+      const buildLine = (lineAngle) => `<path d="M ${spacing / 2} -${spacing} L ${spacing / 2} ${spacing * 2}" stroke="${svgAttr(stroke)}" stroke-width="${lineStrokeWidth}" stroke-linecap="round" transform="rotate(${lineAngle} ${spacing / 2} ${spacing / 2})" />`;
+      if (pattern === 'cross') {
+        content = `${buildLine(angle)}${buildLine((angle + 90) % 180)}`;
+      } else {
+        const effectiveAngle = pattern === 'slash' ? angle : pattern === 'backslash' ? 180 - angle : pattern === 'horizontal' ? 90 : pattern === 'vertical' ? 0 : angle;
+        content = buildLine(effectiveAngle);
+      }
+    }
+    return {
+      defs: `<defs><pattern id="${id}" patternUnits="userSpaceOnUse" width="${spacing}" height="${spacing}"><rect width="${spacing}" height="${spacing}" fill="${svgAttr(fill)}" />${content}</pattern></defs>`,
+      fill: `url(#${id})`
+    };
+  };
+
+  const toAbsoluteHajkIconSrc = (src, baseUrl = '') => {
+    const raw = String(src || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+    if (raw.startsWith('/qgis-svg/') || raw.startsWith('/qgis-svg-colored/')
+        || raw.startsWith('/qtiler-symbology-svg/') || raw.startsWith('/qtiler-symbology-svg-colored/')) {
+      return baseUrl ? `${String(baseUrl).replace(/\/+$/, '')}${raw}` : raw;
+    }
+    return raw;
+  };
+
+  const resolveLocalSvgIconPath = (src) => {
+    let pathname = String(src || '').trim();
+    if (!pathname) return null;
+    try {
+      if (/^https?:\/\//i.test(pathname)) pathname = new URL(pathname).pathname;
+    } catch {
+      return null;
+    }
+    try {
+      pathname = decodeURIComponent(pathname.split('?')[0]).replace(/\\/g, '/');
+    } catch {
+      pathname = pathname.split('?')[0].replace(/\\/g, '/');
+    }
+    const qgisPrefixes = ['/qgis-svg-colored/', '/qgis-svg/'];
+    for (const prefix of qgisPrefixes) {
+      if (pathname.startsWith(prefix)) {
+        const rel = pathname.slice(prefix.length).replace(/\.\.+/g, '');
+        const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
+        return path.join(qgisPrefix, 'svg', rel);
+      }
+    }
+    const qtilerPrefixes = ['/qtiler-symbology-svg-colored/', '/qtiler-symbology-svg/'];
+    for (const prefix of qtilerPrefixes) {
+      if (pathname.startsWith(prefix)) {
+        const rel = pathname.slice(prefix.length).replace(/\.\.+/g, '');
+        return path.join(dataRoot, 'Qtiler-symbology', rel);
+      }
+    }
+    return null;
+  };
+
+  const prepareInlineSvgContent = (content, color = '') => {
+    let svg = String(content || '')
+      .replace(/<\?xml[^>]*>/gi, '')
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .trim();
+    if (!/<svg\b/i.test(svg)) return '';
+    if (!/viewBox\s*=/i.test(svg)) {
+      const wMatch = svg.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
+      const hMatch = svg.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
+      if (wMatch && hMatch) svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}" `);
+    }
+    const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(String(color || '').trim());
+    if (colorMatch) {
+      const fillColor = `#${colorMatch[1]}`;
+      svg = svg.replace(/fill\s*=\s*"(?!none)([^"]*)"/gi, `fill="${fillColor}"`);
+      svg = svg.replace(/fill\s*=\s*'(?!none)([^']*)'/gi, `fill='${fillColor}'`);
+      svg = svg.replace(/fill\s*:\s*(?!none)#?[0-9a-fA-F]{3,8}/gi, `fill:${fillColor}`);
+      svg = svg.replace(/fill\s*:\s*(?!none)rgb\([^)]+\)/gi, `fill:${fillColor}`);
+      if (!/fill\s*=|fill\s*:/i.test(svg)) svg = svg.replace(/<svg\b/i, `<svg fill="${fillColor}"`);
+    }
+    return svg;
+  };
+
+  const inlineSvgIconForLegend = (src, color, x, y, size) => {
+    const filePath = resolveLocalSvgIconPath(src);
+    if (!filePath) return '';
+    let effectiveColor = color;
+    if (!effectiveColor) {
+      try {
+        effectiveColor = new URL(String(src), 'http://qtiler.local').searchParams.get('color') || '';
+      } catch {
+        effectiveColor = '';
+      }
+    }
+    let content;
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      return '';
+    }
+    const svg = prepareInlineSvgContent(content, effectiveColor);
+    if (!svg) return '';
+    return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs) => {
+      const cleanedAttrs = String(attrs || '')
+        .replace(/\s(?:x|y|width|height)=["'][^"']*["']/gi, '')
+        .replace(/\s(?:x|y|width|height)=[^\s>]*/gi, '');
+      return `<svg${cleanedAttrs} x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet">`;
+    });
+  };
+
+  const hajkLegendSymbolSvg = (entry = {}, layer = {}, rowIndex = 0, options = {}) => {
+    const width = Number(options.width) || 36;
+    const height = Number(options.height) || 24;
+    const baseUrl = options.baseUrl || '';
+    const geometryType = String(layer?.geometryType || '').toLowerCase();
+    const fallbackStroke = '#2563eb';
+    const fallbackFill = geometryType.includes('polygon') ? 'rgba(59,130,246,0.25)' : '#3b82f6';
+    if (entry.icon && typeof entry.icon === 'object') {
+      const src = toAbsoluteHajkIconSrc(entry.icon.src, baseUrl);
+      const legendSize = Math.max(16, Math.min(28, Number(entry.icon.legendSize) || 22));
+      if (src) {
+        const x = (width - legendSize) / 2;
+        const y = (height - legendSize) / 2;
+        const inlineSvg = inlineSvgIconForLegend(src, entry.icon.color, x, y, legendSize);
+        if (inlineSvg) return { defs: '', body: inlineSvg };
+        return {
+          defs: '',
+          body: `<image href="${xmlEscape(src)}" x="${x}" y="${y}" width="${legendSize}" height="${legendSize}" preserveAspectRatio="xMidYMid meet"/>`
+        };
+      }
+      const iconColor = svgAttr(entry.icon.color || '#2563eb');
+      const strokeColor = svgAttr(entry.icon.strokeColor || '#1d4ed8');
+      const strokeWidth = Math.max(0.8, Math.min(2.5, Number(entry.icon.strokeWidth) || 1.1));
+      const cx = width / 2;
+      const cy = height / 2;
+      // Inline symbol to avoid external image href issues in SVG data-uri legend rendering.
+      // This guarantees a visible icon in legend even when icon.src cannot be fetched.
+      return {
+        defs: '',
+        body: `<g><circle cx="${cx}" cy="${cy}" r="${Math.max(4, legendSize / 3.2)}" fill="${iconColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/><path d="M${cx} ${cy - Math.max(4, legendSize * 0.28)} L${cx + Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} L${cx - Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} Z" fill="white" fill-opacity="0.9"/></g>`
+      };
+    }
+    if (entry.circle && typeof entry.circle === 'object') {
+      const fill = svgAttr(entry.circle.fill?.color || fallbackFill);
+      const stroke = svgAttr(entry.circle.stroke?.color || fallbackStroke);
+      const strokeWidth = Math.max(0, Number(entry.circle.stroke?.width) || 1);
+      const radius = Math.max(3, Math.min(10, Number(entry.circle.radius) || 6));
+      return { defs: '', body: `<circle cx="${width / 2}" cy="${height / 2}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>` };
+    }
+    if (entry.fill || geometryType.includes('polygon')) {
+      const fill = svgAttr(entry.fill?.color || fallbackFill);
+      const stroke = svgAttr(entry.stroke?.color || fallbackStroke);
+      const strokeWidth = Math.max(0, Number(entry.stroke?.width) || 1);
+      const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object' ? entry.qtilerPatternStyle : null;
+      const pattern = legendPatternFill(fill, stroke, strokeWidth, patternMeta, rowIndex);
+      const dash = legendDashAttr(entry.stroke?.lineDash);
+      return { defs: pattern.defs, body: `<rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="2" fill="${pattern.fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash}/>` };
+    }
+    const stroke = svgAttr(entry.stroke?.color || fallbackStroke);
+    const strokeWidth = Math.max(1, Number(entry.stroke?.width) || 2);
+    const dash = legendDashAttr(entry.stroke?.lineDash);
+    return { defs: '', body: `<path d="M4 ${height - 6} L${width - 4} 6" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"${dash}/>` };
+  };
+
+  const toHajkVectorRuleLegendIcon = (styleDef, layer = {}, baseUrl = '') => {
+     const entries = getHajkLegendStyleEntries(styleDef, layer);
+     if (entries.length !== 1) return '';
+     const entry = entries[0];
+    if (!entry) return '';
+    if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
+       return toAbsoluteHajkIconSrc(entry.icon.src, baseUrl);
+    }
+    const symbol = hajkLegendSymbolSvg(entry, layer, 0, { width: 32, height: 32 });
+    return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${symbol.defs}${symbol.body}</svg>`);
+  };
+
+  const toHajkVectorRuleLegend = (styleDef, layer = {}, baseUrl = '') => {
+    const entries = getHajkLegendStyleEntries(styleDef, layer);
+    if (!entries.length) return '';
+    if (entries.length === 1) return toHajkVectorRuleLegendIcon(styleDef, layer, baseUrl);
+    const rowHeight = 28;
+    const width = 240;
+    const height = Math.max(32, entries.length * rowHeight + 4);
+    const defs = [];
+    const rows = entries.map((entry, index) => {
+      const symbol = hajkLegendSymbolSvg(entry, layer, index, { width: 34, height: 22, baseUrl });
+      if (symbol.defs) defs.push(symbol.defs);
+      const label = String(entry.legendLabel || entry.label || entry.name || `${layer?.title || layer?.name || 'Rule'} ${index + 1}`).trim();
+      const y = 4 + index * rowHeight;
+      return `<g transform="translate(0 ${y})"><g transform="translate(2 1)">${symbol.body}</g><text x="44" y="16" fill="#1f2937" font-family="Arial,sans-serif" font-size="12">${xmlEscape(label)}</text></g>`;
+    }).join('');
+    return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="white" fill-opacity="0"/>${defs.join('')}${rows}</svg>`);
+  };
+
+  const buildHajkIndexConfig = async (profile, baseUrl, req = null) => {
     // Forward caller's auth (cookie + api_key) so server-to-server fetch to
     // /wfs DescribeFeatureType isn't rejected with 401.
     const authHeaders = {};
@@ -4087,10 +4750,7 @@ ${mapIcon}
       const normalizedProjectId = normalizeProjectId(pid || projectId) || projectId;
       const sourceKey = getWmsSourceKey(normalizedProjectId);
       if (!source[sourceKey]) {
-        source[sourceKey] = {
-          url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
-          projection: projCode
-        };
+        source[sourceKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}` };
       }
       return sourceKey;
     };
@@ -4098,118 +4758,33 @@ ${mapIcon}
     source['osm'] = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' };
     // NOTE: No shared WMS source for background — each BG layer gets its own WMTS source
 
-    // Groups: accept both legacy flat `parent` entries and nested `groups` arrays.
-    // Build a nested groups array where each group may contain a `groups` array of children,
-    // which is the structure Origo expects (e.g. a group with subgroups).
-    const groups = [{ name: 'background', title: 'Background', expanded: false, exclusive: true }];
+    // Groups
+    const groups = [
+      { name: 'background', title: 'Background', expanded: false, exclusive: true }
+    ];
     if (Array.isArray(profile.groups) && profile.groups.length) {
-      // First, build a map of group definitions and parent links
-      const byName = new Map();
-      const parentOf = new Map();
-
-      const ensureEntry = (g) => {
-        const name = String(g?.name || '').trim();
-        if (!name) return null;
-        if (!byName.has(name)) {
-          byName.set(name, { name, title: String(g?.title || name), expanded: g?.expanded !== false, groups: [] });
-        } else {
-          const cur = byName.get(name);
-          cur.title = String(g?.title || cur.title || name);
-          cur.expanded = g?.expanded !== false;
-        }
-        return byName.get(name);
-      };
-
       for (const g of profile.groups) {
-        const name = String(g?.name || '').trim();
-        if (!name || name === 'root' || name === 'background') continue;
-        ensureEntry(g);
-        // If this group already contains nested `groups`, register parent links
-        if (Array.isArray(g.groups) && g.groups.length) {
-          for (const child of g.groups) {
-            const childName = String(child?.name || '').trim();
-            if (!childName) continue;
-            ensureEntry(child);
-            parentOf.set(childName, name);
-          }
-        }
-        // If legacy `parent` is present, record it
-        if (g.parent) {
-          const parentName = String(g.parent || '').trim();
-          if (parentName) parentOf.set(name, parentName);
-        }
-      }
-
-      // Attach children to their parents
-      for (const [childName, parentName] of parentOf.entries()) {
-        const parent = byName.get(parentName);
-        const child = byName.get(childName);
-        if (!parent || !child) continue;
-        if (!Array.isArray(parent.groups)) parent.groups = [];
-        // avoid duplicates
-        if (!parent.groups.some((g) => g.name === child.name)) parent.groups.push(child);
-      }
-
-      // Determine top-level groups preserving original order where possible
-      const added = new Set(['background']);
-      for (const g of profile.groups) {
-        const name = String(g?.name || '').trim();
-        if (!name || name === 'root' || name === 'background') continue;
-        if (parentOf.has(name)) continue; // child, will be included under its parent
-        if (added.has(name)) continue;
-        const entry = byName.get(name) || { name, title: name, expanded: true, groups: [] };
+        const gName = String(g?.name || '').trim();
+        if (!gName || gName === 'root' || gName === 'background') continue;
+        const entry = { name: gName, title: String(g?.title || gName), expanded: g?.expanded !== false };
+        if (g.parent) entry.parent = g.parent;
         groups.push(entry);
-        added.add(name);
       }
     }
-
-    // Auto-create any group referenced by a layer but missing from the groups
-    // list, so Origo's layer tree can show it instead of silently dropping
-    // the layer. Runs unconditionally (not only when profile.groups exists).
-    {
-      const knownGroupNames = new Set();
-      const collectNames = (list) => {
-        for (const g of list) {
-          knownGroupNames.add(g.name);
-          if (Array.isArray(g.groups) && g.groups.length) collectNames(g.groups);
-        }
-      };
-      collectNames(groups);
-      for (const layer of (profile.layers || [])) {
-        const gn = String(layer?.group || '').trim();
-        if (gn && gn !== 'root' && gn !== 'background' && !knownGroupNames.has(gn)) {
-          groups.push({ name: gn, title: gn, expanded: true, groups: [] });
-          knownGroupNames.add(gn);
-        }
+    // Auto-create any group referenced by a layer but missing from groups list,
+    // so Origo's layer tree can show it instead of silently dropping the layer.
+    const knownGroupNames = new Set(groups.map((g) => g.name));
+    for (const layer of (profile.layers || [])) {
+      const gn = String(layer?.group || '').trim();
+      if (gn && gn !== 'root' && gn !== 'background' && !knownGroupNames.has(gn)) {
+        groups.push({ name: gn, title: gn, expanded: true });
+        knownGroupNames.add(gn);
       }
-    }
-
-    // Prune groups that end up with no layers anywhere in their subtree (e.g.
-    // an empty placeholder group created in the admin UI but never assigned
-    // any layer or nested under another group) so they don't show up as a
-    // stray/empty entry in the published legend/layer tree.
-    {
-      const usedGroupNames = new Set(
-        (profile.layers || [])
-          .map((layer) => String(layer?.group || '').trim())
-          .filter((name) => name && name !== 'root' && name !== 'background')
-      );
-      const pruneEmpty = (list) => list
-        .map((g) => {
-          if (Array.isArray(g.groups) && g.groups.length) {
-            g.groups = pruneEmpty(g.groups);
-          }
-          return g;
-        })
-        .filter((g) => g.name === 'background' || usedGroupNames.has(g.name) || (Array.isArray(g.groups) && g.groups.length));
-      const pruned = pruneEmpty(groups);
-      groups.length = 0;
-      groups.push(...pruned);
     }
 
     // Layers and Styles
     const layers = [];
-    const origoStyles = {};
+    const hajkStyles = {};
     const qtilerPatternStyles = {};
     const cacheLayersByProject = new Map();
     const getCachedLayersForProject = async (pid) => {
@@ -4220,18 +4795,10 @@ ${mapIcon}
       }
       return cacheLayersByProject.get(normalizedProjectId) || [];
     };
-    // Main map layers — WMS by default, WFS when serveAsWfs===true or editable===true.
+    // Main map layers — WMS by default, WFS when serveAsWfs===true, editable===true,
+    // or searchable===true (Hajk's search sources come from wfslayers).
     const mainLayers = (profile.layers || []).filter((l) => String(l?.role || 'main') !== 'background');
     const wfsSourceKeys = new Set();
-    // Pre-fetch DescribeFeatureType for all WFS layers in parallel so the loop
-    // below hits warm cache instead of N sequential round-trips on first load.
-    try {
-      const wfsLayers = mainLayers.filter((l) => shouldUseWfsForPublishedLayer(l));
-      await Promise.all(wfsLayers.map((l) => {
-        const pid = normalizeProjectId(l?.sourceProjectId || projectId) || projectId;
-        return fetchWfsLayerMeta(baseUrl, pid, l.name, authHeaders).catch(() => null);
-      }));
-    } catch (_) {}
     for (const layer of mainLayers) {
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
       const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
@@ -4262,15 +4829,23 @@ ${mapIcon}
         if (layer.wfsStyle) {
           if (typeof layer.wfsStyle === 'object') {
             styleName = safeStyleName;
-            origoStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle);
-            const patternRuntime = extractRuntimePatternStyle(origoStyles[styleName], layer);
+            hajkStyles[styleName] = rewriteSvgIconColors(layer.wfsStyle, baseUrl);
+            const patternRuntime = extractRuntimePatternStyle(hajkStyles[styleName], {
+              designerOptions: layer.designerOptions,
+              geometryType: layer.geometryType
+            });
             if (patternRuntime) qtilerPatternStyles[styleName] = patternRuntime;
           } else if (typeof layer.wfsStyle === 'string') {
             styleName = layer.wfsStyle;
           }
         } else if (cLayer && cLayer.origoStyle) {
           styleName = safeStyleName;
-          origoStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+          hajkStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle, baseUrl);
+          const patternRuntime = extractRuntimePatternStyle(hajkStyles[styleName], {
+            designerOptions: layer.designerOptions,
+            geometryType: layer.geometryType
+          });
+          if (patternRuntime) qtilerPatternStyles[styleName] = patternRuntime;
         }
 
         // Origo v2.10.0 bug: editAttributes() does `attributeObjects.reduce(...)`
@@ -4311,12 +4886,17 @@ ${mapIcon}
         }
         const wfsDef = {
           name: layer.name,
+          sourceProjectId: srcProjId,
           title: displayTitle,
           group: String(layer.group || 'root'),
           source: wfsSrcKey,
           type: 'WFS',
           queryable: true,
           visible: layer.visible !== false,
+          searchable: layer.searchable === true,
+          searchAttribute: String(layer.searchAttribute || '').trim() || null,
+          idAttribute: String(layer.idAttribute || '').trim() || null,
+          hintText: String(layer.hintText || '').trim() || null,
           style: styleName,
           featureType: layer.name,
           attributes: resolvedAttrs,
@@ -4336,25 +4916,23 @@ ${mapIcon}
         const safe = `${String(srcProjId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layer.name).replace(/\s+/g, '_')}`;
         const thumbStyleName = `wms_thumb_${safe}`;
         const thumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(srcProjId)}?LAYERS=${encodeURIComponent(layer.name)}`;
-        const manualLegendRaw = resolveManualWmsLegendUrl(layer, '');
-        const legendUrl = manualLegendRaw
-          ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl)
-          : buildWmsLegendGraphicUrl(baseUrl, srcProjId, layer.name);
-        origoStyles[thumbStyleName] = [[{ icon: { src: legendUrl }, image: { src: legendUrl } }]];
+        hajkStyles[thumbStyleName] = [[{ image: { src: thumbUrl } }]];
         const wmsDef = {
           name: layer.name,
+          sourceProjectId: srcProjId,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
           title: displayTitle,
           group: String(layer.group || 'root'),
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
           renderMode: 'image',
-          format: 'image/png',
-          transparent: true,
           queryable: true,
           visible: layer.visible !== false,
           style: thumbStyleName,
-          thumbnail: legendUrl
+          thumbnail: thumbUrl,
+          wmsLegendMode: layer.wmsLegendMode,
+          wmsLegendIcon: layer.wmsLegendIcon,
+          wmsLegendUrl: layer.wmsLegendUrl
         };
         // Restrict GetFeatureInfo popup attributes to the user-defined list.
         // Origo `attributes` filters which fields are shown for both WMS
@@ -4368,13 +4946,12 @@ ${mapIcon}
 
     // Background layers
     let hasOsm = false;
+    let nativeOsmVisibleAtStart = false;
     const backgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
     for (const bg of backgrounds) {
       if (bg.type === 'osm' || bg.key === 'osm') {
         hasOsm = true;
-        const osmThumb = 'https://tile.openstreetmap.org/4/8/5.png';
-        origoStyles['bg_thumb_osm'] = [[{ image: { src: osmThumb } }]];
-        layers.push({ name: 'osm', title: 'OpenStreetMap', group: 'background', source: 'osm', queryable: false, type: 'OSM', visible: !!bg.isDefault, style: 'bg_thumb_osm', thumbnail: osmThumb });
+        nativeOsmVisibleAtStart = nativeOsmVisibleAtStart || !!bg.isDefault;
       } else if (bg.type === 'layer' && bg.name) {
         const srcProjId = bg.sourceProjectId || bgProjectId || null;
         const bgName = String(bg.name || '').trim();
@@ -4385,11 +4962,10 @@ ${mapIcon}
         const layerNameSafe = (isThemeBackground ? `theme_${bgThemeName}` : bgName).replace(/\s+/g, '_');
         const displayTitle = String(bg.title || (isThemeBackground ? bgThemeName : bgName));
         const bgStyleName = `bg_thumb_${layerNameSafe}`;
-        const autoThumbUrl = srcProjId
+        const bgThumbUrl = srcProjId
           ? `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(wmsLayerName)}?project=${encodeURIComponent(srcProjId)}`
           : null;
-        const bgThumbUrl = bg.imageUrl ? `${baseUrl}${bg.imageUrl}` : autoThumbUrl;
-        if (bgThumbUrl) origoStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
+        if (bgThumbUrl) hajkStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
         // Use WMTS when tile grid is available, otherwise fall back to WMS
         if (bgTileGrid && srcProjId) {
           // Source key uses underscores (safe identifier); URL uses encodeURIComponent so server
@@ -4397,8 +4973,8 @@ ${mapIcon}
           const srcKey = `wmts_bg_${layerNameSafe}`;
           source[srcKey] = {
             url: isThemeBackground
-              ? buildThemeWmtsUrl(baseUrl, srcProjId, bgThemeName)
-              : `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(wmtsLayerName)}/{z}/{x}/{y}.png`,
+              ? buildThemeWmtsUrl(baseUrl, srcProjId, bgThemeName, true)
+              : `${baseUrl}/wmts/${encodeURIComponent(srcProjId)}/${encodeURIComponent(wmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`,
             type: 'XYZ',
             projection: bgTileGrid.crs || projCode
           };
@@ -4420,6 +4996,8 @@ ${mapIcon}
             tileGrid: {
               origin: bgTileGrid.topLeft,
               resolutions: bgTileGrid.resolutions,
+              matrixIds: bgTileGrid.matrixIds,
+              matrixSet: bgTileGrid.matrixSetId,
               alignBottomLeft: false
             },
             ...(Array.isArray(bgTileGrid.projectionExtent) ? { extent: bgTileGrid.projectionExtent } : {})
@@ -4428,7 +5006,7 @@ ${mapIcon}
           // Fall back to WMS
           const bgSrcKey = 'qtiler_bg_wms';
           if (!source[bgSrcKey] && srcProjId) {
-            source[bgSrcKey] = { url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(srcProjId)}` };
+            source[bgSrcKey] = { url: `${baseUrl}/wms?project=${encodeURIComponent(srcProjId)}` };
           }
           layers.push({
             name: `bg_${layerNameSafe}`,
@@ -4449,9 +5027,8 @@ ${mapIcon}
     if (!hasOsm) {
       // Only make OSM the default if no other background layer is set as default
       const hasDefaultBg = layers.some((l) => l.group === 'background' && l.visible);
-      const osmThumb = 'https://tile.openstreetmap.org/4/8/5.png';
-      origoStyles['bg_thumb_osm'] = [[{ image: { src: osmThumb } }]];
-      layers.push({ name: 'osm', title: 'OpenStreetMap', group: 'background', source: 'osm', queryable: false, type: 'OSM', visible: !hasDefaultBg, style: 'bg_thumb_osm', thumbnail: osmThumb });
+      hasOsm = true;
+      nativeOsmVisibleAtStart = !hasDefaultBg;
     }
 
     // Controls from profile — valid Origo v2.10.0 names only.
@@ -4461,17 +5038,12 @@ ${mapIcon}
       'externalurl', 'fullscreen', 'geoposition', 'home', 'legend', 'link',
       'localization', 'mapmenu', 'measure', 'position', 'print', 'progressbar',
       'rotate', 'scale', 'scaleline', 'scalepicker', 'search', 'sharemap',
-      'splash', 'zoom', 'lantmaterisearch'
+      'splash', 'zoom', 'mouseposition', 'exportmap', 'lantmaterisearch'
     ]);
     const userProvidedControls = Array.isArray(profile.controls);
-    const normalizedControls = userProvidedControls
-      ? profile.controls.map((c) => normalizeOrigoControlEntry(c)).filter(Boolean)
+    const controls = userProvidedControls
+      ? profile.controls.map((c) => normalizeOrigoControlEntry(c)).filter((c) => c && VALID_ORIGO_CONTROL_NAMES.has(c.name))
       : [];
-    const droppedControls = normalizedControls.filter((c) => !VALID_ORIGO_CONTROL_NAMES.has(c.name)).map((c) => c.name);
-    if (droppedControls.length) {
-      console.warn(`[Qtiler2Origo] Profile "${profile.profileKey || profile.projectId || 'unknown'}" dropped unsupported Origo control(s): ${droppedControls.join(', ')}`);
-    }
-    const controls = normalizedControls.filter((c) => VALID_ORIGO_CONTROL_NAMES.has(c.name));
 
     // Origo already renders zoom buttons by default; keeping an explicit
     // `zoom` control duplicates the + / - UI in both preview and published maps.
@@ -4491,7 +5063,7 @@ ${mapIcon}
         if (n === 'editor') controls.splice(i, 1);
       }
       if (controls.length !== beforeLen) {
-        console.warn(`[Qtiler2Origo] Profile "${profile.profileKey || profile.projectId}" has 'editor' control but no editable layers — control removed to avoid Origo crash. Mark at least one layer as editable in the profile.`);
+        console.warn(`[Qtiler2Hajk] Profile "${profile.profileKey || profile.projectId}" has 'editor' control but no editable layers — control removed to avoid Origo crash. Mark at least one layer as editable in the profile.`);
       }
     }
 
@@ -4551,7 +5123,7 @@ ${mapIcon}
       if (primarySrc && Array.isArray(primarySrc.layers) && primarySrc.layers.length) {
         layerFilterQs.push(`lf_${encodeURIComponent(projectId)}=${encodeURIComponent(primarySrc.layers.join(','))}`);
       }
-      let searchUrl = `/plugins/Qtiler2Origo/origo-search?project=${encodeURIComponent(projectId)}`;
+      let searchUrl = `/plugins/Qtiler2Hajk/hajk-search?project=${encodeURIComponent(projectId)}`;
       if (extraPids.length) searchUrl += `&extra=${encodeURIComponent(extraPids.join(','))}`;
       if (layerFilterQs.length) searchUrl += '&' + layerFilterQs.join('&');
 
@@ -4597,7 +5169,7 @@ ${mapIcon}
         }
       }
     } catch (err) {
-      console.warn('[Qtiler2Origo] could not auto-add search control:', err?.message || err);
+      console.warn('[Qtiler2Hajk] could not auto-add search control:', err?.message || err);
     }
 
     const computed = computeProjectionConfig(projCode, nativeExtent);
@@ -4654,77 +5226,702 @@ ${mapIcon}
       finalMaxZoom = finalResolutions.length - 1;
     }
     const effectiveMaxZoom = profileMaxZoom !== null ? Math.min(profileMaxZoom, finalMaxZoom) : finalMaxZoom;
+    
     const effectiveMinZoom = profileMinZoom !== null ? Math.max(0, Math.min(profileMinZoom, effectiveMaxZoom)) : null;
 
-    const config = {
-      ...(profile.search ? { search: profile.search } : {}),
-      ...(profile.clusterOptions ? { clusterOptions: profile.clusterOptions } : {}),
-      ...(profile.pageSettings ? { pageSettings: profile.pageSettings } : {}),
-      ...(profile.featureinfoOptions ? { featureinfoOptions: profile.featureinfoOptions } : {}),
-      ...(profile.attribution ? { attribution: profile.attribution } : {}),
-      ...(profile.target ? { target: profile.target } : {}),
-      ...(profile.url ? { url: profile.url } : {}),
-      projectionCode: projCode,
-      projectionExtent: finalProjectionExtent,
-      extent: finalViewExtent,
-      maxZoom: effectiveMaxZoom,
-      ...(effectiveMinZoom !== null ? { minZoom: effectiveMinZoom } : {}),
-      center,
-      zoom,
-      controls,
-      source,
-      groups,
-      layers,
-      styles: Object.keys(origoStyles).length > 0 ? origoStyles : undefined,
-      qtilerPatternStyles: Object.keys(qtilerPatternStyles).length > 0 ? qtilerPatternStyles : undefined
-    };
-    if (finalResolutions) config.resolutions = finalResolutions;
-    // Force the viewer's default tileGrid to use the WMTS top-left origin
-    // so WMS overlays (which fall back to viewer.getTileGrid()) align with
-    // the pre-cut WMTS background tiles. Without this Origo defaults to
-    // alignBottomLeft:true which uses bottom-left of the extent and the
-    // (z,x,y) -> world bbox math diverges between bg and overlays.
-    if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2) {
-      config.tileGridOptions = {
-        alignBottomLeft: false,
-        origin: bgTileGrid.topLeft.map(Number),
-        resolutions: finalResolutions,
-        extent: finalProjectionExtent,
-        tileSize: [Number(bgTileGrid.tileSize) || 256, Number(bgTileGrid.tileSize) || 256]
-      };
+    if (Array.isArray(profile.extent) && profile.extent.length === 4 && capturedCrsOk) {
+      const fitExtent = profile.extent.map(Number);
+      if (fitExtent.every(Number.isFinite) && fitExtent[2] > fitExtent[0] && fitExtent[3] > fitExtent[1]) {
+        center = [Math.round((fitExtent[0] + fitExtent[2]) / 2), Math.round((fitExtent[1] + fitExtent[3]) / 2)];
+        const resolutionForExtent = Math.max((fitExtent[2] - fitExtent[0]) / 1024, (fitExtent[3] - fitExtent[1]) / 768);
+        if (Array.isArray(finalResolutions) && finalResolutions.length && Number.isFinite(resolutionForExtent) && resolutionForExtent > 0) {
+          let bestZoom = 0;
+          let bestDiff = Infinity;
+          finalResolutions.forEach((resolution, index) => {
+            const diff = Math.abs(Math.log(Number(resolution) / resolutionForExtent));
+            if (Number.isFinite(diff) && diff < bestDiff) {
+              bestDiff = diff;
+              bestZoom = index;
+            }
+          });
+          zoom = Math.max(effectiveMinZoom || 0, Math.min(bestZoom, effectiveMaxZoom || finalMaxZoom));
+        }
+      }
     }
-    if (proj4Defs.length) config.proj4Defs = proj4Defs;
+
+    // --- Transform flat Origo layers & groups to Hajk structured objects --- //
+    
+    // 1. Build nested tree for LayerSwitcher
+    const hajkGroupsMap = new Map();
+    const rootHajkGroups = [];
+    
+    groups.forEach(g => {
+      const hg = {
+        id: g.name,
+        type: "group",
+        name: g.title,
+        toggled: g.expanded !== false,
+        expanded: g.expanded !== false,
+        infogroupvisible: false,
+        parent: g.parent || "-1",
+        layers: [],
+        groups: []
+      };
+      hajkGroupsMap.set(g.name, hg);
+    });
+    
+    // Wire up parent/child groups
+    hajkGroupsMap.forEach((hg, name) => {
+       if (hg.parent && hg.parent !== "-1" && hajkGroupsMap.has(hg.parent)) {
+          hajkGroupsMap.get(hg.parent).groups.push(hg);
+       } else {
+          rootHajkGroups.push(hg);
+       }
+    });
+
+    const wmtslayers = [];
+    const wmslayers = [];
+    const vectorlayers = [];
+    const wfslayers = [];
+    const wfstlayers = [];
+    const baseLayerRefs = [];
+    const searchLayerRefs = [];
+    const editServiceRefs = [];
+    
+    let drawOrder = 1000;
+    let backgroundLayerId = 1;
+    layers.forEach(l => {
+       const lSource = source[l.source];
+       const layerProjectId = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
+       const isBackgroundLayer = l.group === 'background';
+       const hajkLayerId = isBackgroundLayer
+         ? String(backgroundLayerId++)
+         : `${String(l.source || 'qtiler').replace(/[^A-Za-z0-9]/g, '_')}_${String(l.name || l.id || 'layer').replace(/[^A-Za-z0-9]/g, '_')}`;
+       const visibleAtStart = l.visible !== false;
+       const layerListTargetId = hajkLayerId;
+      let layerLegendIcon = l.thumbnail || '';
+       
+       if (lSource && lSource.type === 'WFS') {
+           const fullVectorStyle = hajkStyles[l.style];
+           let styleOptions = {};
+           let scaleZoomOptions = {};
+           let vectorRuleLegendIcon = '';
+           let vectorLegendIcon = '';
+           let vectorLegend = '';
+           let vectorSldText = '';
+           let qtilerStyleRules = [];
+           // Each helper is wrapped individually so a failure in one (e.g. an
+           // unusual style shape) does not blank out the rest. Previously a
+           // single catch reset ALL options to defaults, which is why custom
+           // styles sometimes disappeared from the legend.
+           const legendEntries = (() => { try { return getHajkLegendStyleEntries(fullVectorStyle, l); } catch { return []; } })();
+           const hasMultiRuleLegend = legendEntries.length > 1;
+           try { styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l); } catch (e) { console.warn('[Qtiler2Hajk] styleOptions failed for', l?.name || l?.id || '', e?.message || e); styleOptions = toHajkVectorStyleOptions(null, l); }
+           try { scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode); } catch (e) { console.warn('[Qtiler2Hajk] scaleZoom failed for', l?.name || l?.id || '', e?.message || e); scaleZoomOptions = {}; }
+           try { qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] qtilerStyleRules failed for', l?.name || l?.id || '', e?.message || e); qtilerStyleRules = []; }
+           try { vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] ruleLegendIcon failed for', l?.name || l?.id || '', e?.message || e); vectorRuleLegendIcon = ''; }
+           vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
+           try { vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon; } catch (e) { console.warn('[Qtiler2Hajk] ruleLegend failed for', l?.name || l?.id || '', e?.message || e); vectorLegend = vectorLegendIcon; }
+           try { vectorSldText = qtilerStyleRules.length ? '' : (styleOptions.icon ? '' : toHajkVectorSldText(fullVectorStyle, l, baseUrl)); } catch (e) { console.warn('[Qtiler2Hajk] sldText failed for', l?.name || l?.id || '', e?.message || e); vectorSldText = ''; }
+           const searchId = `${hajkLayerId}_search`;
+           const namedAttributes = getNamedInfoclickAttributes(l.attributes);
+           const displayFieldNames = namedAttributes.map((a) => a.name).filter(Boolean);
+           // Hajk's infoclick calls `.split(',')` on displayFields, so it must
+           // be a comma-separated string, not an array. displayFields also
+           // drives the short "primary label" shown in the breadcrumb/list
+           // header (prepareLabelFromFields in MapClickModel), so it must stay
+           // short - using every attribute here produces a garbled comma-dump
+           // title (e.g. "-28, NULL, NULL, KAVLÅS, ..."). The full attribute
+           // list is still shown in the infobox table below, unaffected.
+           const displayFields = displayFieldNames.slice(0, 3).join(',');
+           const infobox = buildHajkInfobox(l.attributes);
+           vectorlayers.push({
+             id: hajkLayerId,
+             caption: l.title,
+             url: lSource.url,
+             projection: projCode,
+             layer: l.name,
+             version: '1.1.0',
+             dataFormat: 'GeoJSON',
+             visibleAtStart,
+             queryable: true,
+             displayFields,
+             infobox,
+             content: infobox,
+             legend: vectorLegend || '',
+             legendIcon: vectorLegendIcon || undefined,
+             icon: styleOptions.icon || undefined,
+             pointSize: styleOptions.pointSize || undefined,
+             attribution: '',
+             drawOrder,
+             style: l.style,
+             styles: fullVectorStyle,
+             qtilerStyleRules: qtilerStyleRules.length ? qtilerStyleRules : undefined,
+             sldStyle: vectorSldText ? l.style : undefined,
+             sldText: vectorSldText || undefined,
+             ...scaleZoomOptions,
+             ...styleOptions
+           });
+           layerLegendIcon = vectorLegendIcon || vectorLegend || layerLegendIcon;
+           // Only publish this layer as a Search source when the admin
+           // explicitly marked it searchable (l.searchable) - previously
+           // EVERY WFS/vector layer was added unconditionally, so Search
+           // matched layers the admin never enabled search for. Restrict
+           // searchFields to the admin-picked l.searchAttribute (e.g. "name")
+           // when set, instead of matching against every attribute.
+           const searchAttributeName = String(l.searchAttribute || '').trim();
+           const searchFieldNames = searchAttributeName ? [searchAttributeName] : displayFieldNames;
+           if (l.searchable === true) {
+             // Hajk's real Search tool (SearchModel.getFeatureLabels) calls
+             // `source.displayFields.reduce(...)` directly on the entries of
+             // layersConfig.wfslayers (the client copies them verbatim into
+             // tools[search].options.sources) - it must be an ARRAY, not a
+             // joined string (that shape is only correct for vectorlayers,
+             // which real Hajk's infoclick reads with `.split(',')`).
+             wfslayers.push({
+                 id: searchId,
+                 caption: l.title,
+                 url: lSource.url,
+                 layers: [l.name],
+                 searchFields: searchFieldNames,
+                 displayFields: displayFieldNames.slice(0, 3),
+                 geometryField: l.geometryName || 'geometry',
+               outputFormat: 'GML3',
+                 infobox,
+                 zIndex: null
+             });
+             searchLayerRefs.push({ id: searchId, visibleForGroups: [] });
+           }
+
+           if (l.editable === true) {
+             const editId = `${hajkLayerId}_edit`;
+             // Hajk's real Edit tool (EditModel) does NOT use the `sources`
+             // we set on tools[edit].options directly - the client's
+             // AppModel.translateConfig() rebuilds it from these very
+             // layersConfig.wfstlayers entries (filtered by activeServices
+             // ids), so the fix must live here. EditModel's constructor
+             // unconditionally calls `s.uri.trim()` (WFS namespace, crashes
+             // if missing) and AttributeEditor needs `editableFields` in
+             // Hajk's own shape (name/alias/textType), not our internal
+             // `attributes` array. Preserve Qtiler's editor types so Hajk can
+             // render dropdowns, checkboxes, dates and numeric inputs.
+             const editableFields = namedAttributes.map(toHajkEditableField).filter(Boolean);
+             wfstlayers.push({
+               id: editId,
+               caption: l.title,
+               url: lSource.url,
+               uri: `http://qtiler.local/${encodeURIComponent(layerProjectId)}`,
+               layers: [l.name],
+               searchFields: displayFieldNames,
+               displayFields: displayFieldNames.slice(0, 3),
+               geometryField: l.geometryName || 'geom',
+               outputFormat: 'GML3',
+               projection: projCode,
+               style: l.style,
+               editableFields,
+               nonEditableFields: [],
+               attributes: l.attributes,
+               geometryType: l.geometryType,
+               visibleAtStart,
+               zIndex: drawOrder
+             });
+             editServiceRefs.push({ id: editId, visibleForGroups: [] });
+           }
+       } else if (lSource && lSource.url && lSource.url.includes('tile.openstreetmap')) {
+           wmslayers.push({
+               id: hajkLayerId,
+               caption: l.title,
+               url: lSource.url,
+               layers: [l.name],
+               serverType: "osm",
+                 visibleAtStart,
+                 layerType: isBackgroundLayer ? 'base' : undefined,
+                 legendIcon: l.thumbnail || undefined
+           });
+             } else if (lSource && lSource.type === 'XYZ') {
+               wmtslayers.push({
+                 id: hajkLayerId,
+                 caption: l.title,
+                 url: lSource.url,
+                 layer: l.id || l.name,
+                 style: 'default',
+                 projection: lSource.projection || projCode,
+                 origin: l.tileGrid?.origin,
+                 resolutions: l.tileGrid?.resolutions,
+                 matrixIds: l.tileGrid?.matrixIds,
+                 matrixSet: l.tileGrid?.matrixSet || l.tileGrid?.matrixSetId || projCode,
+                 extent: l.extent || l.tileGrid?.extent,
+                 attribution: '',
+                 crossOrigin: 'use-credentials',
+                 visibleAtStart,
+                 drawOrder,
+                 layerType: isBackgroundLayer ? 'base' : undefined,
+                 legend: l.thumbnail || '',
+                 legendIcon: l.thumbnail || undefined
+               });
+               layerLegendIcon = l.thumbnail || layerLegendIcon;
+       } else {
+           const automaticWmsLegendUrl = makeWmsLegendUrl(baseUrl, l.id || l.name, layerProjectId);
+           const manualWmsLegendUrl = toAbsoluteHajkIconSrc(l.wmsLegendUrl || l.wmsLegendIcon || l.legendIcon || '', baseUrl);
+           const wmsLegendUrl = String(l.wmsLegendMode || '').toLowerCase() === 'manual' && manualWmsLegendUrl
+             ? manualWmsLegendUrl
+             : automaticWmsLegendUrl;
+           // Real Hajk's infoclick (getInfoClickInfoFromLayerConfig) reads the popup
+           // template from layersInfo[subLayer].infobox and the field list from
+           // layersInfo[subLayer].searchDisplayName (a comma STRING, NOT the vector
+           // layer's `displayFields` key name) - without these, WMS features fell back
+           // to Hajk's generic raw-attribute table (looks inconsistent/"wrong" next to
+           // a properly configured vector layer's popup).
+           const wmsNamedAttributes = getNamedInfoclickAttributes(l.attributes);
+           const wmsDisplayFieldNames = wmsNamedAttributes.map((a) => a.name).filter(Boolean);
+           const wmsInfobox = buildHajkInfobox(l.attributes);
+           wmslayers.push({
+               id: hajkLayerId,
+               caption: l.title,
+               url: lSource ? lSource.url : '',
+                 projection: projCode,
+                 layers: [l.id || l.name],
+                 layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: wmsInfobox, searchDisplayName: wmsDisplayFieldNames.join(','), style: '', queryable: l.queryable !== false }],
+               serverType: "qgis",
+                 visibleAtStart,
+                 crossOrigin: 'use-credentials',
+                   singleTile: false,
+                 imageFormat: 'image/png',
+                 version: '1.1.1',
+                 infoFormat: 'application/json',
+                 legend: wmsLegendUrl || '',
+                 legendIcon: wmsLegendUrl || undefined,
+                 attribution: '',
+                 drawOrder,
+                 layerType: isBackgroundLayer ? 'base' : undefined
+           });
+                   layerLegendIcon = wmsLegendUrl || layerLegendIcon;
+       }
+       
+       const layRef = {
+               id: layerListTargetId,
+           drawOrder: drawOrder--,
+               caption: l.title,
+               visibleAtStart,
+           layerType: isBackgroundLayer ? 'base' : undefined,
+           legendIcon: layerLegendIcon || undefined,
+           infobox: ""
+       };
+       
+         if (isBackgroundLayer) {
+           baseLayerRefs.push(layRef);
+         } else if (l.group && hajkGroupsMap.has(l.group)) {
+           hajkGroupsMap.get(l.group).layers.push(layRef);
+       } else {
+          // fallback root
+         if (!hajkGroupsMap.has('qtiler_layers')) {
+           const fallbackGroup = {
+            id: 'qtiler_layers',
+            type: 'group',
+            name: 'Layers',
+            toggled: true,
+            expanded: true,
+            infogroupvisible: false,
+            parent: '-1',
+            layers: [],
+            groups: []
+           };
+           hajkGroupsMap.set('qtiler_layers', fallbackGroup);
+           rootHajkGroups.push(fallbackGroup);
+          }
+         hajkGroupsMap.get('qtiler_layers').layers.push(layRef);
+       }
+    });
+
+    const groupHasContent = (group) => {
+      if (!group || typeof group !== 'object') return false;
+      if (Array.isArray(group.layers) && group.layers.length) return true;
+      return Array.isArray(group.groups) && group.groups.some(groupHasContent);
+    };
+    const layerSwitcherGroups = rootHajkGroups.filter(groupHasContent);
+
+    const legacyToolNames = {
+      mapmenu: 'layerswitcher',
+      legend: 'infoclick',
+      editor: 'edit',
+      draw: 'sketch',
+      measure: 'measurer',
+      position: 'coordinates'
+    };
+    const profileToolEntries = Array.isArray(profile.controls)
+      ? profile.controls.map((entry) => {
+          const rawName = typeof entry === 'string' ? entry : entry?.name;
+          const name = legacyToolNames[String(rawName || '').trim()] || String(rawName || '').trim();
+          if (!name) return null;
+          const options = entry && typeof entry === 'object' && entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)
+            ? entry.options
+            : null;
+          return { name, options };
+        }).filter(Boolean)
+      : [];
+    const userProvidedTools = profileToolEntries.length > 0;
+    const toolOptions = new Map();
+    profileToolEntries.forEach((entry) => {
+      const current = toolOptions.get(entry.name) || {};
+      toolOptions.set(entry.name, entry.options ? { ...current, ...entry.options } : current);
+    });
+    const isToolEnabled = (name) => !userProvidedTools || profileToolEntries.some((entry) => entry.name === name);
+    const mergeToolOptions = (name, defaults) => ({ ...(defaults || {}), ...(toolOptions.get(name) || {}) });
+    // Some Hajk tools actively fetch an external service (or initialize a 3rd-party
+    // SDK) as soon as they mount. If the admin enables the control but leaves the
+    // required URL/API key empty, the real Hajk client can throw during mount and
+    // take the whole map down. Skip adding these tools until they are configured,
+    // instead of pushing them with empty defaults.
+    const TOOL_REQUIRED_ALL_FIELDS = {
+      streetview: ['apiKey'],
+      routing: ['apiKey'],
+      export: ['exportUrl'],
+      // PropertyChecker ('Fastighetskontroll') is a Swedish municipal plugin
+      // that always calls .split(',') on these three fields and always looks
+      // up checkLayerId/digitalPlansLayerId, with no safe generic default —
+      // it requires pre-existing WMS layers with municipality-specific
+      // attribute names that Qtiler cannot auto-generate.
+      propertychecker: [
+        'checkLayerId',
+        'checkLayerPropertyAttribute',
+        'digitalPlansLayerId',
+        'groupDigitalPlansLayerByAttribute',
+        'groupDigitalPlansLayerSecondLevelByAttribute',
+        'buildingsLayerIds',
+        'bordersLayerIds',
+        'plansLayerIds'
+      ]
+    };
+    const TOOL_REQUIRED_ANY_FIELDS = {
+      documenthandler: ['mapServiceUrl', 'customThemeUrl']
+    };
+    const toolOptionsAreSufficient = (name, options) => {
+      const opts = options || {};
+      const anyFields = TOOL_REQUIRED_ANY_FIELDS[name];
+      if (anyFields && !anyFields.some((key) => String(opts[key] || '').trim())) return false;
+      const allFields = TOOL_REQUIRED_ALL_FIELDS[name];
+      if (allFields && !allFields.every((key) => String(opts[key] || '').trim())) return false;
+      return true;
+    };
+    const pushToolIfConfigured = (name, defaults) => {
+      const options = mergeToolOptions(name, defaults);
+      if (!toolOptionsAreSufficient(name, options)) {
+        console.warn(`[Qtiler2Hajk] Skipping tool "${name}": required option(s) not configured (${JSON.stringify(TOOL_REQUIRED_ALL_FIELDS[name] || TOOL_REQUIRED_ANY_FIELDS[name])}).`);
+        return;
+      }
+      tools.push({ type: name, options });
+    };
+    const tools = [];
+    if (isToolEnabled('layerswitcher')) {
+      tools.push({
+        type: 'layerswitcher',
+        options: mergeToolOptions('layerswitcher', {
+          groups: layerSwitcherGroups,
+          baselayers: baseLayerRefs,
+          active: true,
+          visibleAtStart: false,
+          enableOSM: hasOsm,
+          OSMVisibleAtStart: nativeOsmVisibleAtStart,
+          showFilter: true,
+          enableTransparencySlider: true,
+          target: 'left'
+        })
+      });
+    }
+    if (isToolEnabled('infoclick')) {
+      tools.push({
+        type: 'infoclick',
+        options: mergeToolOptions('infoclick', {
+          height: 'dynamic',
+          anchor: [0.5, 1],
+          scale: 0.15,
+          strokeColor: { r: 200, g: 0, b: 0, a: 0.7 },
+          strokeWidth: 4,
+          fillColor: { r: 255, g: 0, b: 0, a: 0.1 },
+          allowDangerousHtml: hasHtmlInfoclickRows(layers),
+          useNewInfoclick: true,
+          useNewPlaceholderMatching: true,
+          useLevel1FeatureHighlight: true,
+          transformLinkUri: true,
+          visibleForGroups: []
+        })
+      });
+    }
+    if (searchLayerRefs.length && isToolEnabled('search')) {
+      tools.push({
+        type: 'search',
+        options: mergeToolOptions('search', {
+          // The client's AppModel.translateConfig() rebuilds options.sources
+          // from layersConfig.wfslayers (filtered by options.layers ids) on
+          // every load, but we also set it here as a harmless fallback.
+          sources: wfslayers,
+          layers: searchLayerRefs,
+          visibleForGroups: [],
+          maxResultsPerDataset: 100,
+          searchBarPlaceholder: 'Search...',
+          enableFeaturePreview: true,
+          showResultFeaturesInMap: true,
+          enableResultsFiltering: true,
+          enableResultsSorting: true,
+          enableResultsDownloading: true
+        })
+      });
+    }
+    if (editServiceRefs.length && isToolEnabled('edit')) {
+      tools.push({
+        type: 'edit',
+        options: mergeToolOptions('edit', {
+          // The client's AppModel.translateConfig() rebuilds options.sources
+          // from layersConfig.wfstlayers (filtered by activeServices ids) on
+          // every load, but we also set it here as a harmless fallback.
+          sources: wfstlayers,
+          activeServices: editServiceRefs,
+          visibleForGroups: [],
+          target: 'left'
+        })
+      });
+    }
+    if (isToolEnabled('coordinates')) tools.push({ type: 'coordinates', options: mergeToolOptions('coordinates', { target: 'toolbar', position: 'left', visibleForGroups: [] }) });
+    if (isToolEnabled('measurer')) tools.push({ type: 'measurer', options: mergeToolOptions('measurer', { target: 'toolbar', position: 'left', visibleAtStart: false }) });
+    if (isToolEnabled('print')) tools.push({ type: 'print', options: mergeToolOptions('print', { target: 'toolbar', position: 'left', visibleAtStart: false }) });
+    if (isToolEnabled('sketch')) tools.push({ type: 'sketch', options: mergeToolOptions('sketch', { target: 'left', position: 'left', visibleForGroups: [] }) });
+    if (isToolEnabled('bookmarks')) tools.push({ type: 'bookmarks', options: mergeToolOptions('bookmarks', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] }) });
+    if (isToolEnabled('propertychecker')) pushToolIfConfigured('propertychecker', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] });
+    if (isToolEnabled('routing')) pushToolIfConfigured('routing', { target: 'left', position: 'left', visibleAtStart: false, visibleForGroups: [] });
+    if (isToolEnabled('anchor')) tools.push({ type: 'anchor', options: mergeToolOptions('anchor', { target: 'control', position: 'right', instruction: '', visibleForGroups: [] }) });
+    if (isToolEnabled('location')) tools.push({ type: 'location', options: mergeToolOptions('location', { target: 'control', position: 'right', visibleForGroups: [] }) });
+    if (isToolEnabled('streetview')) pushToolIfConfigured('streetview', { target: 'toolbar', position: 'right', apiKey: '', instruction: '', visibleForGroups: [] });
+    if (isToolEnabled('layercomparer')) tools.push({ type: 'layercomparer', options: mergeToolOptions('layercomparer', { target: 'left', showNonBaseLayersInSelect: false, instruction: '', visibleAtStart: false, chosenLayers: [], visibleForGroups: [] }) });
+    if (isToolEnabled('buffer')) tools.push({ type: 'buffer', options: mergeToolOptions('buffer', { target: 'toolbar', instruction: '', varbergVer: false, geoserverUrl: '', notFeatureLayers: [], visibleForGroups: [] }) });
+    if (isToolEnabled('documenthandler')) pushToolIfConfigured('documenthandler', { target: 'left', title: 'Documents', mapServiceUrl: '', customThemeUrl: '', tableOfContents: { expanded: true }, settings: { menu: [] }, visibleForGroups: [] });
+    if (isToolEnabled('informative')) tools.push({ type: 'informative', options: mergeToolOptions('informative', { caption: 'Information', html: '', serviceUrl: '', document: '', tocExpanded: true, visibleForGroups: [] }) });
+    if (isToolEnabled('preset')) tools.push({ type: 'preset', options: mergeToolOptions('preset', {
+      presetList: [
+        { name: 'Göteborg', presetUrl: 'x=1321139.1624138714&y=7912264.346665324&z=12' },
+        { name: 'Halmstad', presetUrl: 'x=1427601.0460239874&y=7695072.913788887&z=12' },
+        { name: 'Kungsbacka', presetUrl: 'x=1323808.489763441&y=7850867.971644933&z=12' },
+        { name: 'Varberg', presetUrl: 'x=1357562.7727971568&y=7778074.126093438&z=12' },
+        { name: 'Örebro', presetUrl: 'x=1700469.5474212733&y=8243503.043603574&z=12' }
+      ],
+      visibleForGroups: []
+    }) });
+    // Template is not part of the official Hajk build we ship against.
+    // Keep any legacy profile data inert instead of emitting an unavailable
+    // plugin that the client can only warn about.
+    if (isToolEnabled('template')) {
+      console.warn('[Qtiler2Hajk] Skipping unsupported official Hajk tool "template". Remove it from the profile or ship a custom Hajk build that includes it.');
+    }
+    if (isToolEnabled('export')) pushToolIfConfigured('export', { target: 'left', exportUrl: '', scales: '250,500,1000,2500,5000,10000,25000,50000,100000' });
+    if (isToolEnabled('timeslider')) tools.push({ type: 'timeslider', options: mergeToolOptions('timeslider', { visibleAtStart: false, start: '', end: '', step: '', layers: [], visibleForGroups: [] }) });
+    let referenceProjections = [];
     try {
-      const profileKey = sanitizeFileToken(String(profile?.profileKey || profile?.name || profile?.projectId || ''));
-      const cacheKey = `index|${profileKey}|${String(baseUrl || '')}`;
-      origoIndexCache.set(cacheKey, JSON.stringify(config));
-    } catch (_) {}
+      const referenceConfigPath = path.join(installRoot, 'simpleMapAndLayersConfig.json');
+      if (fs.existsSync(referenceConfigPath)) {
+        const referenceConfig = JSON.parse(await fs.promises.readFile(referenceConfigPath, 'utf8'));
+        referenceProjections = Array.isArray(referenceConfig?.mapConfig?.projections)
+          ? referenceConfig.mapConfig.projections
+          : [];
+      }
+    } catch { referenceProjections = []; }
+    const generatedProjections = buildProj4Defs(projCode, 'EPSG:3857', 'EPSG:4326')
+      .flatMap((def) => {
+        const entries = [{ code: def.code, definition: def.projection }];
+        const epsgMatch = /^EPSG:(\d+)$/i.exec(def.code);
+        if (epsgMatch) entries.push({ code: `http://www.opengis.net/gml/srs/epsg.xml#${epsgMatch[1]}`, definition: def.projection });
+        return entries;
+      })
+      .map((def) => ({
+        code: def.code,
+        definition: def.definition,
+        extent: def.code === projCode || def.code.endsWith(`#${String(projCode).split(':').pop()}`) ? finalProjectionExtent : undefined,
+        units: null
+      }));
+    const projectionByCode = new Map();
+    [...referenceProjections, ...generatedProjections].forEach((projection) => {
+      if (!projection || !projection.code || !projection.definition) return;
+      projectionByCode.set(projection.code, { ...projection });
+    });
+    const hajkProjections = Array.from(projectionByCode.values());
+
+    const config = {
+      mapConfig: {
+        projections: hajkProjections,
+        map: {
+          target: "map",
+          center: center,
+          title: String(profile.name || profile.profileKey || profile.projectId || 'Qtiler2Hajk'),
+          projection: projCode,
+          zoom: zoom,
+          maxZoom: effectiveMaxZoom || 18,
+          minZoom: effectiveMinZoom || 0,
+          resolutions: finalResolutions || [],
+          origin: finalProjectionExtent ? [finalProjectionExtent[0], finalProjectionExtent[3]] : [-20037508.34, 20037508.34],
+          extent: finalViewExtent || finalProjectionExtent,
+          extraPrintResolutions: [],
+          mapcleaner: true,
+          mapresetter: false,
+          mapselector: false,
+          geoserverLegendOptions: '',
+          altShiftDragRotate: true,
+          doubleClickZoom: true,
+          dragPan: true,
+          keyboard: true,
+          mouseWheelZoom: true,
+          onFocusOnly: false,
+          pinchRotate: true,
+          pinchZoom: true,
+          shiftDragZoom: true,
+          zoomDelta: 1,
+          zoomDuration: 250,
+          constrainOnlyCenter: false,
+          constrainResolution: false,
+          constrainResolutionMobile: false,
+          confirmOnWindowClose: false,
+          enableAppStateInHash: false,
+          enableDownloadLink: false,
+          drawerVisible: false,
+          drawerPermanent: false,
+          drawerVisibleMobile: false,
+          drawerStatic: false,
+          drawerTitle: '',
+          drawerButtonTitle: '',
+          drawerButtonIcon: '',
+          activeDrawerOnStart: 'plugins',
+          showThemeToggler: true,
+          colors: {
+            primaryColor: '#1976d2',
+            secondaryColor: '#ffa000',
+            preferredColorScheme: 'user'
+          },
+          showCookieNotice: false,
+          showCookieNoticeButton: true,
+          showRecentlyUsedPlugins: false,
+          showUserAvatar: false,
+          introductionEnabled: false,
+          introductionShowControlButton: false,
+          introductionSteps: [],
+          cookieUse3dPart: false,
+          logo: '/plugins/Qtiler2Hajk/hajk/logoLight.png',
+          logoLight: 'logoLight.png',
+          logoDark: 'logoDark.png',
+          defaultCookieNoticeMessage: '',
+          defaultCookieNoticeUrl: '',
+          crossOrigin: 'use-credentials'
+        },
+        tools,
+        version: 2.1
+      },
+      layersConfig: {
+        wmtslayers,
+        wmslayers,
+        wfslayers,
+        vectorlayers,
+        wfstlayers,
+        arcgislayers: []
+      }
+    };
+    if (Object.keys(hajkStyles).length > 0) config.styles = hajkStyles;
+    if (Object.keys(qtilerPatternStyles).length > 0) config.qtilerPatternStyles = qtilerPatternStyles;
     return config;
+
   };
 
   // ── Intercept index.json for Origo viewer: return profile-based config ──
-  app.get(`/plugins/${pluginSlug}/origo/index.json`, async (req, res, next) => {
+  
+  app.get(['/plugins/'+pluginSlug+'/hajk/appConfig.json'], async (req, res) => {
+    res.json({
+      "mapserviceBase": "",
+      // Hajk's SearchModel does `this.#app.config.appConfig.searchProxy + searchSource.url`
+      // with no guard - an undefined searchProxy turns every search fetch into an
+      // invalid "undefinedhttp://..." URL, which fails silently (no crash, zero results).
+      "searchProxy": "",
+      "defaultMap": "simpleMapAndLayersConfig",
+      // This list gates which Hajk plugins actually get dynamically loaded
+      // (AppModel.loadPlugins(activeTools) in the real client) - any tool
+      // type missing here will silently never mount, even if it's present
+      // and fully configured in mapConfig.tools. Must list every real Hajk
+      // plugin folder name (PascalCase, matches apps/client/src/plugins/*)
+      // that our admin UI lets users enable.
+      "availableTools": [ 
+        "Anchor",
+        "Bookmarks",
+        "LayerSwitcher", 
+        "Search", 
+        "Print", 
+        "Measurer", 
+        "InfoDialog", 
+        "Coordinates", 
+        "Sketch", 
+        "Edit", 
+        "PropertyChecker", 
+        "Routing",
+        "Location",
+        "StreetView",
+        "LayerComparer",
+        "Buffer",
+        "DocumentHandler",
+        "Informative",
+        "Export",
+        "TimeSlider"
+      ],
+      "loadErrorTitle": "Error",
+      "loadErrorMessage": "Map could not be loaded."
+    });
+  });
+  
+  // Hajk loads `${defaultMap}.json`; build that config from the selected Qtiler profile.
+  app.get(['/plugins/'+pluginSlug+'/hajk/mapconfig.json'], async (req, res, next) => {
     try {
       const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
       if (!profileId) return next();
       const allProfiles = await readAllPublishedProfiles();
       const accessible = filterProfilesByAccess(allProfiles, req.user);
       const profile = findProfileMatch(accessible, profileId);
-
-      if (!profile) return next();
+      if (!profile) {
+        const exists = findProfileMatch(allProfiles, profileId);
+        if (exists) return res.status(req.user ? 403 : 401).json({ error: req.user ? 'map_access_denied' : 'auth_required' });
+        return next();
+      }
       const baseUrl = getRequestBaseUrl(req);
-      const config = await buildOrigoIndexConfig(profile, baseUrl, req);
+      const config = await buildHajkIndexConfig(profile, baseUrl, req);
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.json(config);
     } catch (err) {
-      console.error('[Qtiler2Origo] index.json dynamic build failed:', err?.message || err);
-      return next();
+      console.error('[Qtiler2Hajk] mapconfig.json dynamic build failed:', err?.stack || err);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.status(500).json({ error: 'map_config_build_failed', message: err?.message || 'Map config build failed' });
+    }
+  });
+
+app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
+    try {
+      const profileId = profileFromReferer(req) || req.query?.qtiler_profile;
+      if (!profileId) return next();
+      const allProfiles = await readAllPublishedProfiles();
+      const accessible = filterProfilesByAccess(allProfiles, req.user);
+      const profile = findProfileMatch(accessible, profileId);
+      if (!profile) {
+        const exists = findProfileMatch(allProfiles, profileId);
+        if (exists) return res.status(req.user ? 403 : 401).json({ error: req.user ? 'map_access_denied' : 'auth_required' });
+        return next();
+      }
+      const baseUrl = getRequestBaseUrl(req);
+      const config = await buildHajkIndexConfig(profile, baseUrl, req);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.json(config);
+    } catch (err) {
+      console.error('[Qtiler2Hajk] index.json dynamic build failed:', err?.stack || err);
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.status(500).json({ error: 'map_config_build_failed', message: err?.message || 'Map config build failed' });
     }
   });
   app.get(`/plugins/${pluginSlug}/api/preview-config.json`, async (req, res) => {
     const { payload } = await resolvePreviewRequestPayload(req);
     const projectId = sanitizeFileToken(String(payload.project || '').trim());
     if (!projectId) return res.status(400).json({ error: 'missing_project' });
+    if (!userCanAccessProjectIds(collectPreviewProjectIds(payload), req.user)) {
+      return res.status(req.user ? 403 : 401).json({ error: req.user ? 'map_access_denied' : 'auth_required' });
+    }
     const rawLayers = String(payload.layers || '').trim();
     const rawGroups = String(payload.groups || '').trim();
     const rawLayerRules = String(payload.layerRules || '').trim();
@@ -4754,7 +5951,6 @@ ${mapIcon}
           if (!name) return null;
           return {
             name,
-            title: String(entry.title || name).trim() || name,
             sourceProjectId: normalizeProjectId(entry.sourceProjectId || projectId) || projectId,
             visible: entry.visible !== false,
             group: String(entry.group || 'root').trim() || 'root'
@@ -4804,6 +6000,64 @@ ${mapIcon}
       }
     };
     const previewLayerRules = parsePreviewLayerRules(rawLayerRules);
+    const parsePreviewControls = (raw) => {
+      const text = String(raw || '').trim();
+      if (!text) return undefined;
+      try {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    const parseNumericArray = (raw) => {
+      try {
+        const value = JSON.parse(String(raw || ''));
+        return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : null;
+      } catch {
+        return null;
+      }
+    };
+    const previewProfileLayers = previewLayerSpecs.map((spec) => {
+      const sourceProjectId = normalizeProjectId(spec.sourceProjectId || projectId) || projectId;
+      const layerName = String(spec.name || '').trim();
+      const keyedRule = previewLayerRules[`${sourceProjectId}::${layerName}`];
+      const namedRule = previewLayerRules[layerName];
+      const rule = keyedRule && typeof keyedRule === 'object'
+        ? keyedRule
+        : (namedRule && typeof namedRule === 'object' ? namedRule : {});
+      return {
+        ...rule,
+        name: layerName,
+        sourceProjectId,
+        title: String(spec.title || layerName).trim() || layerName,
+        role: 'main',
+        visible: spec.visible !== false,
+        group: String(spec.group || rule.group || 'root').trim() || 'root'
+      };
+    }).filter((layer) => layer.name);
+    const previewBackgrounds = bgProject && bgLayer
+      ? [{ type: 'layer', name: bgLayer, sourceProjectId: bgProject, isDefault: true }]
+      : [{ type: 'osm', key: 'osm', isDefault: true }];
+    const previewProfile = {
+      profileKey: 'preview',
+      name: 'Hajk Preview',
+      projectId,
+      backgroundProjectId: bgProject || null,
+      backgrounds: previewBackgrounds,
+      groups: previewGroups,
+      layers: previewProfileLayers,
+      controls: parsePreviewControls(payload.controls),
+      features: { search: true, identify: true, editing: previewProfileLayers.some((layer) => layer.editable === true) },
+      center: parseNumericArray(payload.center),
+      extent: parseNumericArray(payload.extent),
+      zoom: Number.isFinite(Number(payload.zoom)) ? Number(payload.zoom) : undefined,
+      minZoom: Number.isFinite(Number(payload.minZoom)) ? Number(payload.minZoom) : undefined,
+      maxZoom: Number.isFinite(Number(payload.maxZoom)) ? Number(payload.maxZoom) : undefined
+    };
+    const hajkPreviewConfig = await buildHajkIndexConfig(previewProfile, baseUrl, req);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.json(hajkPreviewConfig);
     // When the admin picked OSM (or no background) as default, the view MUST
     // be Web Mercator (EPSG:3857) so the OSM tiles align and the user can
     // zoom out across the full standard pyramid (0..21) regardless of the
@@ -4979,7 +6233,7 @@ ${mapIcon}
       const sourceKey = `qtiler_wms_${String(normalizedProjectId).replace(/[^A-Za-z0-9_]/g, '_') || 'main'}`;
       if (!sourceMap[sourceKey]) {
         sourceMap[sourceKey] = {
-          url: `${baseUrl}/plugins/${pluginSlug}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
+          url: `${baseUrl}/wms?project=${encodeURIComponent(normalizedProjectId)}`,
           projection: projCode
         };
       }
@@ -5012,8 +6266,8 @@ ${mapIcon}
     if (wmtsBgLayerName) {
       sourceMap[wmtsBgLayerName] = {
         url: isThemeBgLayer
-          ? buildThemeWmtsUrl(baseUrl, bgProject, bgThemeName)
-          : `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(previewWmtsLayerName)}/{z}/{x}/{y}.png`,
+          ? buildThemeWmtsUrl(baseUrl, bgProject, bgThemeName, true)
+          : `${baseUrl}/wmts/${encodeURIComponent(bgProject)}/${encodeURIComponent(previewWmtsLayerName)}/{TileMatrix}/{TileCol}/{TileRow}.png`,
         type: 'XYZ',
         projection: (bgTileGrid && bgTileGrid.crs) || projCode
       };
@@ -5039,7 +6293,7 @@ ${mapIcon}
         const safeStyleName = `${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
         if (rule?.wfsStyle && typeof rule.wfsStyle === 'object') {
           styleName = safeStyleName;
-          previewStyles[styleName] = rewriteSvgIconColors(rule.wfsStyle);
+          previewStyles[styleName] = rewriteSvgIconColors(rule.wfsStyle, baseUrl);
           const patternRuntime = extractRuntimePatternStyle(previewStyles[styleName], {
             designerOptions: rule?.designerOptions,
             geometryType: rule?.geometryType
@@ -5049,7 +6303,7 @@ ${mapIcon}
           styleName = rule.wfsStyle;
         } else if (cLayer?.origoStyle) {
           styleName = safeStyleName;
-          previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle);
+          previewStyles[styleName] = rewriteSvgIconColors(cLayer.origoStyle, baseUrl);
         }
         let resolvedAttrs = (Array.isArray(rule?.attributes) && rule.attributes.length)
           ? normalizeInfoclickAttributes(rule.attributes)
@@ -5064,6 +6318,10 @@ ${mapIcon}
           type: 'WFS',
           queryable: true,
           visible: layerSpec.visible !== false,
+          searchable: layerSpec.searchable === true,
+          searchAttribute: String(rule?.searchAttribute || layerSpec.searchAttribute || '').trim() || null,
+          idAttribute: String(rule?.idAttribute || layerSpec.idAttribute || '').trim() || null,
+          hintText: String(rule?.hintText || layerSpec.hintText || '').trim() || null,
           style: styleName,
           featureType: layerName,
           attributes: resolvedAttrs,
@@ -5077,15 +6335,22 @@ ${mapIcon}
           else if (gt.includes('line')) wfsDef.geometryType = 'LineString';
           else if (gt.includes('point')) wfsDef.geometryType = 'Point';
         }
+        Object.assign(
+          wfsDef,
+          toHajkVectorStyleOptions(previewStyles[styleName], wfsDef),
+          toHajkVectorScaleZoomOptions(previewStyles[styleName], finalResolutions, projCode)
+        );
+        {
+          const qtilerStyleRules = toHajkRuntimeStyleRules(previewStyles[styleName], baseUrl);
+          if (qtilerStyleRules.length) {
+            wfsDef.qtilerStyleRules = qtilerStyleRules;
+            delete wfsDef.sldText;
+            delete wfsDef.sldStyle;
+          }
+        }
         layersArr.push(wfsDef);
         continue;
       }
-      const styleName = `wms_thumb_${String(sourceProjectId).replace(/[^A-Za-z0-9_]/g, '_')}_${String(layerName).replace(/[^A-Za-z0-9_]/g, '_')}`;
-      const manualLegendRaw = resolveManualWmsLegendUrl(rule, '');
-      const legendUrl = manualLegendRaw
-        ? buildManualWmsLegendIconUrl(manualLegendRaw, baseUrl)
-        : buildWmsLegendGraphicUrl(baseUrl, sourceProjectId, layerName);
-      if (legendUrl) previewStyles[styleName] = [[{ icon: { src: legendUrl }, image: { src: legendUrl } }]];
       layersArr.push({
         name: sourceProjectId === projectId ? layerName : `${sourceProjectId}::${layerName}`,
         id: layerName,
@@ -5097,20 +6362,19 @@ ${mapIcon}
         format: 'image/png',
         transparent: true,
         queryable: false,
-        visible: layerSpec.visible !== false,
-        ...(legendUrl ? { style: styleName, thumbnail: legendUrl } : {})
+        visible: layerSpec.visible !== false
       });
     }
     if (wmtsBgLayerName && bgTileGrid) {
-      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bgLayer)}?project=${encodeURIComponent(bgProject)}`;
-      const bgStyleName = `bg_thumb_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
+      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(previewWmsLayerName)}?project=${encodeURIComponent(bgProject)}`;
+      const bgStyleName = `bg_thumb_${String(isThemeBgLayer ? `theme_${bgThemeName}` : bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
       previewStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
       const bgMaxZoom = (Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length)
         ? bgTileGrid.resolutions.length - 1 : undefined;
       layersArr.push({
         name: wmtsBgLayerName,
-        id: bgLayer,
-        title: `${bgProject} / ${bgLayer}`,
+        id: previewWmtsLayerName,
+        title: `${bgProject} / ${previewWmsLayerName}`,
         group: 'background',
         source: wmtsBgLayerName,
         type: 'XYZ',
@@ -5123,18 +6387,20 @@ ${mapIcon}
         tileGrid: {
           origin: bgTileGrid.topLeft || [-20037508.34, 20037508.34],
           resolutions: bgTileGrid.resolutions,
+          matrixIds: bgTileGrid.matrixIds,
+          matrixSet: bgTileGrid.matrixSetId,
           alignBottomLeft: false
         },
         ...(Array.isArray(bgTileGrid.projectionExtent) ? { extent: bgTileGrid.projectionExtent } : {})
       });
     } else if (bgProject && bgLayer) {
-      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(bgLayer)}?project=${encodeURIComponent(bgProject)}`;
-      const bgStyleName = `bg_thumb_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
+      const bgThumbUrl = `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/layer/${encodeURIComponent(previewWmsLayerName)}?project=${encodeURIComponent(bgProject)}`;
+      const bgStyleName = `bg_thumb_${String(isThemeBgLayer ? `theme_${bgThemeName}` : bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`;
       previewStyles[bgStyleName] = [[{ image: { src: bgThumbUrl } }]];
       layersArr.push({
-        name: `wms_bg_${String(bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`,
-        id: bgLayer,
-        title: `${bgProject} / ${bgLayer}`,
+        name: `wms_bg_${String(isThemeBgLayer ? `theme_${bgThemeName}` : bgLayer).replace(/[^A-Za-z0-9_]/g, '_')}`,
+        id: previewWmsLayerName,
+        title: `${bgProject} / ${previewWmsLayerName}`,
         group: 'background',
         source: ensurePreviewWmsSource(bgProject),
         type: 'WMS',
@@ -5252,7 +6518,7 @@ ${mapIcon}
   });
 
   // Serve dynamic index.html with the profile name as page title when qtiler_profile is set
-  app.get([`/plugins/${pluginSlug}/origo`, `/plugins/${pluginSlug}/origo/`, `/plugins/${pluginSlug}/origo/index.html`], async (req, res, next) => {
+  app.get([`/plugins/${pluginSlug}/hajk`, `/plugins/${pluginSlug}/hajk/`, `/plugins/${pluginSlug}/hajk/index.html`], async (req, res, next) => {
     const profileId = req.query?.qtiler_profile;
     if (!profileId) return next();
     const webRoot = await resolveQwc2WebRoot().catch(() => '');
@@ -5262,156 +6528,48 @@ ${mapIcon}
       const allProfiles = await readAllPublishedProfiles();
       const accessible = filterProfilesByAccess(allProfiles, req.user);
       const profile = findProfileMatch(accessible, profileId);
-      if (!profile) return next();
+      if (!profile) {
+        const exists = findProfileMatch(allProfiles, profileId);
+        if (exists) return res.status(req.user ? 403 : 401).type('html').send(buildNoAccessPage(true, !!req.user, req.user || null));
+        return next();
+      }
 
       const title = profile?.name || profileId;
       html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
-      
-      // Inject Lantmäteriet control CSS
+      const hajkBase = `<base href="/plugins/${pluginSlug}/hajk/">`;
+      const hajkFavicon = `<link rel="icon" type="image/x-icon" href="/plugins/${pluginSlug}/hajk/favicon.ico"><link rel="apple-touch-icon" href="/plugins/${pluginSlug}/hajk/icon192.png">`;
+      const publishedConfigUrl = `${getRequestBaseUrl(req)}/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
-      if (!html.includes(`/origo-controls/lantmateri-search.css`)) {
-        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${lantmateriCss}\n</head>`);
-      }
-      const legendCssTag = `<style id="qtiler2origo-legend-icon">${origoLegendIconCss}</style>`;
-      if (!html.includes('qtiler2origo-legend-icon')) {
-        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${legendCssTag}\n</head>`);
-      }
-      
-      // Inject Lantmäteriet control script inline (not as external file to avoid cache issues)
-      try {
-        const controlPath = path.join(baseDir, 'origo-controls', 'lantmateri-search.js');
-        const controlJs = await fs.promises.readFile(controlPath, 'utf8');
-        // Extract lantmaterisearch options from profile.controls (set in admin UI)
-        let lmvConfig = {};
-        try {
-          const ctrls = Array.isArray(profile.controls) ? profile.controls : [];
-          const lmvCtrl = ctrls.find((c) => c && c.name === 'lantmaterisearch');
-          if (lmvCtrl && lmvCtrl.options && typeof lmvCtrl.options === 'object') {
-            lmvConfig = lmvCtrl.options;
-          }
-        } catch {}
-        const lmvConfigScript = `<script>window.LANTMATERI_CONFIG = ${JSON.stringify(lmvConfig)};</script>`;
-        const lantmateriScriptInline = `${lmvConfigScript}\n<script>\n${controlJs}\n</script>`;
-        const pluginBootstrapScript = `${lantmateriScriptInline}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
-        if (!html.includes(`/plugins/${pluginSlug}/client/origo-pattern-fills.js`)) {
-          if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${pluginBootstrapScript}\n</head>`);
-          else html = pluginBootstrapScript + html;
-        } else if (!html.includes('LantmateriSearch')) {
-          // origo-pattern-fills already there but not lantmateri control, inject before it
-          html = html.replace(
-            /(<script[^>]*\/plugins\/[^>]*origo-pattern-fills\.js[^>]*><\/script>)/i,
-            `${lantmateriScriptInline}\n$1`
-          );
-        }
-      } catch (err) {
-        console.error('[Qtiler2Origo] Failed to inject Lantmäteriet control:', err);
-      }
-      
-      // Force the Origo initialization to use the explicit config with our profile param
-      // avoiding strict Referer-Policy issues where browsers strip the query.
-      html = html.replace(
-        /Origo\('index\.json'\)/g, 
-        `window.Qtiler2OrigoOrigoBoot.bootOrigo('index.json?qtiler_profile=${encodeURIComponent(profileId)}')`
-      );
-
-      // Inject cross-project map so the search box can hand off hits from
-      // other projects to their own published Origo map (opens in new tab).
-      try {
-        const baseUrl = getRequestBaseUrl(req);
-        const allProfiles2 = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
-        const accessibleSet = new Set(accessible.map((p) => p.projectId));
-        const projectMap = {};
-        const titleMap = {};
-        // First profile per projectId wins (sorted alphabetically in collectPublishedProfiles).
-        for (const row of allProfiles2) {
-          if (!row || !row.projectId) continue;
-          if (!accessibleSet.has(row.projectId)) continue; // ACL-aware
-          if (!projectMap[row.projectId]) {
-            projectMap[row.projectId] = row.launchUrl;
-            titleMap[row.projectId] = row.name || row.projectId;
-          }
-        }
-        const currentProjectId = profile?.projectId || '';
-        const injection = `
-<script>
+      const lantmateriScript = await buildLantmateriControlBootstrap(profile?.controls);
+      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+      const publishedShim = `<script>
 (function(){
-  window.__QTILER_PROJECT_MAP__ = ${JSON.stringify(projectMap)};
-  window.__QTILER_PROJECT_TITLES__ = ${JSON.stringify(titleMap)};
-  window.__QTILER_CURRENT_PROJECT__ = ${JSON.stringify(String(currentProjectId))};
-
-  // Helper exposed for custom UI code.
-  window.qtilerOpenProjectMap = function(pid){
-    var url = (window.__QTILER_PROJECT_MAP__ || {})[pid];
-    if (url) window.open(url, '_blank');
-  };
-
-  // Cross-project search hand-off: cache the latest /api/search response so
-  // we can map a clicked hit to its source project. When the user clicks a
-  // result whose project differs from the current one, we open that
-  // project's Origo map in a new tab.
-  var lastHits = [];
-  var hitsByLabel = Object.create(null);
-
-  var origFetch = window.fetch;
-  if (typeof origFetch === 'function') {
-    window.fetch = function(input, init){
-      var url = (typeof input === 'string') ? input : (input && input.url) || '';
-      var p = origFetch.apply(this, arguments);
-      if (url && url.indexOf('/api/search') !== -1) {
-        p.then(function(r){
-          if (!r || !r.ok) return;
-          try {
-            r.clone().json().then(function(data){
-              if (Array.isArray(data)) {
-                lastHits = data;
-                hitsByLabel = Object.create(null);
-                data.forEach(function(d){
-                  var k = String((d && (d.SEARCH_VALUE || d.NAMN || d.name)) || '').trim().toLowerCase();
-                  if (k && !hitsByLabel[k]) hitsByLabel[k] = d;
-                });
-              }
-            }).catch(function(){});
-          } catch(e){}
-        }).catch(function(){});
-      }
-      return p;
-    };
+  var publishedConfigUrl = ${JSON.stringify(publishedConfigUrl)};
+  var originalFetch = window.fetch.bind(window);
+  function rememberConfig(response) {
+    try {
+      response.clone().json().then(function(cfg) {
+        window.__QTILER2HAJK_CONFIG = cfg;
+        try { window.dispatchEvent(new CustomEvent('qtiler2hajk-config-loaded', { detail: cfg })); } catch (_) {}
+      }).catch(function() {});
+    } catch (_) {}
+    return response;
   }
-
-  document.addEventListener('click', function(ev){
-    var el = ev.target;
-    while (el && el.nodeType === 1) {
-      // Origo's search hit list items typically use these classes; we try
-      // several to be resilient to minor template differences.
-      if (el.matches && (el.matches('.o-search-hit') || el.matches('.o-search-list li') || el.matches('li.o-search-list-item') || el.matches('[data-search-hit]'))) {
-        var label = String(el.textContent || '').trim().toLowerCase();
-        var hit = hitsByLabel[label];
-        var pid = hit && (hit.project || hit.PROJECT || hit._qtiler_project);
-        if (pid && pid !== window.__QTILER_CURRENT_PROJECT__) {
-          var url = (window.__QTILER_PROJECT_MAP__ || {})[pid];
-          if (url) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            window.open(url, '_blank');
-            return;
-          }
-        }
-        break;
-      }
-      el = el.parentNode;
+  function jsonResponse(value) {
+    return Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  }
+  window.fetch = function(input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (/simpleMapAndLayersConfig\\.json(?:\\?|$)/.test(url)) {
+      return originalFetch(publishedConfigUrl, Object.assign({ credentials: 'same-origin' }, init || {})).then(rememberConfig);
     }
-  }, true);
+    return originalFetch(input, init);
+  };
 })();
 </script>`;
-        if (/<\/head>/i.test(html)) {
-          html = html.replace(/<\/head>/i, injection + '\n</head>');
-        } else {
-          html = injection + html;
-        }
-      } catch (err) {
-        console.warn('[Qtiler2Origo] failed to inject cross-project map:', err?.message || err);
+      if (/<head(\s[^>]*)?>/i.test(html)) {
+        html = html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n  ${hajkBase}\n  ${hajkFavicon}\n${publishedShim}\n${patternFillScript}`);
       }
-
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.set('Cache-Control', 'no-store');
       return res.send(html);
@@ -5421,7 +6579,7 @@ ${mapIcon}
   });
 
   app.use(async (req, res, next) => {
-    const mountPrefix = `/plugins/${pluginSlug}/origo`;
+    const mountPrefix = `/plugins/${pluginSlug}/hajk`;
     if (!(req.path === mountPrefix || String(req.path || '').startsWith(`${mountPrefix}/`))) {
       return next();
     }
@@ -5452,16 +6610,16 @@ ${mapIcon}
     }
   });
 
-  // Serve QWC2 from a stable path `/Qtiler2Origo/webmap` on the main server (same origin)
+  // Serve QWC2 from a stable path `/Qtiler2Hajk/webmap` on the main server (same origin)
   // This ensures auth cookies and sessions are shared with Qtiler (port 3000).
-  app.use('/Qtiler2Origo/webmap', async (req, res, next) => {
-    res.set('X-Qtiler2Origo-Webmap', '1');
+  app.use('/Qtiler2Hajk/webmap', async (req, res, next) => {
+    res.set('X-Qtiler2Hajk-Webmap', '1');
     // Backward-compatibility shim for stale/cached themes payloads where
-    // thumbnail URLs were absolute and got prefixed by /Qtiler2Origo/webmap/assets/.
+    // thumbnail URLs were absolute and got prefixed by /Qtiler2Hajk/webmap/assets/.
     // Example broken request:
-    //   /Qtiler2Origo/webmap/assets/http://localhost:3000/plugins/Qtiler2Origo/api/thumbnail/...
+    //   /Qtiler2Hajk/webmap/assets/http://localhost:3000/plugins/Qtiler2Hajk/api/thumbnail/...
     const originalUrl = String(req.originalUrl || '');
-    const badPrefix = '/Qtiler2Origo/webmap/assets/';
+    const badPrefix = '/Qtiler2Hajk/webmap/assets/';
     if (originalUrl.startsWith(`${badPrefix}http://`) || originalUrl.startsWith(`${badPrefix}https://`)) {
       const absolutePart = originalUrl.slice(badPrefix.length);
       try {
@@ -5496,7 +6654,7 @@ ${mapIcon}
     try {
       const webRoot = await resolveQwc2WebRoot();
       if (!webRoot) return res.status(404).send('origo_not_installed');
-      const mountPrefix = '/Qtiler2Origo/webmap';
+      const mountPrefix = '/Qtiler2Hajk/webmap';
       const originalUrl = req.url;
       const scopedUrl = String(req.originalUrl || '').startsWith(mountPrefix)
         ? String(req.originalUrl || '').slice(mountPrefix.length) || '/'
@@ -5512,8 +6670,8 @@ ${mapIcon}
   });
 
   // Expose config.json and themes.json under the same path so QWC2 requests
-  // from `/Qtiler2Origo/webmap` will resolve and use the server-side access control.
-  app.get('/Qtiler2Origo/webmap/config.json', async (req, res) => {
+  // from `/Qtiler2Hajk/webmap` will resolve and use the server-side access control.
+  app.get('/Qtiler2Hajk/webmap/config.json', async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
@@ -5578,7 +6736,7 @@ ${mapIcon}
       // catalog URLs remain in the runtime config returned to the browser.
       try {
         config = config || {};
-        config.searchServiceUrl = '/Qtiler2Origo/search';
+        config.searchServiceUrl = '/Qtiler2Hajk/search';
         config.searchDataServiceUrl = '';
         if (typeof config.editServiceUrl !== 'string' || !config.editServiceUrl.trim()) config.editServiceUrl = '/wfs';
         if (typeof config.mapInfoServiceUrl !== 'string' || !config.mapInfoServiceUrl.trim()) config.mapInfoServiceUrl = '/wms';
@@ -5622,7 +6780,7 @@ ${mapIcon}
 
         // Helper sanitize: clear service endpoints and external catalog URLs
         const clearServices = () => {
-          base.searchServiceUrl = '/Qtiler2Origo/search';
+          base.searchServiceUrl = '/Qtiler2Hajk/search';
           base.searchDataServiceUrl = '';
           if (typeof base.editServiceUrl !== 'string' || !base.editServiceUrl.trim()) base.editServiceUrl = '/wfs';
           if (typeof base.mapInfoServiceUrl !== 'string' || !base.mapInfoServiceUrl.trim()) base.mapInfoServiceUrl = '/wms';
@@ -5664,7 +6822,7 @@ ${mapIcon}
     }
   });
 
-  app.get('/Qtiler2Origo/webmap/themes.json', async (req, res) => {
+  app.get('/Qtiler2Hajk/webmap/themes.json', async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.set('Pragma', 'no-cache');
@@ -5719,11 +6877,11 @@ ${mapIcon}
       version: state.version,
       standalonePort: state.standalonePort,
       installedAt: state.installedAt,
+      lantmateriDemo,
       lastSyncAt: state.lastSyncAt,
       lastError: state.lastError,
-      lantmateriDemo,
       branding,
-      origoUrl: installed ? `/plugins/${pluginSlug}/origo` : null,
+      hajkUrl: installed ? `/plugins/${pluginSlug}/hajk` : null,
       standalone: { running: false, port: null, url: null }
     });
   });
@@ -5785,75 +6943,6 @@ ${mapIcon}
     });
   });
 
-  app.use(`/plugins/${pluginSlug}/background-assets`, express.static(backgroundAssetsRoot, {
-    fallthrough: false,
-    immutable: true,
-    maxAge: '30d'
-  }));
-
-  app.post(`/plugins/${pluginSlug}/api/background-assets/image`, editorOnly, (req, res) => {
-    backgroundImageUpload.single('image')(req, res, async (err) => {
-      if (err) {
-        const msg = String(err?.message || err || 'background_image_upload_failed');
-        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
-          return res.status(413).json({ error: 'background_image_too_large', details: `max_bytes_${MAX_BACKGROUND_IMAGE_BYTES}` });
-        }
-        if (msg.includes('invalid_background_image_extension')) {
-          return res.status(400).json({ error: 'invalid_background_image_extension' });
-        }
-        return res.status(400).json({ error: 'background_image_upload_failed', details: msg });
-      }
-
-      try {
-        const uploaded = req.file;
-        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
-          return res.status(400).json({ error: 'background_image_required' });
-        }
-
-        const ext = path.extname(String(uploaded.originalname || '')).toLowerCase();
-        if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
-          return res.status(400).json({ error: 'invalid_background_image_extension' });
-        }
-
-        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'image'), ext)).slice(0, 80) || 'image';
-        const fileName = `${Date.now()}-${stem}${ext}`;
-        const targetPath = path.join(backgroundAssetsRoot, fileName);
-        await fs.promises.mkdir(backgroundAssetsRoot, { recursive: true });
-        await fs.promises.writeFile(targetPath, uploaded.buffer);
-        const url = `/plugins/${pluginSlug}/background-assets/${encodeURIComponent(fileName)}`;
-        return res.status(201).json({ status: 'uploaded', url });
-      } catch (uploadErr) {
-        return res.status(500).json({ error: 'background_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
-      }
-    });
-  });
-
-  app.get(`/plugins/${pluginSlug}/api/background-assets`, editorOnly, async (_req, res) => {
-    try {
-      const files = await fs.promises.readdir(backgroundAssetsRoot, { withFileTypes: true });
-      const items = [];
-      for (const f of files) {
-        if (!f.isFile()) continue;
-        const ext = path.extname(f.name).toLowerCase();
-        if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) continue;
-        try {
-          const stat = await fs.promises.stat(path.join(backgroundAssetsRoot, f.name));
-          items.push({
-            fileName: f.name,
-            url: `/plugins/${pluginSlug}/background-assets/${encodeURIComponent(f.name)}`,
-            size: stat.size,
-            mtime: stat.mtime.toISOString()
-          });
-        } catch (statErr) { /* ignore per-file stat errors */ }
-      }
-      // sort newest first
-      items.sort((a, b) => (b.mtime || '').localeCompare(a.mtime || ''));
-      res.json({ items });
-    } catch (err) {
-      res.status(500).json({ error: 'background_assets_list_failed', details: String(err?.message || err) });
-    }
-  });
-
   app.delete(`/plugins/${pluginSlug}/api/branding/logo`, editorOnly, async (_req, res) => {
     try {
       const state = await readState();
@@ -5877,7 +6966,184 @@ ${mapIcon}
     }
   });
 
-  // Standalone start/stop endpoints removed — QWC2 is served via /Qtiler2Origo/webmap
+  // ── Legend icon library routes ──
+  app.use(`/plugins/${pluginSlug}/legend-library`, express.static(legendLibraryRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '7d',
+    index: false
+  }));
+
+  app.get(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, async (_req, res) => {
+    try {
+      const items = await listLegendLibraryItems();
+      res.json({ items });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Report which published profiles/layers reference a given legend icon, so
+  // the admin UI can warn before deleting an icon that is in use anywhere.
+  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, editorOnly, async (req, res) => {
+    try {
+      const id = String(req.params?.id || '').trim();
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const items = await listLegendLibraryItems();
+      const item = items.find((it) => String(it.id) === id);
+      if (!item) return res.status(404).json({ error: 'not_found' });
+      const stripStamp = (url) => String(url || '').split('?')[0];
+      const itemUrlBase = stripStamp(item.url);
+      const profiles = await readAllPublishedProfiles();
+      const usage = [];
+      for (const profile of profiles) {
+        const layers = [];
+        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
+          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
+          if (ref && ref === itemUrlBase) {
+            layers.push(String(layer?.title || layer?.name || '').trim());
+          }
+        }
+        if (layers.length) {
+          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
+        }
+      }
+      res.json({ id, name: item.name, usage });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, (req, res) => {
+    legendLibraryUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        const msg = String(err?.message || err || 'legend_library_upload_failed');
+        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({ error: 'legend_library_too_large', details: `max_bytes_${MAX_LEGEND_LIBRARY_BYTES}` });
+        }
+        if (msg.includes('invalid_legend_library_extension')) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        return res.status(400).json({ error: 'legend_library_upload_failed', details: msg });
+      }
+      try {
+        const uploaded = req.file;
+        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
+          return res.status(400).json({ error: 'legend_library_file_required' });
+        }
+        const origExt = path.extname(String(uploaded.originalname || '')).toLowerCase();
+        if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(origExt)) {
+          return res.status(400).json({ error: 'invalid_legend_library_extension' });
+        }
+        const cropped = await cropLegendLibraryBuffer(uploaded.buffer, origExt);
+        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'legend'), origExt)).slice(0, 80) || 'legend';
+        const fileName = `${Date.now()}-${stem}${cropped.ext}`;
+        const targetPath = path.join(legendLibraryRoot, fileName);
+        await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
+        await fs.promises.writeFile(targetPath, cropped.buffer);
+        const item = {
+          id: fileName,
+          name: path.basename(String(uploaded.originalname || fileName)),
+          fileName,
+          mime: cropped.mime,
+          createdAt: nowIso()
+        };
+        const items = await readLegendLibraryIndex();
+        items.unshift(item);
+        await writeLegendLibraryIndex(items);
+        return res.status(201).json({
+          status: 'uploaded',
+          item: { ...item, url: legendLibraryPublicUrl(fileName, Date.now()) }
+        });
+      } catch (uploadErr) {
+        return res.status(500).json({ error: 'legend_library_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, editorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const items = await readLegendLibraryIndex();
+      const idx = items.findIndex((it) => String(it?.id || '') === id);
+      if (idx === -1) return res.status(404).json({ error: 'not_found' });
+      const [removed] = items.splice(idx, 1);
+      await writeLegendLibraryIndex(items);
+      const fileName = sanitizeFileToken(removed?.fileName || id);
+      if (fileName) {
+        await fs.promises.rm(path.join(legendLibraryRoot, fileName), { force: true }).catch(() => {});
+      }
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'legend_library_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // ── Drafts: save/restore in-progress publish editor state server-side ──
+  app.get(`/plugins/${pluginSlug}/api/drafts`, editorOnly, async (_req, res) => {
+    try {
+      const entries = await fs.promises.readdir(draftsRoot).catch(() => []);
+      const drafts = [];
+      for (const fileName of entries) {
+        if (!fileName.toLowerCase().endsWith('.json')) continue;
+        try {
+          const raw = await fs.promises.readFile(path.join(draftsRoot, fileName), 'utf8');
+          const parsed = JSON.parse(raw || '{}');
+          drafts.push({
+            id: fileName.replace(/\.json$/i, ''),
+            name: String(parsed?.name || '').trim(),
+            projectId: String(parsed?.projectId || '').trim(),
+            savedAt: String(parsed?.savedAt || '').trim()
+          });
+        } catch { /* skip malformed */ }
+      }
+      drafts.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+      res.json({ drafts });
+    } catch (err) {
+      res.status(500).json({ error: 'drafts_list_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const raw = await fs.promises.readFile(path.join(draftsRoot, `${id}.json`), 'utf8');
+      res.type('application/json');
+      return res.send(raw);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return res.status(404).json({ error: 'draft_not_found' });
+      res.status(500).json({ error: 'draft_read_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      const payload = (req.body && typeof req.body === 'object') ? req.body : {};
+      payload.savedAt = nowIso();
+      await fs.promises.mkdir(draftsRoot, { recursive: true });
+      await fs.promises.writeFile(path.join(draftsRoot, `${id}.json`), JSON.stringify(payload, null, 2), 'utf8');
+      res.json({ status: 'saved', id, savedAt: payload.savedAt });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_save_failed', details: String(err?.message || err) });
+    }
+  });
+
+  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
+    try {
+      const id = sanitizeFileToken(String(req.params?.id || ''));
+      if (!id) return res.status(400).json({ error: 'id_required' });
+      await fs.promises.rm(path.join(draftsRoot, `${id}.json`), { force: true });
+      res.json({ status: 'deleted', id });
+    } catch (err) {
+      res.status(500).json({ error: 'draft_delete_failed', details: String(err?.message || err) });
+    }
+  });
+
+  // Standalone start/stop endpoints removed — QWC2 is served via /Qtiler2Hajk/webmap
 
   app.get(`/plugins/${pluginSlug}/api/releases`, adminOnly, async (req, res) => {
     try {
@@ -5897,18 +7163,31 @@ ${mapIcon}
 
     let tempDir;
     try {
-      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'Qtiler2Origo-origo-'));
-      const zipPath = path.join(tempDir, 'origo.zip');
+      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'Qtiler2Hajk-hajk-'));
+      const zipPath = path.join(tempDir, 'hajk.zip');
       const extractDir = path.join(tempDir, 'extract');
       await fs.promises.mkdir(extractDir, { recursive: true });
 
-      await requestDownload(downloadUrl, zipPath);
+      // Grab the actual URL from Github API if possible (zipball acts funny if it's the raw repo, but for Hajk we need the Simple zip asset)
+      let finalUrl = downloadUrl;
+      if (req.body?.assetUrl) {
+         finalUrl = req.body.assetUrl; // Passed from UI if they select a specific release
+      } else {
+         const releases = await fetchGitHubReleases(repo).catch(() => []);
+         const rel = releases.find(r => r.tag === version);
+         if (rel && rel.assetUrl) finalUrl = rel.assetUrl;
+      }
+      console.log('Downloading Hajk from:', finalUrl);
+
+      await requestDownload(finalUrl, zipPath);
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(extractDir, true);
 
+      // Hajk simple release extracts to a subfolder like hajk-v4.3.0-simple
       const extractedRoot = await locateExtractRoot(extractDir);
       await removeRecursive(installRoot);
       await copyRecursive(extractedRoot, installRoot);
+      await patchHajkRuntimeVectorIcons();
 
       await stateStore.update((draft) => ({
         ...(draft || {}),
@@ -5925,7 +7204,7 @@ ${mapIcon}
         status: 'installed',
         repo,
         version,
-        origoUrl: `/plugins/${pluginSlug}/origo`
+        hajkUrl: `/plugins/${pluginSlug}/hajk`
       });
     } catch(err) { console.error('XERR', err);
       await stateStore.update((draft) => ({
@@ -5992,7 +7271,7 @@ ${mapIcon}
     }
   });
 
-  app.post(`/plugins/${pluginSlug}/api/publish`, adminOnly, express.json({ limit: '50mb' }), async (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/publish`, adminOnly, async (req, res) => {
     try {
       const name = String(req.body?.name || '').trim();
       if (!name) {
@@ -6149,35 +7428,52 @@ ${mapIcon}
         }
         return res.json({ ok: !checks.some((c) => c.severity === 'error'), dryRun: true, issues: [], checks });
       }
-      const projectLayerFlagsByProject = new Map();
-      for (const entry of layerEntries) {
-        const sourceProjectId = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
-        if (!projectLayerFlagsByProject.has(sourceProjectId)) {
-          projectLayerFlagsByProject.set(sourceProjectId, await readProjectLayerFlags(sourceProjectId));
-        }
-      }
+      // QtilerAuth's "Layer permissions" editor is where admins actually mark
+      // a layer searchable + pick its search attribute (wfsSearchable in
+      // cache/<project>/project-config.json, searchAttribute in
+      // data/searchable-layers/<project>.json) - previously neither was ever
+      // read here, so `searchable`/`searchAttribute` on published layers came
+      // ONLY from sourceLayer/rule fields the admin UI never actually sends,
+      // meaning Search silently never had any layers to work with.
+      const involvedProjectIds = Array.from(new Set(
+        layerEntries
+          .map((l) => normalizeProjectId(l?.sourceProjectId || projectId) || projectId)
+          .concat([projectId])
+      ));
+      const projectFlagsByPid = new Map();
+      const searchableConfigByPid = new Map();
+      await Promise.all(involvedProjectIds.map(async (pid) => {
+        const [flags, searchableRows] = await Promise.all([
+          readProjectLayerFlags(pid),
+          readSearchableLayerConfig(pid)
+        ]);
+        projectFlagsByPid.set(pid, flags || {});
+        searchableConfigByPid.set(pid, Array.isArray(searchableRows) ? searchableRows : []);
+      }));
+      const findByNameLoose = (map, name) => {
+        if (!map) return null;
+        if (map[name]) return map[name];
+        const key = Object.keys(map).find((k) => safeLayerNameForWfs(k) === safeLayerNameForWfs(name));
+        return key ? map[key] : null;
+      };
       const layers = layerEntries.map((sourceLayer) => {
         const name = String(sourceLayer?.name || '').trim();
         const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
-        const authFlags = resolveLayerFlagEntry(projectLayerFlagsByProject.get(sourceProjectId), name);
         const themeName = String(sourceLayer?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : '')).trim();
         const isTheme = sourceLayer?.isTheme === true || !!themeName;
         const layerRuleKey = `${sourceProjectId}::${name}`;
         const rule = layerRulesInput[layerRuleKey] && typeof layerRulesInput[layerRuleKey] === 'object'
           ? layerRulesInput[layerRuleKey]
           : ((layerRulesInput[name] && typeof layerRulesInput[name] === 'object') ? layerRulesInput[name] : {});
-        const fallbackSearchable = sourceLayer?.searchable === true || authFlags?.wfsSearchable === true;
-        // Do not implicitly enable editable/WFS purely because the server-level
-        // auth flags allow editing. Admins must explicitly opt-in to editing
-        // in the published profile. Preserve per-layer `editable` from
-        // source project metadata but do not use auth flags as a default.
-        const fallbackEditable = sourceLayer?.editable === true;
+        const qtilerAuthFlags = findByNameLoose(projectFlagsByPid.get(sourceProjectId), name) || {};
+        const qtilerAuthSearchable = (searchableConfigByPid.get(sourceProjectId) || []).find((e) => e && String(e.name || '') === name) || null;
+        const fallbackSearchable = sourceLayer?.searchable === true || qtilerAuthFlags?.wfsSearchable === true;
+        const fallbackEditable = sourceLayer?.editable === true || qtilerAuthFlags?.wfsEditable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
-        const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || '').trim() || null;
-        const fallbackIdAttribute = String(sourceLayer?.idAttribute || '').trim() || null;
+        const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || qtilerAuthSearchable?.searchAttribute || '').trim() || null;
+        const fallbackIdAttribute = String(sourceLayer?.idAttribute || qtilerAuthSearchable?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
-        const fallbackHintText = String(sourceLayer?.hintText || '').trim() || null;
-        const fallbackAttributes = Array.isArray(sourceLayer?.attributes) ? sourceLayer.attributes : [];
+        const fallbackHintText = String(sourceLayer?.hintText || qtilerAuthSearchable?.hintText || '').trim() || null;
         // Preserve wfsStyle from the style editor without implicitly forcing
         // the layer onto the WFS path. WFS stays explicit via serveAsWfs/editable.
         const ruleHasStyle = rule && (rule.wfsStyle !== undefined && rule.wfsStyle !== null);
@@ -6190,11 +7486,7 @@ ${mapIcon}
           group: incomingGroupByName[layerRuleKey] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: isTheme ? false : ((rule.searchable === true) || fallbackSearchable),
           editable: isTheme ? false : ((rule.editable === true) || fallbackEditable),
-          // Serve as WFS only when explicitly requested (serveAsWfs true) or
-          // when the layer is editable (explicit or from source metadata).
-          // Do NOT force WFS simply because authFlags allow editing on the
-          // server side — that would cause WMS layers to be misclassified.
-          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true || fallbackServeAsWfs || (rule.editable === true) || fallbackEditable),
+          serveAsWfs: isTheme ? false : (rule.serveAsWfs === true),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,
@@ -6208,20 +7500,17 @@ ${mapIcon}
         const wmsLegendMode = String(rule?.wmsLegendMode || '').trim().toLowerCase();
         const wmsLegendIcon = String(rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
         const wmsLegendUrl = String(rule?.wmsLegendUrl || rule?.legend || '').trim();
-        if (['manual', 'svg', 'library', 'auto', 'thumbnail'].includes(wmsLegendMode)) out.wmsLegendMode = wmsLegendMode;
+        if (wmsLegendMode === 'manual') out.wmsLegendMode = 'manual';
         if (wmsLegendIcon) out.wmsLegendIcon = wmsLegendIcon;
         if (wmsLegendUrl) out.wmsLegendUrl = wmsLegendUrl;
         if (rule?.designerOptions && typeof rule.designerOptions === 'object' && Object.keys(rule.designerOptions).length) {
           out.designerOptions = rule.designerOptions;
         }
         // Persist user-defined infoclick attributes so the editor can restore
-        // them, and so buildOrigoIndexConfig can apply them as the popup
+        // them, and so buildHajkIndexConfig can apply them as the popup
         // attribute filter for both WFS and WMS layers.
-        const rawRuleAttributes = Array.isArray(rule.attributes) && rule.attributes.length
-          ? rule.attributes
-          : fallbackAttributes;
-        if (Array.isArray(rawRuleAttributes) && rawRuleAttributes.length) {
-          out.attributes = normalizeInfoclickAttributes(rawRuleAttributes)
+        if (Array.isArray(rule.attributes) && rule.attributes.length) {
+          out.attributes = normalizeInfoclickAttributes(rule.attributes)
             .map((a) => {
               if (!a || typeof a !== 'object') return null;
               if (String(a.html || '').trim()) {
@@ -6333,7 +7622,6 @@ ${mapIcon}
 
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
-      try { clearOrigoCaches(profileKey); } catch (_) {}
       const syncBaseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
       // Thumbnail regeneration is expensive (renders WMS) and must only run
       // when the admin explicitly clicks "Regenerate thumbnail" — never
@@ -6341,7 +7629,7 @@ ${mapIcon}
       // already exists on disk.
       const previousThumbMeta = await readPublishedThumbnailMeta(profileKey).catch(() => null);
       void syncRuntimeFilesForProfile(payload, syncBaseUrl).catch((syncErr) => {
-        console.warn('[Qtiler2Origo] publish runtime sync warning:', syncErr?.message || syncErr);
+        console.warn('[Qtiler2Hajk] publish runtime sync warning:', syncErr?.message || syncErr);
       });
 
       // If editing and name changed, remove old profile file
@@ -6359,7 +7647,7 @@ ${mapIcon}
         file: targetPath,
         catalogUrl: `/plugins/${pluginSlug}/api/projects`,
         // Use the plugin-local Origo path for launching the map.
-        launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
+        launchUrl: `${base}/plugins/${pluginSlug}/hajk/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}`,
         publishedConfigUrl: `${base}/plugins/${pluginSlug}/published/${encodeURIComponent(profileKey)}.json`,
         thumbnailUrl: previousThumbMeta?.url ? `${base}${previousThumbMeta.url}` : ''
       });
@@ -6375,7 +7663,7 @@ ${mapIcon}
       const webRoot = await resolveQwc2WebRoot().catch(() => null);
       if (webRoot) candidates.push(path.join(webRoot, 'themesConfig.json'));
       // Also check data area where installer may keep current themes
-      candidates.push(path.join(process.cwd(), 'data', 'Qtiler2Origo', 'origo', 'current', 'themesConfig.json'));
+      candidates.push(path.join(process.cwd(), 'data', 'Qtiler2Hajk', 'hajk', 'current', 'themesConfig.json'));
 
       let touched = 0;
       for (const fp of candidates) {
@@ -6449,7 +7737,6 @@ ${mapIcon}
       parsed.generatedAt = new Date().toISOString();
       await fs.promises.mkdir(publishedRoot, { recursive: true });
       await fs.promises.writeFile(targetPath, JSON.stringify(parsed, null, 2), 'utf8');
-      try { clearOrigoCaches(sanitizeFileToken(newKey)); } catch (_) {}
       const sourceThumbPath = publishedThumbnailPath(sourceKey);
       const targetThumbPath = publishedThumbnailPath(newKey);
       try {
@@ -6532,7 +7819,7 @@ ${mapIcon}
       const results = await fetchLantmateriInfo(infoType, lon, lat);
       res.json({ results });
     } catch (err) {
-      console.error('[Qtiler2Origo] Lantmäteri info error:', err);
+      console.error('[Qtiler2Hajk] Lantmäteri info error:', err);
       res.status(500).json({ error: 'Request failed', details: String(err?.message || err) });
     }
   });
@@ -6605,7 +7892,7 @@ ${mapIcon}
     } catch (err) {
       const message = String(err?.message || err);
       const status = /too complex|too few|coordinates|supported|Missing/.test(message) ? 400 : 500;
-      console.error('[Qtiler2Origo] Lantmäteri area report error:', err);
+      console.error('[Qtiler2Hajk] Lantmäteri area report error:', err);
       res.status(status).json({ error: 'Area report failed', details: message });
     }
   });
@@ -6838,7 +8125,7 @@ ${mapIcon}
     const basic = Buffer.from(`${oauth.clientId}:${oauth.clientSecret}`).toString('base64');
     const body = new URLSearchParams({ grant_type: 'client_credentials' });
     if (oauth.scope) body.set('scope', oauth.scope);
-    console.log(`[Qtiler2Origo][LMV] fetching OAuth token from ${oauth.tokenUrl}`);
+    console.log(`[Qtiler2Hajk][LMV] fetching OAuth token from ${oauth.tokenUrl}`);
     const r = await fetch(oauth.tokenUrl, {
       method: 'POST',
       headers: {
@@ -6892,7 +8179,7 @@ ${mapIcon}
           const t = await _getLmvOAuthToken(product.oauth);
           if (t) authHeader = `Bearer ${t}`;
         } catch (e) {
-          console.warn(`[Qtiler2Origo][LMV] ${productId} OAuth failed: ${e.message}`);
+          console.warn(`[Qtiler2Hajk][LMV] ${productId} OAuth failed: ${e.message}`);
           return res.status(502).json({ error: 'oauth_failed', details: e.message });
         }
       }
@@ -6924,9 +8211,9 @@ ${mapIcon}
             const out = proj4(fromCode, 'EPSG:4326', [inX, inY]);
             X = out[0];
             Y = out[1];
-            console.log(`[Qtiler2Origo][LMV] ${productId} reprojected ${fromCode} (${inX},${inY}) -> WGS84 (${X.toFixed(6)},${Y.toFixed(6)})`);
+            console.log(`[Qtiler2Hajk][LMV] ${productId} reprojected ${fromCode} (${inX},${inY}) -> WGS84 (${X.toFixed(6)},${Y.toFixed(6)})`);
           } catch (rpErr) {
-            console.warn(`[Qtiler2Origo][LMV] ${productId} reprojection failed: ${rpErr.message}`);
+            console.warn(`[Qtiler2Hajk][LMV] ${productId} reprojection failed: ${rpErr.message}`);
           }
         }
         // Tiny ~10 m bbox at Swedish latitudes: 0.0001° lat ≈ 11m, 0.00018° lon ≈ 10m at 60°N.
@@ -6936,12 +8223,12 @@ ${mapIcon}
         const results = {};
         for (const coll of product.collections) {
           const url = `${product.baseUrl}/collections/${coll}/items?bbox=${bbox}&limit=5&f=json`;
-          console.log(`[Qtiler2Origo][LMV] ${productId}/${coll} -> ${url}`);
+          console.log(`[Qtiler2Hajk][LMV] ${productId}/${coll} -> ${url}`);
           try {
             const r = await fetch(url, { headers });
             if (!r.ok) {
               const txt = await r.text().catch(() => '');
-              console.warn(`[Qtiler2Origo][LMV] ${productId}/${coll} upstream ${r.status}: ${txt.slice(0, 200)}`);
+              console.warn(`[Qtiler2Hajk][LMV] ${productId}/${coll} upstream ${r.status}: ${txt.slice(0, 200)}`);
               results[coll] = { error: r.status, body: txt.slice(0, 200) };
               continue;
             }
@@ -6954,17 +8241,17 @@ ${mapIcon}
       }
 
       const url = _expandLmvUrl(product.urlTemplate, lon, lat, n, e, srid);
-      console.log(`[Qtiler2Origo][LMV] ${productId} -> ${url}`);
+      console.log(`[Qtiler2Hajk][LMV] ${productId} -> ${url}`);
       const r = await fetch(url, { headers });
       if (!r.ok) {
         const txt = await r.text().catch(() => '');
-        console.warn(`[Qtiler2Origo][LMV] ${productId} upstream ${r.status}: ${txt.slice(0, 300)}`);
+        console.warn(`[Qtiler2Hajk][LMV] ${productId} upstream ${r.status}: ${txt.slice(0, 300)}`);
         return res.status(r.status).json({ error: 'upstream_error', status: r.status, url, body: txt.slice(0, 500) });
       }
       const data = await r.json();
       res.json(data);
     } catch (err) {
-      console.error('[Qtiler2Origo] LMV point-product error:', err);
+      console.error('[Qtiler2Hajk] LMV point-product error:', err);
       res.status(500).json({ error: 'Request failed', details: String(err?.message || err) });
     }
   });
@@ -6988,7 +8275,6 @@ ${mapIcon}
 
       await fs.promises.rm(target, { force: true });
   await fs.promises.rm(thumbPath, { force: true }).catch(() => {});
-  try { clearOrigoCaches(sanitizeFileToken(profileName)); } catch (_) {}
 
       // Remove cached thumbnails for this project only when no other published
       // profile still references the same projectId.
@@ -7015,224 +8301,6 @@ ${mapIcon}
   });
 
   // Wipe cached WMS thumbnails for a project so the next request regenerates them.
-  app.delete(`/plugins/${pluginSlug}/api/thumbnail/cache/:projectId/layer/:layerName`, adminOnly, async (req, res) => {
-    try {
-      const projectId = normalizeProjectId(req.params?.projectId || '');
-      const layerName = String(req.params?.layerName || '').trim();
-      if (!projectId || !layerName) return res.status(400).json({ error: 'project_and_layer_required' });
-      const removed = await removeCachedLayerThumbnails(projectId, layerName);
-      res.json({ status: 'cleared', projectId, layerName, removed });
-    } catch (err) {
-      console.error('[thumbnail-layer-cache-clear]', err);
-      res.status(500).json({ error: 'thumbnail_layer_cache_clear_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.post(`/plugins/${pluginSlug}/api/thumbnail/regenerate/:projectId/layer/:layerName`, adminOnly, async (req, res) => {
-    try {
-      const projectId = normalizeProjectId(req.params?.projectId || '');
-      const layerName = String(req.params?.layerName || '').trim();
-      if (!projectId || !layerName) return res.status(400).json({ error: 'project_and_layer_required' });
-      await removeCachedLayerThumbnails(projectId, layerName);
-      await clearThumbnailRenderCaches([projectId]);
-      const baseUrl = getRequestBaseUrl(req);
-      const generated = await generateThumbnail(projectId, layerName, baseUrl, req.headers.cookie, {
-        apiKey: getRequestApiKey(req),
-        authorization: req.get?.('authorization') || ''
-      });
-      const stamp = Date.now();
-      res.json({
-        status: generated ? 'regenerated' : 'placeholder',
-        projectId,
-        layerName,
-        thumbUrl: `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layerName)}&_=${stamp}`,
-        legendUrl: `${baseUrl}/plugins/${pluginSlug}/api/thumbnail/${encodeURIComponent(projectId)}?LAYERS=${encodeURIComponent(layerName)}&LEGEND=1&_=${stamp}`
-      });
-    } catch (err) {
-      console.error('[thumbnail-layer-regenerate]', err);
-      res.status(500).json({ error: 'thumbnail_layer_regenerate_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.use(`/plugins/${pluginSlug}/legend-library`, express.static(legendLibraryRoot, {
-    fallthrough: false,
-    immutable: true,
-    maxAge: '7d',
-    index: false
-  }));
-
-  app.get(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, async (_req, res) => {
-    try {
-      const items = await listLegendLibraryItems();
-      res.json({ items });
-    } catch (err) {
-      res.status(500).json({ error: 'legend_library_list_failed', details: String(err?.message || err) });
-    }
-  });
-
-  // Report which published profiles/layers reference a given legend icon, so
-  // the admin UI can warn before deleting an icon that is in use anywhere
-  // (not just the currently open draft).
-  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, editorOnly, async (req, res) => {
-    try {
-      const id = String(req.params?.id || '').trim();
-      if (!id) return res.status(400).json({ error: 'id_required' });
-      const items = await listLegendLibraryItems();
-      const item = items.find((it) => String(it.id) === id);
-      if (!item) return res.status(404).json({ error: 'not_found' });
-      const stripStamp = (url) => String(url || '').split('?')[0];
-      const itemUrlBase = stripStamp(item.url);
-      const profiles = await readAllPublishedProfiles();
-      const usage = [];
-      for (const profile of profiles) {
-        const layers = [];
-        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
-          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
-          if (ref && ref === itemUrlBase) {
-            layers.push(String(layer?.title || layer?.name || '').trim());
-          }
-        }
-        if (layers.length) {
-          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
-        }
-      }
-      res.json({ id, name: item.name, usage });
-    } catch (err) {
-      res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });
-    }
-  });
-
-  // Drafts: save/restore in-progress publish editor state server-side so it
-  // survives browser restarts and works across machines.
-  app.get(`/plugins/${pluginSlug}/api/drafts`, editorOnly, async (_req, res) => {
-    try {
-      const entries = await fs.promises.readdir(draftsRoot).catch(() => []);
-      const drafts = [];
-      for (const fileName of entries) {
-        if (!fileName.toLowerCase().endsWith('.json')) continue;
-        try {
-          const raw = await fs.promises.readFile(path.join(draftsRoot, fileName), 'utf8');
-          const parsed = JSON.parse(raw || '{}');
-          drafts.push({
-            id: fileName.replace(/\.json$/i, ''),
-            name: String(parsed?.name || '').trim(),
-            projectId: String(parsed?.projectId || '').trim(),
-            savedAt: String(parsed?.savedAt || '').trim()
-          });
-        } catch { /* skip malformed */ }
-      }
-      drafts.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
-      res.json({ drafts });
-    } catch (err) {
-      res.status(500).json({ error: 'drafts_list_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
-    try {
-      const id = sanitizeFileToken(String(req.params?.id || ''));
-      if (!id) return res.status(400).json({ error: 'id_required' });
-      const raw = await fs.promises.readFile(path.join(draftsRoot, `${id}.json`), 'utf8');
-      res.type('application/json');
-      return res.send(raw);
-    } catch (err) {
-      if (err?.code === 'ENOENT') return res.status(404).json({ error: 'draft_not_found' });
-      res.status(500).json({ error: 'draft_read_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, express.json({ limit: '10mb' }), async (req, res) => {
-    try {
-      const id = sanitizeFileToken(String(req.params?.id || ''));
-      if (!id) return res.status(400).json({ error: 'id_required' });
-      const payload = (req.body && typeof req.body === 'object') ? req.body : {};
-      payload.savedAt = nowIso();
-      await fs.promises.mkdir(draftsRoot, { recursive: true });
-      await fs.promises.writeFile(path.join(draftsRoot, `${id}.json`), JSON.stringify(payload, null, 2), 'utf8');
-      res.json({ status: 'saved', id, savedAt: payload.savedAt });
-    } catch (err) {
-      res.status(500).json({ error: 'draft_save_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
-    try {
-      const id = sanitizeFileToken(String(req.params?.id || ''));
-      if (!id) return res.status(400).json({ error: 'id_required' });
-      await fs.promises.rm(path.join(draftsRoot, `${id}.json`), { force: true });
-      res.json({ status: 'deleted', id });
-    } catch (err) {
-      res.status(500).json({ error: 'draft_delete_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.post(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, (req, res) => {
-    legendLibraryUpload.single('image')(req, res, async (err) => {
-      if (err) {
-        const msg = String(err?.message || err || 'legend_library_upload_failed');
-        if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
-          return res.status(413).json({ error: 'legend_library_too_large', details: `max_bytes_${MAX_LEGEND_LIBRARY_BYTES}` });
-        }
-        if (msg.includes('invalid_legend_library_extension')) {
-          return res.status(400).json({ error: 'invalid_legend_library_extension' });
-        }
-        return res.status(400).json({ error: 'legend_library_upload_failed', details: msg });
-      }
-      try {
-        const uploaded = req.file;
-        if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
-          return res.status(400).json({ error: 'legend_library_file_required' });
-        }
-        const origExt = path.extname(String(uploaded.originalname || '')).toLowerCase();
-        if (!ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(origExt)) {
-          return res.status(400).json({ error: 'invalid_legend_library_extension' });
-        }
-        const cropped = await cropLegendLibraryBuffer(uploaded.buffer, origExt);
-        const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'legend'), origExt)).slice(0, 80) || 'legend';
-        const fileName = `${Date.now()}-${stem}${cropped.ext}`;
-        const targetPath = path.join(legendLibraryRoot, fileName);
-        await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
-        await fs.promises.writeFile(targetPath, cropped.buffer);
-        const item = {
-          id: fileName,
-          name: path.basename(String(uploaded.originalname || fileName)),
-          fileName,
-          mime: cropped.mime,
-          createdAt: nowIso()
-        };
-        const items = await readLegendLibraryIndex();
-        items.unshift(item);
-        await writeLegendLibraryIndex(items);
-        return res.status(201).json({
-          status: 'uploaded',
-          item: {
-            ...item,
-            url: legendLibraryPublicUrl(fileName, Date.now())
-          }
-        });
-      } catch (uploadErr) {
-        return res.status(500).json({ error: 'legend_library_upload_failed', details: String(uploadErr?.message || uploadErr) });
-      }
-    });
-  });
-
-  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, editorOnly, async (req, res) => {
-    try {
-      const id = sanitizeFileToken(req.params?.id || '');
-      if (!id) return res.status(400).json({ error: 'legend_library_id_required' });
-      const items = await readLegendLibraryIndex();
-      const match = items.find((item) => sanitizeFileToken(item?.id || item?.fileName || '') === id);
-      const fileName = sanitizeFileToken(match?.fileName || id);
-      if (fileName) {
-        await fs.promises.rm(path.join(legendLibraryRoot, fileName), { force: true }).catch(() => {});
-      }
-      await writeLegendLibraryIndex(items.filter((item) => sanitizeFileToken(item?.id || item?.fileName || '') !== id));
-      res.json({ status: 'deleted', id });
-    } catch (err) {
-      res.status(500).json({ error: 'legend_library_delete_failed', details: String(err?.message || err) });
-    }
-  });
-
   app.delete(`/plugins/${pluginSlug}/api/thumbnail/cache/:projectId`, adminOnly, async (req, res) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
@@ -7381,209 +8449,11 @@ ${mapIcon}
       const profileKey = profile?.profileKey || profileOrProject;
       const projectId = normalizeProjectId(profile?.projectId || profileOrProject);
       const base = getRequestBaseUrl(req).replace(/\/+$|$/, '');
-      res.json({ projectId, profileKey, launchUrl: `${base}/plugins/${pluginSlug}/origo/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}` });
+      res.json({ projectId, profileKey, launchUrl: `${base}/plugins/${pluginSlug}/hajk/?qtiler_profile=${encodeURIComponent(profileKey)}#/?t=${encodeURIComponent(projectId)}` });
     } catch(err) { console.error('XERR', err);
       res.status(500).json({ error: 'publish_launch_url_failed', details: String(err?.message || err) });
     }
   });
-
-  app.get(`/plugins/${pluginSlug}/api/legend-icon`, async (req, res) => {
-    try {
-      const raw = String(req.query?.src || '').trim();
-      if (!raw || /[\r\n]/.test(raw)) return res.status(400).send('Invalid icon URL');
-      if (/^(?:javascript|data|vbscript):/i.test(raw)) return res.status(400).send('Invalid icon URL');
-      const format = String(req.query?.format || req.query?.FORMAT || '').trim().toLowerCase();
-      if (format.includes('json')) {
-        const title = String(req.query?.title || req.query?.label || 'Legend').trim() || 'Legend';
-        return res.json({ Legend: [{ layerName: title, rules: [{ title, name: title }] }] });
-      }
-      let target = raw;
-      if (!/^https?:\/\//i.test(target) && !target.startsWith('/')) {
-        target = `/${target.replace(/^\/+/, '')}`;
-      }
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.redirect(302, target);
-    } catch (err) {
-      res.status(500).send(String(err?.message || err));
-    }
-  });
-
-  /* ── WMS proxy: keep ImageWMS under Qtiler's 4M-pixel GetMap cap ──
-     Recipients who only install this plugin still hit /wms 400 XML on
-     full-viewport ImageWMS. Proxy through the plugin, downscale the
-     render, then stretch the PNG back to WIDTH x HEIGHT so Origo can
-     decode it and place it on the requested BBOX. */
-  const ORIGO_WMS_MAX_PIXELS = 4000000;
-  const origoFitGetMapSize = (width, height, maxPixels) => {
-    const w0 = Math.max(1, Number(width) || 1);
-    const h0 = Math.max(1, Number(height) || 1);
-    const pixels = w0 * h0;
-    if (!(maxPixels > 0) || pixels <= maxPixels) {
-      return { width: w0, height: h0, scaled: false };
-    }
-    const scale = Math.sqrt(maxPixels / pixels);
-    let w = Math.max(1, Math.floor(w0 * scale));
-    let h = Math.max(1, Math.floor(h0 * scale));
-    while (w * h > maxPixels && (w > 1 || h > 1)) {
-      if (w >= h && w > 1) w -= 1;
-      else if (h > 1) h -= 1;
-      else break;
-    }
-    return { width: w, height: h, scaled: true };
-  };
-  const origoWmsParam = (req, key) => {
-    const target = String(key || '').toLowerCase();
-    for (const source of [req.query, req.body]) {
-      if (!source || typeof source !== 'object') continue;
-      if (source[key] != null) return Array.isArray(source[key]) ? source[key][0] : source[key];
-      for (const [k, v] of Object.entries(source)) {
-        if (String(k).toLowerCase() === target) return Array.isArray(v) ? v[0] : v;
-      }
-    }
-    return null;
-  };
-  const fetchUpstreamWms = (imageUrl, auth = {}) => new Promise((resolve, reject) => {
-    try {
-      const parsedUrl = new URL(imageUrl);
-      const reqOptions = {
-        hostname: parsedUrl.hostname,
-        port: parsedUrl.port,
-        path: parsedUrl.pathname + parsedUrl.search,
-        headers: {}
-      };
-      if (auth.cookieHeader) reqOptions.headers.cookie = auth.cookieHeader;
-      if (auth.apiKey) reqOptions.headers['x-api-key'] = auth.apiKey;
-      if (auth.authorization) reqOptions.headers.authorization = auth.authorization;
-      const fetcher = imageUrl.startsWith('https') ? https : http;
-      const proxyReq = fetcher.get(reqOptions, (proxyRes) => {
-        const chunks = [];
-        proxyRes.on('data', (chunk) => chunks.push(chunk));
-        proxyRes.on('end', () => resolve({
-          status: proxyRes.statusCode || 500,
-          contentType: String(proxyRes.headers['content-type'] || ''),
-          buffer: Buffer.concat(chunks)
-        }));
-        proxyRes.on('error', reject);
-      });
-      proxyReq.setTimeout(120_000, () => {
-        try { proxyReq.destroy(new Error('origo wms proxy timed out')); } catch (_) {}
-      });
-      proxyReq.on('error', reject);
-    } catch (err) {
-      reject(err);
-    }
-  });
-  const handleOrigoWmsProxy = async (req, res) => {
-    try {
-      const baseUrl = getRequestBaseUrl(req);
-      const merged = { ...(req.query || {}), ...(req.body || {}) };
-      const requestName = String(origoWmsParam(req, 'REQUEST') || origoWmsParam(req, 'request') || '').trim();
-      const widthReq = Number.parseInt(String(origoWmsParam(req, 'WIDTH') ?? ''), 10);
-      const heightReq = Number.parseInt(String(origoWmsParam(req, 'HEIGHT') ?? ''), 10);
-      const isGetMap = requestName.toUpperCase() === 'GETMAP';
-      const fitted = (isGetMap && widthReq > 0 && heightReq > 0)
-        ? origoFitGetMapSize(widthReq, heightReq, ORIGO_WMS_MAX_PIXELS)
-        : null;
-      const upstreamParams = new URLSearchParams();
-      for (const [key, value] of Object.entries(merged)) {
-        if (value == null) continue;
-        const k = String(key);
-        if (fitted?.scaled && /^WIDTH$/i.test(k)) {
-          upstreamParams.set(k, String(fitted.width));
-          continue;
-        }
-        if (fitted?.scaled && /^HEIGHT$/i.test(k)) {
-          upstreamParams.set(k, String(fitted.height));
-          continue;
-        }
-        if (Array.isArray(value)) upstreamParams.set(k, String(value[0] ?? ''));
-        else upstreamParams.set(k, String(value));
-      }
-      const isGetLegendGraphic = requestName.toUpperCase() === 'GETLEGENDGRAPHIC';
-      if (isGetLegendGraphic) {
-        upstreamParams.set('LAYERTITLE', 'FALSE');
-        upstreamParams.set('RULELABEL', 'FALSE');
-        if (![...upstreamParams.keys()].some((k) => /^TRANSPARENT$/i.test(k))) {
-          upstreamParams.set('TRANSPARENT', 'TRUE');
-        }
-        if (![...upstreamParams.keys()].some((k) => /^SYMBOLWIDTH$/i.test(k))) {
-          upstreamParams.set('SYMBOLWIDTH', '16');
-        }
-        if (![...upstreamParams.keys()].some((k) => /^SYMBOLHEIGHT$/i.test(k))) {
-          upstreamParams.set('SYMBOLHEIGHT', '16');
-        }
-      }
-      const upstreamUrl = `${INTERNAL_APP_ORIGIN}/wms?${upstreamParams.toString()}`;
-      const upstream = await fetchUpstreamWms(upstreamUrl, {
-        cookieHeader: req.headers?.cookie,
-        apiKey: req.headers?.['x-api-key'] || req.query?.api_key,
-        authorization: req.get?.('authorization') || ''
-      });
-      let body = upstream.buffer;
-      let contentType = upstream.contentType || 'application/octet-stream';
-      if (fitted?.scaled && String(contentType).toLowerCase().startsWith('image/')) {
-        try {
-          const formatHint = String(origoWmsParam(req, 'FORMAT') || contentType).toLowerCase();
-          const pipeline = sharp(body).resize(widthReq, heightReq, { fit: 'fill' });
-          if (formatHint.includes('jpeg') || formatHint.includes('jpg')) {
-            body = await pipeline.jpeg({ quality: 85 }).toBuffer();
-            contentType = 'image/jpeg';
-          } else {
-            body = await pipeline.png().toBuffer();
-            contentType = 'image/png';
-          }
-        } catch (resizeErr) {
-          console.warn('[Qtiler2Origo] WMS proxy resize failed:', resizeErr?.message || resizeErr);
-        }
-      }
-      if (isGetLegendGraphic && String(contentType).toLowerCase().startsWith('image/')) {
-        try {
-          const meta = await sharp(body).metadata();
-          const w = Number(meta.width) || 0;
-          const h = Number(meta.height) || 0;
-          if (w > 40 && h > 0 && w > h * 1.4) {
-            const pad = Math.min(4, Math.max(0, w - 1));
-            const swatch = Math.max(16, Math.min(32, w, h + pad));
-            body = await sharp(body)
-              .extract({ left: 0, top: 0, width: Math.min(swatch, w), height: h })
-              .png()
-              .toBuffer();
-            contentType = 'image/png';
-          }
-        } catch (legendCropErr) {
-          console.warn('[Qtiler2Origo] legend crop failed:', legendCropErr?.message || legendCropErr);
-        }
-      }
-      res.status(upstream.status || 200);
-      res.set('Cache-Control', 'no-store');
-      res.type(contentType.split(';')[0] || 'application/octet-stream');
-      return res.send(body);
-    } catch (err) {
-      console.error('[Qtiler2Origo] WMS proxy failed:', err?.message || err);
-      return res.status(502).type('application/xml').send(
-        '<?xml version="1.0"?><ServiceExceptionReport><ServiceException>Origo WMS proxy failed</ServiceException></ServiceExceptionReport>'
-      );
-    }
-  };
-  app.get(`/plugins/${pluginSlug}/wms`, handleOrigoWmsProxy);
-  app.post(
-    `/plugins/${pluginSlug}/wms`,
-    express.urlencoded({ extended: true, limit: '50mb' }),
-    express.json({ limit: '50mb' }),
-    (req, res, next) => {
-      try {
-        const merged = Object.assign({}, req.query || {}, req.body || {});
-        Object.defineProperty(req, 'query', {
-          value: merged,
-          writable: true,
-          enumerable: true,
-          configurable: true
-        });
-      } catch { /* keep original query */ }
-      next();
-    },
-    handleOrigoWmsProxy
-  );
 
   /* ── Thumbnail proxy: generates a WMS GetMap preview for a project (cached) ── */
   app.get(`/plugins/${pluginSlug}/api/thumbnail/:projectId`, async (req, res) => {
@@ -7622,21 +8492,6 @@ ${mapIcon}
         authorization: req.get?.('authorization') || ''
       });
       if (thumbPath) {
-        const asLegend = ['1', 'true', 'yes'].includes(String(req.query?.LEGEND || req.query?.legend || '').trim().toLowerCase());
-        if (asLegend) {
-          try {
-            const swatch = await sharp(thumbPath)
-              .resize(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE, {
-                fit: 'contain',
-                background: { r: 255, g: 255, b: 255, alpha: 0 }
-              })
-              .png()
-              .toBuffer();
-            res.set('Cache-Control', 'public, max-age=300');
-            res.type('image/png');
-            return res.send(swatch);
-          } catch (_) { /* fall through to full thumbnail */ }
-        }
         res.set('Cache-Control', 'public, max-age=300');
         return res.sendFile(thumbPath);
       }
@@ -7675,7 +8530,7 @@ ${mapIcon}
   // Serve GeoTIFF terrain files for the QWC2 3D viewer (map3d.dtm.url).
   // Files are read from the project's folder inside qgisprojects/.
 
-  app.get('/Qtiler2Origo/terrain/:projectId/:filename', async (req, res) => {
+  app.get('/Qtiler2Hajk/terrain/:projectId/:filename', async (req, res) => {
     try {
       const projectId = normalizeProjectId(req.params?.projectId || '');
       const filename = String(req.params?.filename || '').replace(/[/\\]/g, '');
@@ -7696,13 +8551,13 @@ ${mapIcon}
       res.set('Cache-Control', 'public, max-age=3600');
       return res.sendFile(filePath);
     } catch (err) {
-      console.error('[Qtiler2Origo] terrain serve error:', err?.message || err);
+      console.error('[Qtiler2Hajk] terrain serve error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
 
   // -----------------------------------------------------------------------
-  // Layer style extraction (Qtiler2Origo internal).
+  // Layer style extraction (Qtiler2Hajk internal).
   // Returns a JSON description of a vector layer's QGIS renderer so the
   // client can render the layer as WFS while preserving the QGIS look.
   // Only simple renderers (singleSymbol, categorizedSymbol) are supported;
@@ -7711,7 +8566,7 @@ ${mapIcon}
   // Response is cached on disk under cache/<projectId>/_styles/<layer>.json
   // and invalidated when the source .qgz/.qgs mtime advances.
   // -----------------------------------------------------------------------
-  app.get('/Qtiler2Origo/layer-style', async (req, res) => {
+  app.get('/Qtiler2Hajk/layer-style', async (req, res) => {
     try {
       const projectId = String(req.query.project || req.query.projectId || '').trim();
       const layerName = String(req.query.layer || '').trim();
@@ -7777,13 +8632,13 @@ ${mapIcon}
         await fs.promises.mkdir(cacheDir, { recursive: true });
         await fs.promises.writeFile(cacheFile, JSON.stringify(result), 'utf8');
       } catch (err) {
-        console.warn('[Qtiler2Origo] layer-style cache write failed:', err?.message || err);
+        console.warn('[Qtiler2Hajk] layer-style cache write failed:', err?.message || err);
       }
 
       res.setHeader('Cache-Control', 'public, max-age=86400');
       return res.json(result);
     } catch (err) {
-      console.error('[Qtiler2Origo] layer-style error:', err?.message || err);
+      console.error('[Qtiler2Hajk] layer-style error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
@@ -7791,7 +8646,7 @@ ${mapIcon}
   // -----------------------------------------------------------------------
   // Layer fields/attributes (for filter & label dropdowns in the editor)
   // -----------------------------------------------------------------------
-  app.get('/Qtiler2Origo/layer-fields', async (req, res) => {
+  app.get('/Qtiler2Hajk/layer-fields', async (req, res) => {
     try {
       const projectId = String(req.query.project || req.query.projectId || '').trim();
       const layerName = String(req.query.layer || '').trim();
@@ -7824,7 +8679,7 @@ ${mapIcon}
       }
       return res.json(result || { fields: [] });
     } catch (err) {
-      console.error('[Qtiler2Origo] layer-fields error:', err?.message || err);
+      console.error('[Qtiler2Hajk] layer-fields error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
@@ -7832,7 +8687,7 @@ ${mapIcon}
   // -----------------------------------------------------------------------
   // Layer unique values for a given field (used by filter value dropdown)
   // -----------------------------------------------------------------------
-  app.get('/Qtiler2Origo/layer-values', async (req, res) => {
+  app.get('/Qtiler2Hajk/layer-values', async (req, res) => {
     try {
       const projectId = String(req.query.project || req.query.projectId || '').trim();
       const layerName = String(req.query.layer || '').trim();
@@ -7868,7 +8723,7 @@ ${mapIcon}
       }
       return res.json(result || { values: [] });
     } catch (err) {
-      console.error('[Qtiler2Origo] layer-values error:', err?.message || err);
+      console.error('[Qtiler2Hajk] layer-values error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
@@ -7889,7 +8744,7 @@ ${mapIcon}
       }
       let content = await fs.promises.readFile(filePath, 'utf8');
 
-      // OpenLayers and Origo required explicit viewBox and matching width/height for aspect ratios
+      // OpenLayers and Hajk Legend require physical width/height and viewBox for accurate aspect scaling
       let hasVB = /viewBox\s*=/i.test(content);
       const wMatch = content.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
       const hMatch = content.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
@@ -7947,7 +8802,7 @@ ${mapIcon}
   // -----------------------------------------------------------------------
   // QGIS SVG library list (for graphical icon picker)
   // -----------------------------------------------------------------------
-  app.get('/Qtiler2Origo/qgis-svg-list', async (_req, res) => {
+  app.get('/Qtiler2Hajk/qgis-svg-list', async (_req, res) => {
     try {
       const qgisPrefix = process.env.QGIS_PREFIX || 'C:\\QGIS_344\\apps\\qgis';
       const svgRoot = path.join(qgisPrefix, 'svg');
@@ -8001,7 +8856,7 @@ ${mapIcon}
       res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.json({ categories });
     } catch (err) {
-      console.error('[Qtiler2Origo] qgis-svg-list error:', err?.message || err);
+      console.error('[Qtiler2Hajk] qgis-svg-list error:', err?.message || err);
       return res.status(500).json({ error: 'server_error' });
     }
   });
@@ -8193,7 +9048,7 @@ ${mapIcon}
 
       // Origo search expects a flat array of features where each item has the
       // attribute named by `searchAttribute` (label) and optionally
-      // `geometryAttribute` (WKT). See plugins/Qtiler2Origo profile defaults.
+      // `geometryAttribute` (WKT). See plugins/Qtiler2Hajk profile defaults.
       if (req.query.origo || req._forceOrigo) {
         const origoItems = [];
         for (const grp of completed) {
@@ -8223,7 +9078,7 @@ ${mapIcon}
 
       res.json({ results: fulltextResults, result_counts: counts });
     } catch(err) { console.error('XERR', err);
-      console.error('/Qtiler2Origo/search API Error:', err);
+      console.error('/Qtiler2Hajk/search API Error:', err);
       // Surface failures so the client can tell "no results" apart from
       // "search backend broken" (previously both returned empty arrays).
       res.status(500);
@@ -8231,11 +9086,11 @@ ${mapIcon}
       res.json({ results: [], result_counts: [], error: 'search_failed', details: String(err?.message || err) });
     }
   };
-  app.get('/Qtiler2Origo/search', searchHandler);
+  app.get('/Qtiler2Hajk/search', searchHandler);
   // Origo-shaped search endpoint: same handler, returns flat array when called
   // via the plugin URL. The defaultSearchOptions above point Origo here with
   // `?project=<id>&origo=1` baked in.
-  app.get('/plugins/Qtiler2Origo/origo-search', (req, res) => {
+  app.get('/plugins/Qtiler2Hajk/hajk-search', (req, res) => {
     req._forceOrigo = true;
     return searchHandler(req, res);
   });

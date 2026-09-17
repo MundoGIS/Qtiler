@@ -1,0 +1,9460 @@
+/* ── i18n dictionary (en / es / sv / no) ── */
+/* Lock body scroll while any .modal.is-active exists, so modals don't appear
+   to drift when the user scrolls the underlying page. */
+(function setupModalScrollLock() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const sync = () => {
+    const modalOpen = !!document.querySelector('.modal.is-active, .hiw-modal:not([hidden])');
+    const publishOpen = !!document.querySelector('.publish-editor:not([hidden])');
+    const shouldLock = modalOpen || publishOpen;
+    document.documentElement.classList.toggle('is-clipped', shouldLock);
+    document.documentElement.style.overflow = shouldLock ? 'hidden' : '';
+    document.body.style.overflow = shouldLock ? 'hidden' : '';
+    document.body.classList.toggle('modal-open', shouldLock);
+    document.body.classList.toggle('publish-editor-open', publishOpen);
+  };
+  const obs = new MutationObserver(sync);
+  document.addEventListener('DOMContentLoaded', () => {
+    obs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'hidden'] });
+    sync();
+  });
+})();
+
+const QTWC_I18N = {
+  en: {
+    'Qtiler2Hajk.title': 'Hajk Bridge for Qtiler',
+    'Qtiler2Hajk.subtitle': 'Install Hajk from GitHub, publish QGIS maps visually, and manage access with or without QtilerAuth.',
+    'Qtiler2Hajk.how_title': 'How Qtiler2Hajk works',
+    'Qtiler2Hajk.how_intro': 'Qtiler2Hajk connects Qtiler to Hajk, turning QGIS projects into configured web maps from one administration interface.',
+    'Qtiler2Hajk.how_step_install': 'Install Hajk — pick a release tag from the official GitHub repository. Qtiler downloads the build and serves it from the plugin so the viewer stays inside the same deployment.',
+    'Qtiler2Hajk.how_step_publish': 'Publish maps — open the Maps tab, configure CRS, zoom, layers, backgrounds and tools, then save. Qtiler generates the Hajk configuration automatically and keeps non-WFS layers published through the correct WMS path unless WFS/editing is explicitly enabled.',
+    'Qtiler2Hajk.how_step_share': 'Share maps — every published profile gets a stable direct link that can also be used by QtilerStories.',
+    'Qtiler2Hajk.how_step_brand': 'Brand and customise — upload a viewer logo and configure layers, backgrounds, search, editing and toolbar controls.',
+    'Qtiler2Hajk.how_outro': 'Open source under MPL-2.0. The plugin only talks to GitHub during install; at runtime it works with QtilerAuth when available and degrades safely to public access when it is not, without telemetry or external data export.',
+    'Qtiler2Hajk.installation': 'Installation',
+    'Qtiler2Hajk.github_repo': 'GitHub repo',
+    'Qtiler2Hajk.version_tag': 'Version',
+    'Qtiler2Hajk.refresh': '↻',
+    'Qtiler2Hajk.include_prerelease': 'Include pre-releases',
+    'Qtiler2Hajk.no_releases_found': '(no releases found)',
+    'Qtiler2Hajk.releases_error': '(error fetching releases)',
+    'Qtiler2Hajk.install_Hajk': 'Install Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Uninstall Hajk',
+    'Qtiler2Hajk.checking': 'Checking…',
+    'Qtiler2Hajk.installed': 'Installed',
+    'Qtiler2Hajk.not_installed': 'Not installed',
+    'Qtiler2Hajk.installed_at': 'Installed on {date} · repo {repo} · version {version}',
+    'Qtiler2Hajk.not_installed_hint': 'Hajk is not installed. Enter the GitHub repo and version above, then click Install.',
+    'Qtiler2Hajk.standalone_server': 'Hajk standalone server',
+    'Qtiler2Hajk.Hajk_port': 'Hajk port',
+    'Qtiler2Hajk.start_server': 'Start server',
+    'Qtiler2Hajk.stop_server': 'Stop server',
+    'Qtiler2Hajk.open_Hajk': 'Open Hajk',
+    'Qtiler2Hajk.webmap_link': 'Open webmap',
+    'Qtiler2Hajk.running': 'Running',
+    'Qtiler2Hajk.stopped': 'Stopped',
+    'Qtiler2Hajk.server_running_at': 'Server running on port {port}',
+    'Qtiler2Hajk.server_stopped_hint': 'Server is not running. Set a port and click Start.',
+    'Qtiler2Hajk.logo_section': 'Webmap logo',
+    'Qtiler2Hajk.logo_desc': 'Upload a logo for the Hajk top bar. Allowed formats: PNG, JPG, SVG, WEBP.',
+    'Qtiler2Hajk.logo_file': 'Logo file',
+    'Qtiler2Hajk.upload_logo': 'Upload logo',
+    'Qtiler2Hajk.remove_logo': 'Remove logo',
+    'Qtiler2Hajk.no_logo': 'No logo',
+    'Qtiler2Hajk.logo_active': 'Active',
+    'Qtiler2Hajk.logo_updated_at': 'Logo updated: {date}',
+    'Qtiler2Hajk.logo_select_file': 'Select a file first.',
+    'Qtiler2Hajk.legend_library_title': 'Legend icons',
+    'Qtiler2Hajk.legend_library_help': 'Upload PNG or SVG icons once. They stay available for every published map. Raster files are cropped to 24×24 so they fit the Hajk legend.',
+    'Qtiler2Hajk.legend_library_file': 'PNG or SVG file',
+    'Qtiler2Hajk.legend_library_upload': 'Upload icon',
+    'Qtiler2Hajk.legend_library_delete': 'Delete',
+    'Qtiler2Hajk.legend_library_select_file': 'Select a PNG or SVG file first.',
+    'Qtiler2Hajk.wms_legend_regen': 'Recreate thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail recreated for "{layer}".',
+    'Qtiler2Hajk.profiles_section': 'Published maps',
+    'Qtiler2Hajk.profiles_desc': 'Manage generated profiles and launch links for Hajk (webmap).',
+    'Qtiler2Hajk.publish_new': 'New map',
+    'Qtiler2Hajk.no_profiles': 'No published profiles yet. Click "New profile" to create one.',
+    'Qtiler2Hajk.open_json': 'JSON',
+    'Qtiler2Hajk.open_Hajk_link': 'Open map',
+    'Qtiler2Hajk.edit_profile': 'Edit map',
+    'Qtiler2Hajk.duplicate': 'Duplicate',
+    'Qtiler2Hajk.duplicate_title': 'Duplicate webmap',
+    'Qtiler2Hajk.duplicate_help': 'Enter a unique name for the new webmap. The original will be kept unchanged.',
+    'Qtiler2Hajk.duplicate_new_name': 'New webmap name',
+    'Qtiler2Hajk.duplicate_btn': 'Duplicate',
+    'Qtiler2Hajk.duplicate_done': 'Webmap duplicated as "{id}".',
+    'Qtiler2Hajk.delete': 'Delete',
+    'Qtiler2Hajk.confirm_delete': 'Delete published profile for {id}?',
+    'Qtiler2Hajk.open_viewer': 'Published maps gallery',
+    'Qtiler2Hajk.activity_log': 'Activity log',
+    'Qtiler2Hajk.clear': 'Clear',
+    'Qtiler2Hajk.no_activity': 'No activity yet.',
+    'Qtiler2Hajk.modal_title': 'Publish project in Hajk',
+    'Qtiler2Hajk.modal_title_edit': 'Edit profile: {id}',
+    'Qtiler2Hajk.main_project': 'Main project',
+    'Qtiler2Hajk.project_layers': 'Project layers',
+    'Qtiler2Hajk.project_layers_help': 'Activate layers to include them in the published map. The \u2018Visible on map start\u2019 toggle controls whether an included layer is shown when the map first opens. Vector layers can optionally be served as WFS to enable the attribute table and editing; layers without WFS are served as WMS with GetLegendGraphic or an optional manual legend icon.',
+    'Qtiler2Hajk.layer_include': 'Include',
+    'Qtiler2Hajk.layer_initial_visibility': 'Visible on map start',
+    'Qtiler2Hajk.layer_title': 'Map title',
+    'Qtiler2Hajk.layer_title_placeholder': 'Visible title (optional)',
+    'Qtiler2Hajk.layer_include_help': 'If enabled, this layer is included in the published map.',
+    'Qtiler2Hajk.layer_initial_visibility_help': 'If enabled, this included layer is visible when the map opens.',
+    'Qtiler2Hajk.wms_legend_auto': 'WMS legend',
+    'Qtiler2Hajk.wms_legend_manual': 'Manual icon',
+    'Qtiler2Hajk.wms_legend_pick': 'Pick SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Clear',
+    'Qtiler2Hajk.wms_legend_url': 'Legend URL or SVG path',
+    'Qtiler2Hajk.wms_legend_help': 'WMS layers use GetLegendGraphic by default. Pick an SVG or paste an image URL to override the legend item.',
+    'Qtiler2Hajk.bg_project': 'Background project (optional)',
+    'Qtiler2Hajk.bg_layers': 'Background layers',
+    'Qtiler2Hajk.default_bg': 'Default background',
+    'Qtiler2Hajk.default_bg_help': 'OSM and No background are always available. Choose one as default.',
+    'Qtiler2Hajk.Hajk_features': 'Hajk modules',
+    'Qtiler2Hajk.feat_search': 'Search',
+    'Qtiler2Hajk.feat_search_global': 'Global Search',
+    'Qtiler2Hajk.feat_editing': 'Editing',
+    'Qtiler2Hajk.feat_identify': 'Identify',
+    'Qtiler2Hajk.feat_layer_tree': 'LayerTree',
+    'Qtiler2Hajk.feat_legend': 'Legend',
+    'Qtiler2Hajk.feat_measurement': 'Measure',
+    'Qtiler2Hajk.feat_print': 'Print',
+    'Qtiler2Hajk.feat_maptip': 'MapTip',
+    'Qtiler2Hajk.feat_share': 'Share',
+    'Qtiler2Hajk.feat_redlining': 'Redlining',
+    'Qtiler2Hajk.feat_bookmark': 'Bookmark',
+    'Qtiler2Hajk.feat_height_profile': 'HeightProfile',
+    'Qtiler2Hajk.feat_view3d': 'View3D',
+    'Qtiler2Hajk.feat_dxf_export': 'DxfExport',
+    'Qtiler2Hajk.feat_attribute_table': 'AttributeTable',
+    'Qtiler2Hajk.feat_routing': 'Routing',
+    'Qtiler2Hajk.publish_now': 'Publish',
+    'Qtiler2Hajk.preflight_btn': 'Check map',
+    'Qtiler2Hajk.preflight_checking': 'Checking...',
+    'Qtiler2Hajk.preflight_ok': 'Map check passed. Projects, layers and backgrounds are available.',
+    'Qtiler2Hajk.save_draft': 'Save draft',
+    'Qtiler2Hajk.draft_saved': '✓ Draft saved',
+    'Qtiler2Hajk.draft_restore_msg': 'A saved draft exists for this map (saved {date}). Restore it and continue where you left off?',
+    'Qtiler2Hajk.draft_restored': 'Draft restored.',
+    'Qtiler2Hajk.draft_save_failed': 'Could not save the draft: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'Lantmäteriet Search returns DEMO data — no API key configured on the server (set LANTMATERI_API_KEY in .env).',
+    'Qtiler2Hajk.thumb_missing': 'No thumbnail',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'You have unpublished changes in the map editor. Close anyway and lose them?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'QGIS SVG icons',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Uploaded icons',
+    'Qtiler2Hajk.legend_upload_new': 'Upload new…',
+    'Qtiler2Hajk.legend_pick_title': 'Choose legend icon',
+    'Qtiler2Hajk.legend_search_placeholder': 'Search icons…',
+    'Qtiler2Hajk.legend_delete_in_use': 'This icon is used by: {layers}. Delete it anyway?',
+    'Qtiler2Hajk.legend_delete_confirm': 'Delete this icon? It will no longer be available in the library.',
+    'Qtiler2Hajk.legend_current_map': 'current map',
+    'Qtiler2Hajk.legend_library_empty': 'No uploaded icons yet.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Legend icon uploaded.',
+    'Qtiler2Hajk.log_legend_deleted': 'Legend icon deleted.',
+    'Qtiler2Hajk.preview_btn': 'Preview',
+    'Qtiler2Hajk.cancel': 'Cancel',
+    'Qtiler2Hajk.no_layers': 'No layers found.',
+    'Qtiler2Hajk.no_bg_available': 'No backgrounds available.',
+    'Qtiler2Hajk.no_project_selected': 'No project selected.',
+    'Qtiler2Hajk.no_bg_selected': 'No background project selected.',
+    'Qtiler2Hajk.optional_select': 'Optional: select another project first.',
+    'Qtiler2Hajk.no_bg_option': 'No background',
+    'Qtiler2Hajk.osm_bg': 'OSM background',
+    'Qtiler2Hajk.log_installed': 'Hajk installed successfully.',
+    'Qtiler2Hajk.log_uninstalled': 'Hajk uninstalled.',
+    'Qtiler2Hajk.log_server_started': 'Standalone server started on port {port}.',
+    'Qtiler2Hajk.log_server_stopped': 'Standalone server stopped.',
+    'Qtiler2Hajk.log_logo_uploaded': 'Logo uploaded.',
+    'Qtiler2Hajk.log_logo_removed': 'Logo removed.',
+    'Qtiler2Hajk.log_published': 'Profile "{id}" published.',
+    'Qtiler2Hajk.log_deleted': 'Profile "{id}" deleted.',
+    'Qtiler2Hajk.regen_thumb': 'Regenerate thumbnail',
+    'Qtiler2Hajk.regen_thumb_title': 'Clear cached thumbnails for this project so a fresh one is generated on next view.',
+    'Qtiler2Hajk.thumbnail_change': 'Change thumbnail',
+    'Qtiler2Hajk.thumbnail_setup_title': 'Map thumbnails',
+    'Qtiler2Hajk.thumbnail_setup_help': 'Replace an automatically generated thumbnail with your own image. Publishing the map again keeps this image; Regenerate thumbnail returns to automatic mode.',
+    'Qtiler2Hajk.thumbnail_setup_map': 'Published map',
+    'Qtiler2Hajk.thumbnail_setup_file': 'PNG, JPG or WEBP image',
+    'Qtiler2Hajk.thumbnail_setup_upload': 'Upload thumbnail',
+    'Qtiler2Hajk.log_thumb_regen': 'Thumbnail cache cleared for "{id}" ({n} files).',
+    'Qtiler2Hajk.log_error': 'Error: {msg}',
+    'Qtiler2Hajk.requires_install': 'Install Hajk first to use this section.',
+    'Qtiler2Hajk.loading': 'Loading...',
+    'Qtiler2Hajk.load_preview': 'Load Preview',
+    'Qtiler2Hajk.open_in_new_tab': 'Open in new tab',
+    'Qtiler2Hajk.capture_view': 'Capture view (Center & Zoom)',
+    'Qtiler2Hajk.clear_extent': 'Clear extent',
+    'Qtiler2Hajk.center_default_bg': 'Center on default background',
+    'Qtiler2Hajk.layer_select_all': 'Select all',
+    'Qtiler2Hajk.layer_select_none': 'Select none',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent cleared.',
+    'Qtiler2Hajk.default_bg_centered': 'Map centered on the default background.',
+    'Qtiler2Hajk.default_bg_center_failed': 'Could not center on the default background: {msg}',
+    'Qtiler2Hajk.fullscreen': 'Full screen',
+    'Qtiler2Hajk.windowed': 'Windowed',
+    'Qtiler2Hajk.interactive_map': 'Interactive Map',
+    'Qtiler2Hajk.interactive_map_error': 'Interactive Map error',
+    'Qtiler2Hajk.interactive_map_idle': 'Click Load Preview to load the map',
+    'Qtiler2Hajk.interactive_map_preparing': 'Preparing Interactive Map…',
+    'Qtiler2Hajk.interactive_map_loading_layers': 'Loading map layers…',
+    'Qtiler2Hajk.interactive_map_iframe_error': 'The Interactive Map iframe could not be loaded.',
+    'Qtiler2Hajk.interactive_map_load_failed': 'The map could not be loaded.',
+    'Qtiler2Hajk.interactive_map_prepare_failed': 'The preview could not be prepared.',
+    'Qtiler2Hajk.select_main_project_first': 'Select a main project first.',
+    'Qtiler2Hajk.preview_loading_log': 'Loading preview map…',
+    'Qtiler2Hajk.preview_ready_log': 'Preview map ready. You can capture the extent.',
+    'Qtiler2Hajk.map_state_read_failed': 'Could not read map state: {msg}',
+    'Qtiler2Hajk.zoom_read_failed': 'Could not read the current zoom level.',
+    'Qtiler2Hajk.summary_current_map': 'Current map',
+    'Qtiler2Hajk.summary_name': 'Name',
+    'Qtiler2Hajk.summary_untitled': 'Untitled map',
+    'Qtiler2Hajk.summary_main_project': 'Main project',
+    'Qtiler2Hajk.summary_not_selected': 'Not selected',
+    'Qtiler2Hajk.summary_description': 'Description',
+    'Qtiler2Hajk.summary_no_description': 'No description',
+    'Qtiler2Hajk.summary_active_layers': 'Active layers ({n})',
+    'Qtiler2Hajk.summary_no_active_layers': 'No active layers selected yet.',
+    'Qtiler2Hajk.summary_backgrounds': 'Backgrounds',
+    'Qtiler2Hajk.summary_default': 'Default',
+    'Qtiler2Hajk.summary_default_none': 'No background',
+    'Qtiler2Hajk.summary_no_background_layers': 'No background layers selected.',
+    'Qtiler2Hajk.summary_preview_controls': 'Controls in preview ({n})',
+    'Qtiler2Hajk.summary_no_active_controls': 'No active controls configured.',
+    'Qtiler2Hajk.searchable': 'searchable',
+    'Qtiler2Hajk.editable': 'editable',
+    'Qtiler2Hajk.layers_count': '{n} layers',
+    'Qtiler2Hajk.bg_count': '{n} backgrounds',
+    'Qtiler2Hajk.tab_setup': 'Setup',
+    'Qtiler2Hajk.tab_maps': 'Maps',
+    'Qtiler2Hajk.tab_log': 'Log',
+    'Qtiler2Hajk.map_name': 'Map name',
+    'Qtiler2Hajk.map_name_placeholder': 'Unique name for this map',
+    'Qtiler2Hajk.map_description': 'Description',
+    'Qtiler2Hajk.map_desc_placeholder': 'Optional description',
+    'Qtiler2Hajk.name_required': 'A name is required.',
+    'Qtiler2Hajk.name_duplicate': 'A map with this name already exists.',
+    'Qtiler2Hajk.step_layers': '1. Layers',
+    'Qtiler2Hajk.step_backgrounds': '2. Background maps',
+    'Qtiler2Hajk.step_tools': '3. Tools',
+    'Qtiler2Hajk.step_controls_search': '3. Controls & search',
+    'Qtiler2Hajk.step_hajk_config': '4. Hajk Configuration',
+    'Qtiler2Hajk.step_json_editor': '5. JSON Editor',
+    'Qtiler2Hajk.json_editor_help': 'Edit the complete map configuration JSON. Changes are validated in real-time.',
+    'Qtiler2Hajk.json_load': 'Load current config',
+    'Qtiler2Hajk.json_import': 'Import JSON',
+    'Qtiler2Hajk.json_download': 'Download JSON',
+    'Qtiler2Hajk.json_format': 'Format JSON',
+    'Qtiler2Hajk.json_validate': 'Validate',
+    'Qtiler2Hajk.json_apply': 'Apply changes',
+    'Qtiler2Hajk.json_clear_log': 'Clear log',
+    'Qtiler2Hajk.json_editor_label': 'Map Configuration JSON',
+    'Qtiler2Hajk.json_log_label': 'Validation & Error Log',
+    'Qtiler2Hajk.publish_editor_fixed_help': 'Fixed editor to create and edit maps without the page shifting.',
+    'Qtiler2Hajk.svg_picker_title': 'Select SVG icon (QGIS)',
+    'Qtiler2Hajk.default': 'Default',
+    'Qtiler2Hajk.feat_search_desc': 'Full-text search across map layers',
+    'Qtiler2Hajk.feat_search_global_desc': 'Enable Coordinates and Nominatim OSM',
+    'Qtiler2Hajk.feat_search_help': 'Local search uses your searchable layers through /Qtiler2Hajk/search. Global Search adds coordinates and Nominatim results on top.',
+    'Qtiler2Hajk.feat_identify_desc': 'Click map to query feature attributes',
+    'Qtiler2Hajk.feat_layer_tree_desc': 'Show/hide layers and groups',
+    'Qtiler2Hajk.feat_legend_desc': 'Display layer symbology and legend',
+    'Qtiler2Hajk.feat_editing_desc': 'Create, update, and delete features',
+    'Qtiler2Hajk.feat_print_desc': 'Export map to PDF using QGIS layouts',
+    'Qtiler2Hajk.feat_maptip_desc': 'Hover tooltips with feature info',
+    'Qtiler2Hajk.feat_measurement_desc': 'Measure distances and areas on the map',
+    'Qtiler2Hajk.feat_share_desc': 'Share current map view via URL',
+    'Qtiler2Hajk.feat_redlining_desc': 'Draw temporary shapes and annotations',
+    'Qtiler2Hajk.feat_bookmark_desc': 'Save and restore map extents',
+    'Qtiler2Hajk.feat_height_profile_desc': 'Elevation cross-section along a path',
+    'Qtiler2Hajk.feat_view3d_desc': 'Enable the Hajk View3D module for terrain and 3D layers',
+    'Qtiler2Hajk.feat_dxf_export_desc': 'Download layers as AutoCAD DXF',
+    'Qtiler2Hajk.feat_attribute_table_desc': 'Tabular view of feature attributes',
+    'Qtiler2Hajk.feat_routing_desc': 'Calculate routes between points',
+    'Qtiler2Hajk.wfs_helper_title': 'WFS search and editing',
+    'Qtiler2Hajk.wfs_search_helper': 'Search uses Qtiler searchable layers. Mark layers as searchable in QtilerAuth, then add local or cross-project sources here; results follow project access.',
+    'Qtiler2Hajk.wfs_edit_helper': 'Editing requires QtilerAuth active, the layer allowed as editable in QtilerAuth, user edit access, and the layer published as WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk receives the same Qtiler WFS metadata as Origo: attributes, geometry field, namespace and styles.',
+    'Qtiler2Hajk.tool_config': 'Configuration',
+    'Qtiler2Hajk.cfg_share_url': 'Share service URL',
+    'Qtiler2Hajk.cfg_share_url_ph': 'https://example.com/share',
+    'Qtiler2Hajk.cfg_routing_url': 'Routing service URL (OSRM/Valhalla)',
+    'Qtiler2Hajk.cfg_routing_url_ph': 'https://router.example.com/route',
+    'Qtiler2Hajk.cfg_elevation_url': 'Elevation service URL',
+    'Qtiler2Hajk.cfg_elevation_url_ph': 'https://elevation.example.com',
+    'Qtiler2Hajk.cfg_dxf_url': 'DXF export service URL',
+    'Qtiler2Hajk.cfg_dxf_url_ph': 'https://example.com/dxf',
+    'Qtiler2Hajk.ctrl_home': 'Home (zoom to extent)',
+    'Qtiler2Hajk.ctrl_zoom': 'Zoom (+/−)',
+    'Qtiler2Hajk.ctrl_rotate': 'Rotate map',
+    'Qtiler2Hajk.ctrl_fullscreen': 'Full screen',
+    'Qtiler2Hajk.ctrl_geoposition': 'My location (GPS)',
+    'Qtiler2Hajk.ctrl_mapmenu': 'Layer menu',
+    'Qtiler2Hajk.ctrl_legend': 'Legend',
+    'Qtiler2Hajk.ctrl_search': 'Search (geocoding)',
+    'Qtiler2Hajk.ctrl_editor': 'Feature editor (WFS)',
+    'Qtiler2Hajk.ctrl_draw': 'Draw (redlining)',
+    'Qtiler2Hajk.ctrl_measure': 'Measure distances/areas',
+    'Qtiler2Hajk.ctrl_position': 'Cursor coordinates',
+    'Qtiler2Hajk.ctrl_print': 'Print',
+    'Qtiler2Hajk.ctrl_sharemap': 'Share map',
+    'Qtiler2Hajk.ctrl_progressbar': 'Progress bar',
+    'Qtiler2Hajk.ctrl_scaleline': 'Scale bar',
+    'Qtiler2Hajk.ctrl_attribution': 'Attribution',
+    'Qtiler2Hajk.ctrl_about': 'About',
+    'Qtiler2Hajk.ctrl_bookmarks': 'Bookmarks',
+    'Qtiler2Hajk.ctrl_draganddrop': 'Drag & drop files',
+    'Qtiler2Hajk.ctrl_externalurl': 'External URL links',
+    'Qtiler2Hajk.ctrl_link': 'Link button',
+    'Qtiler2Hajk.ctrl_splash': 'Splash dialog',
+    'Qtiler2Hajk.ctrl_scale': 'Scale (text)',
+    'Qtiler2Hajk.ctrl_scalepicker': 'Scale picker',
+    'Qtiler2Hajk.ctrl_lantmateri': 'Lantmäteriet Search (Property & Address)',
+    'Qtiler2Hajk.wfs_modal_title': 'Vector style editor',
+    'Qtiler2Hajk.wfs_layer': 'Layer',
+    'Qtiler2Hajk.wfs_tab_rules': 'Advanced design',
+    'Qtiler2Hajk.wfs_tab_designer': 'Basic design',
+    'Qtiler2Hajk.wfs_tab_json': 'Advanced JSON',
+    'Qtiler2Hajk.wfs_tab_attributes': 'Attributes (Infoclick)',
+    'Qtiler2Hajk.wfs_designer_header': 'Quick visual tuning',
+    'Qtiler2Hajk.wfs_designer_help': 'The preview stays on the right. Adjust fill, pattern and stroke from the control box on the left.',
+    'Qtiler2Hajk.wfs_group_geometry': 'Geometry',
+    'Qtiler2Hajk.wfs_group_fill': 'Fill',
+    'Qtiler2Hajk.wfs_group_pattern': 'Pattern',
+    'Qtiler2Hajk.wfs_group_stroke': 'Stroke',
+    'Qtiler2Hajk.wfs_reset': '↺ Reset to basic style',
+    'Qtiler2Hajk.wfs_cancel': 'Cancel',
+    'Qtiler2Hajk.wfs_save': 'Save style',
+    'Qtiler2Hajk.wfs_rules_header': 'Rules and filters',
+    'Qtiler2Hajk.wfs_copy_rules': '-- Copy rules from layer --',
+    'Qtiler2Hajk.wfs_copy_attrs': '-- Copy attributes from layer --',
+    'Qtiler2Hajk.wfs_add_rule': '+ Add rule',
+    'Qtiler2Hajk.wfs_rules_help': 'Each rule is evaluated in order. For a default style, leave the filter empty in the last one.',
+    'Qtiler2Hajk.wfs_attrs_header': 'Popup attributes (Infoclick)',
+    'Qtiler2Hajk.wfs_add_attr': '+ Add attribute',
+    'Qtiler2Hajk.wfs_add_html': '+ Add HTML',
+    'Qtiler2Hajk.wfs_attrs_help': 'Define the attributes to display. If you leave it empty, all are shown.',
+    'Qtiler2Hajk.wfs_json_label': 'Full layer JSON (configuration + style)',
+    'Qtiler2Hajk.wfs_json_help': 'Edit the complete object here: name, geometryType, wfsStyle, searchable, etc.',
+    'Qtiler2Hajk.wfs_copy_layer': '-- Copy from layer --',
+    'Qtiler2Hajk.wfs_export_json': 'Export JSON',
+    'Qtiler2Hajk.wfs_import_json': 'Import JSON',
+    'Qtiler2Hajk.wfs_apply_json': 'Apply JSON',
+    'Qtiler2Hajk.wfs_format_json': 'Format JSON',
+    'Qtiler2Hajk.wfs_preview': 'Preview',
+    'Qtiler2Hajk.wfs_preview_help': 'The preview updates live as you change color, width, opacity and symbol.',
+    'Qtiler2Hajk.wfs_square': 'Square',
+    'Qtiler2Hajk.wfs_triangle': 'Triangle',
+    'Qtiler2Hajk.wfs_star': 'Star',
+    'Qtiler2Hajk.wfs_radius_size': 'Radius / size',
+    'Qtiler2Hajk.wfs_dash': 'Line pattern',
+    'Qtiler2Hajk.wfs_rule': 'Rule',
+    'Qtiler2Hajk.wfs_move_up': 'Move up',
+    'Qtiler2Hajk.wfs_move_down': 'Move down',
+    'Qtiler2Hajk.wfs_delete': 'Delete',
+    'Qtiler2Hajk.wfs_edit_rule': 'Edit rule',
+    'Qtiler2Hajk.wfs_rule_editor_title': 'Edit rule style',
+    'Qtiler2Hajk.wfs_rule_editor_done': 'Done',
+    'Qtiler2Hajk.wfs_rule_default': 'Default rule',
+    'Qtiler2Hajk.wfs_edit_visual_style': 'Edit visual style',
+    'Qtiler2Hajk.wfs_rule_mode_note': 'Editing visual style for rule {rule}. Save to apply it to that rule only.',
+    'Qtiler2Hajk.wfs_filter': 'Filter',
+    'Qtiler2Hajk.wfs_attr': 'Attribute',
+    'Qtiler2Hajk.wfs_op': 'Operator',
+    'Qtiler2Hajk.wfs_value': 'Value',
+    'Qtiler2Hajk.wfs_value_placeholder_any': 'Write a value',
+    'Qtiler2Hajk.wfs_value_placeholder_suggested': 'Write a value or choose a suggestion',
+    'Qtiler2Hajk.wfs_value_help_manual': 'You can type a value manually even if the attribute has no detected values.',
+    'Qtiler2Hajk.wfs_value_help_suggested': 'Use an existing value or write a new one manually.',
+    'Qtiler2Hajk.wfs_value_help_pick_field': 'Select an attribute first to filter by a value.',
+    'Qtiler2Hajk.wfs_no_filter': '— No filter (default) —',
+    'Qtiler2Hajk.wfs_symbol': 'Symbol',
+    'Qtiler2Hajk.wfs_circle': 'Circle',
+    'Qtiler2Hajk.wfs_svg_icon': 'SVG icon',
+    'Qtiler2Hajk.wfs_no_fill': 'No fill (transparent)',
+    'Qtiler2Hajk.wfs_no_fill_only_stroke': 'No fill (transparent, stroke only)',
+    'Qtiler2Hajk.wfs_no_stroke': 'No stroke',
+    'Qtiler2Hajk.wfs_radius': 'Radius',
+    'Qtiler2Hajk.wfs_fill_color': 'Fill color',
+    'Qtiler2Hajk.wfs_fill_opacity': 'Fill opacity',
+    'Qtiler2Hajk.wfs_fill_pattern': 'Fill pattern',
+    'Qtiler2Hajk.wfs_fill_pattern_angle': 'Pattern angle',
+    'Qtiler2Hajk.wfs_fill_pattern_spacing': 'Pattern spacing',
+    'Qtiler2Hajk.wfs_fill_pattern_size': 'Dot size',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent': 'Transparent background',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent_help': 'Show only the lines or dots so layers below remain visible.',
+    'Qtiler2Hajk.wfs_fill_pattern_solid': 'Solid',
+    'Qtiler2Hajk.wfs_fill_pattern_slash': 'Slash',
+    'Qtiler2Hajk.wfs_fill_pattern_backslash': 'Backslash',
+    'Qtiler2Hajk.wfs_fill_pattern_horizontal': 'Horizontal lines',
+    'Qtiler2Hajk.wfs_fill_pattern_vertical': 'Vertical lines',
+    'Qtiler2Hajk.wfs_fill_pattern_dots': 'Dots',
+    'Qtiler2Hajk.wfs_fill_pattern_outline': 'Outline only',
+    'Qtiler2Hajk.wfs_stroke_color': 'Stroke color',
+    'Qtiler2Hajk.wfs_stroke_width': 'Stroke width',
+    'Qtiler2Hajk.wfs_stroke_opacity': 'Stroke opacity',
+    'Qtiler2Hajk.wfs_stroke_pattern': 'Stroke pattern',
+    'Qtiler2Hajk.wfs_pick_svg': 'Choose SVG…',
+    'Qtiler2Hajk.wfs_url': 'URL/path',
+    'Qtiler2Hajk.wfs_scale_field': 'Scale',
+    'Qtiler2Hajk.wfs_opacity': 'Opacity',
+    'Qtiler2Hajk.wfs_tint_color': 'Tint color',
+    'Qtiler2Hajk.wfs_enable_svg_tint': 'Enable SVG tinting',
+    'Qtiler2Hajk.wfs_color': 'Color',
+    'Qtiler2Hajk.wfs_width': 'Width',
+    'Qtiler2Hajk.wfs_pattern': 'Pattern',
+    'Qtiler2Hajk.wfs_solid': 'Solid',
+    'Qtiler2Hajk.wfs_dashed': 'Dashed',
+    'Qtiler2Hajk.wfs_dotted': 'Dotted',
+    'Qtiler2Hajk.wfs_dashdot': 'Dash-dot',
+    'Qtiler2Hajk.wfs_legend_label': 'Legend label',
+    'Qtiler2Hajk.wfs_visible_from': 'Visible from scale 1:',
+    'Qtiler2Hajk.wfs_visible_to': 'Visible up to scale 1:',
+    'Qtiler2Hajk.wfs_visible_from_tip': 'Minimum scale at which this symbol is visible (denominator, e.g. 1000)',
+    'Qtiler2Hajk.wfs_visible_to_tip': 'Maximum scale at which this symbol is visible (denominator, e.g. 50000)',
+    'Qtiler2Hajk.wfs_no_limit': 'no limit',
+    'Qtiler2Hajk.wfs_label': 'Label',
+    'Qtiler2Hajk.wfs_text_help': 'Text (use {{field}} to insert values)',
+    'Qtiler2Hajk.wfs_text_placeholder': 'e.g. {{name}} or fixed text',
+    'Qtiler2Hajk.wfs_insert_field': 'Insert field',
+    'Qtiler2Hajk.wfs_size': 'Size',
+    'Qtiler2Hajk.wfs_label_placement': 'Placement',
+    'Qtiler2Hajk.wfs_label_placement_point': 'Above (point)',
+    'Qtiler2Hajk.wfs_label_placement_line': 'Follow line',
+    'Qtiler2Hajk.wfs_label_offsetx': 'Offset X (px)',
+    'Qtiler2Hajk.wfs_label_offsety': 'Offset Y (px)',
+    'Qtiler2Hajk.wfs_label_from': 'Label from 1:',
+    'Qtiler2Hajk.wfs_label_to': 'Label up to 1:',
+    'Qtiler2Hajk.wfs_label_from_tip': 'Minimum scale at which the label is visible',
+    'Qtiler2Hajk.wfs_label_to_tip': 'Maximum scale at which the label is visible',
+    'Qtiler2Hajk.step_controls': '3. Map controls',
+    'Qtiler2Hajk.step_controls_help': 'Select the tools to show in the viewer. Click the gear icon next to a control to configure its options.',
+    'Qtiler2Hajk.cfg_btn_title': 'Configure options',
+    'Qtiler2Hajk.cfg_invalid_json': 'Invalid JSON',
+    'Qtiler2Hajk.opt_zoomOnStart': 'Zoom on start',
+    'Qtiler2Hajk.opt_isActive': 'Open by default',
+    'Qtiler2Hajk.opt_useGroupIndication': 'Group indication',
+    'Qtiler2Hajk.opt_expanded': 'Expanded',
+    'Qtiler2Hajk.opt_url': 'Service URL',
+    'Qtiler2Hajk.opt_limit': 'Result limit',
+    'Qtiler2Hajk.opt_hintText': 'Placeholder text',
+    'Qtiler2Hajk.opt_minLength': 'Min characters',
+    'Qtiler2Hajk.opt_tracking': 'Auto-track position',
+    'Qtiler2Hajk.opt_enableHighAccuracy': 'High accuracy',
+    'Qtiler2Hajk.opt_default': 'Default tool',
+    'Qtiler2Hajk.opt_tools': 'Tools (comma-separated)',
+    'Qtiler2Hajk.opt_title': 'Title',
+    'Qtiler2Hajk.opt_projections_json': 'Projections (JSON)',
+    'Qtiler2Hajk.opt_logo': 'Logo URL',
+    'Qtiler2Hajk.opt_northArrow': 'Show north arrow',
+    'Qtiler2Hajk.opt_scales': 'Scales (comma-separated)',
+    'Qtiler2Hajk.opt_attribution': 'Attribution text',
+    'Qtiler2Hajk.opt_buttonText': 'Button label',
+    'Qtiler2Hajk.opt_content': 'Content (HTML)',
+    'Qtiler2Hajk.wfs_style_yes': 'WFS Style',
+    'Qtiler2Hajk.wfs_style_no': 'Config. style',
+    'Qtiler2Hajk.wfs_saved': 'Saved.',
+    'Qtiler2Hajk.wfs_invalid_json': 'Invalid JSON: ',
+    'Qtiler2Hajk.wfs_invalid_json_apply': 'Could not apply JSON: ',
+    'Qtiler2Hajk.wfs_reset_confirm': 'The current style of the layer will be lost and the default basic style will be restored. Continue?',
+    'Qtiler2Hajk.zoom_warn': 'Warning: Min Zoom ({min}) is greater than Max Zoom ({max}). Min = farthest level (small), Max = closest level (large).',
+    'Qtiler2Hajk.fam_point': 'Point',
+    'Qtiler2Hajk.fam_line': 'Line',
+    'Qtiler2Hajk.fam_polygon': 'Polygon',
+    'Qtiler2Hajk.no_rules_yet': 'No rules yet.',
+    'Qtiler2Hajk.loading_style': 'Loading detected style from QGIS…',
+    'Qtiler2Hajk.install_Hajk': 'Install Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Uninstall Hajk',
+    'Qtiler2Hajk.attr_options_ph': 'One option per line',
+    'Qtiler2Hajk.attr_detect_from_style': 'Detect from style',
+    'Qtiler2Hajk.attr_detect_none': 'No == filter values found in style for "{attr}". Add rules with == filters in the style first.',
+    'Qtiler2Hajk.attr_detect_ok': 'Detected {n} values from style for "{attr}".',
+    'Qtiler2Hajk.attr_title_ph': 'Display title',
+    'Qtiler2Hajk.pub_groups_legend': 'Groups & visibility',
+    'Qtiler2Hajk.pub_groups_help': "Define groups (and subgroups) and assign each visible layer to the group where it appears in the viewer's tree.",
+    'Qtiler2Hajk.pub_groups_label': 'Groups',
+    'Qtiler2Hajk.pub_add_group': '+ Add group',
+    'Qtiler2Hajk.pub_layer_assign_label': 'Layers → group + initial visibility',
+    'Qtiler2Hajk.pub_layer_assign_help': 'Only layers checked in step 1 appear here.',
+    'Qtiler2Hajk.pub_no_groups': 'No custom groups. Layers will go to the default group.',
+    'Qtiler2Hajk.pub_no_parent': '(no parent)',
+    'Qtiler2Hajk.pub_group_name_ph': 'technical name',
+    'Qtiler2Hajk.pub_group_title_ph': 'visible title',
+    'Qtiler2Hajk.pub_assign_help': 'Check layers in step 1 to assign them.',
+    'Qtiler2Hajk.extra_layers_legend': 'Additional project layers',
+    'Qtiler2Hajk.extra_layers_help': 'Add WMS or WFS layers from other published QGIS projects.',
+    'Qtiler2Hajk.extra_layers_add': 'Add layers',
+    'Qtiler2Hajk.extra_layers_empty': 'No external layers added.',
+    'Qtiler2Hajk.extra_layers_remove': 'Remove',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Add layers from another project',
+    'Qtiler2Hajk.extra_layers_project': 'Project',
+    'Qtiler2Hajk.extra_layers_cancel': 'Cancel',
+    'Qtiler2Hajk.extra_layers_apply': 'Add selected layers',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Select a project',
+    'Qtiler2Hajk.extra_layers_current_project': 'The main project is already listed above. Pick a different project here.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'No layers available for this project.',
+    'Qtiler2Hajk.layer_generic': 'Layer',
+    'Qtiler2Hajk.pub_search_legend': 'Search options',
+    'Qtiler2Hajk.pub_search_hint_label': 'Suggested text',
+    'Qtiler2Hajk.pub_search_min_label': 'Minimum characters',
+    'Qtiler2Hajk.pub_search_limit_label': 'Max results',
+    'Qtiler2Hajk.pub_search_placeholder': 'Search…',
+    'Qtiler2Hajk.pub_search_sources_label': 'Cross-project search sources',
+    'Qtiler2Hajk.pub_search_sources_help': 'Add additional projects (and pick specific searchable layers) so the search box in the published map can find features from those projects too. The user must have access to each project for its results to appear.',
+    'Qtiler2Hajk.pub_search_source_add': 'Add project',
+    'Qtiler2Hajk.pub_search_source_pick_project': '— Select project —',
+    'Qtiler2Hajk.pub_search_source_layers': 'Layers',
+    'Qtiler2Hajk.pub_search_source_all_layers': 'All searchable layers',
+    'Qtiler2Hajk.pub_search_source_no_layers': 'No searchable layers configured for this project.',
+    'Qtiler2Hajk.pub_search_source_remove': 'Remove',
+    'Qtiler2Hajk.pub_search_source_current': 'Current project',
+    'Qtiler2Hajk.pub_search_no_projects': 'No projects are available. Check the server connection or add publishable projects.',
+    'Qtiler2Hajk.pub_edit_profile_title': 'Edit name, layers, backgrounds, groups and tools',
+    'Qtiler2Hajk.hiw.button': 'How it works & Security',
+    'Qtiler2Hajk.hiw.title': 'How Qtiler2Hajk works & security',
+    'Qtiler2Hajk.hiw.lead': 'Qtiler2Hajk embeds the Hajk web map viewer in Qtiler. It installs a selected GitHub release and lets administrators configure each published map graphically from QGIS.',
+    'Qtiler2Hajk.hiw.vs.title': 'Qrigo vs Qtiler2Hajk',
+    'Qtiler2Hajk.hiw.vs.1': 'Qrigo is for users who already run a standard Hajk installation on their own server: it only generates JSON snippets to paste into your existing Hajk index.json.',
+    'Qtiler2Hajk.hiw.vs.2': 'Qtiler2Hajk installs Hajk on top of Qtiler itself, with a graphical map editor backed by the QGIS library and Qtiler\'s cache and WMS/WFS layers — no separate Hajk server required.',
+    'Qtiler2Hajk.hiw.arch.title': '1. Architecture',
+    'Qtiler2Hajk.hiw.arch.1': 'Express plugin under plugins/Qtiler2Hajk/. The Hajk build is downloaded from GitHub and served at /plugins/Qtiler2Hajk/hajk.',
+    'Qtiler2Hajk.hiw.flow.title': '2. Step by step',
+    'Qtiler2Hajk.hiw.flow.1': 'Setup tab: pick a GitHub release tag and click Install Hajk.',
+    'Qtiler2Hajk.hiw.flow.2': 'Maps tab: select a project published in Qtiler, edit the map graphically (CRS, center, zoom, layers, backgrounds, tools) and publish it as an Hajk viewer.',
+    'Qtiler2Hajk.hiw.maps.title': '3. Maps & QGIS library',
+    'Qtiler2Hajk.hiw.maps.1': 'Maps are built directly from QGIS projects: layers, styles, scales and CRS come from the project on disk.',
+    'Qtiler2Hajk.hiw.maps.2': 'Default WMTS background invariants ensure every map has a working base layer, and vector layers that are not explicitly marked for WFS stay published as WMS layers with WMS legends or optional manual legend icons.',
+    'Qtiler2Hajk.hiw.wfs.title': '4. WFS edit & cache reuse',
+    'Qtiler2Hajk.hiw.wfs.1': 'Editable WFS layers reuse the Qtiler WFS endpoint, including multipart edits and edit-existing-feature-by-id. A layer is exposed as WFS only when it is explicitly enabled for WFS or editing.',
+    'Qtiler2Hajk.hiw.auth.title': '5. Authentication & visibility',
+    'Qtiler2Hajk.hiw.auth.2': 'Cookie sessions and ?api_key=/x-api-key headers are both supported for QGIS Desktop and external integrations when auth is enabled, while the same routes continue to work without auth dependencies in public-only mode.',
+    'Qtiler2Hajk.hiw.auth.3': 'Standalone-port environment precedence is honoured so the plugin behaves consistently behind IIS or NGINX reverse proxies, independent of whether auth is enabled.',
+    'Qtiler2Hajk.hiw.security.title': '6. Security & privacy',
+    'Qtiler2Hajk.hiw.security.1': 'Network calls are limited to GitHub during install and, when enabled, to local auth/ACL checks; there is no runtime telemetry and the base plugin does not require the separate QtilerAuth plugin to stay alive.',
+  },
+  es: {
+    'Qtiler2Hajk.title': 'Qtiler2Hajk',
+    'Qtiler2Hajk.subtitle': 'Instala Hajk desde GitHub, publica mapas QGIS visualmente y gestiona el acceso con o sin QtilerAuth.',
+    'Qtiler2Hajk.how_title': 'Cómo funciona Qtiler2Hajk',
+    'Qtiler2Hajk.how_intro': 'Qtiler2Hajk conecta Qtiler con Hajk y convierte proyectos QGIS en mapas web configurados desde una sola interfaz de administración.',
+    'Qtiler2Hajk.how_step_install': 'Instalar Hajk — elige una versión publicada en el repositorio oficial de GitHub. Qtiler descarga el build y lo sirve desde el propio plugin para que el visor quede dentro del mismo despliegue.',
+    'Qtiler2Hajk.how_step_publish': 'Publicar mapas — abre la pestaña Mapas, configura CRS, zoom, capas, fondos y herramientas, y guarda. Qtiler genera automáticamente la configuración de Hajk y mantiene las capas no WFS por la ruta correcta de WMS salvo que WFS o edición estén activados explícitamente.',
+    'Qtiler2Hajk.how_step_share': 'Comparte mapas: cada perfil publicado obtiene un enlace directo estable que también puede usar QtilerStories.',
+    'Qtiler2Hajk.how_step_brand': 'Personaliza el visor: sube un logotipo y configura capas, fondos, búsqueda, edición y controles de la barra.',
+    'Qtiler2Hajk.how_outro': 'Software libre bajo MPL-2.0. El plugin solo se comunica con GitHub durante la instalación; en tiempo de ejecución trabaja con QtilerAuth cuando existe y degrada de forma segura a acceso público cuando no, sin telemetría ni salida de datos a terceros.',
+    'Qtiler2Hajk.installation': 'Instalación',
+    'Qtiler2Hajk.github_repo': 'Repositorio GitHub',
+    'Qtiler2Hajk.version_tag': 'Versión',
+    'Qtiler2Hajk.refresh': '↻',
+    'Qtiler2Hajk.include_prerelease': 'Incluir pre-releases',
+    'Qtiler2Hajk.no_releases_found': '(no se encontraron releases)',
+    'Qtiler2Hajk.releases_error': '(error al obtener releases)',
+    'Qtiler2Hajk.install_Hajk': 'Instalar Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Desinstalar Hajk',
+    'Qtiler2Hajk.checking': 'Verificando…',
+    'Qtiler2Hajk.installed': 'Instalado',
+    'Qtiler2Hajk.not_installed': 'No instalado',
+    'Qtiler2Hajk.installed_at': 'Instalado el {date} · repo {repo} · versión {version}',
+    'Qtiler2Hajk.not_installed_hint': 'Hajk no está instalado. Ingresa el repo y la versión arriba, luego haz clic en Instalar.',
+    'Qtiler2Hajk.standalone_server': 'Servidor Hajk independiente',
+    'Qtiler2Hajk.Hajk_port': 'Puerto Hajk',
+    'Qtiler2Hajk.start_server': 'Iniciar servidor',
+    'Qtiler2Hajk.stop_server': 'Detener servidor',
+    'Qtiler2Hajk.open_Hajk': 'Abrir Hajk',
+    'Qtiler2Hajk.webmap_link': 'Abrir webmap',
+    'Qtiler2Hajk.running': 'Ejecutando',
+    'Qtiler2Hajk.stopped': 'Detenido',
+    'Qtiler2Hajk.server_running_at': 'Servidor ejecutando en puerto {port}',
+    'Qtiler2Hajk.server_stopped_hint': 'El servidor no está ejecutando. Define un puerto y haz clic en Iniciar.',
+    'Qtiler2Hajk.logo_section': 'Logo del webmap',
+    'Qtiler2Hajk.logo_desc': 'Sube un logo para el TopBar de Hajk. Formatos permitidos: PNG, JPG, SVG, WEBP.',
+    'Qtiler2Hajk.logo_file': 'Archivo de logo',
+    'Qtiler2Hajk.upload_logo': 'Subir logo',
+    'Qtiler2Hajk.remove_logo': 'Quitar logo',
+    'Qtiler2Hajk.no_logo': 'Sin logo',
+    'Qtiler2Hajk.logo_active': 'Activo',
+    'Qtiler2Hajk.logo_updated_at': 'Logo actualizado: {date}',
+    'Qtiler2Hajk.logo_select_file': 'Selecciona un archivo primero.',
+    'Qtiler2Hajk.legend_library_title': 'Iconos de leyenda',
+    'Qtiler2Hajk.legend_library_help': 'Sube PNG o SVG una vez. Quedan disponibles para todos los mapas publicados. Las imágenes raster se recortan a 24×24 para la leyenda de Hajk.',
+    'Qtiler2Hajk.legend_library_file': 'Archivo PNG o SVG',
+    'Qtiler2Hajk.legend_library_upload': 'Subir icono',
+    'Qtiler2Hajk.legend_library_delete': 'Eliminar',
+    'Qtiler2Hajk.legend_library_select_file': 'Selecciona primero un PNG o SVG.',
+    'Qtiler2Hajk.wms_legend_regen': 'Recrear thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail recreado para "{layer}".',
+    'Qtiler2Hajk.profiles_section': 'Mapas publicados',
+    'Qtiler2Hajk.profiles_desc': 'Gestiona perfiles generados y enlaces de lanzamiento para Hajk (webmap).',
+    'Qtiler2Hajk.publish_new': 'Nuevo mapa',
+    'Qtiler2Hajk.no_profiles': 'Aún no hay perfiles publicados. Haz clic en "Nuevo perfil" para crear uno.',
+    'Qtiler2Hajk.open_json': 'JSON',
+    'Qtiler2Hajk.open_Hajk_link': 'Abrir mapa',
+    'Qtiler2Hajk.edit_profile': 'Editar mapa',
+    'Qtiler2Hajk.duplicate': 'Duplicar',
+    'Qtiler2Hajk.duplicate_title': 'Duplicar webmap',
+    'Qtiler2Hajk.duplicate_help': 'Indica un nombre único para el nuevo webmap. El original se conservará sin cambios.',
+    'Qtiler2Hajk.duplicate_new_name': 'Nuevo nombre del webmap',
+    'Qtiler2Hajk.duplicate_btn': 'Duplicar',
+    'Qtiler2Hajk.duplicate_done': 'Webmap duplicado como «{id}».',
+    'Qtiler2Hajk.delete': 'Eliminar',
+    'Qtiler2Hajk.confirm_delete': '¿Eliminar perfil publicado de {id}?',
+    'Qtiler2Hajk.open_viewer': 'Galería de mapas publicados',
+    'Qtiler2Hajk.activity_log': 'Registro de actividad',
+    'Qtiler2Hajk.clear': 'Limpiar',
+    'Qtiler2Hajk.no_activity': 'Sin actividad aún.',
+    'Qtiler2Hajk.modal_title': 'Publicar proyecto en Hajk',
+    'Qtiler2Hajk.modal_title_edit': 'Editar perfil: {id}',
+    'Qtiler2Hajk.main_project': 'Proyecto principal',
+    'Qtiler2Hajk.project_layers': 'Capas del proyecto',
+    'Qtiler2Hajk.project_layers_help': 'Activa las capas para incluirlas en el mapa publicado. La opcion Visible al abrir controla si las capas incluidas aparecen al abrir el mapa. Las capas vectoriales pueden publicarse como WFS para habilitar la tabla de atributos y la edicion; si no se activa WFS, la capa se sirve como WMS con leyenda GetLegendGraphic o un icono manual opcional.',
+    'Qtiler2Hajk.layer_include': 'Incluir',
+    'Qtiler2Hajk.layer_initial_visibility': 'Visible al abrir',
+    'Qtiler2Hajk.layer_title': 'Titulo en el mapa',
+    'Qtiler2Hajk.layer_title_placeholder': 'Titulo visible (opcional)',
+    'Qtiler2Hajk.layer_include_help': 'Si está activado, esta capa se incluye en el mapa publicado.',
+    'Qtiler2Hajk.layer_initial_visibility_help': 'Si está activado, esta capa incluida se verá al abrir el mapa.',
+    'Qtiler2Hajk.wms_legend_auto': 'Leyenda WMS',
+    'Qtiler2Hajk.wms_legend_manual': 'Icono manual',
+    'Qtiler2Hajk.wms_legend_pick': 'Elegir SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Limpiar',
+    'Qtiler2Hajk.wms_legend_url': 'URL de leyenda o ruta SVG',
+    'Qtiler2Hajk.wms_legend_help': 'Las capas WMS usan GetLegendGraphic por defecto. Elige un SVG o pega una URL de imagen para reemplazar la leyenda.',
+    'Qtiler2Hajk.bg_project': 'Proyecto de fondo (opcional)',
+    'Qtiler2Hajk.bg_layers': 'Capas de fondo',
+    'Qtiler2Hajk.default_bg': 'Fondo por defecto',
+    'Qtiler2Hajk.default_bg_help': 'OSM y Sin fondo siempre disponibles. Elige uno como predeterminado.',
+    'Qtiler2Hajk.Hajk_features': 'Módulos de Hajk',
+    'Qtiler2Hajk.feat_search': 'Búsqueda',
+    'Qtiler2Hajk.feat_search_global': 'Búsqueda global',
+    'Qtiler2Hajk.feat_editing': 'Edición',
+    'Qtiler2Hajk.feat_identify': 'Identificar',
+    'Qtiler2Hajk.feat_layer_tree': 'LayerTree',
+    'Qtiler2Hajk.feat_legend': 'Leyenda',
+    'Qtiler2Hajk.feat_measurement': 'Medir',
+    'Qtiler2Hajk.feat_print': 'Imprimir',
+    'Qtiler2Hajk.feat_maptip': 'MapTip',
+    'Qtiler2Hajk.feat_share': 'Compartir',
+    'Qtiler2Hajk.feat_redlining': 'Anotaciones',
+    'Qtiler2Hajk.feat_bookmark': 'Marcadores',
+    'Qtiler2Hajk.feat_height_profile': 'Perfil de altura',
+    'Qtiler2Hajk.feat_view3d': 'Vista 3D',
+    'Qtiler2Hajk.feat_dxf_export': 'Exportación DXF',
+    'Qtiler2Hajk.feat_attribute_table': 'Tabla de atributos',
+    'Qtiler2Hajk.feat_routing': 'Rutas',
+    'Qtiler2Hajk.publish_now': 'Publicar',
+    'Qtiler2Hajk.preflight_btn': 'Comprobar mapa',
+    'Qtiler2Hajk.preflight_checking': 'Comprobando...',
+    'Qtiler2Hajk.preflight_ok': 'La comprobación pasó. Los proyectos, capas y fondos están disponibles.',
+    'Qtiler2Hajk.save_draft': 'Guardar borrador',
+    'Qtiler2Hajk.draft_saved': '✓ Borrador guardado',
+    'Qtiler2Hajk.draft_restore_msg': 'Existe un borrador guardado de este mapa (guardado {date}). ¿Restaurarlo y continuar donde lo dejaste?',
+    'Qtiler2Hajk.draft_restored': 'Borrador restaurado.',
+    'Qtiler2Hajk.draft_save_failed': 'No se pudo guardar el borrador: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'La búsqueda de Lantmäteriet devuelve datos DEMO: no hay clave de API configurada en el servidor (define LANTMATERI_API_KEY en .env).',
+    'Qtiler2Hajk.thumb_missing': 'Sin miniatura',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'Tienes cambios sin publicar en el editor de mapa. ¿Cerrar de todos modos y perderlos?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'SVG de QGIS',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Iconos subidos',
+    'Qtiler2Hajk.legend_upload_new': 'Subir nuevo…',
+    'Qtiler2Hajk.legend_pick_title': 'Elegir icono de leyenda',
+    'Qtiler2Hajk.legend_search_placeholder': 'Buscar iconos…',
+    'Qtiler2Hajk.legend_delete_in_use': 'Este icono lo usan: {layers}. ¿Eliminarlo de todos modos?',
+    'Qtiler2Hajk.legend_delete_confirm': '¿Eliminar este icono? Ya no estará disponible en la biblioteca.',
+    'Qtiler2Hajk.legend_current_map': 'mapa actual',
+    'Qtiler2Hajk.legend_library_empty': 'Todavía no hay iconos subidos.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Icono de leyenda subido.',
+    'Qtiler2Hajk.log_legend_deleted': 'Icono de leyenda eliminado.',
+    'Qtiler2Hajk.preview_btn': 'Vista previa',
+    'Qtiler2Hajk.cancel': 'Cancelar',
+    'Qtiler2Hajk.no_layers': 'No se encontraron capas.',
+    'Qtiler2Hajk.no_bg_available': 'Sin fondos disponibles.',
+    'Qtiler2Hajk.no_project_selected': 'Sin proyecto seleccionado.',
+    'Qtiler2Hajk.no_bg_selected': 'Sin proyecto de fondo seleccionado.',
+    'Qtiler2Hajk.optional_select': 'Opcional: selecciona otro proyecto primero.',
+    'Qtiler2Hajk.no_bg_option': 'Sin fondo',
+    'Qtiler2Hajk.osm_bg': 'Fondo OSM',
+    'Qtiler2Hajk.log_installed': 'Hajk instalado correctamente.',
+    'Qtiler2Hajk.log_uninstalled': 'Hajk desinstalado.',
+    'Qtiler2Hajk.log_server_started': 'Servidor iniciado en puerto {port}.',
+    'Qtiler2Hajk.log_server_stopped': 'Servidor detenido.',
+    'Qtiler2Hajk.log_logo_uploaded': 'Logo subido.',
+    'Qtiler2Hajk.log_logo_removed': 'Logo eliminado.',
+    'Qtiler2Hajk.log_published': 'Perfil "{id}" publicado.',
+    'Qtiler2Hajk.log_deleted': 'Perfil "{id}" eliminado.',
+    'Qtiler2Hajk.regen_thumb': 'Regenerar miniatura',
+    'Qtiler2Hajk.regen_thumb_title': 'Borra las miniaturas en caché del proyecto para que se regeneren la próxima vez.',
+    'Qtiler2Hajk.thumbnail_change': 'Cambiar miniatura',
+    'Qtiler2Hajk.thumbnail_setup_title': 'Miniaturas de mapas',
+    'Qtiler2Hajk.thumbnail_setup_help': 'Reemplaza la miniatura automática con una imagen propia. Volver a publicar conserva esta imagen; Regenerar miniatura vuelve al modo automático.',
+    'Qtiler2Hajk.thumbnail_setup_map': 'Mapa publicado',
+    'Qtiler2Hajk.thumbnail_setup_file': 'Imagen PNG, JPG o WEBP',
+    'Qtiler2Hajk.thumbnail_setup_upload': 'Subir miniatura',
+    'Qtiler2Hajk.log_thumb_regen': 'Caché de miniaturas vaciada para "{id}" ({n} archivos).',
+    'Qtiler2Hajk.log_error': 'Error: {msg}',
+    'Qtiler2Hajk.requires_install': 'Instala Hajk primero para usar esta sección.',
+    'Qtiler2Hajk.loading': 'Cargando...',
+    'Qtiler2Hajk.load_preview': 'Cargar vista previa',
+    'Qtiler2Hajk.open_in_new_tab': 'Abrir en pestaña nueva',
+    'Qtiler2Hajk.capture_view': 'Capturar vista (Centro y Zoom)',
+    'Qtiler2Hajk.clear_extent': 'Limpiar extent',
+    'Qtiler2Hajk.center_default_bg': 'Centrar en fondo predeterminado',
+    'Qtiler2Hajk.layer_select_all': 'Seleccionar todas',
+    'Qtiler2Hajk.layer_select_none': 'Seleccionar ninguna',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent limpiado.',
+    'Qtiler2Hajk.default_bg_centered': 'Mapa centrado en el fondo predeterminado.',
+    'Qtiler2Hajk.default_bg_center_failed': 'No se pudo centrar en el fondo predeterminado: {msg}',
+    'Qtiler2Hajk.fullscreen': 'Pantalla completa',
+    'Qtiler2Hajk.windowed': 'Ventana',
+    'Qtiler2Hajk.interactive_map': 'Mapa interactivo',
+    'Qtiler2Hajk.interactive_map_error': 'Error del mapa interactivo',
+    'Qtiler2Hajk.interactive_map_idle': 'Pulsa Cargar vista previa para cargar el mapa',
+    'Qtiler2Hajk.interactive_map_preparing': 'Preparando mapa interactivo…',
+    'Qtiler2Hajk.interactive_map_loading_layers': 'Cargando capas del mapa…',
+    'Qtiler2Hajk.interactive_map_iframe_error': 'No se pudo cargar el iframe del mapa interactivo.',
+    'Qtiler2Hajk.interactive_map_load_failed': 'No se pudo cargar el mapa.',
+    'Qtiler2Hajk.interactive_map_prepare_failed': 'No se pudo preparar la vista previa.',
+    'Qtiler2Hajk.select_main_project_first': 'Selecciona un proyecto principal primero.',
+    'Qtiler2Hajk.preview_loading_log': 'Cargando mapa preview…',
+    'Qtiler2Hajk.preview_ready_log': 'Mapa preview listo. Puedes capturar el extent.',
+    'Qtiler2Hajk.map_state_read_failed': 'No se pudo leer el estado del mapa: {msg}',
+    'Qtiler2Hajk.zoom_read_failed': 'No se pudo leer el zoom actual.',
+    'Qtiler2Hajk.summary_current_map': 'Mapa actual',
+    'Qtiler2Hajk.summary_name': 'Nombre',
+    'Qtiler2Hajk.summary_untitled': 'Mapa sin título',
+    'Qtiler2Hajk.summary_main_project': 'Proyecto principal',
+    'Qtiler2Hajk.summary_not_selected': 'No seleccionado',
+    'Qtiler2Hajk.summary_description': 'Descripción',
+    'Qtiler2Hajk.summary_no_description': 'Sin descripción',
+    'Qtiler2Hajk.summary_active_layers': 'Capas activas ({n})',
+    'Qtiler2Hajk.summary_no_active_layers': 'Todavía no hay capas activas seleccionadas.',
+    'Qtiler2Hajk.summary_backgrounds': 'Fondos',
+    'Qtiler2Hajk.summary_default': 'Por defecto',
+    'Qtiler2Hajk.summary_default_none': 'Sin fondo',
+    'Qtiler2Hajk.summary_no_background_layers': 'No hay capas de fondo seleccionadas.',
+    'Qtiler2Hajk.summary_preview_controls': 'Controles en la vista previa ({n})',
+    'Qtiler2Hajk.summary_no_active_controls': 'No hay controles activos configurados.',
+    'Qtiler2Hajk.searchable': 'buscable',
+    'Qtiler2Hajk.editable': 'editable',
+    'Qtiler2Hajk.layers_count': '{n} capas',
+    'Qtiler2Hajk.bg_count': '{n} fondos',
+    'Qtiler2Hajk.tab_setup': 'Configuración',
+    'Qtiler2Hajk.tab_maps': 'Mapas',
+    'Qtiler2Hajk.tab_log': 'Registro',
+    'Qtiler2Hajk.map_name': 'Nombre del mapa',
+    'Qtiler2Hajk.map_name_placeholder': 'Nombre único para este mapa',
+    'Qtiler2Hajk.map_description': 'Descripción',
+    'Qtiler2Hajk.map_desc_placeholder': 'Descripción opcional',
+    'Qtiler2Hajk.name_required': 'Se requiere un nombre.',
+    'Qtiler2Hajk.name_duplicate': 'Ya existe un mapa con este nombre.',
+    'Qtiler2Hajk.step_layers': '1. Capas',
+    'Qtiler2Hajk.step_backgrounds': '2. Mapas de fondo',
+    'Qtiler2Hajk.step_tools': '3. Herramientas',
+    'Qtiler2Hajk.step_controls_search': '3. Controles y búsqueda',
+    'Qtiler2Hajk.step_hajk_config': '4. Configuración de Hajk',
+    'Qtiler2Hajk.step_json_editor': '5. Editor JSON',
+    'Qtiler2Hajk.json_editor_help': 'Edita la configuración JSON completa del mapa. Los cambios se validan en tiempo real.',
+    'Qtiler2Hajk.json_load': 'Cargar configuración actual',
+    'Qtiler2Hajk.json_import': 'Importar JSON',
+    'Qtiler2Hajk.json_download': 'Descargar JSON',
+    'Qtiler2Hajk.json_format': 'Formatear JSON',
+    'Qtiler2Hajk.json_validate': 'Validar',
+    'Qtiler2Hajk.json_apply': 'Aplicar cambios',
+    'Qtiler2Hajk.json_clear_log': 'Limpiar registro',
+    'Qtiler2Hajk.json_editor_label': 'Configuración JSON del mapa',
+    'Qtiler2Hajk.json_log_label': 'Registro de validación y errores',
+    'Qtiler2Hajk.publish_editor_fixed_help': 'Editor fijo para crear y editar mapas sin desplazar la página.',
+    'Qtiler2Hajk.svg_picker_title': 'Seleccionar icono SVG (QGIS)',
+    'Qtiler2Hajk.default': 'Por defecto',
+    'Qtiler2Hajk.feat_search_desc': 'Búsqueda de texto completo en capas del mapa',
+    'Qtiler2Hajk.feat_search_global_desc': 'Activa coordenadas y Nominatim de OSM',
+    'Qtiler2Hajk.feat_search_help': 'La búsqueda local usa tus capas configuradas como buscables a través de /Qtiler2Hajk/search. La búsqueda global añade coordenadas y resultados de Nominatim.',
+    'Qtiler2Hajk.feat_identify_desc': 'Haz clic en el mapa para consultar atributos',
+    'Qtiler2Hajk.feat_layer_tree_desc': 'Mostrar/ocultar capas y grupos',
+    'Qtiler2Hajk.feat_legend_desc': 'Mostrar simbología y leyenda de capas',
+    'Qtiler2Hajk.feat_editing_desc': 'Crear, actualizar y eliminar elementos',
+    'Qtiler2Hajk.feat_print_desc': 'Exportar mapa a PDF con diseños de QGIS',
+    'Qtiler2Hajk.feat_maptip_desc': 'Información emergente al pasar el ratón',
+    'Qtiler2Hajk.feat_measurement_desc': 'Medir distancias y áreas en el mapa',
+    'Qtiler2Hajk.feat_share_desc': 'Compartir la vista actual del mapa por URL',
+    'Qtiler2Hajk.feat_redlining_desc': 'Dibujar formas temporales y anotaciones',
+    'Qtiler2Hajk.feat_bookmark_desc': 'Guardar y restaurar extensiones del mapa',
+    'Qtiler2Hajk.feat_height_profile_desc': 'Sección transversal de elevación a lo largo de un camino',
+    'Qtiler2Hajk.feat_view3d_desc': 'Activa el módulo View3D de Hajk para terreno y capas 3D',
+    'Qtiler2Hajk.feat_dxf_export_desc': 'Descargar capas como AutoCAD DXF',
+    'Qtiler2Hajk.feat_attribute_table_desc': 'Vista tabular de atributos de elementos',
+    'Qtiler2Hajk.feat_routing_desc': 'Calcular rutas entre puntos',
+    'Qtiler2Hajk.wfs_helper_title': 'Búsqueda y edición WFS',
+    'Qtiler2Hajk.wfs_search_helper': 'La búsqueda usa las capas buscables de Qtiler. Márcalas como buscables en QtilerAuth y añade aquí fuentes locales o de otros proyectos; los resultados respetan el acceso del proyecto.',
+    'Qtiler2Hajk.wfs_edit_helper': 'La edición requiere QtilerAuth activo, la capa permitida como editable en QtilerAuth, acceso de edición para el usuario y la capa publicada como WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk recibe los mismos metadatos WFS de Qtiler que Origo: atributos, campo geométrico, namespace y estilos.',
+    'Qtiler2Hajk.tool_config': 'Configuración',
+    'Qtiler2Hajk.cfg_share_url': 'URL del servicio de compartir',
+    'Qtiler2Hajk.cfg_share_url_ph': 'https://ejemplo.com/share',
+    'Qtiler2Hajk.cfg_routing_url': 'URL del servicio de rutas (OSRM/Valhalla)',
+    'Qtiler2Hajk.cfg_routing_url_ph': 'https://router.ejemplo.com/route',
+    'Qtiler2Hajk.cfg_elevation_url': 'URL del servicio de elevación',
+    'Qtiler2Hajk.cfg_elevation_url_ph': 'https://elevation.ejemplo.com',
+    'Qtiler2Hajk.cfg_dxf_url': 'URL del servicio de exportación DXF',
+    'Qtiler2Hajk.cfg_dxf_url_ph': 'https://ejemplo.com/dxf',
+    'Qtiler2Hajk.ctrl_home': 'Inicio (zoom a extensión)',
+    'Qtiler2Hajk.ctrl_zoom': 'Zoom (+/−)',
+    'Qtiler2Hajk.ctrl_rotate': 'Rotar mapa',
+    'Qtiler2Hajk.ctrl_fullscreen': 'Pantalla completa',
+    'Qtiler2Hajk.ctrl_geoposition': 'Mi posición (GPS)',
+    'Qtiler2Hajk.ctrl_mapmenu': 'Menú de capas',
+    'Qtiler2Hajk.ctrl_legend': 'Leyenda',
+    'Qtiler2Hajk.ctrl_search': 'Búsqueda (geocodificación)',
+    'Qtiler2Hajk.ctrl_editor': 'Editor de entidades (WFS)',
+    'Qtiler2Hajk.ctrl_draw': 'Dibujar (redlining)',
+    'Qtiler2Hajk.ctrl_measure': 'Medir distancias/áreas',
+    'Qtiler2Hajk.ctrl_position': 'Coordenadas del cursor',
+    'Qtiler2Hajk.ctrl_print': 'Imprimir',
+    'Qtiler2Hajk.ctrl_sharemap': 'Compartir mapa',
+    'Qtiler2Hajk.ctrl_progressbar': 'Barra de progreso',
+    'Qtiler2Hajk.ctrl_scaleline': 'Escala gráfica',
+    'Qtiler2Hajk.ctrl_attribution': 'Atribución',
+    'Qtiler2Hajk.ctrl_about': 'Acerca de',
+    'Qtiler2Hajk.ctrl_bookmarks': 'Marcadores',
+    'Qtiler2Hajk.ctrl_draganddrop': 'Arrastrar y soltar archivos',
+    'Qtiler2Hajk.ctrl_externalurl': 'Enlaces URL externos',
+    'Qtiler2Hajk.ctrl_link': 'Botón de enlace',
+    'Qtiler2Hajk.ctrl_splash': 'Diálogo de bienvenida',
+    'Qtiler2Hajk.ctrl_scale': 'Escala (texto)',
+    'Qtiler2Hajk.ctrl_scalepicker': 'Selector de escala',
+    'Qtiler2Hajk.ctrl_lantmateri': 'Búsqueda Lantmäteriet (Catastro y Direcciones)',
+    'Qtiler2Hajk.wfs_modal_title': 'Editor de estilo vectorial',
+    'Qtiler2Hajk.wfs_layer': 'Capa',
+    'Qtiler2Hajk.wfs_tab_rules': 'Diseño avanzado',
+    'Qtiler2Hajk.wfs_tab_designer': 'Diseño básico',
+    'Qtiler2Hajk.wfs_tab_json': 'Editar JSON avanzado',
+    'Qtiler2Hajk.wfs_tab_attributes': 'Atributos (Infoclick)',
+    'Qtiler2Hajk.wfs_designer_header': 'Ajuste visual rápido',
+    'Qtiler2Hajk.wfs_designer_help': 'La vista previa queda a la derecha. A la izquierda ajustas relleno, patrón y borde desde una caja más cómoda.',
+    'Qtiler2Hajk.wfs_group_geometry': 'Geometría',
+    'Qtiler2Hajk.wfs_group_fill': 'Relleno',
+    'Qtiler2Hajk.wfs_group_pattern': 'Patrón',
+    'Qtiler2Hajk.wfs_group_stroke': 'Borde y línea',
+    'Qtiler2Hajk.wfs_reset': '↺ Restablecer estilo básico',
+    'Qtiler2Hajk.wfs_cancel': 'Cancelar',
+    'Qtiler2Hajk.wfs_save': 'Guardar estilo',
+    'Qtiler2Hajk.wfs_rules_header': 'Reglas y filtros',
+    'Qtiler2Hajk.wfs_copy_rules': '-- Copiar reglas de capa --',
+    'Qtiler2Hajk.wfs_copy_attrs': '-- Copiar atributos de capa --',
+    'Qtiler2Hajk.wfs_add_rule': '+ Añadir regla',
+    'Qtiler2Hajk.wfs_rules_help': 'Cada regla se evalúa por orden. Si quieres una "por defecto", deja el filtro vacío en la última.',
+    'Qtiler2Hajk.wfs_attrs_header': 'Atributos del Popup (Infoclick)',
+    'Qtiler2Hajk.wfs_add_attr': '+ Añadir atributo',
+    'Qtiler2Hajk.wfs_add_html': '+ Añadir HTML',
+    'Qtiler2Hajk.wfs_attrs_help': 'Define los atributos a mostrar. Si no llenas nada, se muestran todos.',
+    'Qtiler2Hajk.wfs_json_label': 'JSON completo de la capa (configuración + estilo)',
+    'Qtiler2Hajk.wfs_json_help': 'Edita aquí el objeto completo: name, geometryType, wfsStyle, searchable, etc.',
+    'Qtiler2Hajk.wfs_copy_layer': '-- Copiar de capa --',
+    'Qtiler2Hajk.wfs_export_json': 'Exportar JSON',
+    'Qtiler2Hajk.wfs_import_json': 'Importar JSON',
+    'Qtiler2Hajk.wfs_apply_json': 'Aplicar JSON',
+    'Qtiler2Hajk.wfs_format_json': 'Formatear JSON',
+    'Qtiler2Hajk.wfs_preview': 'Vista previa',
+    'Qtiler2Hajk.wfs_preview_help': 'La vista previa se actualiza en vivo mientras cambias color, grosor, opacidad y símbolo.',
+    'Qtiler2Hajk.wfs_square': 'Cuadrado',
+    'Qtiler2Hajk.wfs_triangle': 'Triángulo',
+    'Qtiler2Hajk.wfs_star': 'Estrella',
+    'Qtiler2Hajk.wfs_radius_size': 'Radio / tamaño',
+    'Qtiler2Hajk.wfs_dash': 'Patrón de línea',
+    'Qtiler2Hajk.wfs_rule': 'Regla',
+    'Qtiler2Hajk.wfs_move_up': 'Subir',
+    'Qtiler2Hajk.wfs_move_down': 'Bajar',
+    'Qtiler2Hajk.wfs_delete': 'Eliminar',
+    'Qtiler2Hajk.wfs_edit_rule': 'Editar regla',
+    'Qtiler2Hajk.wfs_rule_editor_title': 'Editar estilo de regla',
+    'Qtiler2Hajk.wfs_rule_editor_done': 'Listo',
+    'Qtiler2Hajk.wfs_rule_default': 'Regla por defecto',
+    'Qtiler2Hajk.wfs_edit_visual_style': 'Editar estilo visual',
+    'Qtiler2Hajk.wfs_rule_mode_note': 'Estás editando la apariencia visual de la regla {rule}. Al guardar se aplica solo a esa regla.',
+    'Qtiler2Hajk.wfs_filter': 'Filtro',
+    'Qtiler2Hajk.wfs_attr': 'Atributo',
+    'Qtiler2Hajk.wfs_op': 'Operador',
+    'Qtiler2Hajk.wfs_value': 'Valor',
+    'Qtiler2Hajk.wfs_value_placeholder_any': 'Escribe un valor',
+    'Qtiler2Hajk.wfs_value_placeholder_suggested': 'Escribe un valor o elige una sugerencia',
+    'Qtiler2Hajk.wfs_value_help_manual': 'Puedes escribir un valor manualmente aunque el atributo no tenga valores detectados.',
+    'Qtiler2Hajk.wfs_value_help_suggested': 'Usa un valor existente o escribe uno nuevo manualmente.',
+    'Qtiler2Hajk.wfs_value_help_pick_field': 'Selecciona primero un atributo para filtrar por valor.',
+    'Qtiler2Hajk.wfs_no_filter': '— Sin filtro (por defecto) —',
+    'Qtiler2Hajk.wfs_symbol': 'Símbolo',
+    'Qtiler2Hajk.wfs_circle': 'Círculo',
+    'Qtiler2Hajk.wfs_svg_icon': 'Icono SVG',
+    'Qtiler2Hajk.wfs_no_fill': 'Sin relleno (transparente)',
+    'Qtiler2Hajk.wfs_no_fill_only_stroke': 'Sin relleno (transparente, solo borde)',
+    'Qtiler2Hajk.wfs_no_stroke': 'Sin borde',
+    'Qtiler2Hajk.wfs_radius': 'Radio',
+    'Qtiler2Hajk.wfs_fill_color': 'Color de relleno',
+    'Qtiler2Hajk.wfs_fill_opacity': 'Opacidad relleno',
+    'Qtiler2Hajk.wfs_fill_pattern': 'Patrón de relleno',
+    'Qtiler2Hajk.wfs_fill_pattern_angle': 'Ángulo del patrón',
+    'Qtiler2Hajk.wfs_fill_pattern_spacing': 'Separación del patrón',
+    'Qtiler2Hajk.wfs_fill_pattern_size': 'Tamaño de punto',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent': 'Fondo transparente',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent_help': 'Muestra solo las rayas o puntos para poder ver capas debajo.',
+    'Qtiler2Hajk.wfs_fill_pattern_solid': 'Sólido',
+    'Qtiler2Hajk.wfs_fill_pattern_slash': 'Slash',
+    'Qtiler2Hajk.wfs_fill_pattern_backslash': 'Backslash',
+    'Qtiler2Hajk.wfs_fill_pattern_horizontal': 'Líneas horizontales',
+    'Qtiler2Hajk.wfs_fill_pattern_vertical': 'Líneas verticales',
+    'Qtiler2Hajk.wfs_fill_pattern_dots': 'Puntos',
+    'Qtiler2Hajk.wfs_fill_pattern_outline': 'Solo borde',
+    'Qtiler2Hajk.wfs_stroke_color': 'Color del borde',
+    'Qtiler2Hajk.wfs_stroke_width': 'Grosor borde',
+    'Qtiler2Hajk.wfs_stroke_opacity': 'Opacidad borde',
+    'Qtiler2Hajk.wfs_stroke_pattern': 'Patrón borde',
+    'Qtiler2Hajk.wfs_pick_svg': 'Elegir SVG…',
+    'Qtiler2Hajk.wfs_url': 'URL/ruta',
+    'Qtiler2Hajk.wfs_scale_field': 'Escala',
+    'Qtiler2Hajk.wfs_opacity': 'Opacidad',
+    'Qtiler2Hajk.wfs_tint_color': 'Teñir color',
+    'Qtiler2Hajk.wfs_enable_svg_tint': 'Activar tintado de SVG',
+    'Qtiler2Hajk.wfs_color': 'Color',
+    'Qtiler2Hajk.wfs_width': 'Grosor',
+    'Qtiler2Hajk.wfs_pattern': 'Patrón',
+    'Qtiler2Hajk.wfs_solid': 'Sólida',
+    'Qtiler2Hajk.wfs_dashed': 'Discontinua',
+    'Qtiler2Hajk.wfs_dotted': 'Punteada',
+    'Qtiler2Hajk.wfs_dashdot': 'Punto y raya',
+    'Qtiler2Hajk.wfs_legend_label': 'Etiqueta de leyenda',
+    'Qtiler2Hajk.wfs_visible_from': 'Visible desde escala 1:',
+    'Qtiler2Hajk.wfs_visible_to': 'Visible hasta escala 1:',
+    'Qtiler2Hajk.wfs_visible_from_tip': 'Escala mínima a la que se ve este símbolo (denominador, ej: 1000)',
+    'Qtiler2Hajk.wfs_visible_to_tip': 'Escala máxima a la que se ve este símbolo (denominador, ej: 50000)',
+    'Qtiler2Hajk.wfs_no_limit': 'sin límite',
+    'Qtiler2Hajk.wfs_label': 'Etiqueta',
+    'Qtiler2Hajk.wfs_text_help': 'Texto (usa {{campo}} para insertar valores)',
+    'Qtiler2Hajk.wfs_text_placeholder': 'Ej: {{name}} o texto fijo',
+    'Qtiler2Hajk.wfs_insert_field': 'Insertar campo',
+    'Qtiler2Hajk.wfs_size': 'Tamaño',
+    'Qtiler2Hajk.wfs_label_placement': 'Colocación',
+    'Qtiler2Hajk.wfs_label_placement_point': 'Sobre el punto',
+    'Qtiler2Hajk.wfs_label_placement_line': 'Seguir la línea',
+    'Qtiler2Hajk.wfs_label_offsetx': 'Desplaz. X (px)',
+    'Qtiler2Hajk.wfs_label_offsety': 'Desplaz. Y (px)',
+    'Qtiler2Hajk.wfs_label_from': 'Etiqueta desde 1:',
+    'Qtiler2Hajk.wfs_label_to': 'Etiqueta hasta 1:',
+    'Qtiler2Hajk.wfs_label_from_tip': 'Escala mínima a la que se ve la etiqueta',
+    'Qtiler2Hajk.wfs_label_to_tip': 'Escala máxima a la que se ve la etiqueta',
+    'Qtiler2Hajk.step_controls': '3. Controles del mapa',
+    'Qtiler2Hajk.step_controls_help': 'Selecciona las herramientas que aparecerán en el visor. Pulsa el icono de engranaje junto a un control para configurar sus opciones.',
+    'Qtiler2Hajk.cfg_btn_title': 'Configurar opciones',
+    'Qtiler2Hajk.cfg_invalid_json': 'JSON inválido',
+    'Qtiler2Hajk.opt_zoomOnStart': 'Zoom al iniciar',
+    'Qtiler2Hajk.opt_isActive': 'Abierto por defecto',
+    'Qtiler2Hajk.opt_useGroupIndication': 'Indicación de grupo',
+    'Qtiler2Hajk.opt_expanded': 'Expandido',
+    'Qtiler2Hajk.opt_url': 'URL del servicio',
+    'Qtiler2Hajk.opt_limit': 'Límite de resultados',
+    'Qtiler2Hajk.opt_hintText': 'Texto de ayuda',
+    'Qtiler2Hajk.opt_minLength': 'Mín. caracteres',
+    'Qtiler2Hajk.opt_tracking': 'Seguimiento automático',
+    'Qtiler2Hajk.opt_enableHighAccuracy': 'Alta precisión',
+    'Qtiler2Hajk.opt_default': 'Herramienta por defecto',
+    'Qtiler2Hajk.opt_tools': 'Herramientas (separadas por coma)',
+    'Qtiler2Hajk.opt_title': 'Título',
+    'Qtiler2Hajk.opt_projections_json': 'Proyecciones (JSON)',
+    'Qtiler2Hajk.opt_logo': 'URL del logo',
+    'Qtiler2Hajk.opt_northArrow': 'Mostrar flecha norte',
+    'Qtiler2Hajk.opt_scales': 'Escalas (separadas por coma)',
+    'Qtiler2Hajk.opt_attribution': 'Texto de atribución',
+    'Qtiler2Hajk.opt_buttonText': 'Etiqueta del botón',
+    'Qtiler2Hajk.opt_content': 'Contenido (HTML)',
+    'Qtiler2Hajk.wfs_style_yes': 'Estilo WFS',
+    'Qtiler2Hajk.wfs_style_no': 'Config. estilo',
+    'Qtiler2Hajk.wfs_saved': 'Guardado.',
+    'Qtiler2Hajk.wfs_invalid_json': 'JSON inválido: ',
+    'Qtiler2Hajk.wfs_invalid_json_apply': 'No se pudo aplicar el JSON: ',
+    'Qtiler2Hajk.wfs_reset_confirm': 'Se perderá el estilo actual de la capa y se restaurará el estilo básico por defecto. ¿Continuar?',
+    'Qtiler2Hajk.zoom_warn': 'Atención: Min Zoom ({min}) es mayor que Max Zoom ({max}). Min = nivel más alejado (chico), Max = nivel más cercano (grande).',
+    'Qtiler2Hajk.fam_point': 'Punto',
+    'Qtiler2Hajk.fam_line': 'Línea',
+    'Qtiler2Hajk.fam_polygon': 'Polígono',
+    'Qtiler2Hajk.no_rules_yet': 'Sin reglas todavía.',
+    'Qtiler2Hajk.loading_style': 'Cargando estilo detectado desde QGIS…',
+    'Qtiler2Hajk.install_Hajk': 'Instalar Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Desinstalar Hajk',
+    'Qtiler2Hajk.attr_options_ph': 'Una opción por línea',
+    'Qtiler2Hajk.attr_detect_from_style': 'Detectar del estilo',
+    'Qtiler2Hajk.attr_detect_none': 'No se encontraron valores con filtro == en el estilo para "{attr}". Agrega reglas con filtros == en el estilo primero.',
+    'Qtiler2Hajk.attr_detect_ok': 'Detectados {n} valores del estilo para "{attr}".',
+    'Qtiler2Hajk.attr_title_ph': 'Título a mostrar',
+    'Qtiler2Hajk.pub_groups_legend': 'Grupos y visibilidad',
+    'Qtiler2Hajk.pub_groups_help': 'Define grupos (y subgrupos) y asigna cada capa visible al grupo donde aparecerá en el árbol del visor.',
+    'Qtiler2Hajk.pub_groups_label': 'Grupos',
+    'Qtiler2Hajk.pub_add_group': '+ Añadir grupo',
+    'Qtiler2Hajk.pub_layer_assign_label': 'Capas → grupo + visibilidad inicial',
+    'Qtiler2Hajk.pub_layer_assign_help': 'Solo aparecen las capas marcadas en el paso 1.',
+    'Qtiler2Hajk.pub_no_groups': 'No hay grupos personalizados. Las capas irán al grupo por defecto.',
+    'Qtiler2Hajk.pub_no_parent': '(sin padre)',
+    'Qtiler2Hajk.pub_group_name_ph': 'nombre técnico',
+    'Qtiler2Hajk.pub_group_title_ph': 'título visible',
+    'Qtiler2Hajk.pub_assign_help': 'Marca capas en el paso 1 para asignarlas.',
+    'Qtiler2Hajk.extra_layers_legend': 'Capas adicionales de proyectos',
+    'Qtiler2Hajk.extra_layers_help': 'Añade capas WMS o WFS desde otros proyectos QGIS publicados.',
+    'Qtiler2Hajk.extra_layers_add': 'Añadir capas',
+    'Qtiler2Hajk.extra_layers_empty': 'No se han añadido capas externas.',
+    'Qtiler2Hajk.extra_layers_remove': 'Quitar',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Añadir capas desde otro proyecto',
+    'Qtiler2Hajk.extra_layers_project': 'Proyecto',
+    'Qtiler2Hajk.extra_layers_cancel': 'Cancelar',
+    'Qtiler2Hajk.extra_layers_apply': 'Añadir capas seleccionadas',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Selecciona un proyecto',
+    'Qtiler2Hajk.extra_layers_current_project': 'El proyecto principal ya aparece arriba. Elige aquí otro proyecto.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'No hay capas disponibles para este proyecto.',
+    'Qtiler2Hajk.layer_generic': 'Capa',
+    'Qtiler2Hajk.pub_search_legend': 'Opciones de Búsqueda',
+    'Qtiler2Hajk.pub_search_hint_label': 'Texto sugerido',
+    'Qtiler2Hajk.pub_search_min_label': 'Caracteres mínimos',
+    'Qtiler2Hajk.pub_search_limit_label': 'Resultados máx.',
+    'Qtiler2Hajk.pub_search_placeholder': 'Buscar…',
+    'Qtiler2Hajk.pub_search_sources_label': 'Fuentes de búsqueda entre proyectos',
+    'Qtiler2Hajk.pub_search_sources_help': 'Agrega proyectos adicionales (y elige capas específicas) para que el buscador del mapa publicado encuentre también entidades de esos proyectos. El usuario debe tener acceso a cada proyecto para ver sus resultados.',
+    'Qtiler2Hajk.pub_search_source_add': 'Añadir proyecto',
+    'Qtiler2Hajk.pub_search_source_pick_project': '— Selecciona proyecto —',
+    'Qtiler2Hajk.pub_search_source_layers': 'Capas',
+    'Qtiler2Hajk.pub_search_source_all_layers': 'Todas las capas buscables',
+    'Qtiler2Hajk.pub_search_source_no_layers': 'No hay capas buscables configuradas para este proyecto.',
+    'Qtiler2Hajk.pub_search_source_remove': 'Quitar',
+    'Qtiler2Hajk.pub_search_source_current': 'Proyecto actual',
+    'Qtiler2Hajk.pub_search_no_projects': 'No hay proyectos disponibles. Verifica la conexión con el servidor o añade proyectos publicables.',
+    'Qtiler2Hajk.pub_edit_profile_title': 'Editar nombre, capas, fondos, grupos y herramientas',
+    'Qtiler2Hajk.hiw.button': 'Cómo funciona y seguridad',
+    'Qtiler2Hajk.hiw.title': 'Cómo funciona Qtiler2Hajk y por qué es seguro',
+    'Qtiler2Hajk.hiw.lead': 'Qtiler2Hajk integra el visor web Hajk en Qtiler. Instala una versión seleccionada desde GitHub y permite configurar gráficamente cada mapa publicado desde QGIS.',
+    'Qtiler2Hajk.hiw.vs.title': 'Qrigo vs Qtiler2Hajk',
+    'Qtiler2Hajk.hiw.vs.1': 'Qrigo es para usuarios que ya tienen Hajk instalado de forma estándar en su propio servidor: solo genera snippets JSON para pegar en el index.json de tu Hajk existente.',
+    'Qtiler2Hajk.hiw.vs.2': 'Qtiler2Hajk instala Hajk sobre Qtiler, con un editor gráfico de mapas respaldado por la biblioteca de QGIS y por el caché y las capas WMS/WFS de Qtiler — sin necesidad de un servidor Hajk aparte.',
+    'Qtiler2Hajk.hiw.arch.title': '1. Arquitectura',
+    'Qtiler2Hajk.hiw.arch.1': 'Plugin Express en plugins/Qtiler2Hajk/. El build de Hajk se descarga de GitHub y se sirve en /plugins/Qtiler2Hajk/hajk.',
+    'Qtiler2Hajk.hiw.flow.title': '2. Paso a paso',
+    'Qtiler2Hajk.hiw.flow.1': 'Pestaña Setup: elige un tag de release de GitHub y pulsa Instalar Hajk.',
+    'Qtiler2Hajk.hiw.flow.2': 'Pestaña Mapas: selecciona un proyecto publicado en Qtiler, edita el mapa gráficamente (CRS, centro, zoom, capas, fondos, herramientas) y publícalo como visor Hajk.',
+    'Qtiler2Hajk.hiw.maps.title': '3. Mapas y biblioteca QGIS',
+    'Qtiler2Hajk.hiw.maps.1': 'Los mapas se construyen directamente desde proyectos QGIS: capas, estilos, escalas y CRS provienen del proyecto en disco.',
+    'Qtiler2Hajk.hiw.maps.2': 'Se garantizan invariantes de fondo WMTS por defecto para que cada mapa tenga una capa base válida, y las capas vectoriales que no estén marcadas explícitamente como WFS siguen publicándose como WMS con su presentación tipo thumbnail.',
+    'Qtiler2Hajk.hiw.wfs.title': '4. Edición WFS y reuso de caché',
+    'Qtiler2Hajk.hiw.wfs.1': 'Las capas WFS editables reutilizan el endpoint WFS de Qtiler, incluyendo edición multipart y edición por id de feature existente. Una capa se expone como WFS solo cuando está marcada explícitamente para WFS o edición.',
+    'Qtiler2Hajk.hiw.auth.title': '5. Autenticación y visibilidad',
+    'Qtiler2Hajk.hiw.auth.2': 'Se admiten sesiones por cookie y cabeceras ?api_key=/x-api-key para QGIS Desktop e integraciones externas cuando la auth está activa, pero las mismas rutas siguen funcionando sin depender de auth en modo totalmente público.',
+    'Qtiler2Hajk.hiw.auth.3': 'Se respeta la precedencia de variables de entorno del puerto standalone para que el plugin se comporte igual tras IIS o NGINX, con o sin autenticación activa.',
+    'Qtiler2Hajk.hiw.security.title': '6. Seguridad y privacidad',
+    'Qtiler2Hajk.hiw.security.1': 'Las llamadas de red se limitan a GitHub al instalar y, cuando existe, a comprobaciones locales de auth/ACL; no hay telemetría en tiempo de ejecución y el plugin base no necesita el plugin separado QtilerAuth para seguir vivo.',
+  },
+  sv: {
+    'Qtiler2Hajk.title': 'Hajk-brygga för Qtiler',
+    'Qtiler2Hajk.subtitle': 'Installera Hajk från GitHub, publicera QGIS-kartor visuellt och hantera åtkomst med eller utan QtilerAuth.',
+    'Qtiler2Hajk.how_title': 'Så fungerar Qtiler2Hajk',
+    'Qtiler2Hajk.how_intro': 'Qtiler2Hajk kopplar Qtiler till Hajk och omvandlar QGIS-projekt till konfigurerade webbkartor från ett administrationsgränssnitt.',
+    'Qtiler2Hajk.how_step_install': 'Installera Hajk — välj en releasetagg från det officiella GitHub-arkivet. Qtiler laddar ner bygget och serverar det från själva pluginet så att visaren stannar i samma driftsättning.',
+    'Qtiler2Hajk.how_step_publish': 'Publicera kartor — öppna fliken Kartor, konfigurera CRS, zoom, lager, bakgrunder och verktyg och spara. Qtiler genererar Hajk-konfigurationen automatiskt och håller lager som inte är WFS på rätt WMS-väg om inte WFS eller redigering uttryckligen aktiverats.',
+    'Qtiler2Hajk.how_step_share': 'Dela kartor: varje publicerad profil får en stabil direktlänk som också kan användas av QtilerStories.',
+    'Qtiler2Hajk.how_step_brand': 'Varumärkesanpassa visaren: ladda upp en logotyp och konfigurera lager, bakgrunder, sökning, redigering och verktygsfält.',
+    'Qtiler2Hajk.how_outro': 'Öppen källkod under MPL-2.0. Pluginet kommunicerar bara med GitHub vid installation; under drift använder det QtilerAuth när det finns och degraderar säkert till publik åtkomst när det inte gör det, utan telemetri eller extern dataexport.',
+    'Qtiler2Hajk.installation': 'Installation',
+    'Qtiler2Hajk.github_repo': 'GitHub-repo',
+    'Qtiler2Hajk.version_tag': 'Version',
+    'Qtiler2Hajk.refresh': '↻',
+    'Qtiler2Hajk.include_prerelease': 'Inkludera pre-releases',
+    'Qtiler2Hajk.no_releases_found': '(inga releases hittades)',
+    'Qtiler2Hajk.releases_error': '(fel vid hämtning av releases)',
+    'Qtiler2Hajk.install_Hajk': 'Installera Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Avinstallera Hajk',
+    'Qtiler2Hajk.checking': 'Kontrollerar…',
+    'Qtiler2Hajk.installed': 'Installerad',
+    'Qtiler2Hajk.not_installed': 'Ej installerad',
+    'Qtiler2Hajk.installed_at': 'Installerad {date} · repo {repo} · version {version}',
+    'Qtiler2Hajk.not_installed_hint': 'Hajk är inte installerad. Ange repo och version ovan, klicka sedan på Installera.',
+    'Qtiler2Hajk.standalone_server': 'Fristående Hajk-server',
+    'Qtiler2Hajk.Hajk_port': 'Hajk-port',
+    'Qtiler2Hajk.start_server': 'Starta server',
+    'Qtiler2Hajk.stop_server': 'Stoppa server',
+    'Qtiler2Hajk.open_Hajk': 'Öppna Hajk',
+    'Qtiler2Hajk.webmap_link': 'Öppna webbkarta',
+    'Qtiler2Hajk.running': 'Körs',
+    'Qtiler2Hajk.stopped': 'Stoppad',
+    'Qtiler2Hajk.server_running_at': 'Server körs på port {port}',
+    'Qtiler2Hajk.server_stopped_hint': 'Server körs inte. Ange port och klicka Starta.',
+    'Qtiler2Hajk.logo_section': 'Webbkart-logotyp',
+    'Qtiler2Hajk.logo_desc': 'Ladda upp en logotyp för Hajk top bar. Tillåtna format: PNG, JPG, SVG, WEBP.',
+    'Qtiler2Hajk.logo_file': 'Logotypfil',
+    'Qtiler2Hajk.upload_logo': 'Ladda upp logotyp',
+    'Qtiler2Hajk.remove_logo': 'Ta bort logotyp',
+    'Qtiler2Hajk.no_logo': 'Ingen logotyp',
+    'Qtiler2Hajk.logo_active': 'Aktiv',
+    'Qtiler2Hajk.logo_updated_at': 'Logotyp uppdaterad: {date}',
+    'Qtiler2Hajk.logo_select_file': 'Välj en fil först.',
+    'Qtiler2Hajk.legend_library_title': 'Legendikoner',
+    'Qtiler2Hajk.legend_library_help': 'Ladda upp PNG eller SVG en gång. De finns sedan tillgängliga för alla publicerade kartor. Rasterbilder beskärs till 24×24 för Hajks legend.',
+    'Qtiler2Hajk.legend_library_file': 'PNG- eller SVG-fil',
+    'Qtiler2Hajk.legend_library_upload': 'Ladda upp ikon',
+    'Qtiler2Hajk.legend_library_delete': 'Ta bort',
+    'Qtiler2Hajk.legend_library_select_file': 'Välj först en PNG- eller SVG-fil.',
+    'Qtiler2Hajk.wms_legend_regen': 'Återskapa thumbnail',
+    'Qtiler2Hajk.log_layer_thumb_regen': 'Thumbnail återskapad för "{layer}".',
+    'Qtiler2Hajk.profiles_section': 'Publicerade kartor',
+    'Qtiler2Hajk.profiles_desc': 'Hantera genererade profiler och startlänkar för Hajk (webmap).',
+    'Qtiler2Hajk.publish_new': 'Ny karta',
+    'Qtiler2Hajk.no_profiles': 'Inga publicerade profiler ännu. Klicka "Ny profil" för att skapa en.',
+    'Qtiler2Hajk.open_json': 'JSON',
+    'Qtiler2Hajk.open_Hajk_link': 'Öppna karta',
+    'Qtiler2Hajk.edit_profile': 'Redigera karta',
+    'Qtiler2Hajk.duplicate': 'Duplicera',
+    'Qtiler2Hajk.duplicate_title': 'Duplicera webbkarta',
+    'Qtiler2Hajk.duplicate_help': 'Ange ett unikt namn för den nya webbkartan. Originalet behålls oförändrat.',
+    'Qtiler2Hajk.duplicate_new_name': 'Nytt namn på webbkartan',
+    'Qtiler2Hajk.duplicate_btn': 'Duplicera',
+    'Qtiler2Hajk.duplicate_done': 'Webbkartan duplicerad som ”{id}”.',
+    'Qtiler2Hajk.delete': 'Radera',
+    'Qtiler2Hajk.confirm_delete': 'Radera publicerad profil för {id}?',
+    'Qtiler2Hajk.open_viewer': 'Galleri för publicerade kartor',
+    'Qtiler2Hajk.activity_log': 'Aktivitetslogg',
+    'Qtiler2Hajk.clear': 'Rensa',
+    'Qtiler2Hajk.no_activity': 'Ingen aktivitet ännu.',
+    'Qtiler2Hajk.modal_title': 'Publicera projekt i Hajk',
+    'Qtiler2Hajk.modal_title_edit': 'Redigera profil: {id}',
+    'Qtiler2Hajk.main_project': 'Huvudprojekt',
+    'Qtiler2Hajk.project_layers': 'Projektlager',
+    'Qtiler2Hajk.project_layers_help': 'Aktivera lager för att inkludera dem i den publicerade kartan. Växeln Synlig vid start avgör om ett inkluderat lager visas när kartan öppnas. Vektorlager kan valfritt publiceras som WFS för att möjliggöra attributtabell och redigering; lager utan WFS serveras som WMS med GetLegendGraphic eller en valfri manuell legendikon.',
+    'Qtiler2Hajk.layer_include': 'Inkludera',
+    'Qtiler2Hajk.layer_initial_visibility': 'Synlig vid start',
+    'Qtiler2Hajk.layer_title': 'Karttitel',
+    'Qtiler2Hajk.layer_title_placeholder': 'Synlig titel (valfritt)',
+    'Qtiler2Hajk.layer_include_help': 'Om aktiverad inkluderas lagret i den publicerade kartan.',
+    'Qtiler2Hajk.layer_initial_visibility_help': 'Om aktiverad visas det inkluderade lagret när kartan öppnas.',
+    'Qtiler2Hajk.wms_legend_auto': 'WMS-legend',
+    'Qtiler2Hajk.wms_legend_manual': 'Manuell ikon',
+    'Qtiler2Hajk.wms_legend_pick': 'Välj SVG',
+    'Qtiler2Hajk.wms_legend_clear': 'Rensa',
+    'Qtiler2Hajk.wms_legend_url': 'Legend-URL eller SVG-sökväg',
+    'Qtiler2Hajk.wms_legend_help': 'WMS-lager använder GetLegendGraphic som standard. Välj en SVG eller klistra in en bild-URL för att ersätta legendobjektet.',
+    'Qtiler2Hajk.bg_project': 'Bakgrundsprojekt (valfritt)',
+    'Qtiler2Hajk.bg_layers': 'Bakgrundslager',
+    'Qtiler2Hajk.default_bg': 'Standardbakgrund',
+    'Qtiler2Hajk.default_bg_help': 'OSM och Ingen bakgrund är alltid tillgängliga. Välj en som standard.',
+    'Qtiler2Hajk.Hajk_features': 'Hajk-moduler',
+    'Qtiler2Hajk.feat_search': 'Sök',
+    'Qtiler2Hajk.feat_search_global': 'Global sökning',
+    'Qtiler2Hajk.feat_editing': 'Redigering',
+    'Qtiler2Hajk.feat_identify': 'Identifiera',
+    'Qtiler2Hajk.feat_layer_tree': 'LayerTree',
+    'Qtiler2Hajk.feat_legend': 'Teckenförklaring',
+    'Qtiler2Hajk.feat_measurement': 'Mät',
+    'Qtiler2Hajk.feat_print': 'Skriv ut',
+    'Qtiler2Hajk.feat_maptip': 'MapTip',
+    'Qtiler2Hajk.feat_share': 'Dela',
+    'Qtiler2Hajk.feat_redlining': 'Markeringar',
+    'Qtiler2Hajk.feat_bookmark': 'Bokmärken',
+    'Qtiler2Hajk.feat_height_profile': 'Höjdprofil',
+    'Qtiler2Hajk.feat_view3d': '3D-vy',
+    'Qtiler2Hajk.feat_dxf_export': 'DXF-export',
+    'Qtiler2Hajk.feat_attribute_table': 'Attributtabell',
+    'Qtiler2Hajk.feat_routing': 'Ruttplanering',
+    'Qtiler2Hajk.publish_now': 'Publicera',
+    'Qtiler2Hajk.preflight_btn': 'Kontrollera karta',
+    'Qtiler2Hajk.preflight_checking': 'Kontrollerar...',
+    'Qtiler2Hajk.preflight_ok': 'Kartkontrollen gick igenom. Projekt, lager och bakgrunder är tillgängliga.',
+    'Qtiler2Hajk.save_draft': 'Spara utkast',
+    'Qtiler2Hajk.draft_saved': '✓ Utkast sparat',
+    'Qtiler2Hajk.draft_restore_msg': 'Ett sparat utkast finns för denna karta (sparad {date}). Återställa det och fortsätta där du slutade?',
+    'Qtiler2Hajk.draft_restored': 'Utkast återställt.',
+    'Qtiler2Hajk.draft_save_failed': 'Kunde inte spara utkastet: {msg}',
+    'Qtiler2Hajk.lmv_demo_warning': 'Lantmäteriet-sökning returnerar DEMO-data — ingen API-nyckel konfigurerad på servern (sätt LANTMATERI_API_KEY i .env).',
+    'Qtiler2Hajk.thumb_missing': 'Ingen miniatyr',
+    'Qtiler2Hajk.unsaved_changes_confirm': 'Du har opublicerade ändringar i kartredigeraren. Stäng ändå och förlora dem?',
+    'Qtiler2Hajk.legend_pick_qgis_svg': 'QGIS SVG-ikoner',
+    'Qtiler2Hajk.legend_pick_uploaded': 'Uppladdade ikoner',
+    'Qtiler2Hajk.legend_upload_new': 'Ladda upp ny…',
+    'Qtiler2Hajk.legend_pick_title': 'Välj legendikon',
+    'Qtiler2Hajk.legend_search_placeholder': 'Sök ikoner…',
+    'Qtiler2Hajk.legend_delete_in_use': 'Denna ikon används av: {layers}. Ta bort den ändå?',
+    'Qtiler2Hajk.legend_delete_confirm': 'Ta bort denna ikon? Den kommer inte längre att finnas i biblioteket.',
+    'Qtiler2Hajk.legend_current_map': 'aktuell karta',
+    'Qtiler2Hajk.legend_library_empty': 'Inga uppladdade ikoner ännu.',
+    'Qtiler2Hajk.log_legend_uploaded': 'Legendikon uppladdad.',
+    'Qtiler2Hajk.log_legend_deleted': 'Legendikon borttagen.',
+    'Qtiler2Hajk.preview_btn': 'Förhandsgranska',
+    'Qtiler2Hajk.cancel': 'Avbryt',
+    'Qtiler2Hajk.no_layers': 'Inga lager hittades.',
+    'Qtiler2Hajk.no_bg_available': 'Inga bakgrunder tillgängliga.',
+    'Qtiler2Hajk.no_project_selected': 'Inget projekt valt.',
+    'Qtiler2Hajk.no_bg_selected': 'Inget bakgrundsprojekt valt.',
+    'Qtiler2Hajk.optional_select': 'Valfritt: välj ett annat projekt först.',
+    'Qtiler2Hajk.no_bg_option': 'Ingen bakgrund',
+    'Qtiler2Hajk.osm_bg': 'OSM-bakgrund',
+    'Qtiler2Hajk.log_installed': 'Hajk installerad.',
+    'Qtiler2Hajk.log_uninstalled': 'Hajk avinstallerad.',
+    'Qtiler2Hajk.log_server_started': 'Server startad på port {port}.',
+    'Qtiler2Hajk.log_server_stopped': 'Server stoppad.',
+    'Qtiler2Hajk.log_logo_uploaded': 'Logotyp uppladdad.',
+    'Qtiler2Hajk.log_logo_removed': 'Logotyp borttagen.',
+    'Qtiler2Hajk.log_published': 'Profil "{id}" publicerad.',
+    'Qtiler2Hajk.log_deleted': 'Profil "{id}" raderad.',
+    'Qtiler2Hajk.regen_thumb': 'Regenerera miniatyr',
+    'Qtiler2Hajk.regen_thumb_title': 'Rensa cachelagrade miniatyrer för projektet så att en ny skapas nästa gång.',
+    'Qtiler2Hajk.thumbnail_change': 'Byt miniatyrbild',
+    'Qtiler2Hajk.thumbnail_setup_title': 'Kartminiatyrer',
+    'Qtiler2Hajk.thumbnail_setup_help': 'Ersätt den automatiska miniatyren med en egen bild. Ny publicering behåller bilden; Skapa om miniatyr återgår till automatiskt läge.',
+    'Qtiler2Hajk.thumbnail_setup_map': 'Publicerad karta',
+    'Qtiler2Hajk.thumbnail_setup_file': 'PNG-, JPG- eller WEBP-bild',
+    'Qtiler2Hajk.thumbnail_setup_upload': 'Ladda upp miniatyr',
+    'Qtiler2Hajk.log_thumb_regen': 'Miniatyrcache rensad för "{id}" ({n} filer).',
+    'Qtiler2Hajk.log_error': 'Fel: {msg}',
+    'Qtiler2Hajk.requires_install': 'Installera Hajk först för att använda denna sektion.',
+    'Qtiler2Hajk.loading': 'Laddar...',
+    'Qtiler2Hajk.load_preview': 'Ladda förhandsvisning',
+    'Qtiler2Hajk.open_in_new_tab': 'Öppna i ny flik',
+    'Qtiler2Hajk.capture_view': 'Fånga vy (Centrum och zoom)',
+    'Qtiler2Hajk.clear_extent': 'Rensa extent',
+    'Qtiler2Hajk.center_default_bg': 'Centrera på standardbakgrund',
+    'Qtiler2Hajk.layer_select_all': 'Välj alla',
+    'Qtiler2Hajk.layer_select_none': 'Välj inga',
+    'Qtiler2Hajk.map_extent_cleared': 'Extent rensad.',
+    'Qtiler2Hajk.default_bg_centered': 'Kartan centrerades på standardbakgrunden.',
+    'Qtiler2Hajk.default_bg_center_failed': 'Kunde inte centrera på standardbakgrunden: {msg}',
+    'Qtiler2Hajk.fullscreen': 'Helskärm',
+    'Qtiler2Hajk.windowed': 'Fönsterläge',
+    'Qtiler2Hajk.interactive_map': 'Interaktiv karta',
+    'Qtiler2Hajk.interactive_map_error': 'Fel i interaktiv karta',
+    'Qtiler2Hajk.interactive_map_idle': 'Klicka på Ladda förhandsvisning för att läsa in kartan',
+    'Qtiler2Hajk.interactive_map_preparing': 'Förbereder interaktiv karta…',
+    'Qtiler2Hajk.interactive_map_loading_layers': 'Laddar kartlager…',
+    'Qtiler2Hajk.interactive_map_iframe_error': 'Iframe för den interaktiva kartan kunde inte laddas.',
+    'Qtiler2Hajk.interactive_map_load_failed': 'Kartan kunde inte laddas.',
+    'Qtiler2Hajk.interactive_map_prepare_failed': 'Förhandsvisningen kunde inte förberedas.',
+    'Qtiler2Hajk.select_main_project_first': 'Välj först ett huvudprojekt.',
+    'Qtiler2Hajk.preview_loading_log': 'Laddar förhandsgranskningskarta…',
+    'Qtiler2Hajk.preview_ready_log': 'Förhandsgranskningskartan är klar. Du kan fånga utbredningen.',
+    'Qtiler2Hajk.map_state_read_failed': 'Kunde inte läsa kartans tillstånd: {msg}',
+    'Qtiler2Hajk.zoom_read_failed': 'Kunde inte läsa aktuell zoomnivå.',
+    'Qtiler2Hajk.summary_current_map': 'Aktuell karta',
+    'Qtiler2Hajk.summary_name': 'Namn',
+    'Qtiler2Hajk.summary_untitled': 'Namnlös karta',
+    'Qtiler2Hajk.summary_main_project': 'Huvudprojekt',
+    'Qtiler2Hajk.summary_not_selected': 'Inte valt',
+    'Qtiler2Hajk.summary_description': 'Beskrivning',
+    'Qtiler2Hajk.summary_no_description': 'Ingen beskrivning',
+    'Qtiler2Hajk.summary_active_layers': 'Aktiva lager ({n})',
+    'Qtiler2Hajk.summary_no_active_layers': 'Inga aktiva lager valda ännu.',
+    'Qtiler2Hajk.summary_backgrounds': 'Bakgrunder',
+    'Qtiler2Hajk.summary_default': 'Standard',
+    'Qtiler2Hajk.summary_default_none': 'Ingen bakgrund',
+    'Qtiler2Hajk.summary_no_background_layers': 'Inga bakgrundslager valda.',
+    'Qtiler2Hajk.summary_preview_controls': 'Kontroller i förhandsvisningen ({n})',
+    'Qtiler2Hajk.summary_no_active_controls': 'Inga aktiva kontroller konfigurerade.',
+    'Qtiler2Hajk.searchable': 'sökbar',
+    'Qtiler2Hajk.editable': 'redigerbar',
+    'Qtiler2Hajk.layers_count': '{n} lager',
+    'Qtiler2Hajk.bg_count': '{n} bakgrunder',
+    'Qtiler2Hajk.tab_setup': 'Inställningar',
+    'Qtiler2Hajk.tab_maps': 'Kartor',
+    'Qtiler2Hajk.tab_log': 'Logg',
+    'Qtiler2Hajk.map_name': 'Kartnamn',
+    'Qtiler2Hajk.map_name_placeholder': 'Unikt namn för denna karta',
+    'Qtiler2Hajk.map_description': 'Beskrivning',
+    'Qtiler2Hajk.map_desc_placeholder': 'Valfri beskrivning',
+    'Qtiler2Hajk.name_required': 'Ett namn krävs.',
+    'Qtiler2Hajk.name_duplicate': 'En karta med detta namn finns redan.',
+    'Qtiler2Hajk.step_layers': '1. Lager',
+    'Qtiler2Hajk.step_backgrounds': '2. Bakgrundskartor',
+    'Qtiler2Hajk.step_tools': '3. Verktyg',
+    'Qtiler2Hajk.step_controls_search': '3. Kontroller och sökning',
+    'Qtiler2Hajk.step_hajk_config': '4. Hajk-konfiguration',
+    'Qtiler2Hajk.step_json_editor': '5. JSON-redigerare',
+    'Qtiler2Hajk.json_editor_help': 'Redigera den fullständiga kartkonfigurations-JSON. Ändringar valideras i realtid.',
+    'Qtiler2Hajk.json_load': 'Ladda aktuell konfiguration',
+    'Qtiler2Hajk.json_import': 'Importera JSON',
+    'Qtiler2Hajk.json_download': 'Ladda ner JSON',
+    'Qtiler2Hajk.json_format': 'Formatera JSON',
+    'Qtiler2Hajk.json_validate': 'Validera',
+    'Qtiler2Hajk.json_apply': 'Tillämpa ändringar',
+    'Qtiler2Hajk.json_clear_log': 'Rensa logg',
+    'Qtiler2Hajk.json_editor_label': 'Kartkonfiguration JSON',
+    'Qtiler2Hajk.json_log_label': 'Validerings- och fellogg',
+    'Qtiler2Hajk.publish_editor_fixed_help': 'Fast redigerare för att skapa och redigera kartor utan att sidan flyttas.',
+    'Qtiler2Hajk.svg_picker_title': 'Välj SVG-ikon (QGIS)',
+    'Qtiler2Hajk.default': 'Standard',
+    'Qtiler2Hajk.feat_search_desc': 'Fulltextsökning i kartlager',
+    'Qtiler2Hajk.feat_search_global_desc': 'Aktivera koordinater och Nominatim OSM',
+    'Qtiler2Hajk.feat_search_help': 'Lokal sökning använder dina sökbara lager via /Qtiler2Hajk/search. Global sökning lägger till koordinater och Nominatim-resultat ovanpå detta.',
+    'Qtiler2Hajk.feat_identify_desc': 'Klicka på kartan för att fråga attribut',
+    'Qtiler2Hajk.feat_layer_tree_desc': 'Visa/dölj lager och grupper',
+    'Qtiler2Hajk.feat_legend_desc': 'Visa lagersymbologi och teckenförklaring',
+    'Qtiler2Hajk.feat_editing_desc': 'Skapa, uppdatera och ta bort objekt',
+    'Qtiler2Hajk.feat_print_desc': 'Exportera karta till PDF med QGIS-layouter',
+    'Qtiler2Hajk.feat_maptip_desc': 'Hovertips med objektinformation',
+    'Qtiler2Hajk.feat_measurement_desc': 'Mät avstånd och arealer på kartan',
+    'Qtiler2Hajk.feat_share_desc': 'Dela aktuell kartvy via URL',
+    'Qtiler2Hajk.feat_redlining_desc': 'Rita temporära former och anteckningar',
+    'Qtiler2Hajk.feat_bookmark_desc': 'Spara och återställ kartomfång',
+    'Qtiler2Hajk.feat_height_profile_desc': 'Höjdtvärsnitt längs en sträcka',
+    'Qtiler2Hajk.feat_view3d_desc': 'Aktivera Hajk:s View3D-modul för terräng och 3D-lager',
+    'Qtiler2Hajk.feat_dxf_export_desc': 'Ladda ner lager som AutoCAD DXF',
+    'Qtiler2Hajk.feat_attribute_table_desc': 'Tabellvy av objektattribut',
+    'Qtiler2Hajk.feat_routing_desc': 'Beräkna rutter mellan punkter',
+    'Qtiler2Hajk.wfs_helper_title': 'WFS-sökning och redigering',
+    'Qtiler2Hajk.wfs_search_helper': 'Sökning använder Qtilers sökbara lager. Markera lager som sökbara i QtilerAuth och lägg sedan till lokala källor eller källor från andra projekt här; resultat följer projektåtkomst.',
+    'Qtiler2Hajk.wfs_edit_helper': 'Redigering kräver aktivt QtilerAuth, att lagret är tillåtet som redigerbart i QtilerAuth, redigeringsåtkomst för användaren och att lagret publiceras som WFS.',
+    'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samma Qtiler WFS-metadata som Origo: attribut, geometrijfält, namespace och stilar.',
+    'Qtiler2Hajk.tool_config': 'Konfiguration',
+    'Qtiler2Hajk.cfg_share_url': 'Delningstjänst-URL',
+    'Qtiler2Hajk.cfg_share_url_ph': 'https://example.com/share',
+    'Qtiler2Hajk.cfg_routing_url': 'Ruttjänst-URL (OSRM/Valhalla)',
+    'Qtiler2Hajk.cfg_routing_url_ph': 'https://router.example.com/route',
+    'Qtiler2Hajk.cfg_elevation_url': 'Höjddatatjänst-URL',
+    'Qtiler2Hajk.cfg_elevation_url_ph': 'https://elevation.example.com',
+    'Qtiler2Hajk.cfg_dxf_url': 'DXF-exporttjänst-URL',
+    'Qtiler2Hajk.cfg_dxf_url_ph': 'https://example.com/dxf',
+    'Qtiler2Hajk.ctrl_home': 'Hem (zooma till utbredning)',
+    'Qtiler2Hajk.ctrl_zoom': 'Zoom (+/−)',
+    'Qtiler2Hajk.ctrl_rotate': 'Rotera karta',
+    'Qtiler2Hajk.ctrl_fullscreen': 'Helskärm',
+    'Qtiler2Hajk.ctrl_geoposition': 'Min position (GPS)',
+    'Qtiler2Hajk.ctrl_mapmenu': 'Lagermeny',
+    'Qtiler2Hajk.ctrl_legend': 'Teckenförklaring',
+    'Qtiler2Hajk.ctrl_search': 'Sök (geokodning)',
+    'Qtiler2Hajk.ctrl_editor': 'Objektredigerare (WFS)',
+    'Qtiler2Hajk.ctrl_draw': 'Rita (redlining)',
+    'Qtiler2Hajk.ctrl_measure': 'Mät avstånd/arealer',
+    'Qtiler2Hajk.ctrl_position': 'Markörkoordinater',
+    'Qtiler2Hajk.ctrl_print': 'Skriv ut',
+    'Qtiler2Hajk.ctrl_sharemap': 'Dela karta',
+    'Qtiler2Hajk.ctrl_progressbar': 'Förloppsindikator',
+    'Qtiler2Hajk.ctrl_scaleline': 'Skalstock',
+    'Qtiler2Hajk.ctrl_attribution': 'Upphovsrätt',
+    'Qtiler2Hajk.ctrl_about': 'Om',
+    'Qtiler2Hajk.ctrl_bookmarks': 'Bokmärken',
+    'Qtiler2Hajk.ctrl_draganddrop': 'Dra och släpp filer',
+    'Qtiler2Hajk.ctrl_externalurl': 'Externa URL-länkar',
+    'Qtiler2Hajk.ctrl_link': 'Länkknapp',
+    'Qtiler2Hajk.ctrl_splash': 'Startdialog',
+    'Qtiler2Hajk.ctrl_scale': 'Skala (text)',
+    'Qtiler2Hajk.ctrl_scalepicker': 'Skalväljare',
+    'Qtiler2Hajk.ctrl_lantmateri': 'Lantmäteriet-sökning (Fastighet och Adress)',
+    'Qtiler2Hajk.wfs_modal_title': 'Vektorstilredigerare',
+    'Qtiler2Hajk.wfs_layer': 'Lager',
+    'Qtiler2Hajk.wfs_tab_rules': 'Avancerad design',
+    'Qtiler2Hajk.wfs_tab_designer': 'Grundläggande design',
+    'Qtiler2Hajk.wfs_tab_json': 'Redigera avancerad JSON',
+    'Qtiler2Hajk.wfs_tab_attributes': 'Attribut (Infoclick)',
+    'Qtiler2Hajk.wfs_designer_header': 'Snabb visuell justering',
+    'Qtiler2Hajk.wfs_designer_help': 'Förhandsgranskningen ligger till höger. Justera fyllning, mönster och linje i rutan till vänster.',
+    'Qtiler2Hajk.wfs_group_geometry': 'Geometri',
+    'Qtiler2Hajk.wfs_group_fill': 'Fyllning',
+    'Qtiler2Hajk.wfs_group_pattern': 'Mönster',
+    'Qtiler2Hajk.wfs_group_stroke': 'Linje',
+    'Qtiler2Hajk.wfs_reset': '↺ Återställ grundstil',
+    'Qtiler2Hajk.wfs_cancel': 'Avbryt',
+    'Qtiler2Hajk.wfs_save': 'Spara stil',
+    'Qtiler2Hajk.wfs_rules_header': 'Regler och filter',
+    'Qtiler2Hajk.wfs_copy_rules': '-- Kopiera regler från lager --',
+    'Qtiler2Hajk.wfs_copy_attrs': '-- Kopiera attribut från lager --',
+    'Qtiler2Hajk.wfs_add_rule': '+ Lägg till regel',
+    'Qtiler2Hajk.wfs_rules_help': 'Varje regel utvärderas i ordning. För en standardstil, lämna filtret tomt i den sista.',
+    'Qtiler2Hajk.wfs_attrs_header': 'Popup-attribut (Infoclick)',
+    'Qtiler2Hajk.wfs_add_attr': '+ Lägg till attribut',
+    'Qtiler2Hajk.wfs_add_html': '+ Lägg till HTML',
+    'Qtiler2Hajk.wfs_attrs_help': 'Definiera attributen som ska visas. Om du lämnar tomt visas alla.',
+    'Qtiler2Hajk.wfs_json_label': 'Komplett lager-JSON (konfiguration + stil)',
+    'Qtiler2Hajk.wfs_json_help': 'Redigera det fullständiga objektet här: name, geometryType, wfsStyle, searchable, etc.',
+    'Qtiler2Hajk.wfs_copy_layer': '-- Kopiera från lager --',
+    'Qtiler2Hajk.wfs_export_json': 'Exportera JSON',
+    'Qtiler2Hajk.wfs_import_json': 'Importera JSON',
+    'Qtiler2Hajk.wfs_apply_json': 'Tillämpa JSON',
+    'Qtiler2Hajk.wfs_format_json': 'Formatera JSON',
+    'Qtiler2Hajk.wfs_preview': 'Förhandsgranskning',
+    'Qtiler2Hajk.wfs_preview_help': 'Förhandsvisningen uppdateras direkt när du ändrar färg, bredd, opacitet och symbol.',
+    'Qtiler2Hajk.wfs_square': 'Kvadrat',
+    'Qtiler2Hajk.wfs_triangle': 'Triangel',
+    'Qtiler2Hajk.wfs_star': 'Stjärna',
+    'Qtiler2Hajk.wfs_radius_size': 'Radie / storlek',
+    'Qtiler2Hajk.wfs_dash': 'Linjemönster',
+    'Qtiler2Hajk.wfs_rule': 'Regel',
+    'Qtiler2Hajk.wfs_move_up': 'Flytta upp',
+    'Qtiler2Hajk.wfs_move_down': 'Flytta ner',
+    'Qtiler2Hajk.wfs_delete': 'Ta bort',
+    'Qtiler2Hajk.wfs_edit_rule': 'Redigera regel',
+    'Qtiler2Hajk.wfs_rule_editor_title': 'Redigera regelstil',
+    'Qtiler2Hajk.wfs_rule_editor_done': 'Klar',
+    'Qtiler2Hajk.wfs_rule_default': 'Standardregel',
+    'Qtiler2Hajk.wfs_edit_visual_style': 'Redigera visuell stil',
+    'Qtiler2Hajk.wfs_rule_mode_note': 'Du redigerar den visuella stilen för regel {rule}. När du sparar tillämpas den bara på den regeln.',
+    'Qtiler2Hajk.wfs_filter': 'Filter',
+    'Qtiler2Hajk.wfs_attr': 'Attribut',
+    'Qtiler2Hajk.wfs_op': 'Operator',
+    'Qtiler2Hajk.wfs_value': 'Värde',
+    'Qtiler2Hajk.wfs_value_placeholder_any': 'Skriv ett värde',
+    'Qtiler2Hajk.wfs_value_placeholder_suggested': 'Skriv ett värde eller välj ett förslag',
+    'Qtiler2Hajk.wfs_value_help_manual': 'Du kan skriva ett värde manuellt även om attributet inte har några upptäckta värden.',
+    'Qtiler2Hajk.wfs_value_help_suggested': 'Använd ett befintligt värde eller skriv ett nytt manuellt.',
+    'Qtiler2Hajk.wfs_value_help_pick_field': 'Välj först ett attribut för att filtrera på ett värde.',
+    'Qtiler2Hajk.wfs_no_filter': '— Inget filter (standard) —',
+    'Qtiler2Hajk.wfs_symbol': 'Symbol',
+    'Qtiler2Hajk.wfs_circle': 'Cirkel',
+    'Qtiler2Hajk.wfs_svg_icon': 'SVG-ikon',
+    'Qtiler2Hajk.wfs_no_fill': 'Ingen fyllning (transparent)',
+    'Qtiler2Hajk.wfs_no_fill_only_stroke': 'Ingen fyllning (transparent, endast linje)',
+    'Qtiler2Hajk.wfs_no_stroke': 'Ingen linje',
+    'Qtiler2Hajk.wfs_radius': 'Radie',
+    'Qtiler2Hajk.wfs_fill_color': 'Fyllningsfärg',
+    'Qtiler2Hajk.wfs_fill_opacity': 'Fyllning opacitet',
+    'Qtiler2Hajk.wfs_fill_pattern': 'Fyllningsmönster',
+    'Qtiler2Hajk.wfs_fill_pattern_angle': 'Mönstervinkel',
+    'Qtiler2Hajk.wfs_fill_pattern_spacing': 'Mönsteravstånd',
+    'Qtiler2Hajk.wfs_fill_pattern_size': 'Punktstorlek',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent': 'Transparent bakgrund',
+    'Qtiler2Hajk.wfs_fill_pattern_transparent_help': 'Visa bara linjer eller punkter så att lager under fortfarande syns.',
+    'Qtiler2Hajk.wfs_fill_pattern_solid': 'Heldragen',
+    'Qtiler2Hajk.wfs_fill_pattern_slash': 'Snedstreck',
+    'Qtiler2Hajk.wfs_fill_pattern_backslash': 'Omvänt snedstreck',
+    'Qtiler2Hajk.wfs_fill_pattern_horizontal': 'Horisontella linjer',
+    'Qtiler2Hajk.wfs_fill_pattern_vertical': 'Vertikala linjer',
+    'Qtiler2Hajk.wfs_fill_pattern_dots': 'Punkter',
+    'Qtiler2Hajk.wfs_fill_pattern_outline': 'Endast kontur',
+    'Qtiler2Hajk.wfs_stroke_color': 'Linjefärg',
+    'Qtiler2Hajk.wfs_stroke_width': 'Linjebredd',
+    'Qtiler2Hajk.wfs_stroke_opacity': 'Linje opacitet',
+    'Qtiler2Hajk.wfs_stroke_pattern': 'Linjemönster',
+    'Qtiler2Hajk.wfs_pick_svg': 'Välj SVG…',
+    'Qtiler2Hajk.wfs_url': 'URL/sökväg',
+    'Qtiler2Hajk.wfs_scale_field': 'Skala',
+    'Qtiler2Hajk.wfs_opacity': 'Opacitet',
+    'Qtiler2Hajk.wfs_tint_color': 'Töningsfärg',
+    'Qtiler2Hajk.wfs_enable_svg_tint': 'Aktivera SVG-töning',
+    'Qtiler2Hajk.wfs_color': 'Färg',
+    'Qtiler2Hajk.wfs_width': 'Bredd',
+    'Qtiler2Hajk.wfs_pattern': 'Mönster',
+    'Qtiler2Hajk.wfs_solid': 'Heldragen',
+    'Qtiler2Hajk.wfs_dashed': 'Streckad',
+    'Qtiler2Hajk.wfs_dotted': 'Prickad',
+    'Qtiler2Hajk.wfs_dashdot': 'Streck-prick',
+    'Qtiler2Hajk.wfs_legend_label': 'Legendetikett',
+    'Qtiler2Hajk.wfs_visible_from': 'Synlig från skala 1:',
+    'Qtiler2Hajk.wfs_visible_to': 'Synlig upp till skala 1:',
+    'Qtiler2Hajk.wfs_visible_from_tip': 'Minsta skala där symbolen syns (nämnare, t.ex. 1000)',
+    'Qtiler2Hajk.wfs_visible_to_tip': 'Största skala där symbolen syns (nämnare, t.ex. 50000)',
+    'Qtiler2Hajk.wfs_no_limit': 'ingen gräns',
+    'Qtiler2Hajk.wfs_label': 'Etikett',
+    'Qtiler2Hajk.wfs_text_help': 'Text (använd {{fält}} för att infoga värden)',
+    'Qtiler2Hajk.wfs_text_placeholder': 'T.ex. {{name}} eller fast text',
+    'Qtiler2Hajk.wfs_insert_field': 'Infoga fält',
+    'Qtiler2Hajk.wfs_size': 'Storlek',
+    'Qtiler2Hajk.wfs_label_placement': 'Placering',
+    'Qtiler2Hajk.wfs_label_placement_point': 'Ovanför punkt',
+    'Qtiler2Hajk.wfs_label_placement_line': 'Följ linje',
+    'Qtiler2Hajk.wfs_label_offsetx': 'Förskjutning X (px)',
+    'Qtiler2Hajk.wfs_label_offsety': 'Förskjutning Y (px)',
+    'Qtiler2Hajk.wfs_label_from': 'Etikett från 1:',
+    'Qtiler2Hajk.wfs_label_to': 'Etikett upp till 1:',
+    'Qtiler2Hajk.wfs_label_from_tip': 'Minsta skala där etiketten syns',
+    'Qtiler2Hajk.wfs_label_to_tip': 'Största skala där etiketten syns',
+    'Qtiler2Hajk.step_controls': '3. Kartkontroller',
+    'Qtiler2Hajk.step_controls_help': 'Välj verktygen som ska visas i kartvisaren. Klicka på kugghjulsikonen bredvid en kontroll för att konfigurera dess alternativ.',
+    'Qtiler2Hajk.cfg_btn_title': 'Konfigurera alternativ',
+    'Qtiler2Hajk.cfg_invalid_json': 'Ogiltig JSON',
+    'Qtiler2Hajk.opt_zoomOnStart': 'Zooma vid start',
+    'Qtiler2Hajk.opt_isActive': 'Öppen som standard',
+    'Qtiler2Hajk.opt_useGroupIndication': 'Gruppindikation',
+    'Qtiler2Hajk.opt_expanded': 'Expanderad',
+    'Qtiler2Hajk.opt_url': 'Tjänst-URL',
+    'Qtiler2Hajk.opt_limit': 'Resultatgräns',
+    'Qtiler2Hajk.opt_hintText': 'Platshållartext',
+    'Qtiler2Hajk.opt_minLength': 'Min. tecken',
+    'Qtiler2Hajk.opt_tracking': 'Automatisk positionering',
+    'Qtiler2Hajk.opt_enableHighAccuracy': 'Hög precision',
+    'Qtiler2Hajk.opt_default': 'Standardverktyg',
+    'Qtiler2Hajk.opt_tools': 'Verktyg (kommaseparerade)',
+    'Qtiler2Hajk.opt_title': 'Titel',
+    'Qtiler2Hajk.opt_projections_json': 'Projektioner (JSON)',
+    'Qtiler2Hajk.opt_logo': 'Logotyp-URL',
+    'Qtiler2Hajk.opt_northArrow': 'Visa nordpil',
+    'Qtiler2Hajk.opt_scales': 'Skalor (kommaseparerade)',
+    'Qtiler2Hajk.opt_attribution': 'Upphovsrättstext',
+    'Qtiler2Hajk.opt_buttonText': 'Knappetikett',
+    'Qtiler2Hajk.opt_content': 'Innehåll (HTML)',
+    'Qtiler2Hajk.wfs_style_yes': 'WFS stil',
+    'Qtiler2Hajk.wfs_style_no': 'Konfig. stil',
+    'Qtiler2Hajk.wfs_saved': 'Sparat.',
+    'Qtiler2Hajk.wfs_invalid_json': 'Ogiltig JSON: ',
+    'Qtiler2Hajk.wfs_invalid_json_apply': 'Kunde inte tillämpa JSON: ',
+    'Qtiler2Hajk.wfs_reset_confirm': 'Den nuvarande stilen för lagret går förlorad och standardstilen återställs. Fortsätta?',
+    'Qtiler2Hajk.zoom_warn': 'Obs: Min Zoom ({min}) är större än Max Zoom ({max}). Min = längst bort (låg), Max = närmast (hög).',
+    'Qtiler2Hajk.fam_point': 'Punkt',
+    'Qtiler2Hajk.fam_line': 'Linje',
+    'Qtiler2Hajk.fam_polygon': 'Polygon',
+    'Qtiler2Hajk.no_rules_yet': 'Inga regler än.',
+    'Qtiler2Hajk.loading_style': 'Laddar upptäckt stil från QGIS…',
+    'Qtiler2Hajk.install_Hajk': 'Installera Hajk',
+    'Qtiler2Hajk.uninstall_Hajk': 'Avinstallera Hajk',
+    'Qtiler2Hajk.attr_options_ph': 'En alternativ per rad',
+    'Qtiler2Hajk.attr_detect_from_style': 'Identifiera från stil',
+    'Qtiler2Hajk.attr_detect_none': 'Inga ==-filtervärden hittades i stilen för "{attr}". Lägg till regler med ==-filter i stilen först.',
+    'Qtiler2Hajk.attr_detect_ok': '{n} värden identifierade från stilen för "{attr}".',
+    'Qtiler2Hajk.attr_title_ph': 'Visningstitel',
+    'Qtiler2Hajk.pub_groups_legend': 'Grupper & synlighet',
+    'Qtiler2Hajk.pub_groups_help': 'Definiera grupper (och undergrupper) och tilldela varje synligt lager till gruppen där det visas i kartans träd.',
+    'Qtiler2Hajk.pub_groups_label': 'Grupper',
+    'Qtiler2Hajk.pub_add_group': '+ Lägg till grupp',
+    'Qtiler2Hajk.pub_layer_assign_label': 'Lager → grupp + initial synlighet',
+    'Qtiler2Hajk.pub_layer_assign_help': 'Endast lager kryssade i steg 1 visas här.',
+    'Qtiler2Hajk.pub_no_groups': 'Inga anpassade grupper. Lagren hamnar i standardgruppen.',
+    'Qtiler2Hajk.pub_no_parent': '(ingen förälder)',
+    'Qtiler2Hajk.pub_group_name_ph': 'tekniskt namn',
+    'Qtiler2Hajk.pub_group_title_ph': 'synlig titel',
+    'Qtiler2Hajk.pub_assign_help': 'Kryssa lager i steg 1 för att tilldela dem.',
+    'Qtiler2Hajk.extra_layers_legend': 'Ytterligare projektlager',
+    'Qtiler2Hajk.extra_layers_help': 'Lägg till WMS- eller WFS-lager från andra publicerade QGIS-projekt.',
+    'Qtiler2Hajk.extra_layers_add': 'Lägg till lager',
+    'Qtiler2Hajk.extra_layers_empty': 'Inga externa lager tillagda.',
+    'Qtiler2Hajk.extra_layers_remove': 'Ta bort',
+    'Qtiler2Hajk.extra_layers_modal_title': 'Lägg till lager från ett annat projekt',
+    'Qtiler2Hajk.extra_layers_project': 'Projekt',
+    'Qtiler2Hajk.extra_layers_cancel': 'Avbryt',
+    'Qtiler2Hajk.extra_layers_apply': 'Lägg till valda lager',
+    'Qtiler2Hajk.extra_layers_pick_project': 'Välj ett projekt',
+    'Qtiler2Hajk.extra_layers_current_project': 'Huvudprojektet finns redan ovan. Välj ett annat projekt här.',
+    'Qtiler2Hajk.extra_layers_no_layers': 'Inga lager tillgängliga för detta projekt.',
+    'Qtiler2Hajk.layer_generic': 'Lager',
+    'Qtiler2Hajk.pub_search_legend': 'Sökalternativ',
+    'Qtiler2Hajk.pub_search_hint_label': 'Föreslagen text',
+    'Qtiler2Hajk.pub_search_min_label': 'Minsta antal tecken',
+    'Qtiler2Hajk.pub_search_limit_label': 'Max antal resultat',
+    'Qtiler2Hajk.pub_search_placeholder': 'Sök…',
+    'Qtiler2Hajk.pub_search_sources_label': 'Sökkällor mellan projekt',
+    'Qtiler2Hajk.pub_search_sources_help': 'Lägg till fler projekt (och välj specifika sökbara lager) så att sökrutan i den publicerade kartan kan hitta objekt från dessa projekt också. Användaren måste ha åtkomst till varje projekt för att se dess resultat.',
+    'Qtiler2Hajk.pub_search_source_add': 'Lägg till projekt',
+    'Qtiler2Hajk.pub_search_source_pick_project': '— Välj projekt —',
+    'Qtiler2Hajk.pub_search_source_layers': 'Lager',
+    'Qtiler2Hajk.pub_search_source_all_layers': 'Alla sökbara lager',
+    'Qtiler2Hajk.pub_search_source_no_layers': 'Inga sökbara lager konfigurerade för detta projekt.',
+    'Qtiler2Hajk.pub_search_source_remove': 'Ta bort',
+    'Qtiler2Hajk.pub_search_source_current': 'Aktuellt projekt',
+    'Qtiler2Hajk.pub_search_no_projects': 'Inga projekt är tillgängliga. Kontrollera serveranslutningen eller lägg till publicerbara projekt.',
+    'Qtiler2Hajk.pub_edit_profile_title': 'Redigera namn, lager, bakgrunder, grupper och verktyg',
+    'Qtiler2Hajk.hiw.button': 'Så fungerar det & säkerhet',
+    'Qtiler2Hajk.hiw.title': 'Så fungerar Qtiler2Hajk och varför det är säkert',
+    'Qtiler2Hajk.hiw.lead': 'Qtiler2Hajk bäddar in webbkartvisaren Hajk i Qtiler. Den installerar en vald GitHub-release och låter administratörer konfigurera varje publicerad karta grafiskt från QGIS.',
+    'Qtiler2Hajk.hiw.vs.title': 'Qrigo vs Qtiler2Hajk',
+    'Qtiler2Hajk.hiw.vs.1': 'Qrigo riktar sig till användare som redan kör en standardinstallation av Hajk på sin egen server: det genererar bara JSON-utdrag att klistra in i din befintliga Hajk index.json.',
+    'Qtiler2Hajk.hiw.vs.2': 'Qtiler2Hajk installerar Hajk ovanpå själva Qtiler, med en grafisk kartredigerare som stödjer sig på QGIS-biblioteket och Qtilers cache och WMS/WFS-lager — utan en separat Hajk-server.',
+    'Qtiler2Hajk.hiw.arch.title': '1. Arkitektur',
+    'Qtiler2Hajk.hiw.arch.1': 'Express-plugin under plugins/Qtiler2Hajk/. Hajk-bygget laddas ner från GitHub och serveras på /plugins/Qtiler2Hajk/hajk.',
+    'Qtiler2Hajk.hiw.flow.title': '2. Steg för steg',
+    'Qtiler2Hajk.hiw.flow.1': 'Setup-fliken: välj en GitHub-tagg och klicka Installera Hajk.',
+    'Qtiler2Hajk.hiw.flow.2': 'Maps-fliken: välj ett projekt publicerat i Qtiler, redigera kartan grafiskt (CRS, centrum, zoom, lager, bakgrunder, verktyg) och publicera den som en Hajk-visare.',
+    'Qtiler2Hajk.hiw.maps.title': '3. Kartor och QGIS-biblioteket',
+    'Qtiler2Hajk.hiw.maps.1': 'Kartor byggs direkt från QGIS-projekt: lager, stilar, skalor och CRS kommer från projektet på disk.',
+    'Qtiler2Hajk.hiw.maps.2': 'Standard-WMTS-bakgrund garanteras så varje karta har ett fungerande baslager, och vektorlager som inte uttryckligen markerats för WFS fortsätter att publiceras som WMS-lager med sin miniatyrbaserade presentation.',
+    'Qtiler2Hajk.hiw.wfs.title': '4. WFS-redigering och cache-återanvändning',
+    'Qtiler2Hajk.hiw.wfs.1': 'Redigerbara WFS-lager återanvänder Qtilers WFS-endpoint, inklusive multipart-redigering och redigering av befintliga objekt via id. Ett lager exponeras som WFS bara när det uttryckligen aktiverats för WFS eller redigering.',
+    'Qtiler2Hajk.hiw.auth.title': '5. Autentisering och synlighet',
+    'Qtiler2Hajk.hiw.auth.2': 'Både cookie-sessioner och ?api_key=/x-api-key-headers stöds för QGIS Desktop och externa integrationer när auth är aktiv, medan samma rutter fortsätter att fungera utan auth-beroenden i helt publikt läge.',
+    'Qtiler2Hajk.hiw.auth.3': 'Miljövariabel-precedens för standalone-porten respekteras så plugin beter sig konsekvent bakom IIS eller NGINX, oavsett om auth är aktivt eller inte.',
+    'Qtiler2Hajk.hiw.security.title': '6. Säkerhet och integritet',
+    'Qtiler2Hajk.hiw.security.1': 'Nätverksanrop sker bara mot GitHub vid installation och, när det är aktiverat, mot lokala auth/ACL-kontroller; ingen körtidstelemetri, och baspluginet kräver inte det separata QtilerAuth-pluginet för att fortsätta fungera.',
+  }
+};
+
+const QTILER2HAJK_BRANDING_LOGO_URL = '/plugins/Qtiler2Hajk/public/branding/logo';
+
+function normalizeBrandingLogoUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return value;
+  return value.replace(/\/qtiler\/branding\/logo/ig, QTILER2HAJK_BRANDING_LOGO_URL);
+}
+
+QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
+  'Qtiler2Hajk.title': 'Hajk-bro for Qtiler',
+  'Qtiler2Hajk.subtitle': 'Installer Hajk fra GitHub, publiser QGIS-kart visuelt og administrer tilgang med eller uten QtilerAuth.',
+  'Qtiler2Hajk.hiw.button': 'Slik fungerer det og sikkerhet',
+  'Qtiler2Hajk.tab_setup': 'Oppsett',
+  'Qtiler2Hajk.tab_maps': 'Kart',
+  'Qtiler2Hajk.tab_log': 'Logg',
+  'Qtiler2Hajk.profiles_section': 'Publiserte kart',
+  'Qtiler2Hajk.profiles_desc': 'Administrer genererte profiler og startlenker for Hajk (webkart).',
+  'Qtiler2Hajk.publish_new': 'Nytt kart',
+  'Qtiler2Hajk.open_viewer': 'Galleri for publiserte kart',
+  'Qtiler2Hajk.no_profiles': 'Ingen publiserte profiler ennå. Klikk "Ny profil" for å opprette en.',
+  'Qtiler2Hajk.project_layers': 'Prosjektlag',
+  'Qtiler2Hajk.project_layers_help': 'Aktiver lag for å inkludere dem i det publiserte kartet. Bryteren \'Synlig ved start\' styrer om et inkludert lag vises når kartet åpnes. Vektorlag kan valgfritt publiseres som WFS for å aktivere attributtabell og redigering — lag uten WFS serveres som WMS og vises med et miniatyrbilde av laget.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-søk og redigering',
+  'Qtiler2Hajk.wfs_search_helper': 'Søk bruker Qtilers søkbare lag. Marker lag som søkbare i QtilerAuth, og legg deretter til lokale kilder eller kilder fra andre prosjekter her; resultater følger prosjekttilgang.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Redigering krever aktiv QtilerAuth, at laget er tillatt som redigerbart i QtilerAuth, redigeringstilgang for brukeren og at laget publiseres som WFS.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samme Qtiler WFS-metadata som Origo: attributter, geometrifelt, namespace og stiler.',
+});
+QTWC_I18N.nb = QTWC_I18N.no;
+QTWC_I18N.nn = QTWC_I18N.no;
+
+QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
+  'Qtiler2Hajk.title': 'Hajk-bro til Qtiler',
+  'Qtiler2Hajk.subtitle': 'Installer Hajk fra GitHub, publicér QGIS-kort visuelt, og administrer adgang med eller uden QtilerAuth.',
+  'Qtiler2Hajk.hiw.button': 'Sådan fungerer det og sikkerhed',
+  'Qtiler2Hajk.tab_setup': 'Opsætning',
+  'Qtiler2Hajk.tab_maps': 'Kort',
+  'Qtiler2Hajk.tab_log': 'Log',
+  'Qtiler2Hajk.profiles_section': 'Publicerede kort',
+  'Qtiler2Hajk.profiles_desc': 'Administrer genererede profiler og startlinks til Hajk (webkort).',
+  'Qtiler2Hajk.publish_new': 'Nyt kort',
+  'Qtiler2Hajk.open_viewer': 'Galleri for publicerede kort',
+  'Qtiler2Hajk.no_profiles': 'Ingen publicerede profiler endnu. Klik på "Ny profil" for at oprette en.',
+  'Qtiler2Hajk.project_layers': 'Projektlag',
+  'Qtiler2Hajk.project_layers_help': 'Aktivér lag for at inkludere dem i det offentliggjorte kort. Knappen \'Synlig ved start\' styrer, om et inkluderet lag vises, når kortet åbnes. Vektorlag kan valgfrit publiceres som WFS for at aktivere attributtabel og redigering — lag uden WFS serveres som WMS og vises med et miniaturebillede af laget.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-søgning og redigering',
+  'Qtiler2Hajk.wfs_search_helper': 'Søgning bruger Qtilers søgbare lag. Markér lag som søgbare i QtilerAuth, og tilføj derefter lokale kilder eller kilder fra andre projekter her; resultater følger projektadgang.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Redigering kræver aktiv QtilerAuth, at laget er tilladt som redigerbart i QtilerAuth, redigeringsadgang for brugeren og at laget publiceres som WFS.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk får samme Qtiler WFS-metadata som Origo: attributter, geometrifelt, namespace og stile.',
+});
+
+QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
+  'Qtiler2Hajk.title': 'Hajk-silta Qtilerille',
+  'Qtiler2Hajk.subtitle': 'Asenna Hajk GitHubista, julkaise QGIS-karttoja visuaalisesti ja hallitse käyttöoikeuksia QtilerAuthin kanssa tai ilman sitä.',
+  'Qtiler2Hajk.hiw.button': 'Miten se toimii ja turvallisuus',
+  'Qtiler2Hajk.tab_setup': 'Asetukset',
+  'Qtiler2Hajk.tab_maps': 'Kartat',
+  'Qtiler2Hajk.tab_log': 'Loki',
+  'Qtiler2Hajk.profiles_section': 'Julkaistut kartat',
+  'Qtiler2Hajk.profiles_desc': 'Hallitse Hajk (verkkokartan) luotuja profiileja ja avauslinkkejä.',
+  'Qtiler2Hajk.publish_new': 'Uusi kartta',
+  'Qtiler2Hajk.open_viewer': 'Julkaistujen karttojen galleria',
+  'Qtiler2Hajk.no_profiles': 'Julkaistuja profiileja ei vielä ole. Luo sellainen napsauttamalla "Uusi profiili".',
+  'Qtiler2Hajk.project_layers': 'Projektin tasot',
+  'Qtiler2Hajk.project_layers_help': 'Aktivoi tasot sisällyttääksesi ne julkaistuun karttaan. \'Näkyvissä alussa\' -kytkin ohjaa, näytetäänkö sisällytetty taso, kun kartta avataan. Vektoritasot voidaan valinnaisesti julkaista WFS:nä, jotta ominaisuustaulukko ja muokkaus voidaan ottaa käyttöön — tasot ilman WFS:ää tarjotaan WMS:nä ja näytetään tason pikkukuvalla.',
+  'Qtiler2Hajk.wfs_helper_title': 'WFS-haku ja muokkaus',
+  'Qtiler2Hajk.wfs_search_helper': 'Haku käyttää Qtilerin haettavia tasoja. Merkitse tasot haettaviksi QtilerAuthissa ja lisää sitten tähän paikallisia tai muiden projektien lähteitä; tulokset noudattavat projektin käyttöoikeuksia.',
+  'Qtiler2Hajk.wfs_edit_helper': 'Muokkaus edellyttää aktiivista QtilerAuthia, että taso on sallittu muokattavaksi QtilerAuthissa, käyttäjällä on muokkausoikeus ja taso julkaistaan WFS:nä.',
+  'Qtiler2Hajk.wfs_generated_helper': 'Hajk saa samat Qtiler WFS -metatiedot kuin Origo: attribuutit, geometriakentän, namespacen ja tyylit.',
+});
+
+/* ── DOM refs ── */
+// CRITICAL FIX: Moved tabMapsBadge to the top so syncUI doesn't crash on load!
+const tabMapsBadge = document.getElementById('tabMapsBadge');
+
+const repoEl = document.getElementById('repo');
+const versionEl = document.getElementById('version');
+const refreshReleasesBtn = document.getElementById('refreshReleasesBtn');
+const includePrereleaseEl = document.getElementById('includePrerelease');
+const installBadge = document.getElementById('installBadge');
+const installInfo = document.getElementById('installInfo');
+const installBtn = document.getElementById('installBtn');
+const uninstallBtn = document.getElementById('uninstallBtn');
+const openWebmapBtn = document.getElementById('openWebmapBtn');
+const logoSection = document.getElementById('logoSection');
+const logoBadge = document.getElementById('logoBadge');
+const logoFileInput = document.getElementById('logoFileInput');
+const uploadLogoBtn = document.getElementById('uploadLogoBtn');
+const removeLogoBtn = document.getElementById('removeLogoBtn');
+const logoPreview = document.getElementById('logoPreview');
+const publishSection = document.getElementById('publishSection');
+const profilesBadge = document.getElementById('profilesBadge');
+const openPublishModalBtn = document.getElementById('openPublishModalBtn');
+const publishedProfilesList = document.getElementById('publishedProfilesList');
+const thumbnailSetupSection = document.getElementById('thumbnailSetupSection');
+const thumbnailSetupBadge = document.getElementById('thumbnailSetupBadge');
+const thumbnailProfileSelect = document.getElementById('thumbnailProfileSelect');
+const thumbnailFileInput = document.getElementById('thumbnailFileInput');
+const thumbnailUploadBtn = document.getElementById('thumbnailUploadBtn');
+const thumbnailSetupPreview = document.getElementById('thumbnailSetupPreview');
+const catalogLink = document.getElementById('catalogLink');
+const adminEditorParams = new URLSearchParams(window.location.search);
+const detachedEditorMode = String(adminEditorParams.get('editor') || '').trim().toLowerCase();
+const detachedEditorProfile = String(adminEditorParams.get('profile') || '').trim();
+const isDetachedMapEditor = detachedEditorMode === 'map';
+const isDetachedEditorWindow = isDetachedMapEditor;
+const publishedProfilesRefreshKey = 'qtiler2hajk-published-profiles-refresh';
+const publishedProfilesChannel = (() => {
+  try { return 'BroadcastChannel' in window ? new BroadcastChannel('qtiler2hajk-published-profiles') : null; } catch (_) { return null; }
+})();
+let publishedProfilesRefreshInFlight = null;
+
+async function refreshPublishedProfilesAfterExternalChange() {
+  if (isDetachedMapEditor) return;
+  if (publishedProfilesRefreshInFlight) return publishedProfilesRefreshInFlight;
+  publishedProfilesRefreshInFlight = (async () => {
+  const results = await Promise.allSettled([loadStatus(), loadPublishedProfiles()]);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) addLog(t('Qtiler2Hajk.log_error', { msg: failed.reason?.message || failed.reason }), 'error');
+  })();
+  try {
+    await publishedProfilesRefreshInFlight;
+  } finally {
+    publishedProfilesRefreshInFlight = null;
+  }
+}
+
+function notifyPublishedProfilesChanged() {
+  const message = { type: 'Qtiler2Hajk:published-profiles-changed', at: Date.now() };
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(message, window.location.origin);
+    }
+  } catch (_) {}
+  try {
+    localStorage.setItem(publishedProfilesRefreshKey, JSON.stringify(message));
+  } catch (_) {}
+  try {
+    publishedProfilesChannel?.postMessage(message);
+  } catch (_) {}
+}
+
+publishedProfilesChannel?.addEventListener('message', (event) => {
+  if (event.data?.type !== 'Qtiler2Hajk:published-profiles-changed') return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin) return;
+  if (event.data?.type !== 'Qtiler2Hajk:published-profiles-changed') return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+window.addEventListener('storage', (event) => {
+  if (event.key !== publishedProfilesRefreshKey || !event.newValue) return;
+  refreshPublishedProfilesAfterExternalChange();
+});
+
+function getDetachedEditorUrl(mode, id = '') {
+  const url = new URL(window.location.href);
+  url.searchParams.set('editor', mode);
+  url.searchParams.delete('profile');
+  if (mode === 'map' && id) url.searchParams.set('profile', id);
+  url.hash = '';
+  return url.toString();
+}
+
+function openDetachedEditorWindow(mode, id = '') {
+  const safeId = String(id || 'new').replace(/[^a-z0-9_-]/gi, '_');
+  const features = 'popup=yes,width=1480,height=940,resizable=yes,scrollbars=yes';
+  const win = window.open(getDetachedEditorUrl(mode, id), `Qtiler2Hajk_${mode}_${safeId}`, features);
+  if (win) {
+    win.focus();
+    if (mode === 'map' && !isDetachedMapEditor) {
+      const timer = window.setInterval(() => {
+        if (!win.closed) return;
+        window.clearInterval(timer);
+        refreshPublishedProfilesAfterExternalChange();
+      }, 1000);
+    }
+  }
+  return win;
+}
+
+if (isDetachedEditorWindow) {
+  document.body.classList.add('admin-editor-detached', `admin-editor-detached--${detachedEditorMode}`);
+}
+const publishModal = document.getElementById('publishModal');
+const modalTitle = document.getElementById('modalTitle');
+const closePublishModalTop = document.getElementById('closePublishModalTop');
+const closePublishModalBottom = document.getElementById('closePublishModalBottom');
+const publishModalToggleFullscreen = document.getElementById('publishModalToggleFullscreen');
+const publishModalTabButtons = Array.from(document.querySelectorAll('[data-publish-tab]'));
+const publishModalPanels = Array.from(document.querySelectorAll('[data-publish-panel]'));
+const publishNowBtn = document.getElementById('publishNowBtn');
+const saveDraftBtn = document.getElementById('saveDraftBtn');
+const previewFooterBtn = document.getElementById('previewFooterBtn');
+const preflightPublishBtn = document.getElementById('preflightPublishBtn');
+const removeDemoBtn = document.getElementById('removeDemoBtn');
+const publishName = document.getElementById('publishName');
+const publishDescription = document.getElementById('publishDescription');
+const publishNameError = document.getElementById('publishNameError');
+const publishStatusError = document.getElementById('publishStatusError');
+const publishProjectSelect = document.getElementById('publishProjectSelect');
+const backgroundProjectSelect = document.getElementById('backgroundProjectSelect');
+const projectLayersList = document.getElementById('projectLayersList');
+const backgroundLayersList = document.getElementById('backgroundLayersList');
+const defaultBackgroundList = document.getElementById('defaultBackgroundList');
+const selectAllProjectLayersBtn = document.getElementById('btn-select-all-project-layers');
+const selectNoneProjectLayersBtn = document.getElementById('btn-select-none-project-layers');
+const publishLayersDynamicSlot = document.getElementById('publishLayersDynamicSlot');
+const publishToolsDynamicSlot = document.getElementById('publishToolsDynamicSlot');
+const featureSearch = document.getElementById('featureSearch');
+const featureSearchGlobal = document.getElementById('featureSearchGlobal');
+const featureView3D = document.getElementById('featureView3D');
+const featureEditing = document.getElementById('featureEditing');
+const featureIdentify = document.getElementById('featureIdentify');
+const featureLayerTree = document.getElementById('featureLayerTree');
+const featureLegend = document.getElementById('featureLegend');
+const featureMeasurement = document.getElementById('featureMeasurement');
+const featurePrint = document.getElementById('featurePrint');
+const featureMapTip = document.getElementById('featureMapTip');
+const featureShare = document.getElementById('featureShare');
+const featureRedlining = document.getElementById('featureRedlining');
+const featureBookmark = document.getElementById('featureBookmark');
+const featureHeightProfile = document.getElementById('featureHeightProfile');
+const featureDxfExport = document.getElementById('featureDxfExport');
+const featureAttributeTable = document.getElementById('featureAttributeTable');
+const featureRouting = document.getElementById('featureRouting');
+
+/* ── Tool config DOM refs ── */
+const cfgShareUrl = document.getElementById('cfgShareUrl');
+const cfgRoutingUrl = document.getElementById('cfgRoutingUrl');
+const cfgElevationUrl = document.getElementById('cfgElevationUrl');
+const cfgDxfUrl = document.getElementById('cfgDxfUrl');
+const wfsStyleModal = document.getElementById('wfs-style-modal');
+const wfsStyleLayerTitle = document.getElementById('wfs-style-layer-title');
+const wfsStyleGeometryBadge = document.getElementById('wfs-style-geometry-badge');
+const wfsStyleFullscreenBtn = document.getElementById('wfs-style-fullscreen');
+const wfsStylePreview = document.getElementById('wfs-style-preview');
+const wfsStylePresets = document.getElementById('wfs-style-presets');
+const wfsStylePresetsSection = document.getElementById('wfs-style-presets-section');
+const wfsStylePresetsSelect = document.getElementById('wfs-style-presets-select');
+const wfsStylePresetsApply = document.getElementById('wfs-style-presets-apply');
+const wfsRuleEditorModal = document.getElementById('wfs-rule-editor-modal');
+const wfsRuleEditorHost = document.getElementById('wfs-rule-editor-host');
+const wfsRuleEditorTitle = document.getElementById('wfs-rule-editor-title');
+const wfsRuleEditorFullscreenBtn = document.getElementById('wfs-rule-editor-fullscreen');
+const wfsStyleRuleModeNote = document.getElementById('wfs-style-rule-mode-note');
+const wfsStyleTabButtons = Array.from(document.querySelectorAll('[data-style-tab]'));
+const wfsStylePanels = Array.from(document.querySelectorAll('[data-style-panel]'));
+const wfsStyleJsonEditor = document.getElementById('wfs-style-json-editor');
+const wfsStyleError = document.getElementById('wfs-style-error');
+const wfsStyleShape = document.getElementById('wfsStyleShape');
+const wfsStyleShapeWrap = document.getElementById('wfsStyleShapeWrap');
+const wfsStyleFillColor = document.getElementById('wfsStyleFillColor');
+const wfsStyleFillColorWrap = document.getElementById('wfsStyleFillColorWrap');
+const wfsStyleFillOpacity = document.getElementById('wfsStyleFillOpacity');
+const wfsStyleFillOpacityWrap = document.getElementById('wfsStyleFillOpacityWrap');
+const wfsStyleFillPattern = document.getElementById('wfsStyleFillPattern');
+const wfsStyleFillPatternWrap = document.getElementById('wfsStyleFillPatternWrap');
+const wfsStylePatternAngle = document.getElementById('wfsStylePatternAngle');
+const wfsStylePatternAngleWrap = document.getElementById('wfsStylePatternAngleWrap');
+const wfsStylePatternSpacing = document.getElementById('wfsStylePatternSpacing');
+const wfsStylePatternSpacingWrap = document.getElementById('wfsStylePatternSpacingWrap');
+const wfsStylePatternSize = document.getElementById('wfsStylePatternSize');
+const wfsStylePatternSizeWrap = document.getElementById('wfsStylePatternSizeWrap');
+const wfsStylePatternTransparent = document.getElementById('wfsStylePatternTransparent');
+const wfsStylePatternTransparentWrap = document.getElementById('wfsStylePatternTransparentWrap');
+const wfsStyleStrokeColor = document.getElementById('wfsStyleStrokeColor');
+const wfsStyleStrokeOpacity = document.getElementById('wfsStyleStrokeOpacity');
+const wfsStyleStrokeWidth = document.getElementById('wfsStyleStrokeWidth');
+const wfsStyleRadius = document.getElementById('wfsStyleRadius');
+const wfsStyleRadiusWrap = document.getElementById('wfsStyleRadiusWrap');
+const wfsStyleDash = document.getElementById('wfsStyleDash');
+const wfsStyleResetBtn = document.getElementById('wfs-style-reset');
+const wfsStyleExportJsonBtn = document.getElementById('wfs-style-export-json');
+const wfsStyleImportJsonBtn = document.getElementById('wfs-style-import-json');
+const wfsStyleImportFile = document.getElementById('wfs-style-import-file');
+const wfsStyleApplyJsonBtn = document.getElementById('wfs-style-apply-json');
+const wfsStyleCopySelect = document.getElementById('wfs-style-copy-select');
+
+/* ── Origo preview & config panel ── */
+const controlsJsonInput = document.getElementById('hajk-cfg-controls');
+const extraJsonInput     = document.getElementById('hajk-cfg-extra');
+const zoomInput          = document.getElementById('hajk-cfg-zoom');
+const centerInput        = document.getElementById('hajk-cfg-center');
+const extentInput        = document.getElementById('hajk-cfg-extent');
+const minZoomInput       = document.getElementById('hajk-cfg-min-zoom');
+const maxZoomInput       = document.getElementById('hajk-cfg-max-zoom');
+const previewIframe      = document.getElementById('hajk-preview-iframe');
+const previewOverlay     = document.getElementById('hajk-preview-overlay');
+const previewOverlayTitle = document.getElementById('hajk-preview-overlay-title');
+const previewOverlayMessage = document.getElementById('hajk-preview-overlay-message');
+const openPreviewTabBtn  = document.getElementById('btn-open-map-preview-tab');
+const hajkConfigSummary = document.getElementById('origo-config-summary');
+
+/* ── JSON Editor panel ── */
+const jsonEditorContainer = document.getElementById('json-editor-container');
+const jsonLoadBtn = document.getElementById('btn-json-load');
+const jsonImportBtn = document.getElementById('btn-json-import');
+const jsonImportFile = document.getElementById('map-json-import-file');
+const jsonDownloadBtn = document.getElementById('btn-json-download');
+const jsonUndoBtn = document.getElementById('btn-json-undo');
+const jsonRedoBtn = document.getElementById('btn-json-redo');
+const jsonFormatBtn = document.getElementById('btn-json-format');
+const jsonValidateBtn = document.getElementById('btn-json-validate');
+const jsonApplyBtn = document.getElementById('btn-json-apply');
+const jsonClearLogBtn = document.getElementById('btn-json-clear-log');
+const jsonLogContainer = document.getElementById('json-log-container');
+const jsonLiveStatus = document.getElementById('json-editor-live-status');
+
+/* Map of configurable tools: checkbox id → config panel + input */
+const TOOL_CONFIG_MAP = {
+  featureShare: { panel: document.querySelector('[data-config-for="featureShare"]'), input: cfgShareUrl, key: 'shareServiceUrl' },
+  featureRouting: { panel: document.querySelector('[data-config-for="featureRouting"]'), input: cfgRoutingUrl, key: 'routingServiceUrl' },
+  featureHeightProfile: { panel: document.querySelector('[data-config-for="featureHeightProfile"]'), input: cfgElevationUrl, key: 'elevationServiceUrl' },
+  featureDxfExport: { panel: document.querySelector('[data-config-for="featureDxfExport"]'), input: cfgDxfUrl, key: 'dxfExportServiceUrl' }
+};
+
+/* ── Hajk tools exposed by the published viewer ── */
+const HAJK_TOOL_DEFS = [
+  { id: 'ctrl-mapmenu',  name: 'layerswitcher', options: null, label: 'Layer switcher', defaultChecked: true },
+  { id: 'ctrl-legend',   name: 'infoclick',     options: null, label: 'Info click', defaultChecked: true },
+  { id: 'ctrl-search',   name: 'search',        options: null, label: 'Qtiler WFS search', defaultChecked: false },
+  { id: 'ctrl-editor',   name: 'edit',          options: null, label: 'Qtiler WFS-T editor', defaultChecked: false },
+  { id: 'ctrl-position', name: 'coordinates',   options: null, label: 'Coordinates', defaultChecked: true },
+  { id: 'ctrl-measure',  name: 'measurer',      options: null, label: 'Measurer', defaultChecked: true },
+  { id: 'ctrl-print',    name: 'print',         options: null, label: 'Print', defaultChecked: false },
+  { id: 'ctrl-draw',     name: 'sketch',        options: null, label: 'Sketch', defaultChecked: true },
+  { id: 'ctrl-bookmarks', name: 'bookmarks',    options: null, label: 'Bookmarks', defaultChecked: false },
+  { id: 'ctrl-propertychecker', name: 'propertychecker', options: null, label: 'Property checker (Fastighetskontroll - requires manual WMS layer config, see gear icon)', defaultChecked: false },
+  { id: 'ctrl-lantmaterisearch', name: 'lantmaterisearch', options: {
+    proxyUrl: '/plugins/Qtiler2Hajk/api/lantmateri-proxy',
+    searchTypes: ['fastighet', 'taxering', 'adress', 'ort'],
+    zoomLevel: 14,
+    gdprNotice: 'Information fran Lantmateriet kan innehalla personuppgifter. Anvand endast i tjansteutovning enligt gallande regler.'
+  }, label: 'Lantmateriet search', defaultChecked: false },
+  { id: 'ctrl-routing',  name: 'routing',       options: null, label: 'Routing', defaultChecked: false },
+  { id: 'ctrl-anchor',   name: 'anchor',        options: null, label: 'Share link / QR', defaultChecked: false },
+  { id: 'ctrl-location', name: 'location',      options: null, label: 'User location', defaultChecked: false },
+  { id: 'ctrl-streetview', name: 'streetview',  options: null, label: 'Street View', defaultChecked: false },
+  { id: 'ctrl-layercomparer', name: 'layercomparer', options: null, label: 'Layer comparer', defaultChecked: false },
+  { id: 'ctrl-buffer',   name: 'buffer',        options: null, label: 'Buffer', defaultChecked: false },
+  { id: 'ctrl-documenthandler', name: 'documenthandler', options: null, label: 'Document handler', defaultChecked: false },
+  { id: 'ctrl-informative', name: 'informative', options: null, label: 'Informative', defaultChecked: false },
+  { id: 'ctrl-preset', name: 'preset', options: { presetList: [
+    { name: 'Göteborg', presetUrl: 'x=1321139.1624138714&y=7912264.346665324&z=12' },
+    { name: 'Halmstad', presetUrl: 'x=1427601.0460239874&y=7695072.913788887&z=12' },
+    { name: 'Kungsbacka', presetUrl: 'x=1323808.489763441&y=7850867.971644933&z=12' },
+    { name: 'Varberg', presetUrl: 'x=1357562.7727971568&y=7778074.126093438&z=12' },
+    { name: 'Örebro', presetUrl: 'x=1700469.5474212733&y=8243503.043603574&z=12' }
+  ] }, label: 'Map presets', defaultChecked: false },
+  { id: 'ctrl-export',   name: 'export',        options: null, label: 'Advanced export', defaultChecked: false },
+  { id: 'ctrl-timeslider', name: 'timeslider',  options: null, label: 'Time slider', defaultChecked: false }
+];
+
+/** Build the Hajk tools array from the current checkbox states and write to the JSON textarea. */
+function syncControlsFromCheckboxes() {
+  if (!controlsJsonInput) return;
+  publishState.controlsOptions = publishState.controlsOptions || {};
+  const selected = HAJK_TOOL_DEFS
+    .filter((def) => document.getElementById(def.id)?.checked)
+    .map((def) => {
+      // Per-control overrides from the inline configurator take precedence.
+      const userOpts = publishState.controlsOptions[def.name];
+      const baseOpts = def.options || null;
+      const merged = (userOpts && typeof userOpts === 'object')
+        ? { ...(baseOpts || {}), ...userOpts }
+        : baseOpts;
+      return merged ? { name: def.name, options: merged } : { name: def.name };
+    });
+  controlsJsonInput.value = JSON.stringify(selected, null, 2);
+  try { renderPublishConfigSummary(); } catch {}
+  try { schedulePreviewRefresh(); } catch {}
+}
+
+/** Set checkboxes from a saved Hajk tools array. */
+function syncCheckboxesFromControls(controlsArray) {
+  if (!Array.isArray(controlsArray)) return;
+  publishState.controlsOptions = publishState.controlsOptions || {};
+  const activeNames = new Set();
+  controlsArray.forEach((c) => {
+    if (typeof c === 'string') {
+      activeNames.add(c);
+    } else if (c && typeof c === 'object' && c.name) {
+      activeNames.add(c.name);
+      if (c.options && typeof c.options === 'object') {
+        publishState.controlsOptions[c.name] = c.options;
+      }
+    }
+  });
+  HAJK_TOOL_DEFS.forEach((def) => {
+    const cb = document.getElementById(def.id);
+    if (cb) cb.checked = activeNames.has(def.name);
+  });
+  // Re-render the inline configurator panels so saved options become visible.
+  if (typeof renderControlConfigPanels === 'function') renderControlConfigPanels();
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+let activePublishTab = 'layers';
+
+function getNormalizedControlsArray() {
+  const deduped = new Map();
+  let parsed = [];
+  try {
+    parsed = JSON.parse(String(controlsJsonInput?.value || '[]'));
+  } catch {
+    parsed = [];
+  }
+  if (Array.isArray(parsed)) {
+    parsed.forEach((entry) => {
+      if (typeof entry === 'string' && entry.trim()) {
+        deduped.set(entry.trim(), { name: entry.trim() });
+      } else if (entry && typeof entry === 'object' && String(entry.name || '').trim()) {
+        const name = String(entry.name || '').trim();
+        const normalized = { name };
+        if (entry.options && typeof entry.options === 'object' && !Array.isArray(entry.options)) {
+          normalized.options = entry.options;
+        }
+        deduped.set(name, normalized);
+      }
+    });
+  }
+  if (!deduped.size) {
+    HAJK_TOOL_DEFS
+      .filter((def) => document.getElementById(def.id)?.checked)
+      .forEach((def) => {
+        const userOpts = publishState.controlsOptions?.[def.name];
+        const baseOpts = def.options || null;
+        const merged = (userOpts && typeof userOpts === 'object')
+          ? { ...(baseOpts || {}), ...userOpts }
+          : baseOpts;
+        deduped.set(def.name, merged ? { name: def.name, options: merged } : { name: def.name });
+      });
+  }
+  return Array.from(deduped.values());
+}
+
+function getControlDisplayName(name) {
+  const def = HAJK_TOOL_DEFS.find((item) => item.name === name);
+  if (!def) return name;
+  if (def.labelKey) return t(def.labelKey) || def.label || name;
+  return def.label || name;
+}
+
+function updatePublishModalFullscreenButton() {
+  if (!publishModalToggleFullscreen || !publishModal) return;
+  const isFullscreen = publishModal.classList.contains('publish-editor--fullscreen');
+  publishModalToggleFullscreen.textContent = isFullscreen ? t('Qtiler2Hajk.windowed') : t('Qtiler2Hajk.fullscreen');
+  publishModalToggleFullscreen.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+}
+
+function renderPublishConfigSummary() {
+  if (!hajkConfigSummary) return;
+  const mainProjectId = String(publishProjectSelect?.value || '').trim();
+  const mainProjectLabel = publishProjectSelect?.selectedOptions?.[0]?.textContent?.trim() || mainProjectId || t('Qtiler2Hajk.summary_not_selected');
+  const activeLayerKeys = getCheckedLayerNames(projectLayersList);
+  const allLayers = getAllPublishLayers();
+  const activeLayers = activeLayerKeys
+    .map((key) => allLayers.find((layer) => getLayerKey(layer) === key))
+    .filter(Boolean);
+  const activeBackgroundLayers = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || []);
+  const defaultBackground = (publishState.backgroundOptions || []).find((item) => item.key === publishState.defaultBackgroundKey) || null;
+  const controls = getNormalizedControlsArray();
+  const mapCenter = String(centerInput?.value || '').trim();
+  const mapExtent = String(extentInput?.value || '').trim();
+  const mapZoom = String(zoomInput?.value || '').trim();
+  const mapMinZoom = String(minZoomInput?.value || '').trim();
+  const mapMaxZoom = String(maxZoomInput?.value || '').trim();
+  const layerItems = activeLayers.length
+    ? `<ul class="publish-editor__summary-list">${activeLayers.map((layer) => {
+        const displayTitle = getLayerDisplayTitle(layer);
+        return `<li>${escapeHtml(displayTitle)}${displayTitle && displayTitle !== layer.name ? ` <span style="color:#64748b">(${escapeHtml(layer.name)})</span>` : ''}${layer.sourceProjectId && layer.sourceProjectId !== mainProjectId ? ` <span style="color:#64748b">[${escapeHtml(layer.sourceProjectId)}]</span>` : ''}</li>`;
+      }).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">${escapeHtml(t('Qtiler2Hajk.summary_no_active_layers'))}</p>`;
+  const backgroundItems = activeBackgroundLayers.length
+    ? `<ul class="publish-editor__summary-list">${activeBackgroundLayers.map((layer) => `<li>${escapeHtml(layer.name)}</li>`).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">${escapeHtml(t('Qtiler2Hajk.summary_no_background_layers'))}</p>`;
+  const controlItems = controls.length
+    ? `<ul class="publish-editor__summary-list">${controls.map((ctrl) => `<li>${escapeHtml(getControlDisplayName(ctrl.name))}</li>`).join('')}</ul>`
+    : `<p class="publish-editor__summary-empty">${escapeHtml(t('Qtiler2Hajk.summary_no_active_controls'))}</p>`;
+  hajkConfigSummary.innerHTML = `
+    <section class="publish-editor__summary-card">
+      <h4>${escapeHtml(t('Qtiler2Hajk.summary_current_map'))}</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>${escapeHtml(t('Qtiler2Hajk.summary_name'))}:</strong> ${escapeHtml(String(publishName?.value || '').trim() || t('Qtiler2Hajk.summary_untitled'))}</div>
+        <div><strong>${escapeHtml(t('Qtiler2Hajk.summary_main_project'))}:</strong> ${escapeHtml(mainProjectLabel)}</div>
+        <div><strong>${escapeHtml(t('Qtiler2Hajk.summary_description'))}:</strong> ${escapeHtml(String(publishDescription?.value || '').trim() || t('Qtiler2Hajk.summary_no_description'))}</div>
+      </div>
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>${escapeHtml(t('Qtiler2Hajk.summary_active_layers', { n: String(activeLayers.length) }))}</h4>
+      ${layerItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>${escapeHtml(t('Qtiler2Hajk.summary_backgrounds'))}</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>${escapeHtml(t('Qtiler2Hajk.summary_default'))}:</strong> ${escapeHtml(defaultBackground?.title || t('Qtiler2Hajk.summary_default_none'))}</div>
+      </div>
+      ${backgroundItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>${escapeHtml(t('Qtiler2Hajk.summary_preview_controls', { n: String(controls.length) }))}</h4>
+      ${controlItems}
+    </section>
+    <section class="publish-editor__summary-card">
+      <h4>View state</h4>
+      <div class="publish-editor__summary-meta">
+        <div><strong>Zoom:</strong> ${escapeHtml(mapZoom || 'Auto')}</div>
+        <div><strong>Min / Max:</strong> ${escapeHtml(mapMinZoom || 'default')} / ${escapeHtml(mapMaxZoom || 'default')}</div>
+        <div><strong>Center:</strong> ${escapeHtml(mapCenter || 'Auto')}</div>
+        <div><strong>Extent:</strong> ${escapeHtml(mapExtent || 'Auto')}</div>
+      </div>
+    </section>`;
+}
+
+function setPublishModalTab(tabId) {
+  activePublishTab = String(tabId || 'layers');
+  publishModalTabButtons.forEach((button) => {
+    const isActive = button.getAttribute('data-publish-tab') === activePublishTab;
+    button.classList.toggle('publish-editor__tab-btn--active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+  publishModalPanels.forEach((panel) => {
+    panel.classList.toggle('publish-editor__tab-panel--active', panel.getAttribute('data-publish-panel') === activePublishTab);
+  });
+  if (activePublishTab === 'config') {
+    renderPublishConfigSummary();
+    try {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => { loadMapPreview({ silent: true }).catch(() => {}); });
+      });
+    } catch {}
+  }
+}
+
+/* ── Per-control inline configurator ──
+   Each control may declare a schema of fields; the UI renders structured
+   inputs (checkbox/text/number/textarea) instead of a raw JSON blob. Controls
+   without a schema have no ⚙ button. Fields may declare:
+     - key:   simple property on the options object, OR
+     - path:  dot-notation path for nested options (e.g. 'logo.style.height').
+   See https://origo-map.github.io/origo-documentation/latest/#controls
+*/
+const ORIGO_CTRL_SCHEMAS = {
+  home: [
+    { key: 'extent', type: 'csv-num', label: 'Extent (minx, miny, maxx, maxy)',
+      placeholder: '134966, 6593080, 176372, 6636922' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  fullscreen: [
+    { key: 'target', type: 'text', label: 'Target container element id' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  geoposition: [
+    { key: 'active', type: 'bool', label: 'Active on load', defaultValue: false },
+    { key: 'panTo', type: 'bool', label: 'Pan to user position', defaultValue: true },
+    { key: 'zoomLevel', type: 'number', label: 'Zoom level on locate' },
+    { key: 'enableTracking', type: 'bool', label: 'Enable tracking', defaultValue: false },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  mapmenu: [
+    { key: 'isActive', type: 'bool', label: 'Open on load', defaultValue: false },
+    { key: 'breakPointSize', type: 'select', label: 'Breakpoint size',
+      options: [['', '— default (l) —'], ['xs', 'xs'], ['s', 's'], ['m', 'm'], ['l', 'l']] },
+    { key: 'autoHide', type: 'select', label: 'Auto-hide on map click',
+      options: [['', '— never —'], ['always', 'always'], ['mobile', 'mobile'], ['never', 'never']] },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  legend: [
+    { key: 'expanded', type: 'bool', label: 'Expanded on load', defaultValue: true },
+    { key: 'turnOffLayersControl', type: 'bool', label: 'Turn-off-all-layers button', defaultValue: false },
+    { key: 'turnOnLayersControl', type: 'bool', label: 'Turn-on-all-layers button', defaultValue: false },
+    { key: 'visibleLayersControl', type: 'bool', label: 'Visible-layers button', defaultValue: false },
+    { key: 'visibleLayersViewActive', type: 'bool', label: 'Visible-layers view active', defaultValue: false },
+    { key: 'searchLayersControl', type: 'bool', label: 'Search layers in legend', defaultValue: false },
+    { key: 'searchLayersMinLength', type: 'number', label: 'Search min length' },
+    { key: 'searchLayersLimit', type: 'number', label: 'Search results limit' },
+    { key: 'searchLayersPlaceholderText', type: 'text', label: 'Search placeholder text' },
+    { key: 'autoHide', type: 'select', label: 'Auto-hide on map click',
+      options: [['', '— never —'], ['always', 'always'], ['mobile', 'mobile'], ['never', 'never']] },
+    { key: 'labelOpacitySlider', type: 'text', label: 'Opacity slider label' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  search: [
+    { key: 'url', type: 'text', label: 'Search endpoint URL', placeholder: '/adressok' },
+    { key: 'searchAttribute', type: 'text', label: 'Search attribute', placeholder: 'NAMN' },
+    { key: 'queryParameterName', type: 'text', label: 'Query parameter name', placeholder: 'q' },
+    { key: 'title', type: 'text', label: 'Result title', placeholder: 'Address' },
+    { key: 'hintText', type: 'text', label: 'Placeholder text', placeholder: 'Search…' },
+    { key: 'limit', type: 'number', label: 'Suggestion limit', placeholder: '9' },
+    { key: 'minLength', type: 'number', label: 'Min characters to trigger', placeholder: '4' },
+    { key: 'maxZoomLevel', type: 'number', label: 'Max zoom on result' },
+    { key: 'geometryAttribute', type: 'text', label: 'Geometry attribute', placeholder: 'GEOM' },
+    { key: 'northing', type: 'text', label: 'Northing attribute (option 5)', placeholder: 'N' },
+    { key: 'easting', type: 'text', label: 'Easting attribute (option 5)', placeholder: 'E' },
+    { key: 'idAttribute', type: 'text', label: 'Id attribute' },
+    { key: 'layerNameAttribute', type: 'text', label: 'Layer name attribute' },
+    { key: 'layerName', type: 'text', label: 'Layer name (single-layer search)' },
+    { key: 'titleAttribute', type: 'text', label: 'Title attribute (option 3)' },
+    { key: 'contentAttribute', type: 'text', label: 'Content attribute (option 3)' },
+    { key: 'groupSuggestions', type: 'bool', label: 'Group suggestions', defaultValue: false },
+    { key: 'includeSearchableLayers', type: 'bool', label: 'Include searchable layers', defaultValue: false },
+    { key: 'autocompletePlacement', type: 'select', label: 'Autocomplete placement',
+      options: [['', '— search —'], ['search', 'search'], ['left', 'left'], ['floating', 'floating']] },
+    { key: 'suppressDialog', type: 'bool', label: 'Suppress popup dialog', defaultValue: false },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  measure: [
+    { key: 'measureTools', type: 'csv', label: 'Measure tools (length, area, elevation, buffer)',
+      placeholder: 'length, area' },
+    { key: 'default', type: 'select', label: 'Default tool',
+      options: [['', '— length —'], ['length', 'length'], ['area', 'area'], ['elevation', 'elevation'], ['buffer', 'buffer']] },
+    { key: 'showSegmentLengths', type: 'bool', label: 'Show segment lengths', defaultValue: false },
+    { key: 'showSegmentLabelButtonActive', type: 'bool', label: 'Segment label button active', defaultValue: true },
+    { key: 'useHectare', type: 'bool', label: 'Use hectare for medium areas', defaultValue: true },
+    { key: 'highlightColor', type: 'text', label: 'Highlight color (rgba)', placeholder: 'rgba(133,193,233,0.8)' },
+    { key: 'snap', type: 'bool', label: 'Enable snapping', defaultValue: false },
+    { key: 'snapIsActive', type: 'bool', label: 'Snap active on load', defaultValue: false },
+    { key: 'snapRadius', type: 'number', label: 'Snap radius (px)' },
+    { key: 'snapLayers', type: 'csv', label: 'Snap layers (csv)' },
+    { key: 'queryable', type: 'bool', label: 'Queryable measure features', defaultValue: false },
+    { key: 'elevationServiceURL', type: 'text', label: 'Elevation service URL' },
+    { key: 'elevationTargetProjection', type: 'text', label: 'Elevation target projection' },
+    { key: 'elevationAttribute', type: 'text', label: 'Elevation attribute path' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  position: [
+    { key: 'title', type: 'text', label: 'Initial projection alias', placeholder: 'EPSG:3006' },
+    { key: 'projections', type: 'json', label: 'Projections (JSON)',
+      placeholder: '{ "EPSG:3006": "SWEREF99 TM", "EPSG:4326": "WGS84" }' },
+    { key: 'noPositionText', type: 'text', label: 'Text when no position' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  print: [
+    { key: 'placement', type: 'csv', label: 'Button placement (menu, screen)', placeholder: 'menu, screen' },
+    { key: 'leftFooterText', type: 'text', label: 'Left footer text' },
+    { key: 'showCreated', type: 'bool', label: 'Show created date (footer right)', defaultValue: false },
+    { key: 'createdPrefix', type: 'text', label: 'Created date prefix', placeholder: 'Created ' },
+    { key: 'showScale', type: 'bool', label: 'Show scale on print', defaultValue: true },
+    { key: 'scales', type: 'csv-num', label: 'Available scales (csv)',
+      placeholder: '500, 1000, 5000, 10000, 50000, 100000' },
+    { key: 'mapInteractionsActive', type: 'bool', label: 'Map interactions active', defaultValue: false },
+    { key: 'suppressNewDPIMethod', type: 'bool', label: 'Suppress new DPI method', defaultValue: false },
+    { key: 'supressResolutionsRecalculation', type: 'bool', label: 'Suppress resolutions recalc', defaultValue: false },
+    // Logo placement (nested)
+    { path: 'logo.src', type: 'text', label: 'Logo: image source path',
+      placeholder: '/plugins/Qtiler2Hajk/public/branding/logo  (or  css/png/logo_print.png)' },
+    { path: 'logo.cls', type: 'text', label: 'Logo: CSS class (placement)',
+      placeholder: 'padding-bottom-small  (e.g. padding-top-small for top)' },
+    { path: 'logo.style.height', type: 'text', label: 'Logo: height (CSS)', placeholder: '3rem' },
+    { path: 'logo.style.width', type: 'text', label: 'Logo: width (CSS)' },
+    // North arrow (nested)
+    { path: 'northArrow.visible', type: 'bool', label: 'North arrow visible', defaultValue: true },
+    { path: 'northArrow.src', type: 'text', label: 'North arrow: image source',
+      placeholder: 'css/png/north_arrow_print.png' },
+    { path: 'northArrow.cls', type: 'text', label: 'North arrow: CSS class',
+      placeholder: 'padding-right-small printmap-north-arrow' },
+    { path: 'northArrow.style.height', type: 'text', label: 'North arrow: height', placeholder: '5rem' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  attribution: [
+    { key: 'attribution', type: 'text', label: 'Attribution text' }
+  ],
+  about: [
+    { key: 'buttontext', type: 'text', label: 'Menu button text' },
+    { key: 'title', type: 'text', label: 'Popup title' },
+    { key: 'content', type: 'textarea', label: 'Popup HTML content' },
+    { key: 'placement', type: 'csv', label: 'Placement (menu, screen)', placeholder: 'menu' },
+    { key: 'style', type: 'select', label: 'Modal style',
+      options: [['', '— modal —'], ['modal', 'modal'], ['modal-full', 'modal-full']] },
+    { key: 'icon', type: 'text', label: 'Icon id', placeholder: '#ic_help_outline_24px' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  bookmarks: [
+    { key: 'title', type: 'text', label: 'Panel title', placeholder: 'Bookmarks' },
+    { key: 'isActive', type: 'bool', label: 'Open on load', defaultValue: false },
+    { key: 'maxZoom', type: 'number', label: 'Default zoom level', placeholder: '15' },
+    { key: 'duration', type: 'number', label: 'Animation duration (ms)', placeholder: '300' },
+    { key: 'items', type: 'json', label: 'Items (JSON array)',
+      placeholder: '[ { "name": "City", "coordinates": [x, y], "zoomLevel": 12 } ]' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  draganddrop: [
+    { key: 'groupName', type: 'text', label: 'Group name', placeholder: 'egna-lager' },
+    { key: 'groupTitle', type: 'text', label: 'Group title', placeholder: 'Egna lager' },
+    { key: 'showLegendButton', type: 'bool', label: 'Show add-button in legend', defaultValue: false },
+    { key: 'styleByAttribute', type: 'bool', label: 'Style features by attribute', defaultValue: false },
+    { key: 'zoomToExtent', type: 'bool', label: 'Allow zoom-to-extent', defaultValue: true },
+    { key: 'zoomToExtentOnLoad', type: 'bool', label: 'Zoom to extent on load', defaultValue: true },
+    { key: 'featureStyles', type: 'json', label: 'Feature styles (JSON)' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  draw: [
+    { key: 'buttonText', type: 'text', label: 'Menu button text', placeholder: 'Draw' },
+    { key: 'isActive', type: 'bool', label: 'Active on load', defaultValue: false },
+    { key: 'placement', type: 'csv', label: 'Placement (menu, screen)', placeholder: 'menu' },
+    { key: 'layerTitle', type: 'text', label: 'Layer title', placeholder: 'Drawing' },
+    { key: 'groupName', type: 'text', label: 'Group name' },
+    { key: 'groupTitle', type: 'text', label: 'Group title' },
+    { key: 'multipleLayers', type: 'bool', label: 'Multiple draw layers', defaultValue: false },
+    { key: 'queryable', type: 'bool', label: 'Queryable layer', defaultValue: false },
+    { key: 'removable', type: 'bool', label: 'Removable layer', defaultValue: true },
+    { key: 'exportable', type: 'bool', label: 'Exportable layer', defaultValue: true },
+    { key: 'showAttributeButton', type: 'bool', label: 'Show attribute button', defaultValue: false },
+    { key: 'showDownloadButton', type: 'bool', label: 'Show download button', defaultValue: false },
+    { key: 'showSaveButton', type: 'bool', label: 'Show save button', defaultValue: false },
+    { key: 'zoomToExtent', type: 'bool', label: 'Zoom-to-extent button', defaultValue: true },
+    { key: 'drawTools', type: 'json', label: 'Extra draw tools (JSON)',
+      placeholder: '{ "Polygon": ["freehand", "box"], "LineString": ["freehand"] }' },
+    { key: 'extraMarkers', type: 'json', label: 'Extra markers (JSON)' }
+  ],
+  editor: [
+    { key: 'isActive', type: 'bool', label: 'Toolbar open on load', defaultValue: true },
+    { key: 'autoSave', type: 'bool', label: 'Auto save edits', defaultValue: true },
+    { key: 'autoForm', type: 'bool', label: 'Auto attribute form after draw', defaultValue: false },
+    { key: 'snap', type: 'bool', label: 'Snapping enabled', defaultValue: true },
+    { key: 'snapTolerance', type: 'number', label: 'Snap tolerance (px)', placeholder: '10' },
+    { key: 'trace', type: 'bool', label: 'Tracing enabled', defaultValue: false },
+    { key: 'traceStyle', type: 'text', label: 'Trace style name' },
+    { key: 'validateOnDraw', type: 'bool', label: 'Validate on draw (no self-intersect)', defaultValue: false },
+    { key: 'featureList', type: 'bool', label: 'Show feature list on multi-select', defaultValue: true },
+    { key: 'featureListAttributes', type: 'csv', label: 'Feature list attributes (csv)' },
+    { key: 'modifyTools', type: 'bool', label: 'Show modify tools', defaultValue: false },
+    { key: 'defaultLayer', type: 'text', label: 'Default editable layer' },
+    { key: 'editableLayers', type: 'csv', label: 'Editable layers (csv)' },
+    { key: 'snapLayers', type: 'csv', label: 'Snap layers (csv)' },
+    { key: 'attributes', type: 'json', label: 'Attribute definitions (JSON)' },
+    { key: 'drawTools', type: 'json', label: 'Extra draw tools (JSON)' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  externalurl: [
+    { key: 'tooltipText', type: 'text', label: 'Tooltip text' },
+    { key: 'icon', type: 'text', label: 'Icon id', placeholder: '#ic_baseline_link_24px' },
+    { key: 'direction', type: 'select', label: 'Subbutton direction',
+      options: [['', '— vertical —'], ['vertical', 'vertical'], ['horizontal', 'horizontal']] },
+    { key: 'target', type: 'text', label: 'Anchor target', placeholder: '_blank' },
+    { key: 'links', type: 'json', label: 'Links (JSON array)',
+      placeholder: '[ { "tooltipText": "OSM", "method": "LatLon", "url": "https://…/{{LAT}}/{{LON}}" } ]' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  link: [
+    { key: 'title', type: 'text', label: 'Link title' },
+    { key: 'url', type: 'text', label: 'URL', placeholder: 'https://example.com' },
+    { key: 'icon', type: 'text', label: 'Icon id', placeholder: '#ic_launch_24px' },
+    { key: 'placement', type: 'csv', label: 'Placement (menu, screen)', placeholder: 'menu' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  splash: [
+    { key: 'title', type: 'text', label: 'Modal title' },
+    { key: 'url', type: 'text', label: 'HTML file URL' },
+    { key: 'content', type: 'textarea', label: 'Modal HTML content' },
+    { key: 'style', type: 'text', label: 'CSS style', placeholder: 'width: 600px;' },
+    { path: 'hideButton.visible', type: 'bool', label: 'Show "don\'t show again" button', defaultValue: false },
+    { path: 'hideButton.hideText', type: 'text', label: 'Hide button text' },
+    { path: 'hideButton.confirmText', type: 'text', label: 'Confirm text' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  scale: [
+    { key: 'scaleText', type: 'text', label: 'Prefix text', placeholder: '1:' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  scalepicker: [
+    { key: 'buttonPrefix', type: 'text', label: 'Button prefix', placeholder: 'Scale: ' },
+    { key: 'listItemPrefix', type: 'text', label: 'List item prefix', placeholder: 'Scale: ' },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  sharemap: [
+    { key: 'title', type: 'text', label: 'Menu title', placeholder: 'Share map' },
+    { key: 'icon', type: 'text', label: 'Icon id', placeholder: '#ic_screen_share_outline_24px' },
+    { key: 'storeMethod', type: 'select', label: 'Store method',
+      options: [['', '— url-only —'], ['saveStateToServer', 'saveStateToServer']] },
+    { key: 'serviceEndpoint', type: 'text', label: 'Service endpoint URL' },
+    { key: 'loadMapStateIdMethod', type: 'select', label: 'Load mapStateId method',
+      options: [['', '— path —'], ['path', 'path'], ['query', 'query']] },
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ],
+  progressbar: [
+    { key: 'hideWhenEmbedded', type: 'bool', label: 'Hide when embedded', defaultValue: false }
+  ]
+};
+
+const HAJK_CTRL_SCHEMA_ALIASES = {
+  layerswitcher: 'mapmenu',
+  measurer: 'measure',
+  coordinates: 'position',
+  sketch: 'draw',
+  edit: 'editor'
+};
+
+const HAJK_CTRL_SCHEMAS = {
+  layerswitcher: [
+    { key: 'visibleAtStart', type: 'bool', label: 'Open panel on load', defaultValue: false },
+    { key: 'showFilter', type: 'bool', label: 'Show layer filter', defaultValue: true },
+    { key: 'enableTransparencySlider', type: 'bool', label: 'Opacity slider', defaultValue: true },
+    { key: 'showDrawOrderView', type: 'bool', label: 'Draw order tab', defaultValue: false },
+    { key: 'showQuickAccess', type: 'bool', label: 'Quick access section', defaultValue: false },
+    { key: 'enableOSM', type: 'bool', label: 'Include OSM background', defaultValue: true },
+    { key: 'backgroundSwitcherWhite', type: 'bool', label: 'Include white background', defaultValue: true },
+    { key: 'backgroundSwitcherBlack', type: 'bool', label: 'Include black background', defaultValue: false },
+    { key: 'renderSpecialBackgroundsAtBottom', type: 'bool', label: 'Put white/black/OSM last', defaultValue: true },
+    { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] }
+  ],
+  infoclick: [
+    { key: 'height', type: 'number', label: 'Popup height', placeholder: '300' },
+    { key: 'allowDangerousHtml', type: 'bool', label: 'Allow raw HTML', defaultValue: false },
+    { key: 'useNewInfoclick', type: 'bool', label: 'Use new info click', defaultValue: true },
+    { key: 'useNewPlaceholderMatching', type: 'bool', label: 'Placeholder matching', defaultValue: true },
+    { key: 'useLevel1FeatureHighlight', type: 'bool', label: 'Highlight clicked feature', defaultValue: true },
+    { key: 'transformLinkUri', type: 'bool', label: 'Transform link URLs', defaultValue: true }
+  ],
+  // Swedish "Fastighetskontroll" tool. All fields below are required (no
+  // generic default makes sense) - they must reference WMS layer IDs that
+  // already exist in this map's layer list, with attribute names matching
+  // your own WMS schema. The control is skipped entirely if any is empty.
+  propertychecker: [
+    { key: 'checkLayerId', type: 'text', label: 'Check layer ID (required)' },
+    { key: 'checkLayerPropertyAttribute', type: 'text', label: 'Check layer property attribute (required)' },
+    { key: 'digitalPlansLayerId', type: 'text', label: 'Digital plans layer ID (required)' },
+    { key: 'groupDigitalPlansLayerByAttribute', type: 'text', label: 'Digital plans grouping attribute (required)' },
+    { key: 'groupDigitalPlansLayerSecondLevelByAttribute', type: 'text', label: 'Digital plans 2nd-level grouping attribute (required)' },
+    { key: 'buildingsLayerIds', type: 'text', label: 'Buildings layer IDs, comma-separated (required)' },
+    { key: 'bordersLayerIds', type: 'text', label: 'Borders layer IDs, comma-separated (required)' },
+    { key: 'plansLayerIds', type: 'text', label: 'Plans layer IDs, comma-separated (required)' },
+    { key: 'enableCheckLayerReport', type: 'bool', label: 'Enable check-layer report', defaultValue: true },
+    { key: 'enableDigitalPlansReport', type: 'bool', label: 'Enable digital-plans report', defaultValue: true },
+    { key: 'target', type: 'select', label: 'Target', options: [['right', 'right'], ['left', 'left'], ['toolbar', 'toolbar'], ['control', 'control']] }
+  ],
+  search: [
+    { key: 'searchBarPlaceholder', type: 'text', label: 'Placeholder text', placeholder: 'Search...' },
+    { key: 'maxResultsPerDataset', type: 'number', label: 'Max results per layer', placeholder: '100' },
+    { key: 'delayBeforeAutoSearch', type: 'number', label: 'Auto-search delay (ms)', placeholder: '300' },
+    { key: 'enablePolygonSearch', type: 'bool', label: 'Polygon search', defaultValue: true },
+    { key: 'enableRadiusSearch', type: 'bool', label: 'Radius search', defaultValue: true },
+    { key: 'enableExtentSearch', type: 'bool', label: 'Extent search', defaultValue: true },
+    { key: 'enableResultsFiltering', type: 'bool', label: 'Result filtering', defaultValue: true },
+    { key: 'enableResultsSorting', type: 'bool', label: 'Result sorting', defaultValue: true },
+    { key: 'enableResultsDownloading', type: 'bool', label: 'Result download', defaultValue: true },
+    { key: 'showResultFeaturesInMap', type: 'bool', label: 'Show hits on map', defaultValue: true }
+  ],
+  anchor: [
+    { key: 'title', type: 'text', label: 'Window title', placeholder: 'Share' },
+    { key: 'target', type: 'select', label: 'Target', options: [['control', 'control'], ['toolbar', 'toolbar'], ['left', 'left'], ['right', 'right']] },
+    { key: 'position', type: 'select', label: 'Position', options: [['right', 'right'], ['left', 'left']] },
+    { key: 'allowCreatingCleanUrls', type: 'bool', label: 'Allow clean URLs', defaultValue: true }
+  ],
+  location: [
+    { key: 'target', type: 'select', label: 'Target', options: [['control', 'control'], ['toolbar', 'toolbar'], ['left', 'left'], ['right', 'right']] },
+    { key: 'position', type: 'select', label: 'Position', options: [['right', 'right'], ['left', 'left']] },
+    { key: 'tracking', type: 'bool', label: 'Tracking mode', defaultValue: false }
+  ],
+  streetview: [
+    { key: 'apiKey', type: 'text', label: 'Google API key (required, control is skipped if empty)' },
+    { key: 'target', type: 'select', label: 'Target', options: [['toolbar', 'toolbar'], ['control', 'control'], ['left', 'left'], ['right', 'right']] },
+    { key: 'position', type: 'select', label: 'Position', options: [['right', 'right'], ['left', 'left']] },
+    { key: 'instruction', type: 'textarea', label: 'Instruction text' }
+  ],
+  routing: [
+    { key: 'apiKey', type: 'text', label: 'API key' },
+    { key: 'target', type: 'select', label: 'Target', options: [['toolbar', 'toolbar'], ['control', 'control'], ['left', 'left'], ['right', 'right']] },
+    { key: 'position', type: 'select', label: 'Position', options: [['right', 'right'], ['left', 'left']] },
+    { key: 'instruction', type: 'textarea', label: 'Instruction text' }
+  ],
+  layercomparer: [
+    { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] },
+    { key: 'showNonBaseLayersInSelect', type: 'bool', label: 'Allow overlays in selectors', defaultValue: false },
+    { key: 'visibleAtStart', type: 'bool', label: 'Open on load', defaultValue: false },
+    { key: 'chosenLayers', type: 'json', label: 'Preset comparable layers (JSON)', placeholder: '[ { "id": "layer-id", "caption": "Layer" } ]' }
+  ],
+  buffer: [
+    { key: 'target', type: 'select', label: 'Target', options: [['toolbar', 'toolbar'], ['left', 'left'], ['right', 'right'], ['control', 'control']] },
+    { key: 'geoserverUrl', type: 'text', label: 'GeoServer URL' },
+    { key: 'varbergVer', type: 'bool', label: 'Varberg mode', defaultValue: false },
+    { key: 'notFeatureLayers', type: 'csv', label: 'Excluded layers (csv)' }
+  ],
+  documenthandler: [
+    { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] },
+    { key: 'title', type: 'text', label: 'Title', placeholder: 'Documents' },
+    { key: 'mapServiceUrl', type: 'text', label: 'Document service URL (required unless Custom theme URL is set)' },
+    { key: 'customThemeUrl', type: 'text', label: 'Custom theme JSON URL (required unless Document service URL is set)' },
+    { path: 'tableOfContents.expanded', type: 'bool', label: 'Expanded table of contents', defaultValue: true },
+    { path: 'settings.menu', type: 'json', label: 'Menu JSON', placeholder: '[]' }
+  ],
+  informative: [
+    { key: 'caption', type: 'text', label: 'Caption', placeholder: 'Information' },
+    { key: 'html', type: 'textarea', label: 'Intro HTML' },
+    { key: 'serviceUrl', type: 'text', label: 'Service URL' },
+    { key: 'document', type: 'text', label: 'Document name' },
+    { key: 'tocExpanded', type: 'bool', label: 'TOC expanded', defaultValue: true },
+    { key: 'exportUrl', type: 'text', label: 'Export URL' }
+  ],
+  template: [
+    { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] },
+    { key: 'title', type: 'text', label: 'Title' },
+    { key: 'url', type: 'text', label: 'Template URL (required, control is skipped if empty)' },
+    { key: 'visibleAtStart', type: 'bool', label: 'Open on load', defaultValue: false }
+  ],
+  export: [
+    { key: 'exportUrl', type: 'text', label: 'Export service URL' },
+    { key: 'scales', type: 'csv-num', label: 'Scales', placeholder: '250, 500, 1000, 2500, 5000' },
+    { key: 'target', type: 'select', label: 'Target', options: [['left', 'left'], ['right', 'right'], ['toolbar', 'toolbar'], ['control', 'control']] }
+  ],
+  timeslider: [
+    { key: 'visibleAtStart', type: 'bool', label: 'Visible on load', defaultValue: false },
+    { key: 'start', type: 'text', label: 'Start time' },
+    { key: 'end', type: 'text', label: 'End time' },
+    { key: 'step', type: 'text', label: 'Step' },
+    { key: 'layers', type: 'csv', label: 'Layer ids (csv)' }
+  ]
+};
+
+/* Dot-path helpers for nested option editing */
+function dotGet(obj, path) {
+  if (!obj || !path) return undefined;
+  return String(path).split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+function dotSet(obj, path, value) {
+  const keys = String(path).split('.');
+  const last = keys.pop();
+  let cur = obj;
+  for (const k of keys) {
+    if (cur[k] == null || typeof cur[k] !== 'object') cur[k] = {};
+    cur = cur[k];
+  }
+  if (value === undefined) delete cur[last]; else cur[last] = value;
+}
+
+/* Read/write a field value into an options object using its schema entry. */
+function getFieldValue(opts, field) {
+  if (typeof field.get === 'function') return field.get(opts);
+  if (field.path) return dotGet(opts, field.path);
+  return opts ? opts[field.key] : undefined;
+}
+function setFieldValue(opts, field, raw) {
+  let v = raw;
+  switch (field.type) {
+    case 'bool':
+      v = !!raw; break;
+    case 'number':
+      if (raw === '' || raw == null) v = undefined;
+      else { const n = Number(raw); v = Number.isFinite(n) ? n : undefined; }
+      break;
+    case 'csv':
+      v = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!v.length) v = undefined;
+      break;
+    case 'csv-num':
+      v = String(raw || '').split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n));
+      if (!v.length) v = undefined;
+      break;
+    case 'json':
+      if (!String(raw || '').trim()) { v = undefined; break; }
+      v = JSON.parse(raw); // throws → caller catches
+      break;
+    case 'text':
+    case 'textarea':
+    case 'select':
+    default:
+      if (raw === '' || raw == null) v = undefined;
+      else v = String(raw);
+      break;
+  }
+  if (typeof field.set === 'function') {
+    field.set(opts, v);
+  } else if (field.path) {
+    dotSet(opts, field.path, v);
+  } else if (v === undefined) {
+    delete opts[field.key];
+  } else {
+    opts[field.key] = v;
+  }
+}
+
+/* Resolve a display label for a schema field. Prefers explicit label, falls
+   back to translation when present, finally a prettified key/path. */
+function fieldLabel(field) {
+  if (field.label) return field.label;
+  if (field.labelKey && typeof t === 'function') {
+    const tr = t(field.labelKey);
+    if (tr && tr !== field.labelKey) return tr;
+  }
+  const raw = field.path || field.key || '';
+  return raw.replace(/[._]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function renderControlConfigPanels() {
+  publishState.controlsOptions = publishState.controlsOptions || {};
+  HAJK_TOOL_DEFS.forEach((def) => {
+    const labelEl = document.getElementById(def.id)?.closest('label');
+    if (!labelEl || labelEl.dataset.cfgEnhanced) return;
+    labelEl.dataset.cfgEnhanced = '1';
+    const schema = HAJK_CTRL_SCHEMAS[def.name] || ORIGO_CTRL_SCHEMAS[HAJK_CTRL_SCHEMA_ALIASES[def.name] || def.name];
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'Qtiler2Hajk-control-row';
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.gap = '0.25rem';
+    labelEl.parentNode.insertBefore(wrapper, labelEl);
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.gap = '0.4rem';
+    wrapper.appendChild(header);
+    header.appendChild(labelEl);
+
+    if (!Array.isArray(schema) || schema.length === 0) {
+      // No options → no gear button.
+      return;
+    }
+
+    const cfgBtn = document.createElement('button');
+    cfgBtn.type = 'button';
+    cfgBtn.className = 'button is-small is-light';
+    cfgBtn.textContent = '⚙';
+    cfgBtn.setAttribute('data-i18n-title', 'Qtiler2Hajk.cfg_btn_title');
+    cfgBtn.title = (typeof t === 'function') ? t('Qtiler2Hajk.cfg_btn_title') : 'Configure options';
+    cfgBtn.style.padding = '0 0.45rem';
+    header.appendChild(cfgBtn);
+
+    const panel = document.createElement('div');
+    panel.style.display = 'none';
+    panel.style.padding = '0.5rem';
+    panel.style.background = '#fafafa';
+    panel.style.border = '1px solid #ddd';
+    panel.style.borderRadius = '4px';
+    wrapper.appendChild(panel);
+
+    const err = document.createElement('div');
+    err.style.color = '#c00';
+    err.style.fontSize = '0.7rem';
+    err.style.marginTop = '0.25rem';
+
+    /** Re-render this control's panel from current state. */
+    const renderPanelBody = () => {
+      panel.innerHTML = '';
+      const current = publishState.controlsOptions[def.name] || (def.options ? { ...def.options } : {});
+      schema.forEach((field) => {
+        // Crea un contenedor horizontal para cada campo
+        const row = document.createElement('div');
+        row.className = 'q2o-config-row';
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '120px 1fr';
+        row.style.gap = '0.5rem';
+        row.style.alignItems = 'center';
+        row.style.marginBottom = '0.4rem';
+        const labelTxt = fieldLabel(field);
+        if (field.type === 'bool') {
+          // Label a la izquierda, checkbox a la derecha
+          const label = document.createElement('label');
+          label.style.fontSize = '0.85em';
+          label.style.overflow = 'hidden';
+          label.style.textOverflow = 'ellipsis';
+          label.textContent = labelTxt;
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.style.marginLeft = '0.5rem';
+          const v = getFieldValue(current, field);
+          cb.checked = (v === undefined ? !!field.defaultValue : !!v);
+          cb.addEventListener('change', () => commitField(field, cb.checked));
+          row.appendChild(label);
+          row.appendChild(cb);
+        } else {
+          // Label a la izquierda, input a la derecha
+          const label = document.createElement('label');
+          label.style.fontSize = '0.85em';
+          label.style.overflow = 'hidden';
+          label.style.textOverflow = 'ellipsis';
+          label.textContent = labelTxt;
+          let input;
+          if (field.type === 'textarea' || field.type === 'json') {
+            input = document.createElement('textarea');
+            input.className = 'textarea is-small';
+            input.rows = field.type === 'json' ? 3 : 4;
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
+          } else if (field.type === 'select') {
+            input = document.createElement('div');
+            input.className = 'select is-small is-fullwidth';
+            const sel = document.createElement('select');
+            (field.options || []).forEach(([val, txt]) => {
+              const o = document.createElement('option');
+              o.value = val; o.textContent = txt;
+              sel.appendChild(o);
+            });
+            input.appendChild(sel);
+            input._sel = sel;
+          } else {
+            input = document.createElement('input');
+            input.className = 'input is-small';
+            input.type = field.type === 'number' ? 'number' : 'text';
+            input.style.width = '100%';
+          }
+          if (field.placeholder) {
+            const target = input._sel || input;
+            if ('placeholder' in target) target.placeholder = field.placeholder;
+          }
+          const v = getFieldValue(current, field);
+          const target = input._sel || input;
+          if (v !== undefined && v !== null) {
+            if (field.type === 'json') target.value = (typeof v === 'string') ? v : JSON.stringify(v, null, 2);
+            else if (field.type === 'csv' || field.type === 'csv-num') target.value = Array.isArray(v) ? v.join(', ') : String(v);
+            else target.value = String(v);
+          }
+          target.addEventListener('input', () => commitField(field, target.value));
+          if (field.type === 'select') target.addEventListener('change', () => commitField(field, target.value));
+          row.appendChild(label);
+          row.appendChild(input);
+        }
+        panel.appendChild(row);
+      });
+      panel.appendChild(err);
+    };
+
+    const commitField = (field, raw) => {
+      const opts = publishState.controlsOptions[def.name] || (def.options ? { ...def.options } : {});
+      try {
+        setFieldValue(opts, field, raw);
+        err.textContent = '';
+      } catch (e) {
+        err.textContent = ((typeof t === 'function') ? t('Qtiler2Hajk.cfg_invalid_json') : 'Invalid JSON') + ': ' + e.message;
+        return;
+      }
+      // Drop empty options object so we don't write `{ }` into the published JSON.
+      if (Object.keys(opts).length === 0) {
+        delete publishState.controlsOptions[def.name];
+      } else {
+        publishState.controlsOptions[def.name] = opts;
+      }
+      syncControlsFromCheckboxes();
+    };
+
+    cfgBtn.addEventListener('click', () => {
+      const open = panel.style.display !== 'none';
+      if (open) {
+        panel.style.display = 'none';
+      } else {
+        renderPanelBody();
+        panel.style.display = 'block';
+      }
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded', renderControlConfigPanels);
+// Re-render panels when language changes so labels update.
+if (typeof window !== 'undefined' && window.qtilerLang && typeof window.qtilerLang.subscribe === 'function') {
+  window.qtilerLang.subscribe(() => {
+    document.querySelectorAll('.Qtiler2Hajk-control-row .field').forEach(n => n.remove());
+    // Rebuild headers' tooltips
+    document.querySelectorAll('.Qtiler2Hajk-control-row button[data-i18n-title]').forEach((btn) => {
+      const k = btn.getAttribute('data-i18n-title');
+      btn.title = (typeof t === 'function') ? t(k) : btn.title;
+    });
+  });
+}
+
+/* ── i18n helpers ── */
+function getLang() {
+  let raw = '';
+  if (window.qtilerLang && typeof window.qtilerLang.get === 'function') raw = window.qtilerLang.get();
+  if (!raw) { try { raw = localStorage.getItem('qtiler.lang') || ''; } catch (_) {} }
+  if (!raw) raw = (navigator.language || 'en');
+  raw = String(raw).toLowerCase();
+  return raw.split('-')[0];
+}
+
+function t(key, params) {
+  // Normalize the case of the plugin namespace prefix so that
+  // `data-i18n="qtiler2origo.foo"` (any casing) maps to the canonical
+  // `Qtiler2Hajk.foo` key in the dictionaries.
+  const normalizedKey = String(key || '').replace(/^qtiler2origo\./i, 'Qtiler2Hajk.');
+  const lang = getLang();
+  const dict = QTWC_I18N[lang] || QTWC_I18N.en || {};
+  let text = dict[normalizedKey] || (QTWC_I18N.en || {})[normalizedKey] || normalizedKey;
+  if (params && typeof params === 'object') {
+    Object.keys(params).forEach((k) => { text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), String(params[k])); });
+  }
+  return text;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (key) el.placeholder = t(key);
+  });
+  // Update control checkbox labels — only when the def declares a labelKey,
+  // otherwise keep the plain text from the HTML (or the def.label fallback).
+  HAJK_TOOL_DEFS.forEach((def) => {
+    const span = document.querySelector(`label[for-ctrl="${def.id}"] span, #${def.id}`)?.parentElement?.querySelector('span[data-ctrl-label]');
+    if (!span) return;
+    if (def.labelKey) {
+      const tr = t(def.labelKey);
+      if (tr) span.textContent = tr;
+    } else if (def.label && !span.textContent.trim()) {
+      span.textContent = def.label;
+    }
+  });
+}
+
+if (window.qtilerLang && typeof window.qtilerLang.subscribe === 'function') {
+  window.qtilerLang.subscribe(() => { applyI18n(); syncUI(); });
+}
+
+/* ── Utilities ── */
+function escapeHtml(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function isVectorGeometry(geometry) {
+  const value = String(geometry || '').trim().toLowerCase();
+  if (!value) return false;
+  if (/(raster|tile|pixel|mesh|dem)/.test(value)) return false;
+  return /(point|line|string|polygon|multi|curve|surface|geometry)/.test(value);
+}
+
+function getLayerKey(layer) {
+  return String(layer?.key || layer?.name || '').trim();
+}
+
+function getLayerDisplayTitle(layer) {
+  const key = getLayerKey(layer);
+  return String(publishState.layerTitles?.[key] || layer?.title || layer?.name || '').trim();
+}
+
+function makeLayerKey(projectId, layerName) {
+  const pid = String(projectId || '').trim();
+  const name = String(layerName || '').trim();
+  if (!pid || !name) return name;
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  return pid === currentProjectId ? name : `${pid}::${name}`;
+}
+
+function getAllPublishLayers() {
+  return []
+    .concat(Array.isArray(publishState.mainLayers) ? publishState.mainLayers : [])
+    .concat(Array.isArray(publishState.extraLayers) ? publishState.extraLayers : []);
+}
+
+function getSelectedPublishLayers() {
+  const selectedKeys = new Set(getCheckedLayerNames(projectLayersList));
+  return getAllPublishLayers().filter((layer) => selectedKeys.has(getLayerKey(layer)));
+}
+
+function getLayerProjectId(layerName) {
+  return String(getMainLayerByName(layerName)?.sourceProjectId || publishProjectSelect?.value || '').trim();
+}
+
+function getMainLayerByName(layerName) {
+  const key = String(layerName || '').trim();
+  return getAllPublishLayers().find((layer) => getLayerKey(layer) === key) || null;
+}
+
+function getLayerGeometryType(layerName) {
+  const layer = getMainLayerByName(layerName);
+  const key = String(layerName || '').trim();
+  return String(layer?.geometry || publishState.mainRules?.[key]?.geometryType || '').trim();
+}
+
+function geometryFamily(geometryType) {
+  const value = String(geometryType || '').toLowerCase();
+  if (value.includes('point')) return 'point';
+  if (value.includes('line')) return 'line';
+  if (value.includes('polygon') || value.includes('surface')) return 'polygon';
+  return 'generic';
+}
+
+// Render a small legend preview for a layer row: WFS style SVG sample when a
+// style is configured, uploaded/QGIS icon when one was picked for WMS, or the
+// generated WMS thumbnail as fallback.
+function layerStylePreviewHtml(layer, rule, modeHint) {
+  const serveWfs = String(modeHint || '').toUpperCase() === 'WFS' || rule?.serveAsWfs === true;
+  const geom = rule?.geometryType || layer?.geometry;
+  if (serveWfs) {
+    if (rule?.wfsStyle) {
+      try {
+        const rules = typeof origoStyleToRules === 'function'
+          ? origoStyleToRules(Array.isArray(rule.wfsStyle) ? rule.wfsStyle : [rule.wfsStyle])
+          : [];
+        const first = Array.isArray(rules) && rules.length ? rules[0] : {};
+        const svg = rulePreviewSampleSvg(first || {}, geometryFamily(geom));
+        if (svg) return `<span class="Qtiler2Hajk-layer-style-preview">${svg}</span>`;
+      } catch {}
+    }
+    return `<span class="Qtiler2Hajk-layer-style-preview Qtiler2Hajk-layer-style-preview--pending">WFS</span>`;
+  }
+  const manual = String(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '').trim();
+  if (manual) return `<img class="Qtiler2Hajk-wms-legend-preview" src="${escapeHtml(manual)}" alt="" loading="lazy" />`;
+  const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+  const name = String(layer?.name || '').trim();
+  if (!pid || !name) return `<span class="Qtiler2Hajk-wms-legend-empty">${escapeHtml(t('Qtiler2Hajk.wms_legend_auto'))}</span>`;
+  return `<img class="Qtiler2Hajk-wms-legend-preview" src="/plugins/Qtiler2Hajk/api/thumbnail/${encodeURIComponent(pid)}?LAYERS=${encodeURIComponent(name)}&LEGEND=1" alt="" loading="lazy" />`;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function hexToRgb(hex) {
+  const value = String(hex || '').trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return { r: 59, g: 130, b: 246 };
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16)
+  };
+}
+
+function rgbaString(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${clampNumber(alpha, 0, 1, 1)})`;
+}
+
+function parseColorValue(color, fallbackHex = '#3b82f6', fallbackAlpha = 1) {
+  const raw = String(color || '').trim();
+  if (!raw) return { hex: fallbackHex, alpha: fallbackAlpha };
+  const hexMatch = raw.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) return { hex: `#${hexMatch[1]}`, alpha: 1 };
+  const rgbaMatch = raw.match(/^rgba?\(([^)]+)\)$/i);
+  if (!rgbaMatch) return { hex: fallbackHex, alpha: fallbackAlpha };
+  const parts = rgbaMatch[1].split(',').map((part) => part.trim());
+  if (parts.length < 3) return { hex: fallbackHex, alpha: fallbackAlpha };
+  const [r, g, b] = parts.slice(0, 3).map((part) => clampNumber(part, 0, 255, 0));
+  const alpha = parts[3] == null ? 1 : clampNumber(parts[3], 0, 1, fallbackAlpha);
+  const hex = `#${[r, g, b].map((value) => Math.round(value).toString(16).padStart(2, '0')).join('')}`;
+  return { hex, alpha };
+}
+
+function dashPatternFromKey(key) {
+  switch (String(key || '').trim()) {
+    case 'dashed': return [8, 6];
+    case 'dotted': return [2, 5];
+    case 'dashdot': return [10, 4, 2, 4];
+    default: return undefined;
+  }
+}
+
+function dashKeyFromPattern(pattern) {
+  if (!Array.isArray(pattern) || pattern.length === 0) return 'solid';
+  const signature = pattern.join(',');
+  if (signature === '8,6') return 'dashed';
+  if (signature === '2,5') return 'dotted';
+  if (signature === '10,4,2,4') return 'dashdot';
+  return 'solid';
+}
+
+function defaultStyleDefinition(geometryType) {
+  const family = geometryFamily(geometryType);
+  const rule = {
+    stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 }
+  };
+  if (family === 'polygon' || family === 'generic') {
+    rule.fill = { color: 'rgba(59, 130, 246, 0.25)' };
+  }
+  if (family === 'point' || family === 'generic') {
+    rule.circle = {
+      radius: 6,
+      fill: { color: 'rgba(59, 130, 246, 0.65)' },
+      stroke: { color: 'rgba(30, 64, 175, 1)', width: 2 }
+    };
+  }
+  return [[rule]];
+}
+
+function qgisColorArrayToRgba(colorValue, opacityMultiplier = 1, fallback = 'rgba(128, 128, 128, 1)') {
+  if (!Array.isArray(colorValue) || colorValue.length < 3) return fallback;
+  const red = clampNumber(colorValue[0], 0, 255, 128);
+  const green = clampNumber(colorValue[1], 0, 255, 128);
+  const blue = clampNumber(colorValue[2], 0, 255, 128);
+  const alphaBase = colorValue[3] == null ? 1 : clampNumber(Number(colorValue[3]) / 255, 0, 1, 1);
+  const alpha = clampNumber(alphaBase * clampNumber(opacityMultiplier, 0, 1, 1), 0, 1, 1);
+  return `rgba(${Math.round(red)}, ${Math.round(green)}, ${Math.round(blue)}, ${alpha})`;
+}
+
+function qgisStrokeStyleToLineDash(strokeStyle) {
+  const value = String(strokeStyle || '').toLowerCase();
+  if (!value || value.includes('solid')) return undefined;
+  if (value.includes('dashdot')) return [10, 4, 2, 4];
+  if (value.includes('dot')) return [2, 5];
+  if (value.includes('dash')) return [8, 6];
+  return undefined;
+}
+
+function qgisCategoryFilter(attribute, value) {
+  const field = String(attribute || '').trim();
+  if (!field || value == null || value === '') return '';
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return `[${field}] == ${value}`;
+  }
+  const text = String(value).replace(/'/g, "\\'");
+  return `[${field}] == '${text}'`;
+}
+
+function qgisSymbolToOrigoRule(symbol, geometryType, filterExpression) {
+  if (!symbol || typeof symbol !== 'object') return null;
+  const family = geometryFamily(geometryType);
+  const opacity = clampNumber(symbol.opacity, 0, 1, 1);
+  const strokeWidth = clampNumber(symbol.width != null ? symbol.width : symbol.strokeWidth, 0, 20, family === 'line' ? 2 : 1);
+  const strokeColor = qgisColorArrayToRgba(symbol.strokeColor, opacity, qgisColorArrayToRgba(symbol.color, opacity));
+  const fillColor = qgisColorArrayToRgba(symbol.color, opacity);
+  const geomEntry = {};
+  if (filterExpression) geomEntry.filter = filterExpression;
+
+  if (family === 'point') {
+    const size = clampNumber(symbol.size, 2, 40, 6);
+    geomEntry.circle = {
+      radius: clampNumber(size / 2, 2, 24, 6),
+      fill: { color: fillColor },
+      stroke: { color: strokeColor, width: clampNumber(symbol.strokeWidth, 0, 12, 1) }
+    };
+  } else if (family === 'line') {
+    geomEntry.stroke = {
+      color: fillColor,
+      width: strokeWidth
+    };
+    const lineDash = qgisStrokeStyleToLineDash(symbol.strokeStyle);
+    if (lineDash) geomEntry.stroke.lineDash = lineDash;
+  } else {
+    const fillPattern = String(symbol.fillPattern || 'solid').trim() || 'solid';
+    if (fillPattern !== 'outline') {
+      geomEntry.fill = { color: fillColor };
+    }
+    geomEntry.stroke = {
+      color: strokeColor,
+      width: strokeWidth
+    };
+    const lineDash = qgisStrokeStyleToLineDash(symbol.strokeStyle);
+    if (lineDash) geomEntry.stroke.lineDash = lineDash;
+  }
+
+  return [geomEntry];
+}
+
+function normalizeDetectedLayerStyle(styleDef, geometryType) {
+  if (Array.isArray(styleDef)) return styleDef;
+  if (!styleDef || typeof styleDef !== 'object') return defaultStyleDefinition(geometryType);
+
+  const looksLikeOrigo = !!(styleDef.fill || styleDef.stroke || styleDef.circle || styleDef.icon || styleDef.regularShape);
+  if (looksLikeOrigo) return [[styleDef]];
+
+  const detectedGeometryType = String(styleDef.geometryType || geometryType || '').trim();
+  if (styleDef.type === 'singleSymbol' && styleDef.symbol) {
+    return qgisSymbolToOrigoRule(styleDef.symbol, detectedGeometryType, '') || defaultStyleDefinition(detectedGeometryType);
+  }
+
+  if (styleDef.type === 'categorizedSymbol' && Array.isArray(styleDef.categories)) {
+    const rules = [];
+    for (const category of styleDef.categories) {
+      if (!category || typeof category !== 'object') continue;
+      const filterExpression = qgisCategoryFilter(styleDef.attribute, category.value);
+      const entry = qgisSymbolToOrigoRule(category.symbol, detectedGeometryType, filterExpression);
+      if (entry) rules.push(entry);
+    }
+    if (styleDef.default && typeof styleDef.default === 'object') {
+      const fallbackRule = qgisSymbolToOrigoRule(styleDef.default, detectedGeometryType, '');
+      if (fallbackRule) rules.push(fallbackRule);
+    }
+    return rules.length ? rules : defaultStyleDefinition(detectedGeometryType);
+  }
+
+  return defaultStyleDefinition(detectedGeometryType);
+}
+
+function unwrapPrimaryStyleRule(styleDef) {
+  if (Array.isArray(styleDef) && Array.isArray(styleDef[0]) && styleDef[0][0] && typeof styleDef[0][0] === 'object') {
+    return styleDef[0][0];
+  }
+  if (Array.isArray(styleDef) && styleDef[0] && typeof styleDef[0] === 'object') {
+    return styleDef[0];
+  }
+  return styleDef && typeof styleDef === 'object' ? styleDef : {};
+}
+
+function getDesignerFillPattern() {
+  const raw = String(wfsStyleFillPattern?.value || 'solid').trim().toLowerCase() || 'solid';
+  if (raw === 'diagonal') return 'slash';
+  return raw;
+}
+
+function setDesignerFillPattern(pattern) {
+  if (!wfsStyleFillPattern) return;
+  const raw = String(pattern || 'solid').trim().toLowerCase() || 'solid';
+  wfsStyleFillPattern.value = raw === 'diagonal' ? 'slash' : raw;
+}
+
+function getDefaultDesignerPatternOptions(pattern) {
+  switch (String(pattern || '').trim().toLowerCase()) {
+    case 'backslash':
+      return { angle: 135, spacing: 10, size: 2.5, transparent: false };
+    case 'horizontal':
+      return { angle: 0, spacing: 10, size: 2.5, transparent: false };
+    case 'vertical':
+      return { angle: 90, spacing: 10, size: 2.5, transparent: false };
+    case 'cross':
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+    case 'dots':
+      return { angle: 0, spacing: 10, size: 2.5, transparent: false };
+    case 'slash':
+    case 'diagonal':
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+    default:
+      return { angle: 45, spacing: 10, size: 2.5, transparent: false };
+  }
+}
+
+function getDesignerPatternOptions() {
+  const pattern = getDesignerFillPattern();
+  const defaults = getDefaultDesignerPatternOptions(pattern);
+  return {
+    fillPattern: pattern,
+    fillPatternAngle: clampNumber(wfsStylePatternAngle?.value, 0, 180, defaults.angle),
+    fillPatternSpacing: clampNumber(wfsStylePatternSpacing?.value, 4, 32, defaults.spacing),
+    fillPatternSize: clampNumber(wfsStylePatternSize?.value, 1, 12, defaults.size),
+    fillPatternTransparent: !!wfsStylePatternTransparent?.checked
+  };
+}
+
+function applyDesignerPatternOptions(options) {
+  const normalizedPattern = String(options?.fillPattern || 'solid').trim().toLowerCase() || 'solid';
+  const defaults = getDefaultDesignerPatternOptions(normalizedPattern);
+  setDesignerFillPattern(normalizedPattern);
+  if (wfsStylePatternAngle) {
+    wfsStylePatternAngle.value = String(clampNumber(options?.fillPatternAngle, 0, 180, defaults.angle));
+  }
+  if (wfsStylePatternSpacing) {
+    wfsStylePatternSpacing.value = String(clampNumber(options?.fillPatternSpacing, 4, 32, defaults.spacing));
+  }
+  if (wfsStylePatternSize) {
+    wfsStylePatternSize.value = String(clampNumber(options?.fillPatternSize, 1, 12, defaults.size));
+  }
+  if (wfsStylePatternTransparent) {
+    wfsStylePatternTransparent.checked = options?.fillPatternTransparent === true;
+  }
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+}
+
+function buildSvgPatternFill(fill, stroke, strokeWidth, designerOptions = null) {
+  const pattern = String(designerOptions?.fillPattern || getDesignerFillPattern()).trim().toLowerCase() || 'solid';
+  if (pattern === 'outline') return { defs: '', fill: 'rgba(0,0,0,0)' };
+  if (pattern === 'solid') return { defs: '', fill };
+
+  const defaults = getDefaultDesignerPatternOptions(pattern);
+  const options = designerOptions && typeof designerOptions === 'object'
+    ? {
+        fillPattern: pattern,
+        fillPatternAngle: clampNumber(designerOptions.fillPatternAngle, 0, 180, defaults.angle),
+        fillPatternSpacing: clampNumber(designerOptions.fillPatternSpacing, 4, 32, defaults.spacing),
+        fillPatternSize: clampNumber(designerOptions.fillPatternSize, 1, 12, defaults.size)
+      }
+    : getDesignerPatternOptions();
+  const spacing = clampNumber(options.fillPatternSpacing, 4, 32, 10);
+  const angle = clampNumber(options.fillPatternAngle, 0, 180, defaults.angle);
+  const dotSize = clampNumber(options.fillPatternSize, 1, 12, 2.5);
+  const patternId = `preview-pattern-${pattern}-${spacing}-${angle}-${dotSize}`.replace(/[^a-z0-9_-]/gi, '-');
+  let content = '';
+
+  if (pattern === 'dots') {
+    const radius = Math.max(0.8, dotSize);
+    content = `<circle cx="${spacing / 2}" cy="${spacing / 2}" r="${radius}" fill="${stroke}" />`;
+  } else {
+    const lineStrokeWidth = Math.max(0.6, strokeWidth);
+    const buildLine = (lineAngle) => `<path d="M ${spacing / 2} -${spacing} L ${spacing / 2} ${spacing * 2}" stroke="${stroke}" stroke-width="${lineStrokeWidth}" stroke-linecap="round" transform="rotate(${lineAngle} ${spacing / 2} ${spacing / 2})" />`;
+    if (pattern === 'cross') {
+      content = `${buildLine(angle)}${buildLine((angle + 90) % 180)}`;
+    } else {
+      const effectiveAngle = pattern === 'slash'
+        ? angle
+        : pattern === 'backslash'
+          ? 180 - angle
+          : pattern === 'horizontal'
+            ? 90
+            : pattern === 'vertical'
+              ? 0
+              : angle;
+      content = buildLine(effectiveAngle);
+    }
+  }
+
+  return {
+    defs: `<defs><pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing}" height="${spacing}"><rect width="${spacing}" height="${spacing}" fill="${fill}" />${content}</pattern></defs>`,
+    fill: `url(#${patternId})`
+  };
+}
+
+function syncDesignerGeometryFields(geometryType) {
+  const family = geometryFamily(geometryType);
+  const pointOnly = family === 'point';
+  const hasFill = family !== 'line';
+  const polygonOnly = family === 'polygon' || family === 'generic';
+  const pattern = getDesignerFillPattern();
+  const showPatternControls = polygonOnly && pattern !== 'solid' && pattern !== 'outline';
+  const showDotSize = showPatternControls && pattern === 'dots';
+  const showAngle = showPatternControls && pattern !== 'dots';
+  if (wfsStyleShapeWrap) wfsStyleShapeWrap.hidden = !pointOnly;
+  if (wfsStyleRadiusWrap) wfsStyleRadiusWrap.hidden = !pointOnly;
+  if (wfsStyleFillColorWrap) wfsStyleFillColorWrap.hidden = !hasFill;
+  if (wfsStyleFillOpacityWrap) wfsStyleFillOpacityWrap.hidden = !hasFill;
+  if (wfsStyleFillPatternWrap) wfsStyleFillPatternWrap.hidden = !polygonOnly;
+  if (wfsStylePatternAngleWrap) wfsStylePatternAngleWrap.hidden = !showAngle;
+  if (wfsStylePatternSpacingWrap) wfsStylePatternSpacingWrap.hidden = !showPatternControls;
+  if (wfsStylePatternSizeWrap) wfsStylePatternSizeWrap.hidden = !showDotSize;
+  if (wfsStylePatternTransparentWrap) wfsStylePatternTransparentWrap.hidden = !showPatternControls;
+}
+
+function getSimplifiedQgisStyle(rawStyle, geometryType) {
+  if (!rawStyle || typeof rawStyle !== 'object') return null;
+  if (rawStyle.type === 'singleSymbol' && rawStyle.symbol) {
+    return qgisSymbolToOrigoRule(rawStyle.symbol, geometryType, '') || null;
+  }
+  if (rawStyle.type === 'categorizedSymbol') {
+    const symbol = rawStyle.default || rawStyle.categories?.[0]?.symbol || null;
+    if (!symbol) return null;
+    return qgisSymbolToOrigoRule(symbol, geometryType, '') || null;
+  }
+  return null;
+}
+
+function getDesignerOptionsFromQgisStyle(rawStyle) {
+  if (!rawStyle || typeof rawStyle !== 'object') return { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') };
+  let symbol = null;
+  if (rawStyle.type === 'singleSymbol' && rawStyle.symbol) {
+    symbol = rawStyle.symbol;
+  } else if (rawStyle.type === 'categorizedSymbol') {
+    symbol = rawStyle.default || rawStyle.categories?.[0]?.symbol || null;
+  }
+  const pattern = String(symbol?.fillPattern || 'solid').trim().toLowerCase() || 'solid';
+  return { fillPattern: pattern === 'diagonal' ? 'slash' : pattern, ...getDefaultDesignerPatternOptions(pattern) };
+}
+
+function applyStyleDefinitionToDesigner(styleDef, geometryType) {
+  const family = geometryFamily(geometryType);
+  const rule = unwrapPrimaryStyleRule(styleDef);
+  const pointRule = rule.circle || rule.regularShape || {};
+  const fillRule = pointRule.fill || rule.fill || {};
+  const strokeRule = pointRule.stroke || rule.stroke || {};
+  const fillColor = parseColorValue(fillRule.color, '#3b82f6', family === 'polygon' ? 0.25 : 0.65);
+  const strokeColor = parseColorValue(strokeRule.color, '#2563eb', 1);
+  const shape = rule.regularShape
+    ? (Number(rule.regularShape.points) === 3 ? 'triangle' : Number(rule.regularShape.points) === 4 ? 'square' : 'star')
+    : 'circle';
+
+  if (wfsStyleShape) wfsStyleShape.value = family === 'point' ? shape : 'circle';
+  if (wfsStyleFillColor) wfsStyleFillColor.value = fillColor.hex;
+  if (wfsStyleFillOpacity) wfsStyleFillOpacity.value = String(fillColor.alpha);
+  if (wfsStyleStrokeColor) wfsStyleStrokeColor.value = strokeColor.hex;
+  if (wfsStyleStrokeOpacity) wfsStyleStrokeOpacity.value = String(strokeColor.alpha);
+  if (wfsStyleStrokeWidth) wfsStyleStrokeWidth.value = String(clampNumber(strokeRule.width, 0, 12, 2));
+  if (wfsStyleRadius) wfsStyleRadius.value = String(clampNumber(pointRule.radius || rule.radius, 2, 24, 6));
+  if (wfsStyleDash) wfsStyleDash.value = dashKeyFromPattern(strokeRule.lineDash);
+  const embeddedPattern = rule && rule.qtilerPatternStyle && typeof rule.qtilerPatternStyle === 'object'
+    ? rule.qtilerPatternStyle
+    : null;
+  applyDesignerPatternOptions(embeddedPattern || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  syncDesignerGeometryFields(geometryType);
+}
+
+function buildStyleDefinitionFromDesigner(geometryType) {
+  const family = geometryFamily(geometryType);
+  const fill = {
+    color: rgbaString(wfsStyleFillColor?.value || '#3b82f6', wfsStyleFillOpacity?.value || 0.25)
+  };
+  const stroke = {
+    color: rgbaString(wfsStyleStrokeColor?.value || '#2563eb', wfsStyleStrokeOpacity?.value || 1),
+    width: clampNumber(wfsStyleStrokeWidth?.value, 0, 12, 2)
+  };
+  const dash = dashPatternFromKey(wfsStyleDash?.value);
+  if (dash) stroke.lineDash = dash;
+
+  const rule = { stroke };
+  if (family === 'polygon' || family === 'generic') {
+    const pattern = getDesignerFillPattern();
+    if (pattern !== 'outline') {
+      rule.fill = fill;
+    }
+    if (['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) {
+      rule.qtilerPatternStyle = getDesignerPatternOptions();
+    }
+  }
+  if (family === 'point' || family === 'generic') {
+    const radius = clampNumber(wfsStyleRadius?.value, 2, 24, 6);
+    const shape = String(wfsStyleShape?.value || 'circle').trim();
+    if (shape === 'circle') {
+      rule.circle = { radius, fill, stroke };
+    } else {
+      rule.regularShape = {
+        points: shape === 'triangle' ? 3 : shape === 'square' ? 4 : 5,
+        radius,
+        angle: shape === 'square' ? Math.PI / 4 : 0,
+        ...(shape === 'star' ? { radius2: Math.max(2, radius * 0.45) } : {}),
+        fill,
+        stroke
+      };
+    }
+  }
+  return [[rule]];
+}
+
+function stylePreviewSvg(geometryType) {
+  const family = geometryFamily(geometryType);
+  const fill = rgbaString(wfsStyleFillColor?.value || '#3b82f6', wfsStyleFillOpacity?.value || 0.25);
+  const stroke = rgbaString(wfsStyleStrokeColor?.value || '#2563eb', wfsStyleStrokeOpacity?.value || 1);
+  const strokeWidth = clampNumber(wfsStyleStrokeWidth?.value, 0, 12, 2);
+  const dash = dashPatternFromKey(wfsStyleDash?.value);
+  const dashAttr = dash ? ` stroke-dasharray="${dash.join(' ')}"` : '';
+  if (family === 'line') {
+    return `<svg viewBox="0 0 240 120" aria-hidden="true"><path d="M18 88 C60 22, 120 22, 220 86" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"${dashAttr} /></svg>`;
+  }
+  if (family === 'point') {
+    const radius = clampNumber(wfsStyleRadius?.value, 2, 24, 6) * 2.5;
+    const shape = String(wfsStyleShape?.value || 'circle');
+    if (shape === 'square') {
+      return `<svg viewBox="0 0 240 120" aria-hidden="true"><rect x="${120 - radius}" y="${60 - radius}" width="${radius * 2}" height="${radius * 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+    }
+    if (shape === 'triangle') {
+      return `<svg viewBox="0 0 240 120" aria-hidden="true"><polygon points="120,${60 - radius} ${120 - radius},${60 + radius} ${120 + radius},${60 + radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+    }
+    if (shape === 'star') {
+      return `<svg viewBox="0 0 240 120" aria-hidden="true"><path d="M120 ${60 - radius} L${120 + radius * 0.28} ${60 - radius * 0.28} L${120 + radius} ${60 - radius * 0.22} L${120 + radius * 0.45} ${60 + radius * 0.16} L${120 + radius * 0.62} ${60 + radius} L120 ${60 + radius * 0.46} L${120 - radius * 0.62} ${60 + radius} L${120 - radius * 0.45} ${60 + radius * 0.16} L${120 - radius} ${60 - radius * 0.22} L${120 - radius * 0.28} ${60 - radius * 0.28} Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+    }
+    return `<svg viewBox="0 0 240 120" aria-hidden="true"><circle cx="120" cy="60" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+  }
+  const fillValue = getDesignerFillPattern() === 'outline' ? 'rgba(0,0,0,0)' : fill;
+  const patternFill = buildSvgPatternFill(fillValue, stroke, strokeWidth);
+  return `<svg viewBox="0 0 240 120" aria-hidden="true">${patternFill.defs}<path d="M24 88 L72 30 L150 24 L216 74 L176 94 L70 92 Z" fill="${patternFill.fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashAttr} /></svg>`;
+}
+
+function setStyleEditorTab(tabName) {
+  const valid = ['rules', 'designer', 'json', 'attributes'];
+  const active = valid.includes(tabName) ? tabName : 'rules';
+  if (active !== 'designer' && Number.isInteger(currentDesignerRuleIndex)) {
+    currentDesignerRuleIndex = null;
+    updateDesignerRuleModeNotice();
+  }
+  // Remember which panel was active BEFORE switching, so we can sync edits
+  // out of it (and only out of it) without clobbering work done elsewhere.
+  const previousActive = (wfsStylePanels.find((p) => !p.hidden) || {}).getAttribute
+    ? wfsStylePanels.find((p) => !p.hidden).getAttribute('data-style-panel')
+    : null;
+  wfsStyleTabButtons.forEach((button) => button.classList.toggle('is-active', button.getAttribute('data-style-tab') === active));
+  wfsStylePanels.forEach((panel) => panel.hidden = panel.getAttribute('data-style-panel') !== active);
+  
+  // Sync between tabs
+  if (active === 'json') {
+    // Show FULL layer config (name + rules + style) in the editor
+    setJsonEditorValue(JSON.stringify(buildCurrentWfsLayerConfig(), null, 2));
+  } else if (active === 'rules') {
+    // Only re-parse JSON back into rules when the user is leaving the JSON
+    // tab. Otherwise switching to Attributes and back would clobber any
+    // unsaved rule edits with the stale JSON from when the modal opened.
+    if (previousActive === 'json') {
+      try {
+        const txt = getJsonEditorValue();
+        if (txt && txt.trim()) {
+          const parsed = JSON.parse(txt);
+          const styleArr = Array.isArray(parsed) ? parsed : parsed && parsed.wfsStyle;
+          if (Array.isArray(styleArr)) currentRules = origoStyleToRules(styleArr);
+        }
+      } catch {/* keep current */}
+    }
+    renderRulesPanel();
+  }
+  // Always refresh the preview so the gallery/SVG matches the active tab.
+  try { syncStylePreview(); } catch (_e) {}
+}
+
+function buildCurrentWfsLayerConfig() {
+  const layerName = currentEditingWfsLayer;
+  const layerObj = getMainLayerByName(layerName) || {};
+  const ruleObj = (publishState.mainRules && publishState.mainRules[layerName]) || {};
+  return {
+    name: layerName,
+    title: layerObj.title || layerName,
+    geometryType: ruleObj.geometryType || layerObj.geometry || null,
+    searchable: ruleObj.searchable === true,
+    editable: ruleObj.editable !== false,
+    serveAsWfs: ruleObj.serveAsWfs !== false,
+    designerOptions: ruleObj.designerOptions && typeof ruleObj.designerOptions === 'object'
+      ? JSON.parse(JSON.stringify(ruleObj.designerOptions))
+      : null,
+    wfsStyle: Array.isArray(currentRules) && currentRules.length
+      ? rulesToOrigoStyle(currentRules)
+      : (ruleObj.wfsStyle || null),
+    attributes: Array.isArray(currentAttributes) && currentAttributes.length
+      ? normalizeAttributesList(currentAttributes)
+      : (Array.isArray(ruleObj.attributes) ? ruleObj.attributes : [])
+  };
+}
+
+function applyWfsLayerJsonConfig(parsed) {
+  const layerName = currentEditingWfsLayer;
+  if (!layerName) return;
+  const geometryType = getLayerGeometryType(layerName);
+  const fullCfg = Array.isArray(parsed) ? { wfsStyle: parsed } : ((parsed && typeof parsed === 'object') ? parsed : {});
+  const styleObj = Array.isArray(fullCfg.wfsStyle) ? fullCfg.wfsStyle : defaultStyleDefinition(geometryType);
+  if (!publishState.mainRules[layerName]) {
+    publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: true };
+  }
+  if (typeof fullCfg.searchable === 'boolean') publishState.mainRules[layerName].searchable = fullCfg.searchable;
+  if (typeof fullCfg.editable === 'boolean') publishState.mainRules[layerName].editable = fullCfg.editable;
+  if (typeof fullCfg.serveAsWfs === 'boolean') publishState.mainRules[layerName].serveAsWfs = fullCfg.serveAsWfs;
+  if (fullCfg.geometryType) publishState.mainRules[layerName].geometryType = String(fullCfg.geometryType);
+  if (fullCfg.designerOptions && typeof fullCfg.designerOptions === 'object') {
+    publishState.mainRules[layerName].designerOptions = JSON.parse(JSON.stringify(fullCfg.designerOptions));
+  }
+  currentAttributes = Array.isArray(fullCfg.attributes)
+    ? normalizeAttributesList(fullCfg.attributes)
+    : [];
+  renderAttributesPanel();
+  applyStyleDefinitionToDesigner(styleObj, geometryType);
+  applyDesignerPatternOptions(fullCfg.designerOptions && typeof fullCfg.designerOptions === 'object'
+    ? fullCfg.designerOptions
+    : { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  try {
+    currentRules = origoStyleToRules(Array.isArray(styleObj) ? styleObj : [styleObj]);
+    renderRulesPanel();
+  } catch (_err) {
+    currentRules = [];
+  }
+  setJsonEditorValue(JSON.stringify(fullCfg, null, 2));
+  syncStylePreview();
+}
+
+function syncStylePreview() {
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  // Pick preview source based on the active tab so what you see matches what
+  // you're editing: Basic→single SVG sample, Advanced/JSON→rules gallery.
+  const activePanel = wfsStylePanels.find((panel) => !panel.hidden);
+  const activeName = activePanel ? activePanel.getAttribute('data-style-panel') : null;
+  const preferGallery = activeName !== 'designer'
+    && Array.isArray(currentRules)
+    && currentRules.length
+    && typeof renderRulesPreviewGallery === 'function';
+  if (wfsStylePreview) {
+    if (preferGallery) {
+      renderRulesPreviewGallery();
+    } else {
+      wfsStylePreview.innerHTML = stylePreviewSvg(geometryType);
+    }
+  }
+  if (wfsStyleJsonEditor && !wfsStylePanels.find((panel) => panel.getAttribute('data-style-panel') === 'json' && !panel.hidden)) {
+    wfsStyleJsonEditor.value = JSON.stringify(buildStyleDefinitionFromDesigner(geometryType), null, 2);
+  }
+}
+
+function syncToolCardClasses() {
+  document.querySelectorAll('.Qtiler2Hajk-tool-card input[type="checkbox"]').forEach((cb) => {
+    const card = cb.closest('.Qtiler2Hajk-tool-card');
+    if (card) card.classList.toggle('is-checked', cb.checked);
+    // Show/hide config panel for configurable tools
+    const entry = TOOL_CONFIG_MAP[cb.id];
+    if (entry?.panel) {
+      entry.panel.classList.toggle('is-visible', cb.checked);
+    }
+  });
+}
+
+// CRITICAL FIX: Robust JSON parsing to avoid crashes on empty 200/204 responses
+async function api(url, options = {}) {
+  const opts = { credentials: 'include', headers: {}, ...options };
+  if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(url, opts);
+  const isJson = (res.headers.get('content-type') || '').includes('application/json');
+  const text = await res.text();
+  
+  let payload;
+  if (isJson && text) {
+    try { payload = JSON.parse(text); } catch (e) { payload = text; }
+  } else {
+    payload = text;
+  }
+
+  if (!res.ok) {
+    const issues = Array.isArray(payload?.issues)
+      ? payload.issues.map((issue) => issue?.message || issue?.details || issue?.error || issue).filter(Boolean)
+      : [];
+    const detail = (isJson && (payload?.details || payload?.message || payload?.error)) || payload || res.statusText;
+    const message = issues.length ? `${detail}: ${issues.join('; ')}` : detail;
+    throw new Error(String(message));
+  }
+  return payload;
+}
+
+/* ── Activity log ── */
+const logContainer = document.getElementById('logContainer');
+const clearLogBtn = document.getElementById('clearLogBtn');
+
+function addLog(msg, type = 'info') {
+  if (!logContainer) return;
+  const empty = logContainer.querySelector('.log-empty');
+  if (empty) empty.remove();
+  const entry = document.createElement('div');
+  entry.className = `log-entry log-entry--${type}`;
+  const time = new Date().toLocaleTimeString();
+  entry.innerHTML = `<span class="log-time">${escapeHtml(time)}</span> ${escapeHtml(msg)}`;
+  logContainer.prepend(entry);
+  // Keep max 50 entries
+  while (logContainer.children.length > 50) logContainer.lastChild.remove();
+}
+
+function clearPublishStatusError() {
+  if (!publishStatusError) return;
+  publishStatusError.textContent = '';
+  publishStatusError.style.display = 'none';
+}
+
+function showPublishStatusError(message, tabId = 'layers') {
+  const text = String(message || '').trim();
+  if (!text) return;
+  if (publishStatusError) {
+    publishStatusError.textContent = text;
+    publishStatusError.style.display = '';
+  }
+  if (tabId) setPublishModalTab(tabId);
+  addLog(text, 'error');
+}
+
+clearLogBtn?.addEventListener('click', () => {
+  if (logContainer) logContainer.innerHTML = `<p class="log-empty">${escapeHtml(t('Qtiler2Hajk.no_activity'))}</p>`;
+});
+
+
+/* ── Global state ── */
+let currentStatus = null;
+let publishedItems = [];
+let thumbnailPreviewObjectUrl = '';
+
+const publishState = {
+  projects: [],
+  mainLayers: [],
+  extraLayers: [],
+  backgroundLayers: [],
+  mainRules: {},
+  initialVisibility: {},
+  backgroundOptions: [],
+  defaultBackgroundKey: 'none',
+  groups: [],            // [{ name, title, parent, expanded }]
+  layerGroups: {},       // { layerName: 'groupName' }
+  layerTitles: {},       // { layerKey: 'visible layer title' }
+  controls: {},          // { search: { hintText, minLength, limit, ... } }
+  searchSources: [],     // [{ projectId, layers: [layerName,...] }]
+  searchSourceCatalog: {}, // { projectId: [{ name, ... }] } — cached searchable layers per project
+  projectLayerCatalog: {}, // { projectId: normalizedLayer[] } — cached for external layer picker
+  editingProfileId: null  // non-null = edit mode
+};
+
+function getFixedBackgroundOptions() {
+  return [
+    { key: 'none', type: 'none', title: t('Qtiler2Hajk.no_bg_option'), required: true }
+  ];
+}
+
+/* ══════════════════════════════════════════
+   UI Sync — the heart of the new approach
+   ══════════════════════════════════════════ */
+function syncUI() {
+  const s = currentStatus || {};
+  const installed = !!s.installed;
+  const running = !!s.standalone?.running;
+  const standaloneUrl = s.standalone?.url || '';
+  const hasLogo = !!s.branding?.hasLogo;
+  const logoUrl = normalizeBrandingLogoUrl(s.branding?.logoUrl || (hasLogo ? QTILER2HAJK_BRANDING_LOGO_URL : ''));
+
+  /* ── Installation card ── */
+  if (installBadge) {
+    installBadge.textContent = t(installed ? 'Qtiler2Hajk.installed' : 'Qtiler2Hajk.not_installed');
+    installBadge.className = `badge ${installed ? 'badge--ok' : 'badge--warn'}`;
+  }
+  if (installInfo) {
+    if (installed && s.installedAt) {
+      installInfo.innerHTML = escapeHtml(t('Qtiler2Hajk.installed_at', {
+        date: new Date(s.installedAt).toLocaleDateString(),
+        repo: s.repo || '—',
+        version: s.version || '—'
+      }));
+      installInfo.className = 'info-box info-box--ok';
+    } else if (installed) {
+      installInfo.textContent = t('Qtiler2Hajk.installed');
+      installInfo.className = 'info-box info-box--ok';
+    } else {
+      installInfo.textContent = t('Qtiler2Hajk.not_installed_hint');
+      installInfo.className = 'info-box info-box--warn';
+    }
+  }
+  if (!repoEl.value && s.repo) repoEl.value = s.repo;
+  if (versionEl && s.version && versionEl.options.length > 0) {
+    for (const opt of versionEl.options) {
+      if (opt.value === s.version) { opt.selected = true; break; }
+    }
+  }
+  if (installBtn) installBtn.disabled = false;
+  if (uninstallBtn) uninstallBtn.disabled = !installed;
+
+  /* ── Server card ── */
+  if (openWebmapBtn) {
+    if (installed) {
+      openWebmapBtn.classList.remove('is-disabled');
+      openWebmapBtn.href = '/plugins/Qtiler2Hajk/hajk/';
+    } else {
+      openWebmapBtn.classList.add('is-disabled');
+      openWebmapBtn.href = '#';
+    }
+  }
+
+  /* ── Logo card ── */
+  if (logoSection) logoSection.classList.remove('card--disabled');
+  if (logoBadge) {
+    logoBadge.textContent = t(hasLogo ? 'Qtiler2Hajk.logo_active' : 'Qtiler2Hajk.no_logo');
+    logoBadge.className = `badge ${hasLogo ? 'badge--ok' : 'badge--muted'}`;
+  }
+  if (logoPreview) {
+    if (hasLogo && logoUrl) {
+      logoPreview.src = logoUrl + (logoUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+      logoPreview.style.display = 'block';
+    } else {
+      logoPreview.removeAttribute('src');
+      logoPreview.style.display = 'none';
+    }
+  }
+  if (uploadLogoBtn) uploadLogoBtn.disabled = false;
+  if (removeLogoBtn) removeLogoBtn.disabled = !hasLogo;
+
+  /* ── Profiles card ── */
+  if (publishSection) publishSection.classList.toggle('card--disabled', !installed);
+  if (profilesBadge) profilesBadge.textContent = String(publishedItems.length);
+  if (tabMapsBadge) tabMapsBadge.textContent = String(publishedItems.length);
+  if (openPublishModalBtn) openPublishModalBtn.disabled = !installed;
+  if (catalogLink) {
+    if (installed) {
+      catalogLink.href = '/Qtiler2Hajk/maps';
+      catalogLink.classList.remove('is-disabled');
+    } else {
+      catalogLink.href = '#';
+      catalogLink.classList.add('is-disabled');
+    }
+  }
+
+  if (removeDemoBtn) removeDemoBtn.disabled = !installed;
+  if (!installed && publishModal) publishModal.hidden = true;
+
+  renderPublishedProfiles(publishedItems);
+}
+
+/* ── Published profiles rendering ── */
+function renderPublishedProfiles(items) {
+  if (!publishedProfilesList) return;
+  const rows = Array.isArray(items) ? items : [];
+  const installed = !!currentStatus?.installed;
+
+  if (!rows.length) {
+    publishedProfilesList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_profiles'))}</p>`;
+    return;
+  }
+
+  publishedProfilesList.innerHTML = rows.map((row) => {
+    const profileKey = escapeHtml(row.profileKey || row.name || row.projectId || '');
+    const mapName = escapeHtml(row.name || row.projectId || '');
+    const mapDesc = escapeHtml(row.description || '');
+    const generatedAt = row.generatedAt ? new Date(row.generatedAt).toLocaleString() : '';
+    
+    // Fallback to the published project route via the public alias so the URL
+    // matches the IIS rewrite for /Qtiler2Hajk/maps.
+    const fallbackLaunch = `/Qtiler2Hajk/maps/?qtiler_profile=${encodeURIComponent(row.profileKey || row.projectId || '')}#/?t=${encodeURIComponent(row.profileKey || row.projectId || '')}`;
+    const fallbackOpen = `/plugins/Qtiler2Hajk/published/${encodeURIComponent(row.profileKey || row.name || row.projectId || '')}.json`;
+    const openUrl = escapeHtml(row.url || fallbackOpen);
+    const launchUrl = escapeHtml(row.launchUrl || fallbackLaunch);
+    const launchDisabled = installed ? '' : 'is-disabled';
+    
+    const projectId = escapeHtml(row.projectId || '');
+    const thumbUrl = String(row.thumbnailUrl || '').trim();
+    const thumbMissingBadge = thumbUrl ? '' : `<span class="badge badge--warning" title="${escapeHtml(t('Qtiler2Hajk.regen_thumb_title'))}">⚠ ${escapeHtml(t('Qtiler2Hajk.thumb_missing'))}</span>`;
+    return `
+      <article class="published-item">
+        <div class="published-item__preview">
+          <img src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" />
+          ${thumbMissingBadge}
+        </div>
+        <div class="published-item__content">
+          <div class="published-item__meta">
+            <div>
+              <strong class="published-item__name">${mapName}</strong>
+              ${mapDesc ? `<p class="published-item__desc">${mapDesc}</p>` : ''}
+            </div>
+            <span>${escapeHtml(generatedAt)}</span>
+          </div>
+          <div class="actions">
+            <button class="button is-info small" data-edit-published="${profileKey}" title="${escapeHtml(t('Qtiler2Hajk.pub_edit_profile_title'))}">✏️ ${escapeHtml(t('Qtiler2Hajk.edit_profile'))}</button>
+            <button class="button is-warning small" data-duplicate-published="${profileKey}" data-duplicate-name="${escapeHtml(row.name || row.profileKey || '')}">⎘ ${escapeHtml(t('Qtiler2Hajk.duplicate'))}</button>
+            <a class="button ghost small" href="${openUrl}" target="_blank" rel="noreferrer">${escapeHtml(t('Qtiler2Hajk.open_json'))}</a>
+            <a class="button ghost small ${launchDisabled}" href="${launchDisabled ? '#' : launchUrl}" target="_blank" rel="noreferrer">${escapeHtml(t('Qtiler2Hajk.open_Hajk_link'))}</a>
+            <button class="button ghost small" data-regen-thumb="${profileKey}" title="${escapeHtml(t('Qtiler2Hajk.regen_thumb_title'))}">↻ ${escapeHtml(t('Qtiler2Hajk.regen_thumb'))}</button>
+            <button class="button ghost small" data-manual-thumb="${profileKey}">${escapeHtml(t('Qtiler2Hajk.thumbnail_change'))}</button>
+            <button class="button danger small" data-delete-published="${profileKey}">${escapeHtml(t('Qtiler2Hajk.delete'))}</button>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+/* ── Data loading ── */
+let releasesLoaded = false;
+
+async function loadReleases() {
+  const repo = String(repoEl?.value || '').trim();
+  const pre = includePrereleaseEl?.checked ? '1' : '0';
+  const qs = repo ? `?repo=${encodeURIComponent(repo)}&prerelease=${pre}` : `?prerelease=${pre}`;
+  try {
+    if (versionEl) versionEl.disabled = true;
+    const data = await api(`/plugins/Qtiler2Hajk/api/releases${qs}`);
+    const releases = data?.releases || [];
+    const currentVersion = currentStatus?.version || data?.defaultVersion || '';
+    if (versionEl) {
+      versionEl.innerHTML = '';
+      if (releases.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = t('Qtiler2Hajk.no_releases_found');
+        versionEl.appendChild(opt);
+      } else {
+        for (const r of releases) {
+          const opt = document.createElement('option');
+          opt.value = r.tag;
+          if (r.assetUrl) opt.dataset.asseturl = r.assetUrl;
+          const sizeMb = r.assetSize ? ` (${(r.assetSize / 1048576).toFixed(1)} MB)` : '';
+          const pre = r.prerelease ? ' [pre]' : '';
+          opt.textContent = `${r.name}${pre}${sizeMb}`;
+          if (r.tag === currentVersion) opt.selected = true;
+          versionEl.appendChild(opt);
+        }
+      }
+      versionEl.disabled = false;
+    }
+    releasesLoaded = true;
+  } catch (err) {
+    if (versionEl) {
+      versionEl.innerHTML = `<option value="">${t('Qtiler2Hajk.releases_error')}</option>`;
+      versionEl.disabled = false;
+    }
+  }
+}
+
+async function loadStatus() {
+  currentStatus = await api('/plugins/Qtiler2Hajk/api/status');
+  syncUI();
+  loadLegendLibrary().catch(() => {});
+  // Warn once per page load if Lantmäteriet is running on DEMO data.
+  if (currentStatus?.lantmateriDemo && !loadStatus._lmvWarned) {
+    loadStatus._lmvWarned = true;
+    addLog('⚠ ' + t('Qtiler2Hajk.lmv_demo_warning'), 'error');
+  }
+}
+
+async function loadPublishedProfiles() {
+  const payload = await api('/plugins/Qtiler2Hajk/api/publish/list');
+  // CRITICAL FIX: Handles if payload is already an Array directly
+  publishedItems = payload?.items || (Array.isArray(payload) ? payload : []);
+  syncUI();
+  renderThumbnailSetup();
+}
+
+
+function renderThumbnailSetup(preferredProfileKey = '') {
+  if (!thumbnailProfileSelect) return;
+  const previous = String(preferredProfileKey || thumbnailProfileSelect.value || '').trim();
+  thumbnailProfileSelect.innerHTML = publishedItems.length
+    ? publishedItems.map((item) => `<option value="${escapeHtml(item.profileKey || '')}">${escapeHtml(item.name || item.profileKey || '')}</option>`).join('')
+    : `<option value="">${escapeHtml(t('Qtiler2Hajk.no_profiles'))}</option>`;
+  if (previous && publishedItems.some((item) => item.profileKey === previous)) thumbnailProfileSelect.value = previous;
+  if (thumbnailSetupBadge) thumbnailSetupBadge.textContent = String(publishedItems.length);
+  const selected = publishedItems.find((item) => item.profileKey === thumbnailProfileSelect.value);
+  if (thumbnailSetupPreview && !thumbnailPreviewObjectUrl) {
+    const url = String(selected?.thumbnailUrl || '').trim();
+    thumbnailSetupPreview.src = url ? `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}` : '';
+    thumbnailSetupPreview.classList.toggle('has-image', !!url);
+  }
+  if (thumbnailUploadBtn) thumbnailUploadBtn.disabled = !selected;
+}
+
+function openThumbnailSetup(profileKey) {
+  document.querySelector('.tab-btn[data-tab="setup"]')?.click();
+  renderThumbnailSetup(profileKey);
+  thumbnailSetupSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+thumbnailProfileSelect?.addEventListener('change', () => {
+  if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+  thumbnailPreviewObjectUrl = '';
+  renderThumbnailSetup();
+});
+
+thumbnailFileInput?.addEventListener('change', () => {
+  if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+  thumbnailPreviewObjectUrl = thumbnailFileInput.files?.[0] ? URL.createObjectURL(thumbnailFileInput.files[0]) : '';
+  if (thumbnailSetupPreview) {
+    thumbnailSetupPreview.src = thumbnailPreviewObjectUrl;
+    thumbnailSetupPreview.classList.toggle('has-image', !!thumbnailPreviewObjectUrl);
+  }
+});
+
+thumbnailUploadBtn?.addEventListener('click', async () => {
+  const profileKey = String(thumbnailProfileSelect?.value || '').trim();
+  const file = thumbnailFileInput?.files?.[0];
+  if (!profileKey || !file) return;
+  thumbnailUploadBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('image', file);
+    await api(`/plugins/Qtiler2Hajk/api/publish/thumbnail/${encodeURIComponent(profileKey)}/upload`, { method: 'POST', body });
+    addLog(`Thumbnail updated for ${profileKey}.`, 'ok');
+    if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+    thumbnailPreviewObjectUrl = '';
+    thumbnailFileInput.value = '';
+    await loadPublishedProfiles();
+    renderThumbnailSetup(profileKey);
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    thumbnailUploadBtn.disabled = false;
+  }
+});
+
+async function initDetachedEditorWindow() {
+  if (!isDetachedMapEditor) return;
+  document.body.classList.add('admin-editor-detached', 'admin-editor-detached--map');
+  document.title = detachedEditorProfile ? `Edit map - ${detachedEditorProfile}` : 'New map';
+  await preparePublishModal(detachedEditorProfile || null);
+  publishModal?.classList.add('publish-editor--detached');
+}
+
+/* ── Layer helpers ── */
+function normalizeLayersPayload(payload, options = {}) {
+  const sourceProjectId = String(options.sourceProjectId || publishProjectSelect?.value || '').trim();
+  return (Array.isArray(payload?.layers) ? payload.layers : [])
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const name = String(row.name || row.id || '').trim();
+      if (!name) return null;
+      const key = makeLayerKey(sourceProjectId, name);
+      const kind = String(row.kind || row.type || '').trim().toLowerCase();
+      const isTheme = row.isTheme === true || kind === 'theme' || name.startsWith('theme:');
+      return {
+        key,
+        name,
+        title: String(row.title || row.name || row.id || '').trim() || name,
+        sourceProjectId,
+        geometry: isTheme ? 'theme' : String(row.geometry_type || row.geometry || row.kind || '').trim(),
+        kind: isTheme ? 'theme' : kind,
+        isTheme,
+        themeName: isTheme ? String(row.themeName || name.replace(/^theme:/, '')).trim() : ''
+      };
+    })
+    .filter(Boolean);
+}
+
+function renderLayerChecklist(container, layers, rules = {}) {
+  if (!container) return;
+  const isMainLayerList = container === projectLayersList;
+  const isBackgroundList = container === backgroundLayersList;
+  if (!Array.isArray(layers) || !layers.length) {
+    container.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_layers'))}</p>`;
+    try { renderPublishConfigSummary(); } catch {}
+    return;
+  }
+  // Resolve background project id once for thumbnail URL
+  const bgProjectId = isBackgroundList ? String(backgroundProjectSelect?.value || '').trim() : '';
+  container.innerHTML = layers.map((layer) => {
+    const layerKey = getLayerKey(layer);
+    const rule = rules[layerKey] || {};
+    const tags = [];
+    if (rule.searchable) tags.push(t('Qtiler2Hajk.searchable'));
+    if (rule.editable) tags.push(t('Qtiler2Hajk.editable'));
+    const isVectorLayer = isMainLayerList && isVectorGeometry(layer.geometry);
+    if (rule.serveAsWfs && isMainLayerList) tags.push('WFS vectorial');
+    if (isMainLayerList && layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim()) {
+      tags.push(`Project: ${layer.sourceProjectId}`);
+    }
+    const tagText = tags.length ? `<span class="Qtiler2Hajk-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
+    const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
+    const layerTitle = String(publishState.layerTitles?.[layerKey] || '').trim();
+    const defaultTitle = String(layer.title || layer.name || '').trim() || layer.name;
+
+    // Unified legend preview: always rendered large so the user sees the
+    // effective symbology (WFS style / uploaded icon / QGIS SVG / WMS thumb).
+    const preview = isMainLayerList ? layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS') : '';
+
+    let modeControls = '';
+    if (isVectorLayer) {
+      // Segmented WMS/WFS toggle + style config button (opens WFS style editor
+      // for WFS layers, unified legend icon picker for WMS layers).
+      const mode = rule.serveAsWfs ? 'wfs' : 'wms';
+      modeControls = `
+        <div class="Qtiler2Hajk-mode-switch" role="group" aria-label="WMS/WFS">
+          <button type="button" class="Qtiler2Hajk-mode-switch__btn${mode === 'wms' ? ' is-active' : ''}" data-layer-mode="wms" data-layer-key="${escapeHtml(layerKey)}">WMS</button>
+          <button type="button" class="Qtiler2Hajk-mode-switch__btn${mode === 'wfs' ? ' is-active' : ''}" data-layer-mode="wfs" data-layer-key="${escapeHtml(layerKey)}">WFS</button>
+        </div>
+        <button type="button" class="button is-small is-info is-light Qtiler2Hajk-mode-switch__config" data-style-layer="${escapeHtml(layerKey)}">${rule.serveAsWfs
+          ? (rule.wfsStyle ? t('Qtiler2Hajk.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Hajk.wfs_style_no') || 'Config. estilo')
+          : escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</button>
+      `;
+    } else if (isMainLayerList && !layer.isTheme) {
+      // Raster/non-vector layer: WMS only, but still offer legend icon choice.
+      modeControls = `
+        <span class="Qtiler2Hajk-mode-switch Qtiler2Hajk-mode-switch--static" title="WMS only">WMS</span>
+        <button type="button" class="button is-small is-info is-light Qtiler2Hajk-mode-switch__config" data-style-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</button>
+      `;
+    }
+
+    // WMS legend controls: regenerate thumbnail + clear custom icon.
+    let wmsLegendControls = '';
+    if (isMainLayerList && !layer.isTheme) {
+      wmsLegendControls = `
+        <div class="Qtiler2Hajk-wms-legend-controls${rule.serveAsWfs ? ' is-invisible' : ''}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_help'))}">
+          <button type="button" class="button is-small is-light" data-wms-legend-regen="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_regen') || 'Recreate thumbnail')}">↻</button>
+          <button type="button" class="button is-small is-light" data-wms-legend-clear="${escapeHtml(layerKey)}" title="${escapeHtml(t('Qtiler2Hajk.wms_legend_clear'))}">✕</button>
+        </div>
+      `;
+    }
+
+    let bgThumb = '';
+    if (isBackgroundList && bgProjectId) {
+      const tUrl = `/plugins/Qtiler2Hajk/api/thumbnail/${encodeURIComponent(bgProjectId)}?LAYERS=${encodeURIComponent(layer.name)}`;
+      bgThumb = `<img class="Qtiler2Hajk-bg-item__thumb" src="${escapeHtml(tUrl)}" alt="" loading="lazy" style="width:48px;height:36px;object-fit:cover;border-radius:4px;border:1px solid #d8dde3;margin-right:6px"/>`;
+    }
+    const checkboxId = `Qtilerlay_${(container.id || 'l')}_${escapeHtml(layerKey).replace(/[^a-z0-9_-]/gi, '_')}`;
+    const includeControl = isMainLayerList
+      ? `
+        <label class="button is-small is-light" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;" title="${escapeHtml(t('Qtiler2Hajk.layer_include_help'))}">
+          <input id="${checkboxId}" type="checkbox" data-layer-include="${escapeHtml(layerKey)}" data-layer-name="${escapeHtml(layerKey)}" class="Qtiler2Hajk-layer-row__check" />
+          <span>${escapeHtml(t('Qtiler2Hajk.layer_include'))}</span>
+        </label>
+      `
+      : `<input id="${checkboxId}" type="checkbox" data-layer-include="${escapeHtml(layerKey)}" data-layer-name="${escapeHtml(layerKey)}" class="Qtiler2Hajk-layer-row__check" />`;
+    const visibleControl = isMainLayerList
+      ? `
+        <label class="button is-small is-light" style="margin-bottom:0; display:inline-flex; align-items:center; gap:6px;" title="${escapeHtml(t('Qtiler2Hajk.layer_initial_visibility_help'))}">
+          <input type="checkbox" data-layer-visible="${escapeHtml(layerKey)}" class="Qtiler2Hajk-layer-row__check" ${isInitiallyVisible ? 'checked' : ''} />
+          <span>${escapeHtml(t('Qtiler2Hajk.layer_initial_visibility'))}</span>
+        </label>
+      `
+      : '';
+    const titleControl = isMainLayerList
+      ? `
+        <label class="field Qtiler2Hajk-layer-row__titlefield" style="margin:0;min-width:180px;max-width:260px">
+          <span class="label" style="font-size:11px;margin-bottom:2px">${escapeHtml(t('Qtiler2Hajk.layer_title'))}</span>
+          <input class="input is-small" type="text" data-layer-title="${escapeHtml(layerKey)}" value="${escapeHtml(layerTitle)}" placeholder="${escapeHtml(defaultTitle || t('Qtiler2Hajk.layer_title_placeholder'))}" />
+        </label>
+      `
+      : '';
+    const actionCells = isMainLayerList
+      ? `
+        <div class="Qtiler2Hajk-layer-row__preview">${preview}</div>
+        <div class="Qtiler2Hajk-layer-row__actions">
+          <div class="Qtiler2Hajk-layer-row__toggles">${includeControl}${visibleControl}</div>
+          <div class="Qtiler2Hajk-layer-row__title">${titleControl}</div>
+          <div class="Qtiler2Hajk-layer-row__mode">${modeControls}${wmsLegendControls}</div>
+        </div>
+      `
+      : modeControls;
+    const mainContentTag = isMainLayerList ? 'div' : 'label';
+    return `
+      <div class="Qtiler2Hajk-layer-row${isMainLayerList ? ' Qtiler2Hajk-layer-row--main' : ''}" data-layer-row="${escapeHtml(layerKey)}">
+        ${!isMainLayerList ? includeControl : ''}
+        ${bgThumb}
+        <${mainContentTag}${isMainLayerList ? '' : ` for="${checkboxId}"`} class="Qtiler2Hajk-layer-row__main">
+          <div class="Qtiler2Hajk-layer-row__name">${escapeHtml(layer.name)}</div>
+          ${tagText}
+        </${mainContentTag}>
+        ${actionCells}
+      </div>
+    `;
+  }).join('');
+  syncProjectLayerOptionState();
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+function syncProjectLayerOptionState() {
+  if (!projectLayersList) return;
+  projectLayersList.querySelectorAll('.Qtiler2Hajk-layer-row[data-layer-row]').forEach((row) => {
+    const includeInput = row.querySelector('input[type="checkbox"][data-layer-include]');
+    if (!includeInput) return;
+    const included = includeInput.checked === true;
+    row.classList.toggle('is-excluded', !included);
+    row.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+      if (input === includeInput) return;
+      input.disabled = !included;
+      input.closest('.button')?.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-style-layer]').forEach((button) => {
+      button.disabled = !included;
+      button.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
+      el.disabled = !included;
+      el.setAttribute('aria-disabled', included ? 'false' : 'true');
+    });
+  });
+}
+
+function getCheckedLayerNames(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('input[type="checkbox"][data-layer-include]:checked'))
+    .map((el) => String(el.getAttribute('data-layer-include') || '').trim())
+    .filter(Boolean);
+}
+
+function getCheckedLayers(container, layers) {
+  if (!container || !Array.isArray(layers) || !layers.length) return [];
+  const checkedKeys = new Set(getCheckedLayerNames(container));
+  return layers.filter((layer) => checkedKeys.has(getLayerKey(layer)));
+}
+
+function setCheckedLayerNames(container, names) {
+  if (!container || !Array.isArray(names)) return;
+  const set = new Set(names);
+  container.querySelectorAll('input[type="checkbox"][data-layer-include]').forEach((el) => {
+    el.checked = set.has(el.getAttribute('data-layer-include'));
+  });
+  if (container === projectLayersList) syncProjectLayerOptionState();
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+function setAllProjectLayersIncluded(included) {
+  if (!projectLayersList) return;
+  const names = included ? getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean) : [];
+  setCheckedLayerNames(projectLayersList, names);
+  renderLayerAssignments();
+  schedulePreviewRefresh();
+}
+
+function getInitialVisibleLayerNames() {
+  return getAllPublishLayers()
+    .map((layer) => getLayerKey(layer))
+    .filter((key) => key && publishState.initialVisibility[key] !== false);
+}
+
+/* ── Background options ── */
+function buildBackgroundOptions() {
+  const backgroundProjectId = String(backgroundProjectSelect?.value || '').trim();
+  const selectedBackgroundLayers = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || []);
+  const dynamicOptions = selectedBackgroundLayers.map((layer) => ({
+    key: `layer:${backgroundProjectId}:${layer.name}`,
+    type: 'layer',
+    sourceProjectId: backgroundProjectId,
+    name: layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
+    title: backgroundProjectId ? `${backgroundProjectId} / ${layer.name}` : layer.name,
+    required: false
+  }));
+  const options = [...getFixedBackgroundOptions(), ...dynamicOptions];
+  if (!options.some((o) => o.key === publishState.defaultBackgroundKey)) {
+    const firstWmts = options.find((o) => o.type === 'layer');
+    publishState.defaultBackgroundKey = firstWmts ? firstWmts.key : 'none';
+  }
+  publishState.backgroundOptions = options;
+}
+
+function renderDefaultBackgroundOptions() {
+  if (!defaultBackgroundList) return;
+  if (!publishState.backgroundOptions?.length) {
+    defaultBackgroundList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_bg_available'))}</p>`;
+    return;
+  }
+  defaultBackgroundList.innerHTML = publishState.backgroundOptions.map((item) => {
+    const checked = item.key === publishState.defaultBackgroundKey ? 'checked' : '';
+    const defaultTag = checked ? `<span class="Qtiler2Hajk-bg-item__default-tag">${escapeHtml(t('Qtiler2Hajk.default'))}</span>` : '';
+    let thumbHtml = '';
+    if (item.type === 'layer' && item.sourceProjectId && item.name) {
+      const thumbUrl = `/plugins/Qtiler2Hajk/api/thumbnail/${encodeURIComponent(item.sourceProjectId)}?LAYERS=${encodeURIComponent(item.name)}`;
+      thumbHtml = `<img class="Qtiler2Hajk-bg-item__thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy" />`;
+    } else if (item.type === 'osm' || item.key === 'osm') {
+      // OSM tile sample
+      thumbHtml = `<img class="Qtiler2Hajk-bg-item__thumb" src="https://tile.openstreetmap.org/4/8/5.png" alt="OSM" loading="lazy" />`;
+    } else if (item.type === 'none' || item.key === 'none') {
+      thumbHtml = `<span class="Qtiler2Hajk-bg-item__thumb Qtiler2Hajk-bg-item__thumb--placeholder" style="display:flex;align-items:center;justify-content:center;color:#888;font-size:0.7rem">∅</span>`;
+    } else {
+      thumbHtml = `<span class="Qtiler2Hajk-bg-item__thumb Qtiler2Hajk-bg-item__thumb--placeholder"></span>`;
+    }
+    return `
+      <label class="Qtiler2Hajk-bg-item">
+        <input type="radio" name="Qtiler2HajkDefaultBackground" data-default-bg-key="${escapeHtml(item.key)}" ${checked} />
+        ${thumbHtml}
+        <span class="Qtiler2Hajk-bg-item__name">${escapeHtml(item.title)}</span>
+        ${defaultTag}
+      </label>
+    `;
+  }).join('');
+}
+
+function refreshBackgroundOptions() {
+  buildBackgroundOptions();
+  renderDefaultBackgroundOptions();
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+/* ── Groups, per-layer placement & module config ── */
+
+/**
+ * Inject (once) the "Groups & layer placement" panel and the search options
+ * panel into the publish modal. Returns refs to the dynamic containers.
+ */
+function ensureExtraSections() {
+  const modalBody = publishModal?.querySelector('.modal-card-body');
+  if (!modalBody) return null;
+  const layersSlot = publishLayersDynamicSlot || modalBody;
+  const toolsSlot = publishToolsDynamicSlot || modalBody;
+
+  let groupsSection = document.getElementById('Qtiler2HajkGroupsSection');
+  if (!groupsSection) {
+    groupsSection = document.createElement('fieldset');
+    groupsSection.id = 'Qtiler2HajkGroupsSection';
+    groupsSection.className = 'modal-step';
+    groupsSection.innerHTML = `
+      <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Hajk.pub_groups_legend'))}</legend>
+      <p class="help" style="margin-bottom:.6rem">${escapeHtml(t('Qtiler2Hajk.pub_groups_help'))}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+        <div>
+          <strong style="display:block;margin-bottom:6px">${escapeHtml(t('Qtiler2Hajk.pub_groups_label'))}</strong>
+          <div id="Qtiler2HajkGroupsList"></div>
+          <button type="button" id="Qtiler2HajkAddGroupBtn" class="button is-small" style="margin-top:6px">${escapeHtml(t('Qtiler2Hajk.pub_add_group'))}</button>
+        </div>
+        <div>
+          <strong style="display:block;margin-bottom:6px">${escapeHtml(t('Qtiler2Hajk.pub_layer_assign_label'))}</strong>
+          <div id="Qtiler2HajkLayerAssignList"></div>
+          <p class="help" style="margin-top:6px">${escapeHtml(t('Qtiler2Hajk.pub_layer_assign_help'))}</p>
+        </div>
+      </div>`;
+    toolsSlot.appendChild(groupsSection);
+    groupsSection.querySelector('#Qtiler2HajkAddGroupBtn')
+      .addEventListener('click', () => {
+        const idx = publishState.groups.length + 1;
+        publishState.groups.push({ name: `group_${idx}`, title: `Grupo ${idx}`, parent: '', expanded: true });
+        renderGroupsManager();
+        renderLayerAssignments();
+      });
+    groupsSection.querySelector('#Qtiler2HajkGroupsList')
+      .addEventListener('input', (ev) => {
+        const target = ev.target;
+        if (!(target instanceof HTMLInputElement) || target.type === 'checkbox') return;
+        if (target.getAttribute('data-group-field') !== 'title') return;
+        updateGroupFieldFromElement(target);
+      });
+    groupsSection.querySelector('#Qtiler2HajkGroupsList')
+      .addEventListener('change', (ev) => {
+        const target = ev.target;
+        if (!updateGroupFieldFromElement(target)) return;
+        renderGroupsManager();
+        renderLayerAssignments();
+      });
+    groupsSection.querySelector('#Qtiler2HajkGroupsList')
+      .addEventListener('click', (ev) => {
+        const moveBtn = ev.target.closest('[data-move-group]');
+        if (moveBtn) {
+          const idx = Number(moveBtn.getAttribute('data-group-idx'));
+          const direction = moveBtn.getAttribute('data-move-group') === 'up' ? -1 : 1;
+          movePublishGroup(idx, direction);
+          renderGroupsManager();
+          renderLayerAssignments();
+          return;
+        }
+        const btn = ev.target.closest('[data-remove-group]');
+        if (!btn) return;
+        const idx = Number(btn.getAttribute('data-remove-group'));
+        if (!Number.isInteger(idx)) return;
+        const removed = publishState.groups.splice(idx, 1)[0];
+        if (removed?.name) {
+          Object.keys(publishState.layerGroups).forEach((ln) => {
+            if (publishState.layerGroups[ln] === removed.name) publishState.layerGroups[ln] = 'root';
+          });
+        }
+        renderGroupsManager();
+        renderLayerAssignments();
+      });
+    groupsSection.querySelector('#Qtiler2HajkLayerAssignList')
+      .addEventListener('change', (ev) => {
+        const target = ev.target;
+        const layerName = target.getAttribute('data-layer-group-for');
+        if (layerName) {
+          publishState.layerGroups[layerName] = String(target.value || 'root');
+        }
+        const titleLayerKey = target.getAttribute('data-layer-title-for');
+        if (titleLayerKey) {
+          publishState.layerTitles[titleLayerKey] = String(target.value || '').trim();
+          schedulePreviewRefresh();
+        }
+      });
+  }
+
+  let extraLayersSection = document.getElementById('Qtiler2HajkExtraLayersSection');
+  if (!extraLayersSection) {
+    extraLayersSection = document.createElement('fieldset');
+    extraLayersSection.id = 'Qtiler2HajkExtraLayersSection';
+    extraLayersSection.className = 'modal-step';
+    extraLayersSection.innerHTML = `
+      <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Hajk.extra_layers_legend'))}</legend>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+        <p class="help" style="margin:0">${escapeHtml(t('Qtiler2Hajk.extra_layers_help'))}</p>
+        <button type="button" id="Qtiler2HajkOpenExternalLayers" class="button is-small">+ ${escapeHtml(t('Qtiler2Hajk.extra_layers_add'))}</button>
+      </div>
+      <div id="Qtiler2HajkExtraLayersList"></div>`;
+    layersSlot.appendChild(extraLayersSection);
+  }
+
+  let searchSection = document.getElementById('Qtiler2HajkSearchOptions');
+  if (!searchSection) {
+    searchSection = document.createElement('fieldset');
+    searchSection.id = 'Qtiler2HajkSearchOptions';
+    searchSection.className = 'modal-step';
+    searchSection.innerHTML = `
+      <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Hajk.pub_search_legend'))}</legend>
+      <div class="notification is-info is-light" style="margin-bottom:12px;padding:0.7rem 0.85rem">
+        <strong>${escapeHtml(t('Qtiler2Hajk.wfs_helper_title'))}</strong>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Hajk.wfs_search_helper'))}</p>
+        <p class="help" style="margin:0.35rem 0 0">${escapeHtml(t('Qtiler2Hajk.wfs_edit_helper'))}</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <label class="field"><span class="label">${escapeHtml(t('Qtiler2Hajk.pub_search_hint_label'))}</span>
+          <input id="Qtiler2HajkSearchHint" class="input is-small" type="text" placeholder="${escapeHtml(t('Qtiler2Hajk.pub_search_placeholder'))}" /></label>
+        <label class="field"><span class="label">${escapeHtml(t('Qtiler2Hajk.pub_search_min_label'))}</span>
+          <input id="Qtiler2HajkSearchMin" class="input is-small" type="number" min="1" max="20" value="4" /></label>
+        <label class="field"><span class="label">${escapeHtml(t('Qtiler2Hajk.pub_search_limit_label'))}</span>
+          <input id="Qtiler2HajkSearchLimit" class="input is-small" type="number" min="1" max="100" value="9" /></label>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e0e0e0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+          <strong>${escapeHtml(t('Qtiler2Hajk.pub_search_sources_label'))}</strong>
+          <button type="button" id="Qtiler2HajkSearchSourceAdd" class="button is-small">+ ${escapeHtml(t('Qtiler2Hajk.pub_search_source_add'))}</button>
+        </div>
+        <p class="help" style="margin:0 0 8px">${escapeHtml(t('Qtiler2Hajk.pub_search_sources_help'))}</p>
+        <div id="Qtiler2HajkSearchSourcesList"></div>
+      </div>`;
+    toolsSlot.appendChild(searchSection);
+  }
+  // The search-options section (which now hosts the cross-project picker)
+  // is always visible so the user can configure it before enabling the
+  // Origo `Search` control. Hiding it based on a single checkbox proved
+  // confusing — users reported "the form is empty" because the section
+  // was display:none.
+  searchSection.style.display = '';
+
+  return { groupsSection, extraLayersSection, searchSection };
+}
+
+async function getProjectLayersCatalog(projectId) {
+  const pid = String(projectId || '').trim();
+  if (!pid) return [];
+  if (Array.isArray(publishState.projectLayerCatalog[pid])) {
+    return publishState.projectLayerCatalog[pid];
+  }
+  const payload = await api(`/projects/${encodeURIComponent(pid)}/layers`);
+  const normalized = normalizeLayersPayload(payload, { sourceProjectId: pid });
+  publishState.projectLayerCatalog[pid] = normalized;
+  return normalized;
+}
+
+async function addExternalLayers(projectId, selectedItems) {
+  const pid = String(projectId || '').trim();
+  if (!pid || !Array.isArray(selectedItems) || !selectedItems.length) return;
+  const catalog = await getProjectLayersCatalog(pid);
+  const rules = await loadLayerRules(pid).catch(() => ({}));
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  if (pid === currentProjectId) return;
+
+  for (const item of selectedItems) {
+    const layerName = String(item?.name || '').trim();
+    if (!layerName) continue;
+    const layerObj = catalog.find((layer) => String(layer?.name || '') === layerName) || {
+      key: makeLayerKey(pid, layerName),
+      name: layerName,
+      title: String(item?.title || layerName).trim() || layerName,
+      sourceProjectId: pid,
+      geometry: String(item?.geometryType || item?.geometry || '').trim()
+    };
+    const layerKey = getLayerKey(layerObj);
+    if (!publishState.extraLayers.some((layer) => getLayerKey(layer) === layerKey)) {
+      publishState.extraLayers.push({ ...layerObj });
+    }
+    if (typeof publishState.initialVisibility[layerKey] === 'undefined') {
+      publishState.initialVisibility[layerKey] = true;
+    }
+    const baseRule = rules[layerName] || {};
+    publishState.mainRules[layerKey] = {
+      ...(publishState.mainRules[layerKey] || {}),
+      searchable: baseRule.searchable === true,
+      editable: String(item.mode || '').toUpperCase() === 'WFS' ? baseRule.editable === true : false,
+      serveAsWfs: String(item.mode || '').toUpperCase() === 'WFS',
+      searchAttribute: baseRule.searchAttribute || null,
+      idAttribute: baseRule.idAttribute || null,
+      geometryAttribute: baseRule.geometryAttribute || null,
+      hintText: baseRule.hintText || null,
+      geometryType: String(baseRule.geometryType || layerObj.geometry || '').trim() || null
+    };
+  }
+}
+
+function renderExternalLayersSummary() {
+  const host = document.getElementById('Qtiler2HajkExtraLayersList');
+  if (!host) return;
+  const rows = Array.isArray(publishState.extraLayers) ? publishState.extraLayers : [];
+  if (!rows.length) {
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_empty'))}</p>`;
+    return;
+  }
+  host.innerHTML = rows.map((layer) => {
+    const key = getLayerKey(layer);
+    const rule = publishState.mainRules[key] || {};
+    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      <div>
+        <strong>${escapeHtml(layer.name)}</strong>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
+      </div>
+      <span class="tag is-light">${rule.serveAsWfs ? 'WFS' : 'WMS'}</span>
+      <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">${escapeHtml(t('Qtiler2Hajk.extra_layers_remove'))}</button>
+    </div>`;
+  }).join('');
+}
+
+function ensureExternalLayerModal() {
+  let modal = document.getElementById('Qtiler2HajkExternalLayerModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'Qtiler2HajkExternalLayerModal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-background" data-close-external-layer-modal></div>
+    <div class="modal-card" style="width:min(920px, calc(100vw - 32px))">
+      <header class="modal-card-head">
+        <p class="modal-card-title">${escapeHtml(t('Qtiler2Hajk.extra_layers_modal_title'))}</p>
+        <button type="button" class="delete" aria-label="close" data-close-external-layer-modal></button>
+      </header>
+      <section class="modal-card-body">
+        <label class="field">
+          <span class="label">${escapeHtml(t('Qtiler2Hajk.extra_layers_project'))}</span>
+          <select id="Qtiler2HajkExternalProjectSelect" class="input"></select>
+        </label>
+        <div id="Qtiler2HajkExternalProjectLayers" style="display:grid;gap:8px;max-height:55vh;overflow:auto"></div>
+      </section>
+      <footer class="modal-card-foot" style="justify-content:space-between">
+        <button type="button" class="button" data-close-external-layer-modal>${escapeHtml(t('Qtiler2Hajk.extra_layers_cancel'))}</button>
+        <button type="button" class="button is-primary" id="Qtiler2HajkExternalLayerApply">${escapeHtml(t('Qtiler2Hajk.extra_layers_apply'))}</button>
+      </footer>
+    </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+async function renderExternalLayerModalList(projectId) {
+  const host = document.getElementById('Qtiler2HajkExternalProjectLayers');
+  if (!host) return;
+  const pid = String(projectId || '').trim();
+  if (!pid) {
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_pick_project'))}</p>`;
+    return;
+  }
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  if (pid === currentProjectId) {
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_current_project'))}</p>`;
+    return;
+  }
+  const layers = await getProjectLayersCatalog(pid);
+  if (!layers.length) {
+    host.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.extra_layers_no_layers'))}</p>`;
+    return;
+  }
+  host.innerHTML = layers.map((layer) => {
+    const key = getLayerKey(layer);
+    const isVector = isVectorGeometry(layer.geometry);
+    const checked = publishState.extraLayers.some((row) => getLayerKey(row) === key) ? 'checked' : '';
+    const currentRule = publishState.mainRules[key] || {};
+    const mode = currentRule.serveAsWfs ? 'WFS' : 'WMS';
+    return `<label style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      <input type="checkbox" data-external-layer-check="${escapeHtml(key)}" ${checked} />
+      <div>
+        <div><strong>${escapeHtml(layer.name)}</strong></div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.geometry || t('Qtiler2Hajk.layer_generic'))}</div>
+      </div>
+      <select class="input is-small" style="width:92px" data-external-layer-mode="${escapeHtml(key)}" ${isVector ? '' : 'disabled'}>
+        <option value="WMS" ${mode === 'WMS' ? 'selected' : ''}>WMS</option>
+        <option value="WFS" ${mode === 'WFS' ? 'selected' : ''}>WFS</option>
+      </select>
+    </label>`;
+  }).join('');
+}
+
+function bindExternalLayerPickerEvents() {
+  const openBtn = document.getElementById('Qtiler2HajkOpenExternalLayers');
+  if (openBtn && !openBtn.dataset.bound) {
+    openBtn.dataset.bound = '1';
+    openBtn.addEventListener('click', async () => {
+      const modal = ensureExternalLayerModal();
+      const select = document.getElementById('Qtiler2HajkExternalProjectSelect');
+      const currentProjectId = String(publishProjectSelect?.value || '').trim();
+      const options = (publishState.projects || [])
+        .filter((project) => project.id && project.id !== currentProjectId)
+        .map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>`)
+        .join('');
+      select.innerHTML = `<option value="">${escapeHtml(t('Qtiler2Hajk.extra_layers_pick_project'))}</option>${options}`;
+      modal.classList.add('is-active');
+      await renderExternalLayerModalList(String(select.value || '').trim());
+    });
+  }
+
+  const modal = ensureExternalLayerModal();
+  if (!modal.dataset.bound) {
+    modal.dataset.bound = '1';
+    modal.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.hasAttribute('data-close-external-layer-modal')) {
+        modal.classList.remove('is-active');
+      }
+    });
+    document.getElementById('Qtiler2HajkExternalProjectSelect')?.addEventListener('change', async (event) => {
+      const target = event.target;
+      await renderExternalLayerModalList(String(target.value || '').trim());
+    });
+    document.getElementById('Qtiler2HajkExternalLayerApply')?.addEventListener('click', async () => {
+      const select = document.getElementById('Qtiler2HajkExternalProjectSelect');
+      const projectId = String(select?.value || '').trim();
+      const host = document.getElementById('Qtiler2HajkExternalProjectLayers');
+      const selectedItems = Array.from(host?.querySelectorAll('input[data-external-layer-check]:checked') || []).map((input) => {
+        const layerKey = String(input.getAttribute('data-external-layer-check') || '').trim();
+        const modeSelect = host.querySelector(`[data-external-layer-mode="${CSS.escape(layerKey)}"]`);
+        const layer = (publishState.projectLayerCatalog[projectId] || []).find((entry) => getLayerKey(entry) === layerKey);
+        return layer ? { name: layer.name, mode: String(modeSelect?.value || 'WMS').trim().toUpperCase() === 'WFS' ? 'WFS' : 'WMS' } : null;
+      }).filter(Boolean);
+      await addExternalLayers(projectId, selectedItems);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      renderExternalLayersSummary();
+      refreshExtraSections();
+      modal.classList.remove('is-active');
+    });
+  }
+
+  const summary = document.getElementById('Qtiler2HajkExtraLayersList');
+  if (summary && !summary.dataset.bound) {
+    summary.dataset.bound = '1';
+    summary.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const key = String(target.getAttribute('data-remove-extra-layer') || '').trim();
+      if (!key) return;
+      publishState.extraLayers = publishState.extraLayers.filter((layer) => getLayerKey(layer) !== key);
+      delete publishState.mainRules[key];
+      delete publishState.layerGroups[key];
+      delete publishState.initialVisibility[key];
+      const checkedNames = getCheckedLayerNames(projectLayersList).filter((name) => name !== key);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      renderExternalLayersSummary();
+      renderLayerAssignments();
+    });
+  }
+
+  const assignments = document.getElementById('Qtiler2HajkLayerAssignList');
+  if (assignments && !assignments.dataset.bound) {
+    assignments.dataset.bound = '1';
+    assignments.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const key = String(target.getAttribute('data-remove-publish-layer') || '').trim();
+      if (!key) return;
+      const checkbox = projectLayersList?.querySelector(`input[type="checkbox"][data-layer-include="${CSS.escape(key)}"]`);
+      if (!(checkbox instanceof HTMLInputElement)) return;
+      checkbox.checked = false;
+      renderLayerAssignments();
+      schedulePreviewRefresh();
+    });
+  }
+}
+
+function getGroupOptionsHtml(selected) {
+  const sel = String(selected || 'root');
+  const opts = [{ name: 'root', title: 'Map Layers' }, ...publishState.groups];
+  return opts.map((g) => {
+    const value = String(g.name || '').trim();
+    if (!value) return '';
+    const label = String(g.title || value).trim() || value;
+    const indent = g.parent ? '— ' : '';
+    const isSel = value === sel ? 'selected' : '';
+    return `<option value="${escapeHtml(value)}" ${isSel}>${escapeHtml(indent + label)}</option>`;
+  }).join('');
+}
+
+function renameGroupReferences(oldName, newName) {
+  const prev = String(oldName || '').trim();
+  const next = String(newName || '').trim();
+  if (!prev || prev === next) return;
+  Object.keys(publishState.layerGroups || {}).forEach((layerKey) => {
+    if (publishState.layerGroups[layerKey] === prev) {
+      publishState.layerGroups[layerKey] = next || 'root';
+    }
+  });
+  (publishState.groups || []).forEach((group) => {
+    if (String(group?.parent || '').trim() === prev) {
+      group.parent = next || '';
+    }
+  });
+}
+
+function getGroupDescendantNames(groupName) {
+  const root = String(groupName || '').trim();
+  if (!root) return new Set();
+  const descendants = new Set();
+  const visit = (parentName) => {
+    (publishState.groups || []).forEach((group) => {
+      const name = String(group?.name || '').trim();
+      const parent = String(group?.parent || '').trim();
+      if (!name || descendants.has(name) || parent !== parentName) return;
+      descendants.add(name);
+      visit(name);
+    });
+  };
+  visit(root);
+  return descendants;
+}
+
+function movePublishGroup(fromIndex, direction) {
+  const from = Number(fromIndex);
+  const to = from + Number(direction);
+  if (!Number.isInteger(from) || !Number.isInteger(to)) return;
+  if (from < 0 || to < 0 || from >= publishState.groups.length || to >= publishState.groups.length) return;
+  const [moved] = publishState.groups.splice(from, 1);
+  publishState.groups.splice(to, 0, moved);
+}
+
+function updateGroupFieldFromElement(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  const idx = Number(target.getAttribute('data-group-idx'));
+  if (!Number.isInteger(idx) || !publishState.groups[idx]) return false;
+  const field = target.getAttribute('data-group-field');
+  if (!field) return false;
+  const group = publishState.groups[idx];
+  if (field === 'expanded' && target instanceof HTMLInputElement && target.type === 'checkbox') {
+    group.expanded = target.checked;
+    return true;
+  }
+  const rawValue = String((target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) ? target.value : '').trim();
+  if (field === 'name') {
+    const oldName = String(group.name || '').trim();
+    group.name = rawValue;
+    renameGroupReferences(oldName, rawValue);
+    return true;
+  }
+  if (field === 'parent') {
+    const groupName = String(group.name || '').trim();
+    const blockedParents = getGroupDescendantNames(groupName);
+    if (rawValue === groupName || blockedParents.has(rawValue)) {
+      group.parent = '';
+      return true;
+    }
+    group.parent = rawValue;
+    return true;
+  }
+  group[field] = rawValue;
+  return true;
+}
+
+function renderGroupsManager() {
+  const list = document.getElementById('Qtiler2HajkGroupsList');
+  if (!list) return;
+  if (!publishState.groups.length) {
+    list.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.pub_no_groups'))}</p>`;
+    return;
+  }
+  list.innerHTML = publishState.groups.map((g, idx) => {
+    const groupName = String(g?.name || '').trim();
+    const blockedParents = getGroupDescendantNames(groupName);
+    const parentOpts = [`<option value="">${escapeHtml(t('Qtiler2Hajk.pub_no_parent'))}</option>`]
+      .concat(publishState.groups
+        .filter((gg, j) => j !== idx && gg.name && !blockedParents.has(String(gg.name || '').trim()))
+        .map((gg) => `<option value="${escapeHtml(gg.name)}" ${gg.name === g.parent ? 'selected' : ''}>${escapeHtml(gg.title || gg.name)}</option>`))
+      .join('');
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === publishState.groups.length - 1 ? 'disabled' : '';
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto auto auto auto;gap:6px;margin-bottom:6px;align-items:center">
+      <input class="input is-small" data-group-idx="${idx}" data-group-field="name" value="${escapeHtml(g.name || '')}" placeholder="${escapeHtml(t('Qtiler2Hajk.pub_group_name_ph'))}" />
+      <input class="input is-small" data-group-idx="${idx}" data-group-field="title" value="${escapeHtml(g.title || '')}" placeholder="${escapeHtml(t('Qtiler2Hajk.pub_group_title_ph'))}" />
+      <select class="input is-small" data-group-idx="${idx}" data-group-field="parent">${parentOpts}</select>
+      <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px">
+        <input type="checkbox" data-group-idx="${idx}" data-group-field="expanded" ${g.expanded !== false ? 'checked' : ''} />
+        ${escapeHtml(t('Qtiler2Hajk.opt_expanded'))}
+      </label>
+      <button type="button" class="button is-small is-light" data-move-group="up" data-group-idx="${idx}" title="${escapeHtml(t('Qtiler2Hajk.wfs_move_up'))}" ${upDisabled}>▲</button>
+      <button type="button" class="button is-small is-light" data-move-group="down" data-group-idx="${idx}" title="${escapeHtml(t('Qtiler2Hajk.wfs_move_down'))}" ${downDisabled}>▼</button>
+      <button type="button" class="button is-small is-danger is-light" data-remove-group="${idx}">×</button>
+    </div>`;
+  }).join('');
+}
+
+function renderLayerAssignments() {
+  const list = document.getElementById('Qtiler2HajkLayerAssignList');
+  if (!list) return;
+  // Show ALL project layers (active + inactive) so the user can assign every
+  // layer to a group up-front, even if it isn't currently checked. Active
+  // layers are visually emphasized so the user can tell at a glance.
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) {
+    list.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.pub_assign_help'))}</p>`;
+    return;
+  }
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  // Sort: active first, then inactive — preserving original order within each bucket.
+  const ordered = [
+    ...allLayers.filter((l) => checkedSet.has(getLayerKey(l))),
+    ...allLayers.filter((l) => !checkedSet.has(getLayerKey(l)))
+  ];
+  list.innerHTML = ordered.map((layer) => {
+    const name = String(layer?.name || '');
+    const layerKey = getLayerKey(layer);
+    if (!name || !layerKey) return '';
+    const isActive = checkedSet.has(layerKey);
+    const groupSel = publishState.layerGroups[layerKey] || 'root';
+    const layerTitle = String(publishState.layerTitles[layerKey] || '').trim();
+    const defaultTitle = String(layer?.title || name).trim() || name;
+    const opacity = isActive ? '1' : '0.6';
+    const dot = isActive
+      ? '<span title="active" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex:0 0 8px"></span>'
+      : '<span title="inactive" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#cbd5e1;flex:0 0 8px"></span>';
+    const removeBtn = isActive
+      ? `<button type="button" class="button is-small is-danger is-light" data-remove-publish-layer="${escapeHtml(layerKey)}">${escapeHtml(t('Qtiler2Hajk.pub_search_source_remove'))}</button>`
+      : '<span></span>';
+    return `<div style="display:grid;grid-template-columns:14px minmax(140px,1fr) minmax(160px,1fr) 160px 74px;gap:8px;margin-bottom:4px;align-items:center;opacity:${opacity}">
+      ${dot}
+      <span title="${escapeHtml(name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(name)}${layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim() ? ` [${escapeHtml(layer.sourceProjectId)}]` : ''}</span>
+      <input class="input is-small" type="text" data-layer-title-for="${escapeHtml(layerKey)}" value="${escapeHtml(layerTitle)}" placeholder="${escapeHtml(defaultTitle)}" />
+      <select class="input is-small" data-layer-group-for="${escapeHtml(layerKey)}">${getGroupOptionsHtml(groupSel)}</select>
+      ${removeBtn}
+    </div>`;
+  }).join('');
+}
+
+function refreshExtraSections() {
+  ensureExtraSections();
+  renderGroupsManager();
+  renderLayerAssignments();
+  bindExternalLayerPickerEvents();
+  renderExternalLayersSummary();
+  bindSearchSourceEvents();
+  renderSearchSources();
+  renderPublishConfigSummary();
+}
+
+/* ── Layer loading ── */
+async function loadLayerRules(projectId) {
+  const [config, searchable] = await Promise.all([
+    api(`/projects/${encodeURIComponent(projectId)}/config`).catch(() => ({})),
+    api(`/projects/${encodeURIComponent(projectId)}/searchable`).catch(() => ([]))
+  ]);
+  const searchableRows = Array.isArray(searchable) ? searchable : [];
+  const searchableMap = {};
+  searchableRows.forEach((entry) => {
+    const name = String(entry?.name || '').trim();
+    if (!name) return;
+    searchableMap[name] = {
+      searchable: entry.searchable !== false,
+      searchAttribute: String(entry.searchAttribute || entry.titleField || '').trim() || null,
+      idAttribute: String(entry.idAttribute || '').trim() || null,
+      geometryAttribute: String(entry.geometryAttribute || '').trim() || null,
+      hintText: String(entry.hintText || '').trim() || null
+    };
+  });
+  const layerConfigMap = config?.layers && typeof config.layers === 'object' ? config.layers : {};
+  const rules = {};
+  Object.keys(layerConfigMap).forEach((name) => {
+    const cfg = layerConfigMap[name] && typeof layerConfigMap[name] === 'object' ? layerConfigMap[name] : {};
+    const searchCfg = searchableMap[name] || {};
+    rules[name] = {
+      searchable: searchCfg.searchable === true || cfg.wfsSearchable === true,
+      editable: cfg.wfsEditable === true,
+      searchAttribute: searchCfg.searchAttribute || null,
+      idAttribute: searchCfg.idAttribute || null,
+      geometryAttribute: searchCfg.geometryAttribute || null,
+      hintText: searchCfg.hintText || null
+    };
+  });
+  Object.keys(searchableMap).forEach((name) => {
+    if (rules[name]) return;
+    rules[name] = {
+      searchable: searchableMap[name].searchable === true,
+      editable: false,
+      searchAttribute: searchableMap[name].searchAttribute,
+      idAttribute: searchableMap[name].idAttribute,
+      geometryAttribute: searchableMap[name].geometryAttribute,
+      hintText: searchableMap[name].hintText
+    };
+  });
+  return rules;
+}
+
+async function loadProjectLayers(projectId, target = 'main') {
+  const payload = await api(`/projects/${encodeURIComponent(projectId)}/layers`);
+  const normalized = normalizeLayersPayload(payload, { sourceProjectId: projectId });
+  publishState.projectLayerCatalog[projectId] = normalized;
+  if (target === 'main') {
+    const retainedExtraLayers = (publishState.extraLayers || [])
+      .filter((layer) => String(layer?.sourceProjectId || '').trim() !== projectId);
+    const retainedExtraKeys = new Set(retainedExtraLayers.map((layer) => getLayerKey(layer)));
+    const retainedRules = Object.fromEntries(Object.entries(publishState.mainRules || {})
+      .filter(([key]) => retainedExtraKeys.has(key)));
+    const retainedVisibility = Object.fromEntries(Array.from(retainedExtraKeys)
+      .map((key) => [key, publishState.initialVisibility?.[key] !== false]));
+    const retainedTitles = Object.fromEntries(Object.entries(publishState.layerTitles || {})
+      .filter(([key]) => retainedExtraKeys.has(key)));
+    publishState.mainLayers = normalized;
+    publishState.extraLayers = retainedExtraLayers;
+    publishState.mainRules = { ...(await loadLayerRules(projectId)), ...retainedRules };
+    publishState.initialVisibility = {
+      ...Object.fromEntries(normalized.map((layer) => [getLayerKey(layer), true])),
+      ...retainedVisibility
+    };
+    publishState.layerTitles = retainedTitles;
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    // Default visibility = on, but DO NOT force-check the per-row WFS toggle —
+    // that would override the saved profile's per-layer `serveAsWfs` flag and
+    // make every layer appear as WFS until the user toggles one (which then
+    // re-renders all the others as unchecked, looking like a mass-deselect).
+    setCheckedLayerNames(projectLayersList, getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean));
+    refreshExtraSections();
+    return;
+  }
+  publishState.backgroundLayers = normalized;
+  renderLayerChecklist(backgroundLayersList, publishState.backgroundLayers, {});
+  refreshBackgroundOptions();
+}
+
+async function loadProjectsForPublish() {
+  const payload = await api('/projects');
+  const list = Array.isArray(payload?.projects) ? payload.projects : [];
+  publishState.projects = list.map((p) => ({ id: String(p.id || '').trim(), name: String(p.name || p.id || '').trim() })).filter((p) => p.id);
+  const options = publishState.projects.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || p.id)}</option>`).join('');
+  publishProjectSelect.innerHTML = options;
+  backgroundProjectSelect.innerHTML = `<option value="">${escapeHtml(t('Qtiler2Hajk.no_bg_option'))}</option>${options}`;
+}
+
+/* ── Cross-project search sources picker ── */
+async function getSearchableLayersForProject(projectId) {
+  const pid = String(projectId || '').trim();
+  if (!pid) return [];
+  if (Array.isArray(publishState.searchSourceCatalog[pid])) {
+    return publishState.searchSourceCatalog[pid];
+  }
+  try {
+    const payload = await api(`/projects/${encodeURIComponent(pid)}/searchable`);
+    const rows = Array.isArray(payload) ? payload : [];
+    const filtered = rows
+      .filter((r) => r && r.searchable !== false && String(r.name || '').trim())
+      .map((r) => ({ name: String(r.name).trim() }));
+    publishState.searchSourceCatalog[pid] = filtered;
+    return filtered;
+  } catch {
+    publishState.searchSourceCatalog[pid] = [];
+    return [];
+  }
+}
+
+function projectLabel(pid) {
+  const p = (publishState.projects || []).find((pp) => pp.id === pid);
+  return p ? (p.name || p.id) : pid;
+}
+
+async function renderSearchSources() {
+  const host = document.getElementById('Qtiler2HajkSearchSourcesList');
+  if (!host) return;
+  const currentProjectId = String(publishProjectSelect?.value || '').trim();
+  const sources = Array.isArray(publishState.searchSources) ? publishState.searchSources : [];
+
+  // Warn loudly if the project list is empty — picker dropdowns would
+  // otherwise render with just the placeholder option and the user would
+  // be unable to pick anything.
+  if (!Array.isArray(publishState.projects) || publishState.projects.length === 0) {
+    host.innerHTML = `<p class="help" style="margin:0;color:#a00">${escapeHtml(t('Qtiler2Hajk.pub_search_no_projects'))}</p>`;
+    return;
+  }
+
+  if (!sources.length) {
+    host.innerHTML = `<p class="help" style="margin:0">${escapeHtml(t('Qtiler2Hajk.pub_search_sources_help'))}</p>`;
+    return;
+  }
+
+  // Pre-fetch layer catalogs in parallel.
+  await Promise.all(sources.map((s) => getSearchableLayersForProject(s.projectId)));
+
+  const usedPids = new Set(sources.map((s) => String(s.projectId || '').trim()).filter(Boolean));
+
+  host.innerHTML = sources.map((src, idx) => {
+    const pid = String(src.projectId || '').trim();
+    const catalog = publishState.searchSourceCatalog[pid] || [];
+    const selLayers = new Set(Array.isArray(src.layers) ? src.layers : []);
+
+    const projectOpts = [
+      `<option value="">${escapeHtml(t('Qtiler2Hajk.pub_search_source_pick_project'))}</option>`
+    ].concat((publishState.projects || []).map((p) => {
+      // Allow currently-selected pid even if used; otherwise hide already-used pids.
+      if (p.id !== pid && usedPids.has(p.id)) return '';
+      const isCurrent = currentProjectId && p.id === currentProjectId;
+      const label = (p.name || p.id) + (isCurrent ? ` (${t('Qtiler2Hajk.pub_search_source_current')})` : '');
+      return `<option value="${escapeHtml(p.id)}" ${p.id === pid ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    })).join('');
+
+    const layersHtml = !pid
+      ? ''
+      : (catalog.length === 0
+          ? `<p class="help" style="margin:4px 0 0">${escapeHtml(t('Qtiler2Hajk.pub_search_source_no_layers'))}</p>`
+          : `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.9em">${escapeHtml(t('Qtiler2Hajk.pub_search_source_layers'))} (${selLayers.size === 0 ? t('Qtiler2Hajk.pub_search_source_all_layers') : `${selLayers.size}/${catalog.length}`})</summary>
+              <div style="margin-top:6px;max-height:160px;overflow:auto;border:1px solid #eee;padding:6px;border-radius:4px">
+                <label style="display:block;font-size:0.85em;margin-bottom:4px">
+                  <input type="checkbox" data-search-source-all="${idx}" ${selLayers.size === 0 ? 'checked' : ''} />
+                  ${escapeHtml(t('Qtiler2Hajk.pub_search_source_all_layers'))}
+                </label>
+                ${catalog.map((layer) => `
+                  <label style="display:block;font-size:0.85em;margin-left:12px">
+                    <input type="checkbox" data-search-source-layer="${idx}" value="${escapeHtml(layer.name)}" ${selLayers.has(layer.name) ? 'checked' : ''} ${selLayers.size === 0 ? 'disabled' : ''} />
+                    ${escapeHtml(layer.name)}
+                  </label>`).join('')}
+              </div>
+            </details>`);
+
+    return `<div data-search-source-row="${idx}" style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px;margin-bottom:6px;border:1px solid #ddd;border-radius:4px;background:#fafafa">
+      <div>
+        <select class="input is-small" data-search-source-project="${idx}">${projectOpts}</select>
+        ${layersHtml}
+      </div>
+      <button type="button" class="button is-small is-danger is-light" data-search-source-remove="${idx}" title="${escapeHtml(t('Qtiler2Hajk.pub_search_source_remove'))}">×</button>
+    </div>`;
+  }).join('');
+}
+
+function bindSearchSourceEvents() {
+  const host = document.getElementById('Qtiler2HajkSearchSourcesList');
+  const addBtn = document.getElementById('Qtiler2HajkSearchSourceAdd');
+  if (addBtn && !addBtn.dataset.bound) {
+    addBtn.dataset.bound = '1';
+    addBtn.addEventListener('click', () => {
+      publishState.searchSources = Array.isArray(publishState.searchSources) ? publishState.searchSources : [];
+      publishState.searchSources.push({ projectId: '', layers: [] });
+      renderSearchSources();
+    });
+  }
+  if (host && !host.dataset.bound) {
+    host.dataset.bound = '1';
+    host.addEventListener('change', async (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      const sources = publishState.searchSources;
+
+      const projIdxAttr = el.getAttribute('data-search-source-project');
+      if (projIdxAttr !== null) {
+        const idx = Number.parseInt(projIdxAttr, 10);
+        if (Number.isFinite(idx) && sources[idx]) {
+          sources[idx].projectId = String(el.value || '').trim();
+          sources[idx].layers = []; // reset layer selection on project change
+          await renderSearchSources();
+        }
+        return;
+      }
+
+      const allIdxAttr = el.getAttribute('data-search-source-all');
+      if (allIdxAttr !== null) {
+        const idx = Number.parseInt(allIdxAttr, 10);
+        if (Number.isFinite(idx) && sources[idx]) {
+          if (el.checked) {
+            sources[idx].layers = []; // empty = all
+          } else {
+            // Pre-populate with all catalog entries so user can uncheck
+            const pid = sources[idx].projectId;
+            const catalog = publishState.searchSourceCatalog[pid] || [];
+            sources[idx].layers = catalog.map((l) => l.name);
+          }
+          await renderSearchSources();
+        }
+        return;
+      }
+
+      const layerIdxAttr = el.getAttribute('data-search-source-layer');
+      if (layerIdxAttr !== null) {
+        const idx = Number.parseInt(layerIdxAttr, 10);
+        if (Number.isFinite(idx) && sources[idx]) {
+          const layerName = String(el.value || '').trim();
+          if (!layerName) return;
+          const set = new Set(sources[idx].layers || []);
+          if (el.checked) set.add(layerName); else set.delete(layerName);
+          sources[idx].layers = Array.from(set);
+          // Re-render to update the (n/m) counter in the summary
+          await renderSearchSources();
+        }
+      }
+    });
+    host.addEventListener('click', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      const removeIdxAttr = el.getAttribute('data-search-source-remove');
+      if (removeIdxAttr !== null) {
+        const idx = Number.parseInt(removeIdxAttr, 10);
+        if (Number.isFinite(idx)) {
+          publishState.searchSources.splice(idx, 1);
+          renderSearchSources();
+        }
+      }
+    });
+  }
+}
+
+/* ── Publish editor ── */
+let publishEditorDirty = false;
+function markEditorClean() { publishEditorDirty = false; }
+function markEditorDirty() { publishEditorDirty = true; }
+
+function openPublishModal() {
+  if (publishModal) {
+    publishModal.hidden = false;
+  }
+  clearPublishStatusError();
+  document.body.classList.add('publish-editor-open');
+  refreshExtraSections();
+  // Ensure controls textarea reflects checkboxes when no saved controls yet
+  if (controlsJsonInput && !controlsJsonInput.value.trim()) syncControlsFromCheckboxes();
+  setPublishModalTab('layers');
+  renderPublishConfigSummary();
+  updatePublishModalFullscreenButton();
+  // Any user edit inside the modal marks the editor as dirty.
+  if (publishModal && !publishModal.dataset.dirtyBound) {
+    publishModal.dataset.dirtyBound = '1';
+    publishModal.addEventListener('input', markEditorDirty);
+    publishModal.addEventListener('change', markEditorDirty);
+  }
+}
+function closePublishModal({ force = false } = {}) {
+  if (!force && publishEditorDirty) {
+    if (!window.confirm(t('Qtiler2Hajk.unsaved_changes_confirm'))) return;
+  }
+  publishEditorDirty = false;
+  if (publishModal) publishModal.hidden = true;
+  if (publishModal) publishModal.classList.remove('publish-editor--fullscreen');
+  document.body.classList.remove('publish-editor-open');
+  // Clear preview iframe to remove residual
+  if (previewIframe) previewIframe.src = '';
+  setPreviewOverlayState('idle');
+  publishState.editingProfileId = null;
+  clearPublishStatusError();
+  publishState.groups = [];
+  publishState.layerGroups = {};
+  publishState.layerTitles = {};
+  publishState.initialVisibility = {};
+  publishState.controls = {};
+  publishState.extraLayers = [];
+  updatePublishModalFullscreenButton();
+  if (isDetachedMapEditor) window.close();
+}
+
+async function preparePublishModal(editProfileId = null) {
+  _mapJsonDirty = false;
+  if (_cmMapJsonEditor) {
+    _mapJsonSettingValue = true;
+    _cmMapJsonEditor.setValue('{}');
+    _cmMapJsonEditor.clearHistory();
+    _mapJsonSettingValue = false;
+  }
+  setMapJsonLiveStatus('Ready');
+  publishState.editingProfileId = editProfileId;
+  publishState.layerTitles = {};
+  await loadProjectsForPublish();
+
+  if (editProfileId) {
+    // Edit mode: load existing profile and prefill
+    if (modalTitle) modalTitle.textContent = t('Qtiler2Hajk.modal_title_edit', { id: editProfileId });
+    let profile;
+    try {
+      profile = await api(`/plugins/Qtiler2Hajk/published/${encodeURIComponent(editProfileId)}.json`);
+    } catch { profile = null; }
+
+    if (profile) {
+      // Name & description — store the actual name as editingProfileId for backend
+      publishState.editingProfileId = profile.name || editProfileId;
+      if (publishName) { publishName.value = profile.name || editProfileId; publishName.disabled = true; }
+      if (publishDescription) publishDescription.value = profile.description || '';
+      if (publishNameError) publishNameError.style.display = 'none';
+      // Select main project
+      if (publishProjectSelect) publishProjectSelect.value = profile.projectId || '';
+      const mainProjectId = String(publishProjectSelect.value || '').trim();
+      if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
+
+      const savedLayerRows = Array.isArray(profile.layers) ? profile.layers : [];
+      const savedMain = savedLayerRows.filter((layer) => String(layer?.role || 'main') !== 'background');
+      const savedExternal = savedMain.filter((layer) => {
+        const srcPid = String(layer?.sourceProjectId || '').trim();
+        return srcPid && srcPid !== mainProjectId;
+      });
+      for (const layer of savedExternal) {
+        const srcPid = String(layer?.sourceProjectId || '').trim();
+        const layerName = String(layer?.name || '').trim();
+        if (!srcPid || !layerName) continue;
+        const externalLayer = {
+          key: makeLayerKey(srcPid, layerName),
+          name: layerName,
+          sourceProjectId: srcPid,
+          geometry: String(layer?.geometryType || '').trim()
+        };
+        if (!publishState.extraLayers.some((row) => getLayerKey(row) === externalLayer.key)) {
+          publishState.extraLayers.push(externalLayer);
+        }
+      }
+      savedMain.forEach((layer) => {
+        const key = makeLayerKey(String(layer?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(layer?.name || '').trim());
+        if (!key) return;
+        const savedTitle = String(layer?.title || '').trim();
+        const rawName = String(layer?.name || '').trim();
+        publishState.layerTitles[key] = savedTitle && savedTitle !== rawName ? savedTitle : '';
+        publishState.mainRules[key] = {
+          ...(publishState.mainRules[key] || {}),
+          serveAsWfs: layer?.serveAsWfs === true,
+          wfsStyle: layer?.wfsStyle || null,
+          wmsLegendMode: String(layer?.wmsLegendMode || publishState.mainRules[key]?.wmsLegendMode || 'auto').trim() || 'auto',
+          wmsLegendIcon: String(layer?.wmsLegendIcon || layer?.legendIcon || publishState.mainRules[key]?.wmsLegendIcon || '').trim(),
+          wmsLegendUrl: String(layer?.wmsLegendUrl || layer?.legend || publishState.mainRules[key]?.wmsLegendUrl || '').trim(),
+          designerOptions: layer?.designerOptions && typeof layer.designerOptions === 'object'
+            ? JSON.parse(JSON.stringify(layer.designerOptions))
+            : (publishState.mainRules[key]?.designerOptions || {}),
+          attributes: Array.isArray(layer?.attributes) ? JSON.parse(JSON.stringify(layer.attributes)) : (publishState.mainRules[key]?.attributes || []),
+          searchable: layer?.searchable === true,
+          editable: layer?.editable !== false,
+          geometryType: String(layer?.geometryType || publishState.mainRules[key]?.geometryType || '').trim() || null
+        };
+      });
+      // Background project and selected/default background state
+      const profileBackgrounds = Array.isArray(profile.backgrounds) ? profile.backgrounds : [];
+      const defaultLayerBackground = profileBackgrounds.find((bg) => bg && bg.type === 'layer' && bg.isDefault === true);
+      const firstLayerBackground = profileBackgrounds.find((bg) => bg && bg.type === 'layer' && bg.sourceProjectId && bg.name);
+      const bgProjectId = String(
+        profile.backgroundProjectId
+        || defaultLayerBackground?.sourceProjectId
+        || firstLayerBackground?.sourceProjectId
+        || ''
+      ).trim();
+      const savedDefaultBackgroundKey = String(
+        profile.defaultBackgroundKey
+        || defaultLayerBackground?.key
+        || (defaultLayerBackground?.sourceProjectId && defaultLayerBackground?.name
+          ? `layer:${defaultLayerBackground.sourceProjectId}:${defaultLayerBackground.name}`
+          : 'none')
+      ).trim() || 'none';
+      publishState.defaultBackgroundKey = savedDefaultBackgroundKey;
+      if (backgroundProjectSelect) backgroundProjectSelect.value = bgProjectId;
+      if (bgProjectId) {
+        await loadProjectLayers(bgProjectId, 'background');
+        // Saved profile may store backgrounds either as a flat
+        // `backgroundLayerNames` array or as the structured `backgrounds`
+        // entries (each with type==='layer' and a `name`). Support both so
+        // editing an existing profile pre-checks the correct boxes.
+        let savedBgNames = Array.isArray(profile.backgroundLayerNames) ? profile.backgroundLayerNames.slice() : [];
+        if (!savedBgNames.length && profileBackgrounds.length) {
+          savedBgNames = profileBackgrounds
+            .filter((b) => b && b.type === 'layer' && String(b.sourceProjectId || '').trim() === bgProjectId && b.name)
+            .map((b) => String(b.name));
+        }
+        if (!savedBgNames.length) {
+          savedBgNames = savedLayerRows
+            .filter((layer) => String(layer?.role || '').trim() === 'background' && String(layer?.sourceProjectId || '').trim() === bgProjectId)
+            .map((layer) => String(layer?.name || '').trim())
+            .filter(Boolean);
+        }
+        const savedBgKeys = (publishState.backgroundLayers || [])
+          .filter((layer) => savedBgNames.includes(String(layer?.name || '').trim()))
+          .map((layer) => getLayerKey(layer));
+        setCheckedLayerNames(backgroundLayersList, savedBgKeys);
+        publishState.defaultBackgroundKey = savedDefaultBackgroundKey;
+      }
+
+      const includedSet = new Set(savedMain
+        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim()))
+        .filter(Boolean));
+      const visibleSet = new Set(savedMain
+        .filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible))
+        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim())));
+
+      publishState.initialVisibility = {};
+      includedSet.forEach((key) => {
+        publishState.initialVisibility[key] = visibleSet.has(key);
+      });
+
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, Array.from(includedSet));
+
+      // Default background
+      refreshBackgroundOptions();
+
+      // Features
+      const features = profile.features || {};
+      if (featureSearch) featureSearch.checked = features.search !== false;
+      if (featureSearchGlobal) featureSearchGlobal.checked = features.searchGlobal === true;
+      if (featureView3D) featureView3D.checked = features.view3d !== false;
+      if (featureEditing) featureEditing.checked = features.editing !== false;
+      if (featureIdentify) featureIdentify.checked = features.identify !== false;
+      if (featureLayerTree) featureLayerTree.checked = features.layerTree !== false;
+      if (featureLegend) featureLegend.checked = features.legend !== false;
+      if (featureMeasurement) featureMeasurement.checked = !!features.measurement;
+      if (featurePrint) featurePrint.checked = features.print !== false;
+      if (featureMapTip) featureMapTip.checked = features.mapTip !== false;
+      if (featureShare) featureShare.checked = !!features.share;
+      if (featureRedlining) featureRedlining.checked = !!features.redlining;
+      if (featureBookmark) featureBookmark.checked = !!features.bookmark;
+      if (featureHeightProfile) featureHeightProfile.checked = !!features.heightProfile;
+      if (featureDxfExport) featureDxfExport.checked = !!features.dxfExport;
+      if (featureAttributeTable) featureAttributeTable.checked = !!features.attributeTable;
+      if (featureRouting) featureRouting.checked = !!features.routing;
+
+      // Tool config
+      const tc = profile.toolConfig || {};
+      if (cfgShareUrl) cfgShareUrl.value = tc.shareServiceUrl || '';
+      if (cfgRoutingUrl) cfgRoutingUrl.value = tc.routingServiceUrl || '';
+      if (cfgElevationUrl) cfgElevationUrl.value = tc.elevationServiceUrl || '';
+      if (cfgDxfUrl) cfgDxfUrl.value = tc.dxfExportServiceUrl || '';
+
+      // Groups, per-layer placement and module controls
+      publishState.groups = Array.isArray(profile.groups)
+        ? profile.groups.map((g) => ({
+            name: String(g?.name || '').trim(),
+            title: String(g?.title || g?.name || '').trim(),
+            parent: String(g?.parent || '').trim(),
+            expanded: g?.expanded !== false
+          })).filter((g) => g.name)
+        : [];
+      publishState.layerGroups = {};
+      savedMain.forEach((l) => {
+        const key = makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l?.name || '').trim());
+        if (key) publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
+      });
+      // Restore Origo controls: update textarea and checkboxes
+      const savedControls = Array.isArray(profile.controls) ? profile.controls : [];
+      publishState.controls = savedControls;
+      if (controlsJsonInput) controlsJsonInput.value = JSON.stringify(savedControls, null, 2);
+      syncCheckboxesFromControls(savedControls);
+      // Restore extraJson fields
+      if (extraJsonInput) {
+        const extra = {};
+        if (profile.pageSettings) extra.pageSettings = profile.pageSettings;
+        if (profile.featureinfoOptions) extra.featureinfoOptions = profile.featureinfoOptions;
+        if (Object.keys(extra).length) extraJsonInput.value = JSON.stringify(extra, null, 2);
+      }
+      // Restore center/zoom/extent
+      if (centerInput && Array.isArray(profile.center)) {
+        centerInput.value = JSON.stringify(profile.center);
+        if (profile.centerCrs) centerInput.dataset.crs = String(profile.centerCrs);
+        else delete centerInput.dataset.crs;
+      }
+      if (zoomInput && typeof profile.zoom === 'number') zoomInput.value = profile.zoom;
+      if (extentInput && Array.isArray(profile.extent)) extentInput.value = JSON.stringify(profile.extent);
+      if (minZoomInput) minZoomInput.value = Number.isFinite(Number(profile.minZoom)) ? Number(profile.minZoom) : '';
+      if (maxZoomInput) maxZoomInput.value = Number.isFinite(Number(profile.maxZoom)) ? Number(profile.maxZoom) : '';
+      refreshExtraSections();
+      const sCfg = (Array.isArray(savedControls) ? savedControls : []).find?.(c => c?.name === 'search') || {};
+      const sHint = document.getElementById('Qtiler2HajkSearchHint');
+      const sMin = document.getElementById('Qtiler2HajkSearchMin');
+      const sLim = document.getElementById('Qtiler2HajkSearchLimit');
+      if (sHint) sHint.value = sCfg.hintText || '';
+      if (sMin && Number.isFinite(Number(sCfg.minLength))) sMin.value = Number(sCfg.minLength);
+      if (sLim && Number.isFinite(Number(sCfg.limit))) sLim.value = Number(sCfg.limit);
+      // Restore cross-project search sources
+      publishState.searchSources = Array.isArray(profile?.features?.searchSources)
+        ? profile.features.searchSources
+            .map((src) => ({
+              projectId: String(src?.projectId || '').trim(),
+              layers: Array.isArray(src?.layers)
+                ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+                : []
+            }))
+            .filter((s) => s.projectId)
+        : [];
+      // Seed with the current project so the picker always shows a usable
+      // starting row (otherwise the section appears empty).
+      if (!publishState.searchSources.length) {
+        const curPid = String(publishProjectSelect?.value || '').trim();
+        if (curPid) publishState.searchSources = [{ projectId: curPid, layers: [] }];
+      }
+      publishState.searchSourceCatalog = {};
+      await renderSearchSources();
+    }
+  } else {
+    // New mode
+    if (modalTitle) modalTitle.textContent = t('Qtiler2Hajk.modal_title');
+    if (publishName) { publishName.value = ''; publishName.disabled = false; }
+    if (publishDescription) publishDescription.value = '';
+    if (publishNameError) publishNameError.style.display = 'none';
+    publishState.defaultBackgroundKey = 'none';
+    const mainProjectId = String(publishProjectSelect.value || '').trim();
+    if (mainProjectId) await loadProjectLayers(mainProjectId, 'main');
+    backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.optional_select'))}</p>`;
+    refreshBackgroundOptions();
+    // Reset Origo controls to defaults
+    HAJK_TOOL_DEFS.forEach((def) => {
+      const cb = document.getElementById(def.id);
+      if (cb) cb.checked = def.defaultChecked === true;
+    });
+    syncControlsFromCheckboxes();
+    if (centerInput) { centerInput.value = ''; delete centerInput.dataset.crs; }
+    if (zoomInput) zoomInput.value = '';
+    if (extentInput) extentInput.value = '';
+    if (minZoomInput) minZoomInput.value = '';
+    if (maxZoomInput) maxZoomInput.value = '';
+    if (extraJsonInput) extraJsonInput.value = '';
+    // Reset features to defaults
+    if (featureSearch) featureSearch.checked = true;
+    if (featureSearchGlobal) featureSearchGlobal.checked = false;
+    if (featureView3D) featureView3D.checked = true;
+    if (featureEditing) featureEditing.checked = true;
+    if (featureIdentify) featureIdentify.checked = true;
+    if (featureLayerTree) featureLayerTree.checked = true;
+    if (featureLegend) featureLegend.checked = true;
+    if (featureMeasurement) featureMeasurement.checked = false;
+    if (featurePrint) featurePrint.checked = true;
+    if (featureMapTip) featureMapTip.checked = true;
+    if (featureShare) featureShare.checked = false;
+    if (featureRedlining) featureRedlining.checked = false;
+    if (featureBookmark) featureBookmark.checked = false;
+    if (featureHeightProfile) featureHeightProfile.checked = false;
+    if (featureDxfExport) featureDxfExport.checked = false;
+    if (featureAttributeTable) featureAttributeTable.checked = false;
+    if (featureRouting) featureRouting.checked = false;
+    // Reset tool config
+    if (cfgShareUrl) cfgShareUrl.value = '';
+    if (cfgRoutingUrl) cfgRoutingUrl.value = '';
+    if (cfgElevationUrl) cfgElevationUrl.value = '';
+    if (cfgDxfUrl) cfgDxfUrl.value = '';
+    // Reset cross-project search sources. Seed with the current project so
+    // the picker shows a usable starting row instead of just the help text.
+    {
+      const curPid = String(publishProjectSelect?.value || '').trim();
+      publishState.searchSources = curPid ? [{ projectId: curPid, layers: [] }] : [];
+    }
+    publishState.searchSourceCatalog = {};
+    renderSearchSources();
+  }
+
+  // Sync tool card visual classes
+  syncToolCardClasses();
+  openPublishModal();
+  // Offer to restore a server-side draft saved for this map (if any).
+  maybeRestoreDraft(editProfileId).catch(() => {});
+  markEditorClean();
+}
+
+/* ══════════════════════════════════════════
+   Tab switching
+   ══════════════════════════════════════════ */
+
+document.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.getAttribute('data-tab');
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('tab-btn--active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('tab-panel--active'));
+    btn.classList.add('tab-btn--active');
+    const panel = document.querySelector(`.tab-panel[data-panel="${target}"]`);
+    if (panel) panel.classList.add('tab-panel--active');
+  });
+});
+
+/* ══════════════════════════════════════════
+   Event handlers
+   ══════════════════════════════════════════ */
+
+refreshReleasesBtn?.addEventListener('click', () => loadReleases());
+includePrereleaseEl?.addEventListener('change', () => loadReleases());
+
+installBtn?.addEventListener('click', async () => {
+  installBtn.disabled = true;
+  try {
+    // If we have selected a specific version from the select box, we can pass its assetUrl to bypass fallback logic
+    const selectedOpt = versionEl.options[versionEl.selectedIndex];
+    const assetUrl = selectedOpt && selectedOpt.dataset.asseturl ? selectedOpt.dataset.asseturl : null;
+    
+    await api('/plugins/Qtiler2Hajk/api/install', {
+      method: 'POST',
+      body: { 
+        repo: String(repoEl.value || '').trim(), 
+        version: String(versionEl.value || '').trim(),
+        assetUrl: assetUrl
+      }
+    });
+    addLog(t('Qtiler2Hajk.log_installed'), 'ok');
+    await loadStatus();
+    await loadPublishedProfiles();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    installBtn.disabled = false;
+  }
+});
+
+uninstallBtn?.addEventListener('click', async () => {
+  uninstallBtn.disabled = true;
+  try {
+    await api('/plugins/Qtiler2Hajk/api/install', { method: 'DELETE' });
+    addLog(t('Qtiler2Hajk.log_uninstalled'), 'ok');
+    await loadStatus();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    syncUI();
+  }
+});
+
+uploadLogoBtn?.addEventListener('click', async () => {
+  const file = logoFileInput?.files?.[0];
+  if (!file) { addLog(t('Qtiler2Hajk.logo_select_file'), 'error'); return; }
+  uploadLogoBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('logo', file, file.name || 'logo');
+    await api('/plugins/Qtiler2Hajk/api/branding/logo', { method: 'POST', body });
+    if (logoFileInput) logoFileInput.value = '';
+    addLog(t('Qtiler2Hajk.log_logo_uploaded'), 'ok');
+    await loadStatus();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    syncUI();
+  }
+});
+
+removeLogoBtn?.addEventListener('click', async () => {
+  removeLogoBtn.disabled = true;
+  try {
+    await api('/plugins/Qtiler2Hajk/api/branding/logo', { method: 'DELETE' });
+    if (logoFileInput) logoFileInput.value = '';
+    addLog(t('Qtiler2Hajk.log_logo_removed'), 'ok');
+    await loadStatus();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    syncUI();
+  }
+});
+
+// ── Legend icon library: upload from Setup, delete with in-use warning ──
+const legendLibraryUploadBtn = document.getElementById('legendLibraryUploadBtn');
+const legendLibraryFileInput = document.getElementById('legendLibraryFileInput');
+const legendLibraryGrid = document.getElementById('legendLibraryGrid');
+
+legendLibraryUploadBtn?.addEventListener('click', async () => {
+  const file = legendLibraryFileInput?.files?.[0];
+  if (!file) { addLog(t('Qtiler2Hajk.legend_library_select_file'), 'error'); return; }
+  legendLibraryUploadBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('image', file, file.name || 'legend.png');
+    await api('/plugins/Qtiler2Hajk/api/legend-library', { method: 'POST', body });
+    if (legendLibraryFileInput) legendLibraryFileInput.value = '';
+    addLog(t('Qtiler2Hajk.log_legend_uploaded'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    legendLibraryUploadBtn.disabled = false;
+  }
+});
+
+legendLibraryGrid?.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const button = target.closest('[data-legend-library-delete]');
+  if (!button) return;
+  const id = String(button.getAttribute('data-legend-library-delete') || '').trim();
+  if (!id) return;
+
+  // Warn if the icon is referenced by layers in ANY published map (server-side
+  // scan) or in the map currently open in the editor (in-memory draft state).
+  let usageText = '';
+  try {
+    const usagePayload = await api(`/plugins/Qtiler2Hajk/api/legend-library/${encodeURIComponent(id)}/usage`);
+    const usage = Array.isArray(usagePayload?.usage) ? usagePayload.usage : [];
+    if (usage.length) {
+      const parts = usage.map((u) => {
+        const layers = Array.isArray(u.layers) ? u.layers.slice(0, 4).join(', ') : '';
+        return `${u.name || u.profileKey}${layers ? ` (${layers}${u.layers.length > 4 ? '…' : ''})` : ''}`;
+      });
+      usageText = parts.slice(0, 5).join('; ') + (parts.length > 5 ? '; …' : '');
+    }
+  } catch { /* usage endpoint unavailable — fall back to local check only */ }
+
+  const item = (legendLibraryItems || []).find((it) => String(it?.id) === id);
+  const itemUrl = String(item?.url || '').trim();
+  if (itemUrl) {
+    const stripStamp = (url) => String(url || '').split('?')[0];
+    const itemBase = stripStamp(itemUrl);
+    const localLayers = [];
+    for (const [key, rule] of Object.entries(publishState.mainRules || {})) {
+      const ref = stripStamp(rule?.wmsLegendUrl || rule?.wmsLegendIcon || rule?.legendIcon || '');
+      if (ref && ref === itemBase) localLayers.push(String(rule?.title || key).trim());
+    }
+    if (localLayers.length) {
+      usageText += (usageText ? ' · ' : '') + `${t('Qtiler2Hajk.legend_current_map')}: ${localLayers.slice(0, 4).join(', ')}${localLayers.length > 4 ? '…' : ''}`;
+    }
+  }
+
+  const confirmMsg = usageText
+    ? t('Qtiler2Hajk.legend_delete_in_use', { layers: usageText })
+    : t('Qtiler2Hajk.legend_delete_confirm');
+  if (!window.confirm(confirmMsg)) return;
+
+  button.disabled = true;
+  try {
+    await api(`/plugins/Qtiler2Hajk/api/legend-library/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    addLog(t('Qtiler2Hajk.log_legend_deleted'), 'ok');
+    await loadLegendLibrary();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+    button.disabled = false;
+  }
+});
+
+openPublishModalBtn?.addEventListener('click', async () => {
+  if (!isDetachedMapEditor && openDetachedEditorWindow('map')) return;
+  openPublishModalBtn.disabled = true;
+  try {
+    await preparePublishModal(null);
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    openPublishModalBtn.disabled = false;
+  }
+});
+
+publishProjectSelect?.addEventListener('change', async () => {
+  const projectId = String(publishProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
+  if (!projectId) {
+    projectLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_project_selected'))}</p>`;
+    schedulePreviewRefresh();
+    return;
+  }
+  try { await loadProjectLayers(projectId, 'main'); schedulePreviewRefresh(); } catch (err) { addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error'); }
+});
+
+backgroundProjectSelect?.addEventListener('change', async () => {
+  const projectId = String(backgroundProjectSelect.value || '').trim();
+  clearMapViewOverrides({ refresh: false });
+  if (!projectId) {
+    backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.no_bg_selected'))}</p>`;
+    refreshBackgroundOptions();
+    schedulePreviewRefresh();
+    return;
+  }
+  try { await loadProjectLayers(projectId, 'background'); schedulePreviewRefresh(); } catch (err) { addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error'); }
+});
+
+backgroundLayersList?.addEventListener('change', () => {
+  clearMapViewOverrides({ refresh: false });
+  refreshBackgroundOptions();
+  schedulePreviewRefresh();
+});
+
+projectLayersList?.addEventListener('change', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement && target.hasAttribute('data-wms-legend-mode')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-mode') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = target.value === 'manual' ? 'manual' : 'auto';
+    schedulePreviewRefresh();
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-wms-legend-url')) {
+    const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+    if (!layerKey) return;
+    const value = String(target.value || '').trim();
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = value ? 'manual' : (publishState.mainRules[layerKey].wmsLegendMode || 'auto');
+    publishState.mainRules[layerKey].wmsLegendUrl = value;
+    publishState.mainRules[layerKey].wmsLegendIcon = value;
+    schedulePreviewRefresh();
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    publishState.layerTitles = publishState.layerTitles || {};
+    publishState.layerTitles[layerKey] = String(target.value || '').trim();
+    renderLayerAssignments();
+    renderPublishConfigSummary();
+    schedulePreviewRefresh();
+    return;
+  }
+  if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+
+  if (target.hasAttribute('data-wfs-toggle')) {
+    const layerName = String(target.getAttribute('data-wfs-toggle') || '').trim();
+    if (!layerName) return;
+    if (!publishState.mainRules[layerName]) {
+      publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: false };
+    }
+    publishState.mainRules[layerName].serveAsWfs = target.checked;
+    
+    // Re-render to update tags and button colors
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    renderLayerAssignments();
+    schedulePreviewRefresh();
+    return;
+  }
+
+  if (target.hasAttribute('data-layer-visible')) {
+    const layerKey = String(target.getAttribute('data-layer-visible') || '').trim();
+    if (!layerKey) return;
+    publishState.initialVisibility[layerKey] = target.checked;
+    schedulePreviewRefresh();
+    return;
+  }
+
+  if (!target.hasAttribute('data-layer-include')) return;
+  syncProjectLayerOptionState();
+  renderLayerAssignments();
+  schedulePreviewRefresh();
+});
+
+projectLayersList?.addEventListener('input', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.hasAttribute('data-layer-title')) {
+    const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
+    if (!layerKey) return;
+    publishState.layerTitles = publishState.layerTitles || {};
+    publishState.layerTitles[layerKey] = String(target.value || '').trim();
+    renderPublishConfigSummary();
+    return;
+  }
+  if (!target.hasAttribute('data-wms-legend-url')) return;
+  const layerKey = String(target.getAttribute('data-wms-legend-url') || '').trim();
+  if (!layerKey) return;
+  const value = String(target.value || '').trim();
+  publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+  publishState.mainRules[layerKey].wmsLegendUrl = value;
+  publishState.mainRules[layerKey].wmsLegendIcon = value;
+});
+
+selectAllProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(true);
+});
+
+selectNoneProjectLayersBtn?.addEventListener('click', () => {
+  setAllProjectLayersIncluded(false);
+});
+
+projectLayersList?.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  // Segmented WMS/WFS mode switch
+  const modeBtn = target.closest('button[data-layer-mode]');
+  if (modeBtn) {
+    const layerKey = String(modeBtn.getAttribute('data-layer-key') || '').trim();
+    const mode = String(modeBtn.getAttribute('data-layer-mode') || '').trim().toLowerCase();
+    if (!layerKey || (mode !== 'wms' && mode !== 'wfs')) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].serveAsWfs = mode === 'wfs';
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    renderLayerAssignments();
+    schedulePreviewRefresh();
+    return;
+  }
+  // Regenerate WMS thumbnail
+  const regenButton = target.closest('button[data-wms-legend-regen]');
+  if (regenButton) {
+    const layerKey = String(regenButton.getAttribute('data-wms-legend-regen') || '').trim();
+    if (!layerKey) return;
+    const layer = (getAllPublishLayers() || []).find((l) => getLayerKey(l) === layerKey);
+    const pid = String(layer?.sourceProjectId || publishProjectSelect?.value || '').trim();
+    const layerName = String(layer?.name || '').trim();
+    if (!pid || !layerName) return;
+    regenButton.disabled = true;
+    api(`/plugins/Qtiler2Hajk/api/thumbnail/regenerate/${encodeURIComponent(pid)}/layer/${encodeURIComponent(layerName)}`, { method: 'POST' })
+      .then(() => {
+        addLog(t('Qtiler2Hajk.log_layer_thumb_regen', { layer: layerName }) || `Thumbnail recreated for "${layerName}".`, 'ok');
+        const checkedNames = getCheckedLayerNames(projectLayersList);
+        renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+        setCheckedLayerNames(projectLayersList, checkedNames);
+        schedulePreviewRefresh();
+      })
+      .catch((err) => addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error'))
+      .finally(() => { regenButton.disabled = false; });
+    return;
+  }
+  const clearButton = target.closest('button[data-wms-legend-clear]');
+  if (clearButton) {
+    const layerKey = String(clearButton.getAttribute('data-wms-legend-clear') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || { searchable: false, editable: false };
+    publishState.mainRules[layerKey].wmsLegendMode = 'auto';
+    publishState.mainRules[layerKey].wmsLegendIcon = '';
+    publishState.mainRules[layerKey].wmsLegendUrl = '';
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    schedulePreviewRefresh();
+    return;
+  }
+  const button = target.closest('button[data-style-layer]');
+  if (!button) return;
+  const layerName = String(button.getAttribute('data-style-layer') || '').trim();
+  if (!layerName) return;
+  // Unified legend picker: WFS layers open the full style editor, WMS layers
+  // open the shared icon picker (uploaded library + QGIS SVG + upload new).
+  const rule = publishState.mainRules[layerName] || {};
+  if (rule.serveAsWfs === true) {
+    openStyleEditor(layerName);
+    return;
+  }
+  openLegendLibraryPicker((url) => {
+    publishState.mainRules[layerName] = publishState.mainRules[layerName] || { searchable: false, editable: false };
+    publishState.mainRules[layerName].wmsLegendMode = 'manual';
+    publishState.mainRules[layerName].wmsLegendIcon = url;
+    publishState.mainRules[layerName].wmsLegendUrl = url;
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    schedulePreviewRefresh();
+  });
+});
+
+defaultBackgroundList?.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || target.type !== 'radio') return;
+  const key = String(target.getAttribute('data-default-bg-key') || '').trim();
+  if (key) {
+    publishState.defaultBackgroundKey = key;
+    clearMapViewOverrides({ refresh: false });
+    // Update "Default" tags in-place
+    defaultBackgroundList.querySelectorAll('.Qtiler2Hajk-bg-item').forEach((row) => {
+      const radio = row.querySelector('input[type="radio"]');
+      const existing = row.querySelector('.Qtiler2Hajk-bg-item__default-tag');
+      if (radio?.checked && !existing) {
+        const tag = document.createElement('span');
+        tag.className = 'Qtiler2Hajk-bg-item__default-tag';
+        tag.textContent = t('Qtiler2Hajk.default');
+        row.appendChild(tag);
+      } else if (!radio?.checked && existing) {
+        existing.remove();
+      }
+    });
+    schedulePreviewRefresh();
+  }
+});
+
+saveDraftBtn?.addEventListener('click', async () => {
+  const origText = saveDraftBtn.textContent;
+  saveDraftBtn.disabled = true;
+  try {
+    await saveDraftToServer();
+    saveDraftBtn.textContent = t('Qtiler2Hajk.draft_saved') || '✓ Guardado';
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.draft_save_failed', { msg: err?.message || err }), 'error');
+  } finally {
+    setTimeout(() => {
+      saveDraftBtn.textContent = origText;
+      saveDraftBtn.disabled = false;
+    }, 2500);
+  }
+});
+
+// ── Server-side drafts ─────────────────────────────────────────────────────
+function draftIdForCurrentEditor() {
+  return String(publishState.editingProfileId || publishName?.value || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+}
+
+async function saveDraftToServer() {
+  if (!(await applyPendingMapJsonChanges())) throw new Error('Fix the JSON errors before saving.');
+  const draftId = draftIdForCurrentEditor();
+  const { body } = buildPublishApiBody();
+  await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`, {
+    method: 'PUT',
+    body: { ...body, name: publishName?.value || '', projectId: publishProjectSelect?.value || '' }
+  });
+  return draftId;
+}
+
+async function fetchDraftFromServer(draftId) {
+  try {
+    return await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`);
+  } catch {
+    return null;
+  }
+}
+
+async function deleteDraftFromServer(draftId) {
+  try { await api(`/plugins/Qtiler2Hajk/api/drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' }); } catch {}
+}
+
+async function maybeRestoreDraft(editProfileId) {
+  const draftId = String(editProfileId || '__new__').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  const draft = await fetchDraftFromServer(draftId);
+  if (!draft || !draft.savedAt) return false;
+  const when = new Date(draft.savedAt).toLocaleString();
+  const restore = window.confirm(t('Qtiler2Hajk.draft_restore_msg', { date: when }));
+  if (!restore) {
+    await deleteDraftFromServer(draftId);
+    return true;
+  }
+  try {
+    applyDraftPayload(draft);
+    addLog(t('Qtiler2Hajk.draft_restored'), 'ok');
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  }
+  return true;
+}
+
+function applyDraftPayload(draft) {
+  if (!draft || typeof draft !== 'object') return;
+  if (publishName && draft.name) publishName.value = String(draft.name);
+  if (publishDescription && typeof draft.description === 'string') publishDescription.value = draft.description;
+  if (draft.layerRules && typeof draft.layerRules === 'object') {
+    publishState.mainRules = JSON.parse(JSON.stringify(draft.layerRules));
+  }
+  if (Array.isArray(draft.backgrounds)) {
+    for (const bg of draft.backgrounds) {
+      const opt = (publishState.backgroundOptions || []).find((o) => o && o.key === bg?.key);
+      if (opt && bg?.imageUrl && !String(bg.imageUrl).startsWith('/plugins/Qtiler2Hajk/api/thumbnail/')) {
+        opt.customImageUrl = bg.imageUrl;
+      }
+    }
+    try { renderDefaultBackgroundOptions(); } catch {}
+  }
+  if (draft.defaultBackgroundKey) publishState.defaultBackgroundKey = String(draft.defaultBackgroundKey);
+  if (Array.isArray(draft.controls) && controlsJsonInput) {
+    controlsJsonInput.value = JSON.stringify(draft.controls, null, 2);
+    try { syncCheckboxesFromControls(draft.controls); } catch {}
+  }
+  if (draft.center && centerInput) centerInput.value = JSON.stringify(draft.center);
+  if (typeof draft.zoom === 'number' && zoomInput) zoomInput.value = draft.zoom;
+  if (Array.isArray(draft.extent) && extentInput) extentInput.value = JSON.stringify(draft.extent);
+  try { renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules); } catch {}
+  try { renderPublishConfigSummary(); } catch {}
+}
+
+previewFooterBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
+  setPublishModalTab('config');
+});
+
+function buildPublishApiBody() {
+  const mapName = String(publishName?.value || '').trim();
+  if (!mapName) {
+    const err = new Error(t('Qtiler2Hajk.name_required'));
+    err.field = 'name';
+    throw err;
+  }
+  const mapDescription = String(publishDescription?.value || '').trim();
+  const projectId = String(publishProjectSelect.value || '').trim();
+  if (!projectId) {
+    const err = new Error('Select a main project before publishing.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) {
+    const err = new Error('No project layers are available. Check project access or reload the modal.');
+    err.tab = 'layers';
+    throw err;
+  }
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  if (!selectedLayers.length) {
+    const err = new Error('Select at least one main layer to publish.');
+    err.tab = 'layers';
+    throw err;
+  }
+
+  const layersPayload = selectedLayers.map((layer) => {
+    const key = getLayerKey(layer);
+    return {
+      name: layer.name,
+      title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
+      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      visible: publishState.initialVisibility[key] !== false,
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+    };
+  });
+  const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
+  const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+    .map((layer) => String(layer?.name || '').trim())
+    .filter(Boolean);
+  refreshBackgroundOptions();
+  const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+    key: item.key, type: item.type, title: item.title,
+    sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+    name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
+    isDefault: item.key === publishState.defaultBackgroundKey,
+    // include custom image URL if the admin selected one
+    imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
+  }));
+  const layerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+  return {
+    mapName,
+    body: {
+      name: mapName,
+      description: mapDescription,
+      editingProfileId: publishState.editingProfileId || null,
+      projectId,
+      layers: layersPayload,
+      backgroundProjectId: backgroundProjectId || null,
+      backgroundLayerNames, backgrounds,
+      defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+      layerRules,
+      controls: (function(){ try { return JSON.parse(controlsJsonInput?.value || '[]'); } catch(e){ return []; } })(),
+      pageSettings: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').pageSettings; } catch(e){ return undefined; } })(),
+      featureinfoOptions: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').featureinfoOptions; } catch(e){ return undefined; } })(),
+      extent: (function(){ try { const v = JSON.parse(extentInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      center: (function(){ try { const v = JSON.parse(centerInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+      centerCrs: (function(){ const c = String(centerInput?.dataset?.crs || '').trim(); return c || undefined; })(),
+      zoom: (function(){ try { const z = parseFloat(zoomInput?.value); return isNaN(z) ? undefined : z; } catch(e){ return undefined; } })(),
+      minZoom: (function(){ const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      maxZoom: (function(){ const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+      toolConfig: {
+        shareServiceUrl: String(cfgShareUrl?.value || '').trim(),
+        routingServiceUrl: String(cfgRoutingUrl?.value || '').trim(),
+        elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
+        dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
+      },
+      groups: (publishState.groups || [])
+        .map((g) => ({
+          name: String(g?.name || '').trim(),
+          title: String(g?.title || g?.name || '').trim(),
+          parent: String(g?.parent || '').trim(),
+          expanded: g?.expanded !== false
+        }))
+        .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+      features: {
+        ...readFeatureEditorState(),
+        searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+          .map((src) => ({
+            projectId: String(src?.projectId || '').trim(),
+            layers: Array.isArray(src?.layers)
+              ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+              : []
+          }))
+          .filter((s) => s.projectId)
+      }
+    }
+  };
+}
+
+preflightPublishBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
+  if (currentEditingWfsLayer) {
+    try { saveStyleEditor(); } catch (err) { showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers'); return; }
+  }
+  clearPublishStatusError();
+  if (publishNameError) publishNameError.style.display = 'none';
+  const originalText = preflightPublishBtn.textContent;
+  preflightPublishBtn.disabled = true;
+  preflightPublishBtn.textContent = t('Qtiler2Hajk.preflight_checking');
+  try {
+    const { body } = buildPublishApiBody();
+    const result = await api('/plugins/Qtiler2Hajk/api/publish', { method: 'POST', body: { ...body, dryRun: true } });
+    const checks = Array.isArray(result?.checks) ? result.checks : [];
+    if (!checks.length) {
+      addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+    } else {
+      for (const check of checks) {
+        addLog(`${check.severity === 'error' ? '✗' : '⚠'} ${check.message || check.code}`, check.severity === 'error' ? 'error' : 'info');
+      }
+      if (result?.ok) addLog(t('Qtiler2Hajk.preflight_ok'), 'ok');
+    }
+  } catch (err) {
+    if (err?.field === 'name') {
+      if (publishNameError) { publishNameError.textContent = err.message; publishNameError.style.display = ''; }
+      publishName?.focus();
+    } else {
+      showPublishStatusError(String(err?.message || 'Map check failed.'), err?.tab || 'layers');
+    }
+  } finally {
+    preflightPublishBtn.disabled = false;
+    preflightPublishBtn.textContent = originalText;
+  }
+});
+
+publishNowBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
+  if (currentEditingWfsLayer) {
+    try {
+      saveStyleEditor();
+    } catch (err) {
+      showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers');
+      return;
+    }
+  }
+
+  const mapName = String(publishName?.value || '').trim();
+  const mapDescription = String(publishDescription?.value || '').trim();
+  clearPublishStatusError();
+  if (!mapName) {
+    if (publishNameError) { publishNameError.textContent = t('Qtiler2Hajk.name_required'); publishNameError.style.display = ''; }
+    publishName?.focus();
+    return;
+  }
+  if (publishNameError) publishNameError.style.display = 'none';
+
+  // Check unique name (only for new profiles, not edits)
+  if (!publishState.editingProfileId) {
+    const duplicate = publishedItems.some((item) => (item.name || item.projectId || '').toLowerCase() === mapName.toLowerCase());
+    if (duplicate) {
+      if (publishNameError) { publishNameError.textContent = t('Qtiler2Hajk.name_duplicate'); publishNameError.style.display = ''; }
+      publishName?.focus();
+      return;
+    }
+  }
+
+  const projectId = String(publishProjectSelect.value || '').trim();
+  if (!projectId) { showPublishStatusError('Select a main project before publishing.', 'layers'); return; }
+  const allLayers = getAllPublishLayers();
+  if (!allLayers.length) { showPublishStatusError('No project layers are available. Check project access or reload the modal.', 'layers'); return; }
+
+  const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+  const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+  if (!selectedLayers.length) { showPublishStatusError('Select at least one main layer to publish.', 'layers'); return; }
+
+  const layersPayload = selectedLayers.map((layer) => {
+    const key = getLayerKey(layer);
+    return {
+      name: layer.name,
+      title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      isTheme: layer.isTheme === true,
+      themeName: layer.themeName || null,
+      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      visible: publishState.initialVisibility[key] !== false,
+      group: String(publishState.layerGroups[key] || 'root').trim() || 'root'
+    };
+  });
+
+  const backgroundProjectId = String(backgroundProjectSelect.value || '').trim();
+  const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+    .map((layer) => String(layer?.name || '').trim())
+    .filter(Boolean);
+  refreshBackgroundOptions();
+  const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+    key: item.key, type: item.type, title: item.title,
+    sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+    name: item.type === 'layer' ? item.name : null,
+    isTheme: item.type === 'layer' ? item.isTheme === true : false,
+    themeName: item.type === 'layer' ? item.themeName || null : null,
+    isDefault: item.key === publishState.defaultBackgroundKey,
+    // include custom image URL if the admin selected one
+    imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
+  }));
+  const layerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    layerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+
+  publishNowBtn.disabled = true;
+  try {
+      await api('/plugins/Qtiler2Hajk/api/publish', {
+      method: 'POST',
+      body: {
+        name: mapName,
+        description: mapDescription,
+        editingProfileId: publishState.editingProfileId || null,
+        projectId,
+        layers: layersPayload,
+        backgroundProjectId: backgroundProjectId || null,
+        backgroundLayerNames, backgrounds,
+        defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+        layerRules,
+        controls: (function(){ try { return JSON.parse(controlsJsonInput?.value || '[]'); } catch(e){ return []; } })(),
+        pageSettings: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').pageSettings; } catch(e){ return undefined; } })(),
+        featureinfoOptions: (function(){ try { return JSON.parse(extraJsonInput?.value || '{}').featureinfoOptions; } catch(e){ return undefined; } })(),
+        extent: (function(){ try { const v = JSON.parse(extentInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+        center: (function(){ try { const v = JSON.parse(centerInput?.value || 'null'); return Array.isArray(v) ? v : undefined; } catch(e){ return undefined; } })(),
+        centerCrs: (function(){ const c = String(centerInput?.dataset?.crs || '').trim(); return c || undefined; })(),
+        zoom: (function(){ try { const z = parseFloat(zoomInput?.value); return isNaN(z) ? undefined : z; } catch(e){ return undefined; } })(),
+        minZoom: (function(){ const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+        maxZoom: (function(){ const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })(),
+        toolConfig: {
+          shareServiceUrl: String(cfgShareUrl?.value || '').trim(),
+          routingServiceUrl: String(cfgRoutingUrl?.value || '').trim(),
+          elevationServiceUrl: String(cfgElevationUrl?.value || '').trim(),
+          dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim()
+        },
+        groups: (publishState.groups || [])
+          .map((g) => ({
+            name: String(g?.name || '').trim(),
+            title: String(g?.title || g?.name || '').trim(),
+            parent: String(g?.parent || '').trim(),
+            expanded: g?.expanded !== false
+          }))
+          .filter((g) => g.name && g.name !== 'root' && g.name !== 'background'),
+        features: {
+          ...readFeatureEditorState(),
+          // Cross-project search sources (other feature flags are derived
+          // server-side from defaults; only fields we manage explicitly are
+          // forwarded here).
+          searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+            .map((src) => ({
+              projectId: String(src?.projectId || '').trim(),
+              layers: Array.isArray(src?.layers)
+                ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+                : []
+            }))
+            .filter((s) => s.projectId)
+        }
+      }
+    });
+    addLog(t('Qtiler2Hajk.log_published', { id: mapName }), 'ok');
+    // Published successfully: remove any saved draft for this map and close.
+    await deleteDraftFromServer(draftIdForCurrentEditor());
+    markEditorClean();
+    closePublishModal();
+    void Promise.allSettled([loadStatus(), loadPublishedProfiles()]).then(() => {
+      notifyPublishedProfilesChanged();
+    });
+  } catch (err) {
+    if (err.message && err.message.includes('409')) {
+      if (publishNameError) { publishNameError.textContent = t('Qtiler2Hajk.name_duplicate'); publishNameError.style.display = ''; }
+      publishName?.focus();
+    } else {
+      showPublishStatusError(String(err.message || 'Publish failed.'), 'layers');
+    }
+  } finally {
+    publishNowBtn.disabled = false;
+  }
+});
+
+removeDemoBtn?.addEventListener('click', async () => {
+  if (!window.confirm('Remove bundled demo theme from installed Origo?')) return;
+  removeDemoBtn.disabled = true;
+  try {
+    const r = await api('/plugins/Qtiler2Hajk/api/remove-demo', { method: 'POST' });
+    addLog(`Removed demo entries: ${r?.removed || 0}`, 'ok');
+    await loadStatus();
+    await loadPublishedProfiles();
+  } catch (err) {
+    addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+  } finally {
+    removeDemoBtn.disabled = false;
+  }
+});
+
+/* ── Duplicate published webmap ── */
+function ensureDuplicateProfileModal() {
+  let modal = document.getElementById('Qtiler2HajkDuplicateModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'Qtiler2HajkDuplicateModal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-background" data-dup-close></div>
+    <div class="modal-card" style="max-width:480px">
+      <header class="modal-card-head">
+        <p class="modal-card-title" data-dup-title></p>
+        <button class="delete" aria-label="close" data-dup-close></button>
+      </header>
+      <section class="modal-card-body">
+        <p class="help" data-dup-help style="margin-bottom:10px"></p>
+        <div class="field">
+          <label class="label" data-dup-label></label>
+          <div class="control">
+            <input class="input" type="text" data-dup-input autocomplete="off" />
+          </div>
+          <p class="help is-danger" data-dup-error style="display:none"></p>
+        </div>
+      </section>
+      <footer class="modal-card-foot" style="justify-content:flex-end;gap:8px">
+        <button class="button" data-dup-close data-dup-cancel></button>
+        <button class="button is-primary" data-dup-confirm></button>
+      </footer>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('[data-dup-close]').forEach((el) => el.addEventListener('click', () => closeDuplicateProfileModal()));
+  modal.querySelector('[data-dup-input]').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); modal.querySelector('[data-dup-confirm]').click(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeDuplicateProfileModal(); }
+  });
+  return modal;
+}
+
+let duplicateSourceKey = null;
+function openDuplicateProfileModal(sourceKey, sourceName) {
+  const modal = ensureDuplicateProfileModal();
+  duplicateSourceKey = sourceKey;
+  modal.querySelector('[data-dup-title]').textContent = t('Qtiler2Hajk.duplicate_title');
+  modal.querySelector('[data-dup-help]').textContent = t('Qtiler2Hajk.duplicate_help');
+  modal.querySelector('[data-dup-label]').textContent = t('Qtiler2Hajk.duplicate_new_name');
+  modal.querySelector('[data-dup-confirm]').textContent = t('Qtiler2Hajk.duplicate_btn');
+  modal.querySelector('[data-dup-cancel]').textContent = t('Qtiler2Hajk.wfs_cancel') || 'Cancel';
+  const input = modal.querySelector('[data-dup-input]');
+  const err = modal.querySelector('[data-dup-error]');
+  err.style.display = 'none';
+  err.textContent = '';
+  input.value = `${sourceName} (copy)`;
+  modal.classList.add('is-active');
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+}
+
+function closeDuplicateProfileModal() {
+  const modal = document.getElementById('Qtiler2HajkDuplicateModal');
+  if (modal) modal.classList.remove('is-active');
+  duplicateSourceKey = null;
+}
+
+document.addEventListener('click', async (event) => {
+  const btn = event.target.closest('[data-dup-confirm]');
+  if (!btn) return;
+  const modal = document.getElementById('Qtiler2HajkDuplicateModal');
+  if (!modal || !duplicateSourceKey) return;
+  const input = modal.querySelector('[data-dup-input]');
+  const err = modal.querySelector('[data-dup-error]');
+  const newName = String(input.value || '').trim();
+  err.style.display = 'none';
+  err.textContent = '';
+  if (!newName) {
+    err.textContent = t('Qtiler2Hajk.name_required') || 'Name is required.';
+    err.style.display = '';
+    return;
+  }
+  const collides = (publishedItems || []).some((it) => String(it.name || it.profileKey || '').toLowerCase() === newName.toLowerCase());
+  if (collides) {
+    err.textContent = t('Qtiler2Hajk.name_duplicate') || 'Name already in use.';
+    err.style.display = '';
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await api('/plugins/Qtiler2Hajk/api/publish/duplicate', {
+      method: 'POST',
+      body: { source: duplicateSourceKey, name: newName }
+    });
+    addLog(t('Qtiler2Hajk.duplicate_done', { id: newName }), 'ok');
+    closeDuplicateProfileModal();
+    await loadPublishedProfiles();
+  } catch (e) {
+    if (e?.message && e.message.includes('409')) {
+      err.textContent = t('Qtiler2Hajk.name_duplicate') || 'Name already in use.';
+      err.style.display = '';
+    } else {
+      addLog(t('Qtiler2Hajk.log_error', { msg: e.message || String(e) }), 'error');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ── Edit / delete published ── */
+publishedProfilesList?.addEventListener('click', async (event) => {
+  const manualThumbBtn = event.target.closest('button[data-manual-thumb]');
+  if (manualThumbBtn) {
+    openThumbnailSetup(String(manualThumbBtn.getAttribute('data-manual-thumb') || '').trim());
+    return;
+  }
+  const editBtn = event.target.closest('button[data-edit-published]');
+  if (editBtn) {
+    const projectId = String(editBtn.getAttribute('data-edit-published') || '').trim();
+    if (!projectId) return;
+    if (!isDetachedMapEditor && openDetachedEditorWindow('map', projectId)) return;
+    try { await preparePublishModal(projectId); } catch (err) { addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error'); }
+    return;
+  }
+
+  const dupBtn = event.target.closest('button[data-duplicate-published]');
+  if (dupBtn) {
+    const sourceKey = String(dupBtn.getAttribute('data-duplicate-published') || '').trim();
+    const sourceName = String(dupBtn.getAttribute('data-duplicate-name') || sourceKey).trim();
+    if (!sourceKey) return;
+    openDuplicateProfileModal(sourceKey, sourceName);
+    return;
+  }
+
+  const deleteBtn = event.target.closest('button[data-delete-published]');
+  if (deleteBtn) {
+    const profileName = String(deleteBtn.getAttribute('data-delete-published') || '').trim();
+    if (!profileName) return;
+    if (!window.confirm(t('Qtiler2Hajk.confirm_delete', { id: profileName }))) return;
+    deleteBtn.disabled = true;
+    try {
+      await api(`/plugins/Qtiler2Hajk/api/publish/${encodeURIComponent(profileName)}`, { method: 'DELETE' });
+      addLog(t('Qtiler2Hajk.log_deleted', { id: profileName }), 'ok');
+      await loadPublishedProfiles();
+    } catch (err) {
+      addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+    }
+  }
+
+  const regenBtn = event.target.closest('button[data-regen-thumb]');
+  if (regenBtn) {
+    const profileKey = String(regenBtn.getAttribute('data-regen-thumb') || '').trim();
+    if (!profileKey) return;
+    regenBtn.disabled = true;
+    try {
+      const r = await api(`/plugins/Qtiler2Hajk/api/publish/thumbnail/${encodeURIComponent(profileKey)}`, { method: 'POST' });
+      if (r?.status !== 'regenerated') throw new Error('thumbnail_regenerate_failed');
+      addLog(t('Qtiler2Hajk.log_thumb_regen', { id: profileKey, n: 1 }), 'ok');
+      const card = regenBtn.closest('.published-item');
+      const img = card?.querySelector('.published-item__preview img');
+      if (img && r?.thumbUrl) img.src = r.thumbUrl;
+      await loadPublishedProfiles();
+    } catch (err) {
+      addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+    } finally {
+      regenBtn.disabled = false;
+    }
+  }
+});
+
+closePublishModalTop?.addEventListener('click', closePublishModal);
+closePublishModalBottom?.addEventListener('click', closePublishModal);
+publishModalToggleFullscreen?.addEventListener('click', () => {
+  publishModal?.classList.toggle('publish-editor--fullscreen');
+  updatePublishModalFullscreenButton();
+});
+publishModalTabButtons.forEach((button) => {
+  button.addEventListener('click', () => setPublishModalTab(button.getAttribute('data-publish-tab')));
+});
+
+/* ── Origo preview panel ── */
+function buildMapPreviewPayload() {
+  const projectId = String(publishProjectSelect?.value || '').trim();
+  if (!projectId) return '';
+  const selectedLayers = getSelectedPublishLayers();
+  const previewLayerSpecs = selectedLayers.map((layer) => ({
+    name: layer.name,
+    title: String(publishState.layerTitles[getLayerKey(layer)] || '').trim() || layer.title || layer.name,
+    isTheme: layer.isTheme === true,
+    themeName: layer.themeName || null,
+    sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+    visible: publishState.initialVisibility[getLayerKey(layer)] !== false,
+    group: String(publishState.layerGroups?.[getLayerKey(layer)] || 'root').trim() || 'root'
+  }));
+  const layersParam = previewLayerSpecs.length ? JSON.stringify(previewLayerSpecs) : '';
+  const previewLayerRules = {};
+  selectedLayers.forEach((layer) => {
+    const key = getLayerKey(layer);
+    previewLayerRules[key] = publishState.mainRules[key] || { searchable: false, editable: false };
+  });
+  const layerRulesParam = Object.keys(previewLayerRules).length ? JSON.stringify(previewLayerRules) : '';
+  // Resolve the active background so the preview map uses the SAME tile grid
+  // and CRS as the published profile, instead of OSM-only defaults.
+  const bgKey = publishState.defaultBackgroundKey || '';
+  let bgProject = '';
+  let bgLayer = '';
+  if (bgKey && bgKey.startsWith('layer:')) {
+    const parts = bgKey.split(':');
+    bgProject = parts[1] || '';
+    bgLayer = parts.slice(2).join(':') || '';
+  }
+  // Forward the currently-edited view (center/zoom/extent) so the preview
+  // opens where the profile was last saved instead of zoomed all the way out.
+  const centerStr = String(centerInput?.value || '').trim();
+  const zoomStr   = String(zoomInput?.value   || '').trim();
+  const extentStr = String(extentInput?.value || '').trim();
+  // The CRS the captured center/extent are expressed in. Tracked on the
+  // input element so the server can reject stale coordinates whose CRS no
+  // longer matches the active background (e.g. captured in OSM/3857, then
+  // user switches to a 3006 background — reusing those coords would push
+  // the view to the North Pole).
+  const centerCrs = String(centerInput?.dataset?.crs || '').trim();
+  // Forward admin-defined min/max zoom so the preview pyramid is extended
+  // deep enough — otherwise the WMTS background's shallow pyramid (e.g. 14
+  // levels for 3006) would clamp the preview no matter what the user typed.
+  const minZoomStr = String(document.getElementById('hajk-cfg-min-zoom')?.value || '').trim();
+  const maxZoomStr = String(document.getElementById('hajk-cfg-max-zoom')?.value || '').trim();
+  return {
+    project: projectId,
+    layers: previewLayerSpecs,
+    groups: (publishState.groups || []).map((group) => ({
+      name: String(group?.name || '').trim(),
+      title: String(group?.title || group?.name || '').trim(),
+      parent: String(group?.parent || '').trim(),
+      expanded: group?.expanded !== false
+    })).filter((group) => group.name && group.name !== 'root' && group.name !== 'background'),
+    layerRules: previewLayerRules,
+    bgProject,
+    bgLayer,
+    bgKey,
+    center: centerStr || '',
+    zoom: zoomStr || '',
+    extent: extentStr || '',
+    centerCrs: centerCrs || '',
+    minZoom: minZoomStr || '',
+    maxZoom: maxZoomStr || '',
+    controls: getNormalizedControlsArray()
+  };
+}
+
+async function buildMapPreviewUrl() {
+  const payload = buildMapPreviewPayload();
+  if (!payload) return '';
+  const pluginRootUrl = new URL('../', window.location.href);
+  const pluginRootPath = pluginRootUrl.pathname.replace(/\/+$/,'/');
+  const pluginRootHref = pluginRootUrl.href.replace(/\/+$/,'/');
+  const buildPreviewShellUrl = (configUrl) => {
+    const safeConfigUrl = String(configUrl || '').trim();
+    if (!safeConfigUrl) return '';
+    const previewPageUrl = new URL(safeConfigUrl, window.location.origin);
+    previewPageUrl.pathname = previewPageUrl.pathname.replace(/\/api\/preview-config\.json$/i, '/api/preview-page');
+    return previewPageUrl.href;
+    const resolvedConfigUrl = new URL(safeConfigUrl, window.location.origin).href;
+    const hajkCssUrl = new URL('hajk/css/style.css', pluginRootHref).href;
+    const hajkJsUrl = new URL('hajk/js/origo.js', pluginRootHref).href;
+    const patternFillUrl = new URL('client/origo-pattern-fills.js', pluginRootHref).href;
+    const hajkBaseHref = new URL('hajk/', pluginRootHref).href;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<base href="${hajkBaseHref}">
+<title>Preview</title>
+<link href="${hajkCssUrl}" rel="stylesheet">
+<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden}#app-wrapper{width:100%;height:100%}</style>
+</head>
+<body>
+<div id="app-wrapper"></div>
+<script src="${hajkJsUrl}"><\/script>
+<script src="${patternFillUrl}"><\/script>
+<script>
+  function notifyParent(type, message) {
+    try { window.parent.postMessage({ type: type, message: message }, '*'); } catch (e) {}
+  }
+  function stringifyErrorDetail(detail, fallback) {
+    if (detail == null || detail === '') return fallback;
+    if (typeof detail === 'string') return detail;
+    try { return JSON.stringify(detail); } catch (e) { return String(detail); }
+  }
+  window.addEventListener('error', function(ev) {
+    notifyParent('hajk-error', stringifyErrorDetail(ev && (ev.message || ev.error), 'Runtime error while loading Interactive Map.'));
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    notifyParent('hajk-error', stringifyErrorDetail(reason && (reason.message || reason.error || reason), 'Unhandled promise rejection while loading Interactive Map.'));
+  });
+  fetch(${JSON.stringify(resolvedConfigUrl)}, { credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.text().then(function(text) {
+          throw new Error(text || ('Preview config failed (' + r.status + ')'));
+        });
+      }
+      return r.json().then(function(cfg) {
+        if (cfg && typeof cfg === 'object' && (cfg.error || cfg.details || cfg.message)) {
+          throw new Error(cfg.error || cfg.details || cfg.message);
+        }
+        return cfg;
+      });
+    })
+    .then(function(cfg) {
+      return window.Qtiler2HajkOrigoBoot.bootOrigo(cfg);
+    })
+    .then(function(hajkApp) {
+      window.hajkApp = hajkApp;
+      var refreshMapSize = function() {
+        try {
+          var viewer = typeof hajkApp.api === 'function' ? hajkApp.api() : null;
+          var map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
+          if (map && typeof map.updateSize === 'function') map.updateSize();
+        } catch (e) {}
+      };
+      requestAnimationFrame(function() {
+        requestAnimationFrame(refreshMapSize);
+      });
+      window.addEventListener('resize', refreshMapSize);
+      try {
+        var ro = new ResizeObserver(function() { refreshMapSize(); });
+        ro.observe(document.documentElement);
+        ro.observe(document.body);
+        ro.observe(document.getElementById('app-wrapper'));
+      } catch (e) {}
+      hajkApp.on('load', function() {
+        refreshMapSize();
+        try { window.parent.postMessage({ type: 'hajk-loaded' }, '*'); } catch(e){}
+      });
+    })
+    .catch(function(err) {
+      var detail = stringifyErrorDetail(err && (err.message || err), 'Failed to load preview config.');
+      notifyParent('hajk-error', detail);
+      document.body.innerHTML = '<pre style="padding:1em;color:#b00;white-space:pre-wrap">Failed to load preview config: ' + detail.replace(/[&<>]/g, function(ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]; }) + '</pre>';
+    });
+</script>
+</body>
+</html>`;
+    return URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  };
+  const params = new URLSearchParams();
+  params.set('project', String(payload.project || ''));
+  if (payload.layers?.length) params.set('layers', JSON.stringify(payload.layers));
+  if (payload.groups?.length) params.set('groups', JSON.stringify(payload.groups));
+  if (payload.layerRules && Object.keys(payload.layerRules).length) params.set('layerRules', JSON.stringify(payload.layerRules));
+  if (payload.bgProject) params.set('bgProject', String(payload.bgProject));
+  if (payload.bgLayer) params.set('bgLayer', String(payload.bgLayer));
+  if (payload.bgKey) params.set('bgKey', String(payload.bgKey));
+  if (payload.center) params.set('center', String(payload.center));
+  if (payload.centerCrs) params.set('centerCrs', String(payload.centerCrs));
+  if (payload.zoom) params.set('zoom', String(payload.zoom));
+  if (payload.extent) params.set('extent', String(payload.extent));
+  if (payload.minZoom) params.set('minZoom', String(payload.minZoom));
+  if (payload.maxZoom) params.set('maxZoom', String(payload.maxZoom));
+  if (payload.controls?.length) params.set('controls', JSON.stringify(payload.controls));
+  const directConfigUrl = `${pluginRootPath}api/preview-config.json?${params.toString()}`;
+  try {
+    const res = await fetch(`${pluginRootPath}api/preview-state`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(30000)
+        : undefined
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(detail || `Preview state failed (${res.status})`);
+    }
+    const data = await res.json().catch(() => null);
+    if (typeof data?.state === 'string' && data.state.trim()) {
+      const stateConfigUrl = `${pluginRootPath}api/preview-config.json?state=${encodeURIComponent(data.state)}&project=${encodeURIComponent(String(payload.project || ''))}`;
+      return buildPreviewShellUrl(stateConfigUrl);
+    }
+    return buildPreviewShellUrl(directConfigUrl);
+  } catch (err) {
+    const aborted = err?.name === 'TimeoutError' || err?.name === 'AbortError' || /timed out|aborted/i.test(String(err?.message || err || ''));
+    if (directConfigUrl.length <= 3500 || aborted) {
+      return buildPreviewShellUrl(directConfigUrl);
+    }
+    throw err;
+  }
+}
+
+function setPreviewOverlayState(state, message = '') {
+  if (!previewOverlay) return;
+  const normalized = String(state || 'idle').trim().toLowerCase() || 'idle';
+  previewOverlay.dataset.state = normalized;
+  previewOverlay.style.display = normalized === 'ready' ? 'none' : '';
+  if (previewOverlayTitle) {
+    previewOverlayTitle.textContent = normalized === 'error' ? t('Qtiler2Hajk.interactive_map_error') : t('Qtiler2Hajk.interactive_map');
+  }
+  if (previewOverlayMessage) {
+    previewOverlayMessage.textContent = String(message || (normalized === 'loading'
+      ? t('Qtiler2Hajk.interactive_map_loading_layers')
+      : normalized === 'error'
+        ? t('Qtiler2Hajk.interactive_map_load_failed')
+        : t('Qtiler2Hajk.interactive_map_idle')));
+  }
+}
+
+function formatPreviewErrorMessage(errorLike, fallback = t('Qtiler2Hajk.interactive_map_load_failed')) {
+  const raw = typeof errorLike === 'string'
+    ? errorLike
+    : errorLike?.message || errorLike?.error || errorLike?.detail || '';
+  const text = String(raw || '').trim();
+  if (!text) return fallback;
+  try {
+    const parsed = JSON.parse(text);
+    const fromJson = parsed?.error || parsed?.details || parsed?.message || '';
+    if (String(fromJson || '').trim()) return String(fromJson).trim();
+  } catch {}
+  return text;
+}
+
+async function loadMapPreview(options = {}) {
+  const { silent = false } = options;
+  let src = '';
+  setPreviewOverlayState('loading', t('Qtiler2Hajk.interactive_map_preparing'));
+  try {
+    src = await buildMapPreviewUrl();
+  } catch (err) {
+    const detail = formatPreviewErrorMessage(err, t('Qtiler2Hajk.interactive_map_prepare_failed'));
+    setPreviewOverlayState('error', detail);
+    if (!silent) addLog(`${t('Qtiler2Hajk.interactive_map_prepare_failed')}: ${detail}`, 'error');
+    return '';
+  }
+  if (!src) {
+    setPreviewOverlayState('error', t('Qtiler2Hajk.select_main_project_first'));
+    if (!silent) addLog(t('Qtiler2Hajk.select_main_project_first'), 'error');
+    return '';
+  }
+  if (previewIframe) previewIframe.src = src;
+  setPreviewOverlayState('loading', t('Qtiler2Hajk.interactive_map_loading_layers'));
+  if (!silent) addLog(t('Qtiler2Hajk.preview_loading_log'), 'info');
+  renderPublishConfigSummary();
+  return src;
+}
+
+let publishPreviewRefreshTimer = null;
+function schedulePreviewRefresh() {
+  if (publishPreviewRefreshTimer) window.clearTimeout(publishPreviewRefreshTimer);
+  publishPreviewRefreshTimer = window.setTimeout(() => {
+    publishPreviewRefreshTimer = null;
+    if (activePublishTab === 'config') {
+      loadMapPreview({ silent: true }).catch(() => {});
+    }
+  }, 150);
+}
+
+document.getElementById('btn-load-map-preview')?.addEventListener('click', () => {
+  loadMapPreview().catch(() => {});
+});
+openPreviewTabBtn?.addEventListener('click', async () => {
+  const src = await loadMapPreview({ silent: true });
+  if (src) window.open(src, '_blank', 'noopener,noreferrer');
+});
+
+// Listen for hajk-loaded message from the preview iframe
+window.addEventListener('message', (ev) => {
+  if (ev.data?.type === 'hajk-loaded') {
+    setPreviewOverlayState('ready');
+    addLog(t('Qtiler2Hajk.preview_ready_log'), 'ok');
+    return;
+  }
+  if (ev.data?.type === 'hajk-error') {
+    const detail = formatPreviewErrorMessage(ev.data?.message || ev.data?.error, t('Qtiler2Hajk.interactive_map_load_failed'));
+    setPreviewOverlayState('error', detail);
+    addLog(`${t('Qtiler2Hajk.interactive_map_error')}: ${detail}`, 'error');
+  }
+});
+
+previewIframe?.addEventListener('error', () => {
+  const detail = t('Qtiler2Hajk.interactive_map_iframe_error');
+  setPreviewOverlayState('error', detail);
+  addLog(detail, 'error');
+});
+
+previewIframe?.addEventListener('load', () => {
+  let attempts = 0;
+  const notifyWhenReady = () => {
+    attempts += 1;
+    const mapApi = getPreviewMapApi();
+    if (mapApi?.map) {
+      try { mapApi.map.updateSize?.(); } catch {}
+      window.dispatchEvent(new MessageEvent('message', { data: { type: 'hajk-loaded' } }));
+      return;
+    }
+    if (attempts < 40) window.setTimeout(notifyWhenReady, 250);
+  };
+  window.setTimeout(notifyWhenReady, 250);
+});
+
+function getPreviewMapApi() {
+  try {
+    const win = previewIframe?.contentWindow;
+    const publicApi = win?.hajkPublicApi;
+    const publicMap = publicApi?.olMap || (typeof publicApi?.getMap === 'function' ? publicApi.getMap() : null);
+    if (publicMap) return { map: publicMap, view: publicMap.getView?.() || null };
+
+    const hajkApp = win?.hajkApp;
+    const viewer = typeof hajkApp?.api === 'function' ? hajkApp.api() : null;
+    const legacyMap = typeof viewer?.getMap === 'function' ? viewer.getMap() : null;
+    if (legacyMap) return { map: legacyMap, view: legacyMap.getView?.() || null };
+  } catch {}
+  return null;
+}
+
+// Read the current OL view from the preview iframe. Returns null if the
+// preview has not loaded yet.
+function getPreviewView() {
+  return getPreviewMapApi()?.view || null;
+}
+
+function capturePreviewViewToInputs({ includeExtent = true } = {}) {
+  const mapApi = getPreviewMapApi();
+  const view = mapApi?.view;
+  const map = mapApi?.map;
+  if (!view || !map) return false;
+  const center = typeof view.getCenter === 'function' ? view.getCenter() : null;
+  const zoom = typeof view.getZoom === 'function' ? view.getZoom() : null;
+  const size = typeof map.getSize === 'function' ? map.getSize() : null;
+  const extent = includeExtent && size && typeof view.calculateExtent === 'function' ? view.calculateExtent(size) : null;
+  const projCode = (() => {
+    try { return view.getProjection()?.getCode?.() || ''; } catch { return ''; }
+  })();
+  if (centerInput && Array.isArray(center)) {
+    centerInput.value = JSON.stringify(center.map((v) => Math.round(v)));
+    if (projCode) centerInput.dataset.crs = projCode;
+  }
+  if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom.toFixed(2);
+  if (includeExtent && extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent.map((v) => Math.round(v)));
+  renderPublishConfigSummary();
+  return true;
+}
+
+function clearMapExtentInput({ refresh = true } = {}) {
+  clearMapViewOverrides({ refresh });
+}
+
+function clearMapViewOverrides({ refresh = true } = {}) {
+  if (centerInput) { centerInput.value = ''; delete centerInput.dataset.crs; }
+  if (zoomInput) zoomInput.value = '';
+  if (extentInput) extentInput.value = '';
+  if (minZoomInput) minZoomInput.value = '';
+  if (maxZoomInput) maxZoomInput.value = '';
+  renderPublishConfigSummary();
+  if (refresh) schedulePreviewRefresh();
+}
+
+async function centerPreviewOnDefaultBackground() {
+  clearMapViewOverrides({ refresh: false });
+  await loadMapPreview({ silent: true });
+  addLog(t('Qtiler2Hajk.default_bg_centered'), 'ok');
+}
+
+document.getElementById('btn-fetch-map-extent')?.addEventListener('click', () => {
+  try {
+    if (!capturePreviewViewToInputs({ includeExtent: true })) { addLog('Carga el mapa preview primero.', 'error'); return; }
+  } catch (e) {
+    addLog(t('Qtiler2Hajk.map_state_read_failed', { msg: e.message }), 'error');
+  }
+});
+
+document.getElementById('btn-clear-map-extent')?.addEventListener('click', () => {
+  clearMapExtentInput();
+  addLog(t('Qtiler2Hajk.map_extent_cleared'), 'ok');
+});
+
+document.getElementById('btn-center-default-background')?.addEventListener('click', () => {
+  centerPreviewOnDefaultBackground().catch((err) => {
+    addLog(t('Qtiler2Hajk.default_bg_center_failed', { msg: err?.message || err }), 'error');
+  });
+});
+
+// Capture min/max zoom from the current preview zoom level. Workflow:
+//   1. Admin loads the preview.
+//   2. Zooms OUT to the most zoomed-out level they want to allow → click
+//      "Capturar" next to Min Zoom.
+//   3. Zooms IN to the most zoomed-in level they want to allow → click
+//      "Capturar" next to Max Zoom.
+function captureZoomToInput(input, label) {
+  const view = getPreviewView();
+  if (!view) { addLog('Carga el mapa preview primero.', 'error'); return; }
+  const z = view.getZoom();
+  if (!Number.isFinite(z)) { addLog(t('Qtiler2Hajk.zoom_read_failed'), 'error'); return; }
+  const intZ = Math.round(z);
+  if (input) input.value = String(intZ);
+  addLog(`${label} capturado: ${intZ}`, 'ok');
+  // Sanity check: Min Zoom must be <= Max Zoom (smaller number = more zoomed
+  // out). If the admin captured them backwards, warn so they realise the
+  // semantics (not auto-swap, since we cannot guess intent reliably).
+  const minEl = document.getElementById('hajk-cfg-min-zoom');
+  const maxEl = document.getElementById('hajk-cfg-max-zoom');
+  const minV = Number(minEl?.value);
+  const maxV = Number(maxEl?.value);
+  if (Number.isFinite(minV) && Number.isFinite(maxV) && minV > maxV) {
+    addLog(t('Qtiler2Hajk.zoom_warn', { min: minV, max: maxV }), 'warn');
+  }
+}
+document.getElementById('btn-capture-min-zoom')?.addEventListener('click', () => {
+  captureZoomToInput(document.getElementById('hajk-cfg-min-zoom'), 'Min Zoom');
+});
+document.getElementById('btn-capture-max-zoom')?.addEventListener('click', () => {
+  captureZoomToInput(document.getElementById('hajk-cfg-max-zoom'), 'Max Zoom');
+});
+
+window.addEventListener('message', (ev) => {
+  if (!ev.data || ev.data.type !== 'mapState') return;
+  const { center, zoom, extent, projCode } = ev.data;
+  if (centerInput && Array.isArray(center)) {
+    centerInput.value = JSON.stringify(center);
+    if (projCode) centerInput.dataset.crs = String(projCode);
+  }
+  if (zoomInput && typeof zoom === 'number') zoomInput.value = zoom;
+  if (extentInput && Array.isArray(extent)) extentInput.value = JSON.stringify(extent);
+});
+
+document.getElementById('btn-load-advanced-controls')?.addEventListener('click', () => {
+  // Check all controls and regenerate the JSON textarea
+  HAJK_TOOL_DEFS.forEach((def) => {
+    const cb = document.getElementById(def.id);
+    if (cb) cb.checked = true;
+  });
+  syncControlsFromCheckboxes();
+});
+
+/* ── Origo control checkboxes → auto-update controls JSON textarea ── */
+HAJK_TOOL_DEFS.forEach((def) => {
+  document.getElementById(def.id)?.addEventListener('change', syncControlsFromCheckboxes);
+});
+
+[publishName, publishDescription, zoomInput, centerInput, extentInput, minZoomInput, maxZoomInput, controlsJsonInput, extraJsonInput]
+  .filter(Boolean)
+  .forEach((el) => {
+    el.addEventListener('input', () => {
+      renderPublishConfigSummary();
+      schedulePreviewRefresh();
+    });
+    el.addEventListener('change', () => {
+      renderPublishConfigSummary();
+      schedulePreviewRefresh();
+    });
+  });
+
+/* ── Tool card visual toggle (JS fallback for :has() support) ── */
+document.querySelectorAll('.Qtiler2Hajk-tool-card input[type="checkbox"]').forEach((cb) => {
+  const card = cb.closest('.Qtiler2Hajk-tool-card');
+  if (!card) return;
+  const sync = () => {
+    card.classList.toggle('is-checked', cb.checked);
+    const entry = TOOL_CONFIG_MAP[cb.id];
+    if (entry?.panel) entry.panel.classList.toggle('is-visible', cb.checked);
+  };
+  cb.addEventListener('change', sync);
+  sync();
+});
+
+/* ── Init ── */
+applyI18n();
+
+Promise.all([
+  loadStatus().catch((err) => addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error')),
+  loadPublishedProfiles().catch(() => {}),
+  loadReleases().catch(() => {})
+]).then(() => initDetachedEditorWindow().catch((err) => addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error')));
+
+
+
+/* --- WFS Style Editor Logic --- */
+let currentEditingWfsLayer = null;
+let currentStylePresets = [];
+let currentDetectedQgisStyle = null;
+
+function deepCloneStyle(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
+function getBuiltinStylePresets(geometryType) {
+  const family = geomFamilyOf(geometryType);
+  if (family === 'line') {
+    return [
+      {
+        key: 'builtin-line-solid',
+        title: 'Solid line',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]]
+      },
+      {
+        key: 'builtin-line-dashed',
+        title: 'Dashed line',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(217, 119, 6, 1)', width: 3, lineDash: [8, 6] } }]]
+      },
+      {
+        key: 'builtin-line-subtle',
+        title: 'Subtle gray',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(71, 85, 105, 0.9)', width: 1.5 } }]]
+      }
+    ];
+  }
+  if (family === 'polygon') {
+    return [
+      {
+        key: 'builtin-polygon-fill',
+        title: 'Filled polygon',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(59, 130, 246, 0.25)' }, stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]],
+        designer: { fillPattern: 'solid', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-slash-tight',
+        title: 'Slash hatch 45°',
+        description: 'Tight diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(37, 99, 235, 0.18)' }, stroke: { color: 'rgba(37, 99, 235, 1)', width: 2 } }]],
+        designer: { fillPattern: 'slash', fillPatternAngle: 45, fillPatternSpacing: 8, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-slash-wide',
+        title: 'Slash hatch 25°',
+        description: 'Wide separated lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(14, 165, 233, 0.15)' }, stroke: { color: 'rgba(3, 105, 161, 1)', width: 2 } }]],
+        designer: { fillPattern: 'slash', fillPatternAngle: 25, fillPatternSpacing: 16, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-backslash',
+        title: 'Backslash hatch',
+        description: 'Opposite diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(249, 115, 22, 0.14)' }, stroke: { color: 'rgba(194, 65, 12, 1)', width: 2 } }]],
+        designer: { fillPattern: 'backslash', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-horizontal',
+        title: 'Horizontal hatch',
+        description: 'Parallel horizontal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(99, 102, 241, 0.12)' }, stroke: { color: 'rgba(79, 70, 229, 1)', width: 2 } }]],
+        designer: { fillPattern: 'horizontal', fillPatternAngle: 0, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-vertical',
+        title: 'Vertical hatch',
+        description: 'Parallel vertical lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(236, 72, 153, 0.12)' }, stroke: { color: 'rgba(190, 24, 93, 1)', width: 2 } }]],
+        designer: { fillPattern: 'vertical', fillPatternAngle: 90, fillPatternSpacing: 12, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-cross',
+        title: 'Cross hatch',
+        description: 'Crossed diagonal lines',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(16, 185, 129, 0.16)' }, stroke: { color: 'rgba(5, 150, 105, 1)', width: 2 } }]],
+        designer: { fillPattern: 'cross', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      },
+      {
+        key: 'builtin-polygon-dots-tight',
+        title: 'Dense dots',
+        description: 'Small close dots',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(168, 85, 247, 0.18)' }, stroke: { color: 'rgba(126, 34, 206, 1)', width: 2 } }]],
+        designer: { fillPattern: 'dots', fillPatternAngle: 0, fillPatternSpacing: 8, fillPatternSize: 1.8 }
+      },
+      {
+        key: 'builtin-polygon-dots-wide',
+        title: 'Wide dots',
+        description: 'Separated larger dots',
+        badge: 'Built-in',
+        style: [[{ fill: { color: 'rgba(244, 114, 182, 0.18)' }, stroke: { color: 'rgba(190, 24, 93, 1)', width: 2 } }]],
+        designer: { fillPattern: 'dots', fillPatternAngle: 0, fillPatternSpacing: 16, fillPatternSize: 3.5 }
+      },
+      {
+        key: 'builtin-polygon-outline',
+        title: 'Outline only',
+        description: 'Base preset',
+        badge: 'Built-in',
+        style: [[{ stroke: { color: 'rgba(15, 23, 42, 0.95)', width: 2.5 } }]],
+        designer: { fillPattern: 'outline', fillPatternAngle: 45, fillPatternSpacing: 10, fillPatternSize: 2.5 }
+      }
+    ];
+  }
+  return [];
+}
+
+function getQgisStylePresets(rawStyle, geometryType) {
+  if (!rawStyle || typeof rawStyle !== 'object') return [];
+  const style = getSimplifiedQgisStyle(rawStyle, geometryType);
+  if (!style) return [];
+  const designer = getDesignerOptionsFromQgisStyle(rawStyle);
+  return [{
+    key: 'qgis-detected-style',
+    title: 'QGIS style',
+    description: rawStyle.type === 'categorizedSymbol' ? 'Simplified from QGIS categorized renderer' : 'Imported from QGIS',
+    badge: 'QGIS',
+    style,
+    designer
+  }];
+}
+
+function buildStylePresets(geometryType, rawQgisStyle) {
+  return [...getQgisStylePresets(rawQgisStyle, geometryType), ...getBuiltinStylePresets(geometryType)];
+}
+
+function stylePresetPreviewSvg(preset, geometryType) {
+  const style = preset?.style;
+  try {
+    const family = geomFamilyOf(geometryType);
+    if ((family === 'polygon' || family === 'generic') && preset?.designer?.fillPattern) {
+      const rule = unwrapPrimaryStyleRule(style);
+      const fillColor = String(rule?.fill?.color || 'rgba(59, 130, 246, 0.25)');
+      const strokeColor = String(rule?.stroke?.color || 'rgba(37, 99, 235, 1)');
+      const strokeWidth = Number(rule?.stroke?.width || 2);
+      const dash = Array.isArray(rule?.stroke?.lineDash) ? ` stroke-dasharray="${rule.stroke.lineDash.join(' ')}"` : '';
+      const fillValue = preset.designer.fillPattern === 'outline' ? 'rgba(0,0,0,0)' : fillColor;
+      const patternFill = buildSvgPatternFill(fillValue, strokeColor, strokeWidth, preset.designer);
+      return `<svg viewBox="0 0 240 120" aria-hidden="true">${patternFill.defs}<path d="M24 88 L72 30 L150 24 L216 74 L176 94 L70 92 Z" fill="${patternFill.fill}" stroke="${strokeColor}" stroke-width="${strokeWidth}"${dash} /></svg>`;
+    }
+    const rules = typeof origoStyleToRules === 'function'
+      ? origoStyleToRules(Array.isArray(style) ? style : [style])
+      : [];
+    if (Array.isArray(rules) && rules.length) {
+      return rulePreviewSampleSvg(rules[0], family);
+    }
+  } catch {}
+  return stylePreviewSvg(geometryType);
+}
+
+function renderStylePresetGallery(geometryType) {
+  if (!wfsStylePresets || !wfsStylePresetsSection || !wfsStylePresetsSelect) return;
+  if (!Array.isArray(currentStylePresets) || !currentStylePresets.length) {
+    wfsStylePresets.innerHTML = '';
+    wfsStylePresetsSelect.innerHTML = '<option value="">Selecciona un preset…</option>';
+    wfsStylePresetsSection.hidden = true;
+    return;
+  }
+  wfsStylePresetsSection.hidden = false;
+  wfsStylePresetsSelect.innerHTML = ['<option value="">Selecciona un preset…</option>']
+    .concat(currentStylePresets.map((preset, index) => `<option value="${index}">${escapeHtml(preset.title || `Preset ${index + 1}`)}${preset.badge ? ` (${escapeHtml(preset.badge)})` : ''}</option>`))
+    .join('');
+  const preset = currentStylePresets[0];
+  wfsStylePresets.innerHTML = preset ? `
+    <article class="Qtiler2Hajk-style-preset">
+      <div class="Qtiler2Hajk-style-preset__sample">${stylePresetPreviewSvg(preset, geometryType)}</div>
+      <div class="Qtiler2Hajk-style-preset__meta">
+        <strong>${escapeHtml(preset.title || 'Preset')}</strong>
+        <small>${escapeHtml(preset.description || '')}</small>
+        <span class="Qtiler2Hajk-style-preset__badge">${escapeHtml(preset.badge || 'Preset')}</span>
+      </div>
+    </article>
+  ` : '';
+}
+
+function applyStylePreset(preset) {
+  if (!preset || !preset.style) return;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const style = deepCloneStyle(preset.style);
+  applyStyleDefinitionToDesigner(style, geometryType);
+  applyDesignerPatternOptions(preset?.designer || { fillPattern: 'solid' });
+  try {
+    if (typeof origoStyleToRules === 'function') {
+      currentRules = origoStyleToRules(Array.isArray(style) ? style : [style]);
+      renderRulesPanel();
+    }
+  } catch {}
+  if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
+  try { if (typeof setJsonEditorValue === 'function') setJsonEditorValue(JSON.stringify(style, null, 2)); } catch {}
+  syncStylePreview();
+}
+
+function populateStyleCopySelect(currentLayer) {
+  if (!wfsStyleCopySelect) return;
+  wfsStyleCopySelect.innerHTML = `<option value="">${t('Qtiler2Hajk.wfs_copy_layer')}</option>`;
+  
+  // Find all layers in projectLayersList that have a style (either in mainRules or a default vector)
+  const optionLayers = getAllPublishLayers().filter((layer) => {
+    const layerKey = getLayerKey(layer);
+    return layerKey && layerKey !== currentLayer && isVectorGeometry(getLayerGeometryType(layerKey));
+  });
+
+  for (const l of optionLayers) {
+    const lName = getLayerKey(l);
+    const opt = document.createElement('option');
+    opt.value = lName;
+    opt.textContent = l.sourceProjectId && l.sourceProjectId !== String(publishProjectSelect?.value || '').trim()
+      ? `${l.name} [${l.sourceProjectId}]`
+      : l.name;
+    wfsStyleCopySelect.appendChild(opt);
+  }
+}
+
+function openStyleEditor(layerName) {
+  currentEditingWfsLayer = layerName;
+  currentRuleIndex = 0;
+  const geometryType = getLayerGeometryType(layerName);
+  if (!isVectorGeometry(geometryType)) return;
+  currentDetectedQgisStyle = null;
+  currentStylePresets = buildStylePresets(geometryType, null);
+  renderStylePresetGallery(geometryType);
+
+  if (wfsStyleLayerTitle) wfsStyleLayerTitle.innerText = layerName;
+  if (wfsStyleGeometryBadge) {
+    wfsStyleGeometryBadge.textContent = geometryType || 'Vector';
+    wfsStyleGeometryBadge.className = 'badge badge--ok';
+  }
+  if (wfsStyleError) {
+    wfsStyleError.textContent = '';
+    wfsStyleError.classList.add('is-hidden');
+  }
+  
+  populateStyleCopySelect(layerName);
+
+  const existingRules = publishState.mainRules[layerName] || {};
+  currentAttributes = normalizeAttributesList(existingRules.attributes || []);
+  renderAttributesPanel();
+  populateAttributesCopySelect(layerName);
+  const existingStyle = existingRules.wfsStyle || defaultStyleDefinition(geometryType);
+  applyStyleDefinitionToDesigner(existingStyle, geometryType);
+  applyDesignerPatternOptions(existingRules?.designerOptions || { fillPattern: 'solid' });
+  currentLayerGeomFamily = geomFamilyOf(geometryType);
+  try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules(Array.isArray(existingStyle) ? existingStyle : [existingStyle]); renderRulesPanel(); } } catch(e){}
+  if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(existingStyle, null, 2);
+  
+  setStyleEditorTab('designer');
+  syncStylePreview();
+
+  const projectId = getLayerProjectId(layerName);
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  if (projectId && wfsStyleJsonEditor) {
+    if (!existingRules.wfsStyle) {
+      wfsStyleJsonEditor.value = t('Qtiler2Hajk.loading_style') || 'Loading detected style from QGIS…';
+    }
+    fetch(`/Qtiler2Hajk/layer-style?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(sourceLayerName)}`)
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+      .then((data) => {
+        currentDetectedQgisStyle = data && data.supported === false ? null : (data?.style || null);
+        currentStylePresets = buildStylePresets(geometryType, currentDetectedQgisStyle);
+        renderStylePresetGallery(geometryType);
+        if (existingRules.wfsStyle) return;
+        const qgisDesignerOptions = currentDetectedQgisStyle ? getDesignerOptionsFromQgisStyle(currentDetectedQgisStyle) : { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') };
+        const style = currentDetectedQgisStyle
+          ? (getSimplifiedQgisStyle(currentDetectedQgisStyle, geometryType) || defaultStyleDefinition(geometryType))
+          : defaultStyleDefinition(geometryType);
+        applyStyleDefinitionToDesigner(style, geometryType);
+        applyDesignerPatternOptions(qgisDesignerOptions);
+        try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules(Array.isArray(style) ? style : [style]); renderRulesPanel(); } } catch(e){}
+        if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
+        setStyleEditorTab('designer');
+        syncStylePreview();
+      })
+      .catch(() => {
+        currentDetectedQgisStyle = null;
+        currentStylePresets = buildStylePresets(geometryType, null);
+        renderStylePresetGallery(geometryType);
+        if (existingRules.wfsStyle) return;
+        if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(defaultStyleDefinition(geometryType), null, 2);
+        applyDesignerPatternOptions({ fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+        try { if (typeof origoStyleToRules === "function") { currentRules = origoStyleToRules([defaultStyleDefinition(geometryType)]); renderRulesPanel(); } } catch(e){}
+        syncStylePreview();
+      });
+  }
+
+  openManagedModal(wfsStyleModal, wfsStyleFullscreenBtn);
+}
+
+function closeStyleEditor() {
+  closeRuleStyleEditor();
+  closeManagedModal(wfsStyleModal, wfsStyleFullscreenBtn);
+  currentDesignerRuleIndex = null;
+  updateDesignerRuleModeNotice();
+  currentEditingWfsLayer = null;
+}
+
+function saveStyleEditor() {
+  const layerName = currentEditingWfsLayer;
+  if (!layerName) return;
+
+  try {
+    const activeJson = !!wfsStylePanels.find((panel) => panel.getAttribute('data-style-panel') === 'json' && !panel.hidden);
+    const geometryType = getLayerGeometryType(layerName);
+    const styleObj = activeJson
+      ? (wfsStyleJsonEditor?.value.trim() ? JSON.parse(wfsStyleJsonEditor.value.trim()) : defaultStyleDefinition(geometryType))
+      : buildStyleDefinitionFromDesigner(geometryType);
+
+    if (!publishState.mainRules[layerName]) {
+      publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: true };
+    }
+    publishState.mainRules[layerName].serveAsWfs = true;
+    publishState.mainRules[layerName].wfsStyle = styleObj;
+    publishState.mainRules[layerName].attributes = JSON.parse(JSON.stringify(currentAttributes));
+    publishState.mainRules[layerName].geometryType = geometryType || null;
+    publishState.mainRules[layerName].designerOptions = {
+      ...(publishState.mainRules[layerName].designerOptions || {}),
+      ...getDesignerPatternOptions()
+    };
+
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    closeStyleEditor();
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+  } catch (err) {
+    if (wfsStyleError) {
+      wfsStyleError.innerText = (t('Qtiler2Hajk.wfs_invalid_json') || 'Invalid JSON: ') + err.message;
+      wfsStyleError.classList.remove('is-hidden');
+    }
+  }
+}
+
+wfsStyleTabButtons.forEach((button) => {
+  button.addEventListener('click', () => setStyleEditorTab(button.getAttribute('data-style-tab')));
+});
+
+wfsStyleFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(wfsStyleModal, wfsStyleFullscreenBtn);
+});
+
+wfsRuleEditorFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+});
+
+wfsStylePresetsSelect?.addEventListener('change', () => {
+  const index = Number(wfsStylePresetsSelect.value);
+  if (!Number.isInteger(index) || !currentStylePresets[index] || !wfsStylePresets) return;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const preset = currentStylePresets[index];
+  wfsStylePresets.innerHTML = `
+    <article class="Qtiler2Hajk-style-preset">
+      <div class="Qtiler2Hajk-style-preset__sample">${stylePresetPreviewSvg(preset, geometryType)}</div>
+      <div class="Qtiler2Hajk-style-preset__meta">
+        <strong>${escapeHtml(preset.title || 'Preset')}</strong>
+        <small>${escapeHtml(preset.description || '')}</small>
+        <span class="Qtiler2Hajk-style-preset__badge">${escapeHtml(preset.badge || 'Preset')}</span>
+      </div>
+    </article>
+  `;
+});
+
+wfsStylePresetsApply?.addEventListener('click', () => {
+  const index = Number(wfsStylePresetsSelect?.value);
+  if (!Number.isInteger(index) || !currentStylePresets[index]) return;
+  applyStylePreset(currentStylePresets[index]);
+});
+
+[wfsStyleShape, wfsStyleFillColor, wfsStyleFillOpacity, wfsStyleStrokeColor, wfsStyleStrokeOpacity, wfsStyleStrokeWidth, wfsStyleRadius, wfsStyleDash, wfsStylePatternAngle, wfsStylePatternSpacing, wfsStylePatternSize, wfsStylePatternTransparent]
+  .filter(Boolean)
+  .forEach((input) => {
+    input.addEventListener('input', syncStylePreview);
+    input.addEventListener('change', syncStylePreview);
+  });
+
+wfsStyleFillPattern?.addEventListener('input', () => {
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+  syncStylePreview();
+});
+wfsStyleFillPattern?.addEventListener('change', () => {
+  syncDesignerGeometryFields(getLayerGeometryType(currentEditingWfsLayer));
+  syncStylePreview();
+});
+
+wfsStyleResetBtn?.addEventListener('click', () => {
+  const ok = window.confirm(t('Qtiler2Hajk.wfs_reset_confirm'));
+  if (!ok) return;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const style = defaultStyleDefinition(geometryType);
+  applyStyleDefinitionToDesigner(style, geometryType);
+  applyDesignerPatternOptions({ fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(style, null, 2);
+  // Also reset the rules tab to a single default rule built from the basic style
+  try {
+    if (typeof origoStyleToRules === 'function' && typeof renderRulesPanel === 'function') {
+      currentRules = origoStyleToRules(style);
+      renderRulesPanel();
+    }
+  } catch (_e) {}
+  if (typeof setJsonEditorValue === 'function') setJsonEditorValue(JSON.stringify(style, null, 2));
+  syncStylePreview();
+});
+
+wfsStyleApplyJsonBtn?.addEventListener('click', () => {
+  try {
+    const txt = (typeof getJsonEditorValue === 'function' ? getJsonEditorValue() : (wfsStyleJsonEditor?.value || '')).trim();
+    const parsed = txt ? JSON.parse(txt) : {};
+    applyWfsLayerJsonConfig(parsed);
+    if (wfsStyleError) {
+      wfsStyleError.textContent = '';
+      wfsStyleError.classList.add('is-hidden');
+    }
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus('JSON aplicado a las reglas.', false);
+    // Switch to rules tab so the user sees the result
+    setStyleEditorTab('rules');
+  } catch (err) {
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus((t('Qtiler2Hajk.wfs_invalid_json') || 'Invalid JSON: ') + err.message, true);
+    if (wfsStyleError) {
+    wfsStyleError.innerText = (t('Qtiler2Hajk.wfs_invalid_json_apply') || 'Could not apply JSON: ') + err.message;
+      wfsStyleError.classList.remove('is-hidden');
+    }
+  }
+});
+
+wfsStyleExportJsonBtn?.addEventListener('click', () => {
+  try {
+    const layerName = String(currentEditingWfsLayer || 'layer').trim() || 'layer';
+    const payload = buildCurrentWfsLayerConfig();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${layerName.replace(/[^a-zA-Z0-9._-]/g, '_')}-wfs-style.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus('JSON exportado.', false);
+  } catch (err) {
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus((t('Qtiler2Hajk.wfs_invalid_json_apply') || 'Could not apply JSON: ') + err.message, true);
+  }
+});
+
+wfsStyleImportJsonBtn?.addEventListener('click', () => {
+  wfsStyleImportFile?.click();
+});
+
+wfsStyleImportFile?.addEventListener('change', async () => {
+  const file = wfsStyleImportFile.files && wfsStyleImportFile.files[0] ? wfsStyleImportFile.files[0] : null;
+  if (!file) return;
+  try {
+    const txt = await file.text();
+    const parsed = txt.trim() ? JSON.parse(txt) : {};
+    applyWfsLayerJsonConfig(parsed);
+    if (wfsStyleError) {
+      wfsStyleError.textContent = '';
+      wfsStyleError.classList.add('is-hidden');
+    }
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus('JSON importado.', false);
+    setStyleEditorTab('rules');
+  } catch (err) {
+    if (typeof setJsonEditorStatus === 'function') setJsonEditorStatus((t('Qtiler2Hajk.wfs_invalid_json_apply') || 'Could not apply JSON: ') + err.message, true);
+    if (wfsStyleError) {
+      wfsStyleError.innerText = (t('Qtiler2Hajk.wfs_invalid_json_apply') || 'Could not apply JSON: ') + err.message;
+      wfsStyleError.classList.remove('is-hidden');
+    }
+  } finally {
+    wfsStyleImportFile.value = '';
+  }
+});
+
+wfsStyleCopySelect?.addEventListener('change', () => {
+  const selectedLayer = wfsStyleCopySelect.value;
+  if (!selectedLayer) return;
+  const existingRules = publishState.mainRules[selectedLayer];
+  if (existingRules && existingRules.wfsStyle && wfsStyleJsonEditor) {
+    wfsStyleJsonEditor.value = JSON.stringify(existingRules.wfsStyle, null, 2);
+  }
+});
+
+/* ======================================================================
+   GRAPHICAL RULE-BASED STYLE EDITOR
+   ====================================================================== */
+let currentRules = [];
+let currentRuleIndex = 0; // Index of the rule currently shown in the dropdown-driven editor
+let currentRuleEditorIndex = null;
+let currentDesignerRuleIndex = null;
+let currentAttributes = []; // [{name, title, url}, ...]
+let currentLayerFields = []; // [{name, type}, ...]
+let currentLayerGeomFamily = 'point'; // point|line|polygon
+let svgLibraryCache = null;
+let svgPickerTargetCb = null;
+
+function getDefaultAttributeTitle(name) {
+  const normalizedName = String(name || '').trim();
+  return normalizedName ? `${normalizedName}: ` : '';
+}
+
+function normalizeAttributeDefinition(attr) {
+  if (!attr || typeof attr !== 'object') return null;
+  const rawHtml = attr.html == null ? '' : String(attr.html);
+  if (rawHtml.trim()) {
+    return { html: rawHtml };
+  }
+  const name = String(attr.name || '').trim();
+  if (!name) return null;
+  const rawTitle = attr.title == null ? '' : String(attr.title);
+  return {
+    name,
+    title: rawTitle.trim() ? rawTitle : getDefaultAttributeTitle(name),
+    ...(attr.type ? { type: String(attr.type) } : {}),
+    ...(attr.url ? { url: String(attr.url) } : {}),
+    ...(typeof attr.maxLength === 'number' && Number.isFinite(attr.maxLength) ? { maxLength: attr.maxLength } : {}),
+    ...(Array.isArray(attr.options) ? { options: attr.options.map((item) => String(item).trim()).filter(Boolean) } : {})
+  };
+}
+
+function normalizeAttributesList(list) {
+  return Array.isArray(list)
+    ? list.map(normalizeAttributeDefinition).filter(Boolean)
+    : [];
+}
+
+// Extract unique values for a given attribute name from the current style rules.
+// Looks for equality filters: [attrName] == 'value' or [attrName] == value.
+// Returns the detected values in the order they appear in the rules.
+function extractDropdownOptionsFromRules(attrName) {
+  const name = String(attrName || '').trim().toLowerCase();
+  if (!name) return [];
+  const values = [];
+  const seen = new Set();
+  const seenFilters = new Set();
+  const filterStrings = [];
+
+  const addFilter = (f) => {
+    const s = String(f).trim();
+    if (s && !seenFilters.has(s)) { seenFilters.add(s); filterStrings.push(s); }
+  };
+
+  // Source 1: currentRules (in-memory, most up-to-date)
+  for (const rule of currentRules) {
+    if (rule.filter) addFilter(rule.filter);
+  }
+
+  // Source 2: publishState saved wfsStyle (authoritative stored state)
+  const collectFromStyleDef = (styleDef) => {
+    if (!Array.isArray(styleDef)) return;
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) { node.forEach(walk); return; }
+      if (node.filter != null) addFilter(node.filter);
+    };
+    styleDef.forEach(walk);
+  };
+  try {
+    const saved = publishState?.mainRules?.[currentEditingWfsLayer]?.wfsStyle;
+    if (Array.isArray(saved)) collectFromStyleDef(saved);
+  } catch { /* ignore */ }
+
+  // Source 3: JSON editor textarea (handles direct edits)
+  try {
+    if (wfsStyleJsonEditor?.value) collectFromStyleDef(JSON.parse(wfsStyleJsonEditor.value));
+  } catch { /* ignore */ }
+
+  // Match filter strings — no ^ anchor so leading whitespace is tolerated
+  for (const f of filterStrings) {
+    const m = f.match(/\[([^\]]+)\]\s*==\s*(.+)$/);
+    if (!m) continue;
+    if (m[1].trim().toLowerCase() !== name) continue;
+    let val = m[2].trim();
+    if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    if (val && !seen.has(val)) { seen.add(val); values.push(val); }
+  }
+  return values;
+}
+
+
+const attributesContainer = document.getElementById('wfs-attributes-container');
+const attributesAddBtn = document.getElementById('wfs-attributes-add');
+const attributesAddHtmlBtn = document.getElementById('wfs-attributes-add-html');
+const attributesCopySelect = document.getElementById('wfs-attributes-copy-select');
+
+function renderAttributesPanel() {
+  if (!attributesContainer) return;
+  attributesContainer.innerHTML = '';
+  const fieldOpts = ['<option value="">— elegir campo —</option>']
+    .concat((currentLayerFields || []).map(f => {
+      const lbl = f.type ? `${f.name} (${f.type})` : f.name;
+      return `<option value="${f.name}">${lbl}</option>`;
+    })).join('');
+  currentAttributes.forEach((attr, idx) => {
+    const row = document.createElement('div');
+    row.style.display = 'grid';
+    const isHtmlRow = Object.prototype.hasOwnProperty.call(attr || {}, 'html') && !Object.prototype.hasOwnProperty.call(attr || {}, 'name');
+    row.style.gridTemplateColumns = isHtmlRow ? '1fr 30px' : '1fr 1fr 130px 70px 30px';
+    row.style.gap = '0.4rem';
+    row.style.alignItems = 'start';
+    if (isHtmlRow) {
+      row.innerHTML = `
+        <div>
+          <div style="font-size:0.75rem;color:#64748b;margin-bottom:0.2rem">${escapeHtml(t('Qtiler2Hajk.opt_content'))}</div>
+          <textarea class="textarea is-small" rows="4" placeholder="<b>Foto punkt Nr. {{Numrering}} - {{Plats}}</b>" data-idx="${idx}" data-field="html">${escapeHtml(attr.html || '')}</textarea>
+        </div>
+        <button type="button" class="button small is-danger is-light" data-action="delete" data-idx="${idx}" title="${escapeHtml(t('Qtiler2Hajk.delete'))}">×</button>`;
+      attributesContainer.appendChild(row);
+      return;
+    }
+    const isInList = !attr.name || (currentLayerFields || []).some(f => f.name === attr.name);
+    const nameField = (currentLayerFields && currentLayerFields.length && isInList)
+      ? `<select class="input small" data-idx="${idx}" data-field="name">${fieldOpts.replace(`value="${attr.name}"`, `value="${attr.name}" selected`)}</select>`
+      : `<input type="text" class="input small" placeholder="Nombre del campo" value="${attr.name || ''}" data-idx="${idx}" data-field="name">`;
+    const type = attr.type || 'text';
+    const typeOpts = ['text', 'number', 'url', 'image', 'dropdown', 'textarea', 'checkbox', 'date']
+      .map(t => `<option value="${t}"${t === type ? ' selected' : ''}>${t}</option>`).join('');
+    const maxLen = (attr.maxLength != null ? attr.maxLength : '');
+    const optionsRow = (type === 'dropdown')
+      ? `<div style="grid-column: 1 / -1; margin-top:0.25rem">
+          <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">
+            <span style="font-size:0.8rem;color:#64748b">${escapeHtml(t('Qtiler2Hajk.attr_options_ph'))}</span>
+            <button type="button" class="button is-small is-light" data-action="detect-options" data-idx="${idx}">${escapeHtml(t('Qtiler2Hajk.attr_detect_from_style'))}</button>
+          </div>
+          <textarea class="textarea is-small" rows="3" data-idx="${idx}" data-field="options">${Array.isArray(attr.options) ? attr.options.join('\n') : ''}</textarea>
+        </div>`
+      : '';
+    row.innerHTML = `${nameField}
+      <input type="text" class="input small" placeholder="${escapeHtml(t('Qtiler2Hajk.attr_title_ph'))}" value="${attr.title || ''}" data-idx="${idx}" data-field="title">
+      <select class="input small" data-idx="${idx}" data-field="type">${typeOpts}</select>
+      <input type="number" class="input small" placeholder="max" value="${maxLen}" data-idx="${idx}" data-field="maxLength">
+      <button type="button" class="button small is-danger is-light" data-action="delete" data-idx="${idx}" title="${escapeHtml(t('Qtiler2Hajk.delete'))}">×</button>
+      ${optionsRow}`;
+    attributesContainer.appendChild(row);
+  });
+}
+
+function populateAttributesCopySelect(currentLayer) {
+  if (!attributesCopySelect) return;
+  attributesCopySelect.innerHTML = `<option value="">${t('Qtiler2Hajk.wfs_copy_attrs')}</option>`;
+  for (const layer of getAllPublishLayers()) {
+    const layerKey = getLayerKey(layer);
+    if (!layerKey || layerKey === currentLayer) continue;
+    const attrs = normalizeAttributesList(publishState.mainRules?.[layerKey]?.attributes);
+    if (!attrs.length) continue;
+    const opt = document.createElement('option');
+    opt.value = layerKey;
+    opt.textContent = layer.sourceProjectId && layer.sourceProjectId !== String(publishProjectSelect?.value || '').trim()
+      ? `${layer.name} [${layer.sourceProjectId}]`
+      : layer.name;
+    attributesCopySelect.appendChild(opt);
+  }
+}
+
+if (attributesAddBtn) {
+  attributesAddBtn.addEventListener('click', () => {
+    currentAttributes.push({ name: '', title: '', type: 'text', url: '' });
+    renderAttributesPanel();
+  });
+}
+
+if (attributesAddHtmlBtn) {
+  attributesAddHtmlBtn.addEventListener('click', () => {
+    currentAttributes.push({ html: '' });
+    renderAttributesPanel();
+  });
+}
+
+attributesCopySelect?.addEventListener('change', () => {
+  const src = String(attributesCopySelect.value || '').trim();
+  if (!src) return;
+  currentAttributes = normalizeAttributesList(publishState.mainRules?.[src]?.attributes || []);
+  renderAttributesPanel();
+  attributesCopySelect.value = '';
+});
+
+if (attributesContainer) {
+  const updateAttr = (e) => {
+    const idx = parseInt(e.target.getAttribute('data-idx'));
+    const field = e.target.getAttribute('data-field');
+    if (isNaN(idx) || !currentAttributes[idx] || !field) return;
+    let val = e.target.value;
+    if (field === 'maxLength') {
+      const n = parseInt(val);
+      currentAttributes[idx].maxLength = isNaN(n) ? undefined : n;
+    } else if (field === 'options') {
+      currentAttributes[idx].options = val.split('\n').map(s => s.trim()).filter(Boolean);
+    } else if (field === 'html') {
+      currentAttributes[idx].html = val;
+    } else {
+      currentAttributes[idx][field] = val;
+      // When the user picks a field name, auto-fill the type from WFS metadata
+      // so Origo never receives type:undefined.
+      if (field === 'name' && val) {
+        const detected = (currentLayerFields || []).find(f => f.name === val);
+        if (detected?.type && !currentAttributes[idx].type) {
+          currentAttributes[idx].type = detected.type;
+        }
+        if (!String(currentAttributes[idx].title || '').trim()) {
+          currentAttributes[idx].title = getDefaultAttributeTitle(val);
+        }
+      }
+    }
+    if (field === 'type') renderAttributesPanel();
+  };
+  attributesContainer.addEventListener('input', updateAttr);
+  attributesContainer.addEventListener('change', updateAttr);
+
+  attributesContainer.addEventListener('click', (e) => {
+    if (e.target.getAttribute('data-action') === 'delete') {
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      if (!isNaN(idx)) {
+        currentAttributes.splice(idx, 1);
+        renderAttributesPanel();
+      }
+    }
+    const detectBtn = e.target.closest ? e.target.closest('[data-action="detect-options"]') : (e.target.getAttribute('data-action') === 'detect-options' ? e.target : null);
+    if (detectBtn) {
+      const idx = parseInt(detectBtn.getAttribute('data-idx'));
+      if (isNaN(idx) || !currentAttributes[idx]) return;
+      const attrName = currentAttributes[idx].name;
+      const detected = extractDropdownOptionsFromRules(attrName);
+      const msgOk = (t('Qtiler2Hajk.attr_detect_ok') || 'Detected {n} values for "{attr}".').replace('{n}', detected.length).replace('{attr}', attrName);
+      const msgNone = (t('Qtiler2Hajk.attr_detect_none') || 'No values found for "{attr}".').replace('{attr}', attrName);
+      if (detected.length) {
+        currentAttributes[idx].options = detected;
+        renderAttributesPanel();
+      }
+      // Inline feedback next to the button (always visible regardless of wfsStyleError position)
+      const msgEl = detectBtn.parentElement?.querySelector('.detect-msg');
+      const showInline = (msg, color) => {
+        let el = detectBtn.parentElement?.querySelector('.detect-msg');
+        if (!el) {
+          el = document.createElement('span');
+          el.className = 'detect-msg';
+          el.style.cssText = 'font-size:0.75rem;margin-left:0.5rem';
+          detectBtn.insertAdjacentElement('afterend', el);
+        }
+        el.textContent = msg;
+        el.style.color = color;
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.remove(), 5000);
+      };
+      showInline(detected.length ? msgOk : msgNone, detected.length ? '#059669' : '#b45309');
+      // Also update wfsStyleError if present
+      if (wfsStyleError) {
+        wfsStyleError.textContent = detected.length ? msgOk : msgNone;
+        wfsStyleError.classList.remove('is-hidden');
+        wfsStyleError.style.color = detected.length ? '#059669' : '#b45309';
+        clearTimeout(wfsStyleError._detectTimer);
+        wfsStyleError._detectTimer = setTimeout(() => {
+          wfsStyleError.classList.add('is-hidden');
+          wfsStyleError.style.color = '';
+        }, 5000);
+      }
+    }
+  });
+}
+
+const rulesContainer = document.getElementById('wfs-rules-container');
+const rulesAddBtn = document.getElementById('wfs-rules-add');
+const rulesCopySelect = document.getElementById('wfs-rules-copy-select');
+const svgPickerModal = document.getElementById('svg-picker-modal');
+const svgPickerGrid = document.getElementById('svg-picker-grid');
+const svgPickerSearch = document.getElementById('svg-picker-search');
+const svgPickerFullscreenBtn = document.getElementById('svg-picker-fullscreen');
+
+svgPickerFullscreenBtn?.addEventListener('click', () => {
+  toggleManagedModalFullscreen(svgPickerModal, svgPickerFullscreenBtn);
+});
+
+const managedModalState = new WeakMap();
+let managedModalOrder = 0;
+
+function getManagedModalEntry(modal) {
+  if (!modal) return null;
+  let entry = managedModalState.get(modal);
+  if (!entry) {
+    entry = { offsetX: 0, offsetY: 0, zIndex: 0 };
+    managedModalState.set(modal, entry);
+  }
+  return entry;
+}
+
+function applyManagedModalState(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!modal || !entry) return;
+  modal.style.zIndex = entry.zIndex ? String(entry.zIndex) : '';
+  modal.style.setProperty('--qt-modal-offset-x', `${entry.offsetX || 0}px`);
+  modal.style.setProperty('--qt-modal-offset-y', `${entry.offsetY || 0}px`);
+}
+
+function resetManagedModalState(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!entry) return;
+  entry.offsetX = 0;
+  entry.offsetY = 0;
+  applyManagedModalState(modal);
+}
+
+function bringManagedModalToFront(modal) {
+  const entry = getManagedModalEntry(modal);
+  if (!entry) return;
+  managedModalOrder += 1;
+  entry.zIndex = 2000 + managedModalOrder * 10;
+  applyManagedModalState(modal);
+}
+
+function updateManagedModalFullscreenButton(modal, button) {
+  if (!modal || !button) return;
+  const isFullscreen = modal.classList.contains('Qtiler2Hajk-modal--fullscreen');
+  button.textContent = isFullscreen ? t('Qtiler2Hajk.windowed') : t('Qtiler2Hajk.fullscreen');
+  button.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+}
+
+function toggleManagedModalFullscreen(modal, button) {
+  if (!modal) return;
+  const enabled = modal.classList.toggle('Qtiler2Hajk-modal--fullscreen');
+  if (modal === wfsStyleModal) {
+    modal.classList.toggle('Qtiler2Hajk-style-modal--fullscreen', enabled);
+  }
+  if (enabled) resetManagedModalState(modal);
+  bringManagedModalToFront(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function openManagedModal(modal, button) {
+  if (!modal) return;
+  modal.classList.add('is-active');
+  bringManagedModalToFront(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function closeManagedModal(modal, button) {
+  if (!modal) return;
+  modal.classList.remove('is-active');
+  modal.classList.remove('Qtiler2Hajk-modal--fullscreen');
+  if (modal === wfsStyleModal) {
+    modal.classList.remove('Qtiler2Hajk-style-modal--fullscreen');
+  }
+  resetManagedModalState(modal);
+  updateManagedModalFullscreenButton(modal, button);
+}
+
+function enableManagedModal(modal) {
+  if (!modal || modal.dataset.qtManagedModal === 'true') return;
+  modal.dataset.qtManagedModal = 'true';
+  const header = modal.querySelector('.modal-card-head');
+  header?.classList.add('Qtiler2Hajk-modal-drag-handle');
+  modal.addEventListener('pointerdown', () => bringManagedModalToFront(modal));
+  header?.addEventListener('pointerdown', (event) => {
+    if (!(event.target instanceof HTMLElement)) return;
+    if (modal.classList.contains('Qtiler2Hajk-modal--fullscreen')) return;
+    if (event.button !== 0) return;
+    if (event.target.closest('button, .delete, input, select, textarea, a, label, summary')) return;
+    const entry = getManagedModalEntry(modal);
+    if (!entry) return;
+    const startX = event.clientX - entry.offsetX;
+    const startY = event.clientY - entry.offsetY;
+    bringManagedModalToFront(modal);
+    const onMove = (moveEvent) => {
+      entry.offsetX = moveEvent.clientX - startX;
+      entry.offsetY = moveEvent.clientY - startY;
+      applyManagedModalState(modal);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    event.preventDefault();
+  });
+}
+
+enableManagedModal(wfsStyleModal);
+enableManagedModal(wfsRuleEditorModal);
+enableManagedModal(svgPickerModal);
+
+function defaultRule(geomFamily) {
+  const r = {
+    filter: '',
+    legendLabel: '',
+    minScale: '',
+    maxScale: '',
+    label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '' },
+    designerOptions: null
+  };
+  if (geomFamily === 'point') {
+    r.point = { mode: 'circle', circle: { radius: 6, fill: '#3b82f6', fillOpacity: 0.7, stroke: '#2563eb', strokeWidth: 1, strokeOpacity: 1 }, icon: { src: '', scale: 0.05, opacity: 1, useColor: false, color: '#000000' } };
+  } else if (geomFamily === 'line') {
+    r.stroke = { color: '#2563eb', opacity: 1, width: 2, dash: 'solid' };
+  } else {
+    r.fill = { color: '#3b82f6', opacity: 0.25 };
+    r.stroke = { color: '#2563eb', opacity: 1, width: 2, dash: 'solid' };
+  }
+  return r;
+}
+
+function geomFamilyOf(g) {
+  const s = String(g || '').toLowerCase();
+  if (s.includes('point')) return 'point';
+  if (s.includes('line') || s.includes('linestring')) return 'line';
+  return 'polygon';
+}
+
+function dashKeyToArray(key) {
+  switch (key) {
+    case 'dashed': return [8, 6];
+    case 'dotted': return [2, 4];
+    case 'dashdot': return [8, 4, 2, 4];
+    default: return [0];
+  }
+}
+function dashArrayToKey(arr) {
+  if (!Array.isArray(arr) || !arr.length || arr[0] === 0) return 'solid';
+  if (arr.length === 2 && arr[0] >= 6) return 'dashed';
+  if (arr[0] <= 3) return 'dotted';
+  return 'dashdot';
+}
+
+function hexToRgba(hex, opacity) {
+  const m = String(hex || '#000000').replace('#', '').match(/.{1,2}/g);
+  const r = parseInt(m[0], 16) || 0, g = parseInt(m[1], 16) || 0, b = parseInt(m[2], 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${opacity != null ? opacity : 1})`;
+}
+function parseColorString(c, defHex = '#000000', defOp = 1) {
+  if (!c) return { hex: defHex, op: defOp };
+  const m = String(c).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (m) {
+    const hex = '#' + [m[1], m[2], m[3]].map(n => Number(n).toString(16).padStart(2, '0')).join('');
+    return { hex, op: m[4] != null ? Number(m[4]) : 1 };
+  }
+  if (String(c).startsWith('#')) return { hex: c, op: 1 };
+  return { hex: defHex, op: defOp };
+}
+
+function buildOperatorList(fieldType) {
+  const t = String(fieldType || '').toLowerCase();
+  const isNumeric = t.includes('int') || t.includes('real') || t.includes('double') || t.includes('numeric');
+  const ops = ['==', '!='];
+  if (isNumeric) ops.push('>', '>=', '<', '<=');
+  ops.push('LIKE');
+  return ops;
+}
+
+function buildFilterFromUi(field, op, value, fieldType) {
+  if (!field) return '';
+  const t = String(fieldType || '').toLowerCase();
+  const isNumeric = t.includes('int') || t.includes('real') || t.includes('double') || t.includes('numeric');
+  const v = isNumeric && !isNaN(Number(value)) ? value : `'${String(value).replace(/'/g, "\\'")}'`;
+  if (op === 'LIKE') return `[${field}] LIKE '%${String(value).replace(/'/g, "\\'")}%'`;
+  return `[${field}] ${op} ${v}`;
+}
+
+function parseFilterToUi(expr) {
+  if (!expr) return { field: '', op: '==', value: '' };
+  const m1 = String(expr).match(/^\[([^\]]+)\]\s*(==|!=|>=|<=|>|<|LIKE)\s*(.+)$/i);
+  if (m1) {
+    let val = m1[3].trim();
+    if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+    if (m1[2].toUpperCase() === 'LIKE') val = val.replace(/^%|%$/g, '');
+    return { field: m1[1], op: m1[2].toUpperCase() === 'LIKE' ? 'LIKE' : m1[2], value: val };
+  }
+  return { field: '', op: '==', value: '' };
+}
+
+function rulesToOrigoStyle(rules) {
+  if (!Array.isArray(rules) || !rules.length) return [];
+  const normScale = (v) => (v === '' || v == null || isNaN(Number(v))) ? null : Number(v);
+  const legacyToMustache = (s) => String(s || '').replace(/\[([A-Za-z_][\w-]*)\]/g, '{{$1}}');
+  return rules.map(r => {
+    const entries = [];
+    const geomEntry = {};
+    if (r.filter) geomEntry.filter = r.filter;
+    const legendLabel = String(r.legendLabel || '').trim();
+    if (legendLabel) {
+      geomEntry.legendLabel = legendLabel;
+      geomEntry.label = legendLabel;
+    }
+    if (currentLayerGeomFamily === 'point') {
+      if (r.point && r.point.mode === 'icon' && r.point.icon && r.point.icon.src) {
+        geomEntry.icon = {
+          src: r.point.icon.src,
+          scale: r.point.icon.scale != null ? r.point.icon.scale : 0.05,
+          anchor: r.point.icon.anchor || [0.5, 0.5],
+          opacity: r.point.icon.opacity != null ? r.point.icon.opacity : 1
+        };
+        if (r.point.icon.useColor && r.point.icon.color) {
+          geomEntry.icon.color = r.point.icon.color;
+        }
+      } else if (r.point && r.point.circle) {
+        const c = r.point.circle;
+        geomEntry.circle = {
+          radius: c.radius || 6,
+          fill: { color: c.fillNone ? 'rgba(0,0,0,0)' : hexToRgba(c.fill, c.fillOpacity) },
+          stroke: { color: hexToRgba(c.stroke, c.strokeOpacity), width: c.strokeWidth || 1 }
+        };
+      }
+    } else if (currentLayerGeomFamily === 'line') {
+      geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width || 2, lineDash: dashKeyToArray(r.stroke.dash) };
+    } else {
+      if (!r.fill.none) geomEntry.fill = { color: hexToRgba(r.fill.color, r.fill.opacity) };
+      if (!r.stroke.none) geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width || 1, lineDash: dashKeyToArray(r.stroke.dash) };
+      const pattern = String(r?.designerOptions?.fillPattern || '').trim().toLowerCase();
+      if (['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(pattern)) {
+        geomEntry.qtilerPatternStyle = {
+          ...getDefaultDesignerPatternOptions(pattern),
+          ...JSON.parse(JSON.stringify(r.designerOptions || {})),
+          fillPattern: pattern
+        };
+      }
+    }
+    const gMin = normScale(r.maxScale); // user input "Visible desde 1:N" → larger denominator hidden
+    const gMax = normScale(r.minScale);
+    // In Origo: maxScale = larger denom (zoomed-out limit), minScale = smaller denom (zoomed-in limit)
+    // We expose: "Visible desde escala 1:X" (less detail) → maxScale=X
+    //            "Visible hasta escala 1:Y" (more detail) → minScale=Y
+    if (gMin != null) geomEntry.maxScale = gMin;
+    if (gMax != null) geomEntry.minScale = gMax;
+    entries.push(geomEntry);
+
+    if (r.label && r.label.enabled && r.label.text) {
+      const textEntry = {};
+      if (r.filter) textEntry.filter = r.filter;
+      textEntry.text = {
+        text: legacyToMustache(r.label.text),
+        font: `${r.label.size || 12}px sans-serif`,
+        fill: { color: r.label.color || '#000000' },
+        stroke: { color: '#FFFFFF', width: 3 },
+        offsetX: r.label.offsetX != null ? Number(r.label.offsetX) || 0 : 0,
+        offsetY: r.label.offsetY != null ? Number(r.label.offsetY) || 0 : -14,
+        textAlign: 'center',
+        overflow: true
+      };
+      // Origo/OL: when placement is 'line', the label follows the geometry.
+      if (r.label.placement === 'line') {
+        textEntry.text.placement = 'line';
+        // offsetY along a line is interpreted relative to the line; small
+        // negative values put it slightly above the line in OL.
+      }
+      const lMin = normScale(r.label.maxScale);
+      const lMax = normScale(r.label.minScale);
+      if (lMin != null) textEntry.maxScale = lMin;
+      if (lMax != null) textEntry.minScale = lMax;
+      entries.push(textEntry);
+    }
+    return entries;
+  });
+}
+
+function origoStyleToRules(styleDef) {
+  if (!Array.isArray(styleDef)) return [defaultRule(currentLayerGeomFamily)];
+  const out = [];
+  for (const ruleArr of styleDef) {
+    const entries = Array.isArray(ruleArr) ? ruleArr : [ruleArr];
+    if (!entries.length) continue;
+    const r = defaultRule(currentLayerGeomFamily);
+    let geomEntry = null;
+    let textEntry = null;
+    for (const e of entries) {
+      if (!e || typeof e !== 'object') continue;
+      if (e.text && !textEntry) textEntry = e;
+      if (!geomEntry && (e.circle || e.icon || e.image || e.fill || e.stroke)) geomEntry = e;
+    }
+    const def = geomEntry || entries[0];
+    if (def && def.filter) r.filter = def.filter;
+    if (def && (def.legendLabel != null || def.label != null)) {
+      r.legendLabel = String(def.legendLabel != null ? def.legendLabel : def.label).trim();
+    }
+    if (def) {
+      if (def.maxScale != null) r.maxScale = def.maxScale;
+      if (def.minScale != null) r.minScale = def.minScale;
+    }
+    if (textEntry) {
+      r.label.enabled = true;
+      r.label.text = textEntry.text.text || '';
+      r.label.color = parseColorString(textEntry.text.fill && textEntry.text.fill.color, '#000000', 1).hex;
+      const fm = String(textEntry.text.font || '').match(/(\d+)px/);
+      if (fm) r.label.size = Number(fm[1]);
+      if (textEntry.text.offsetX != null) r.label.offsetX = textEntry.text.offsetX;
+      if (textEntry.text.offsetY != null) r.label.offsetY = textEntry.text.offsetY;
+      if (textEntry.text.placement === 'line') r.label.placement = 'line';
+      if (textEntry.maxScale != null) r.label.maxScale = textEntry.maxScale;
+      if (textEntry.minScale != null) r.label.minScale = textEntry.minScale;
+    }
+    if (def && currentLayerGeomFamily === 'point') {
+      if (def.icon && def.icon.src) {
+        r.point.mode = 'icon';
+        r.point.icon.src = def.icon.src;
+        r.point.icon.scale = def.icon.scale != null ? def.icon.scale : 0.05;
+        r.point.icon.opacity = def.icon.opacity != null ? def.icon.opacity : 1;
+        if (def.icon.color) {
+          r.point.icon.color = def.icon.color;
+          r.point.icon.useColor = true;
+        }
+      } else if (def.circle) {
+        r.point.mode = 'circle';
+        r.point.circle.radius = def.circle.radius || 6;
+        const fillRaw = def.circle.fill && def.circle.fill.color;
+        const f = parseColorString(fillRaw);
+        r.point.circle.fill = f.hex; r.point.circle.fillOpacity = f.op;
+        r.point.circle.fillNone = (typeof fillRaw === 'string' && /rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/i.test(fillRaw));
+        const s = parseColorString(def.circle.stroke && def.circle.stroke.color);
+        r.point.circle.stroke = s.hex; r.point.circle.strokeOpacity = s.op;
+        r.point.circle.strokeWidth = (def.circle.stroke && def.circle.stroke.width) || 1;
+      }
+    } else if (def && currentLayerGeomFamily === 'line') {
+      const s = parseColorString(def.stroke && def.stroke.color);
+      r.stroke.color = s.hex; r.stroke.opacity = s.op;
+      r.stroke.width = (def.stroke && def.stroke.width) || 2;
+      r.stroke.dash = dashArrayToKey(def.stroke && def.stroke.lineDash);
+    } else if (def) {
+      r.fill.none = !def.fill;
+      const f = parseColorString(def.fill && def.fill.color);
+      r.fill.color = f.hex; r.fill.opacity = f.op;
+      r.stroke.none = !def.stroke;
+      const s = parseColorString(def.stroke && def.stroke.color);
+      r.stroke.color = s.hex; r.stroke.opacity = s.op;
+      r.stroke.width = (def.stroke && def.stroke.width) || 1;
+      r.stroke.dash = dashArrayToKey(def.stroke && def.stroke.lineDash);
+      r.designerOptions = def.qtilerPatternStyle && typeof def.qtilerPatternStyle === 'object'
+        ? JSON.parse(JSON.stringify(def.qtilerPatternStyle))
+        : null;
+    }
+    out.push(r);
+  }
+  return out.length ? out : [defaultRule(currentLayerGeomFamily)];
+}
+
+/* ── Legend icon library (uploaded PNG/SVG, shared across maps) ── */
+let legendLibraryItems = [];
+
+async function loadLegendLibrary() {
+  try {
+    const payload = await api('/plugins/Qtiler2Hajk/api/legend-library');
+    legendLibraryItems = Array.isArray(payload?.items) ? payload.items : [];
+  } catch {
+    legendLibraryItems = [];
+  }
+  renderLegendLibraryGrid();
+  return legendLibraryItems;
+}
+
+function renderLegendLibraryGrid() {
+  const grid = document.getElementById('legendLibraryGrid');
+  const badge = document.getElementById('legendLibraryBadge');
+  if (badge) badge.textContent = String(legendLibraryItems.length);
+  if (!grid) return;
+  if (!legendLibraryItems.length) {
+    grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+    return;
+  }
+  grid.innerHTML = legendLibraryItems.map((item) => `
+    <div class="Qtiler2Hajk-legend-library-item">
+      <img src="${escapeHtml(item.url)}" alt="" />
+      <span title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || item.fileName || '')}</span>
+      <button type="button" class="button is-small is-danger is-light" data-legend-library-delete="${escapeHtml(item.id)}">${escapeHtml(t('Qtiler2Hajk.legend_library_delete') || 'Delete')}</button>
+    </div>
+  `).join('');
+}
+
+// Unified legend icon picker: uploaded icons + QGIS SVG + upload new,
+// shared between WMS and WFS layers.
+function openLegendLibraryPicker(targetCallback) {
+  let modal = document.getElementById('Qtiler2HajkLegendPicker');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'Qtiler2HajkLegendPicker';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-background" data-close-legend-picker></div>
+      <div class="modal-card Qtiler2Hajk-legend-picker__card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">${escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</p>
+          <button type="button" class="delete" aria-label="close" data-close-legend-picker></button>
+        </header>
+        <section class="modal-card-body">
+          <div class="Qtiler2Hajk-legend-picker__toolbar">
+            <div class="Qtiler2Hajk-legend-picker__tabs">
+              <button type="button" class="button is-small" data-legend-tab="library">${escapeHtml(t('Qtiler2Hajk.legend_pick_uploaded'))}</button>
+              <button type="button" class="button is-small" data-legend-tab="qgis">${escapeHtml(t('Qtiler2Hajk.legend_pick_qgis_svg'))}</button>
+            </div>
+            <input class="input is-small Qtiler2Hajk-legend-picker__search" type="search" placeholder="${escapeHtml(t('Qtiler2Hajk.legend_search_placeholder'))}" />
+            <button type="button" class="button is-small is-primary" data-legend-upload>${escapeHtml(t('Qtiler2Hajk.legend_upload_new'))}</button>
+          </div>
+          <div class="Qtiler2Hajk-legend-picker__grid" data-legend-grid></div>
+        </section>
+      </div>`;
+    document.body.appendChild(modal);
+    modal._state = { tab: 'library', filter: '', svgCats: [] };
+
+    const grid = modal.querySelector('[data-legend-grid]');
+    const searchInput = modal.querySelector('.Qtiler2Hajk-legend-picker__search');
+
+    const renderGrid = () => {
+      const st = modal._state;
+      const f = String(st.filter || '').toLowerCase();
+      if (st.tab === 'library') {
+        const items = (legendLibraryItems || []).filter((item) => {
+          if (!f) return true;
+          return String(item.name || item.fileName || '').toLowerCase().includes(f);
+        });
+        if (!items.length) {
+          grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+          return;
+        }
+        grid.innerHTML = items.map((item) => `
+          <button type="button" class="Qtiler2Hajk-legend-pick" data-legend-pick="${escapeHtml(item.url)}" title="${escapeHtml(item.name || '')}">
+            <img src="${escapeHtml(item.url)}" alt="" />
+            <span>${escapeHtml(item.name || '')}</span>
+          </button>
+        `).join('');
+        return;
+      }
+      const icons = [];
+      for (const cat of (st.svgCats || [])) {
+        for (const ic of (cat.icons || [])) {
+          const label = `${cat.name}/${ic.name}`;
+          if (f && !label.toLowerCase().includes(f)) continue;
+          icons.push({ url: ic.url, label, name: ic.name });
+        }
+      }
+      if (!icons.length) {
+        grid.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.legend_library_empty'))}</p>`;
+        return;
+      }
+      grid.innerHTML = icons.map((ic) => `
+        <button type="button" class="Qtiler2Hajk-legend-pick" data-legend-pick="${escapeHtml(ic.url)}" title="${escapeHtml(ic.label)}">
+          <img src="${escapeHtml(ic.url)}" alt="" loading="lazy" />
+          <span>${escapeHtml(ic.label)}</span>
+        </button>
+      `).join('');
+    };
+
+    modal._renderGrid = renderGrid;
+
+    modal.querySelectorAll('[data-legend-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        modal._state.tab = btn.getAttribute('data-legend-tab');
+        modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b === btn));
+        if (modal._state.tab === 'qgis' && !modal._state.svgCats.length) {
+          loadSvgLibrary().then((cats) => { modal._state.svgCats = cats || []; renderGrid(); });
+          return;
+        }
+        renderGrid();
+      });
+    });
+
+    searchInput.addEventListener('input', () => {
+      modal._state.filter = searchInput.value;
+      renderGrid();
+    });
+
+    modal.querySelector('[data-legend-upload]').addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const body = new FormData();
+          body.append('image', file, file.name || 'legend.png');
+          await api('/plugins/Qtiler2Hajk/api/legend-library', { method: 'POST', body });
+          addLog(t('Qtiler2Hajk.log_legend_uploaded'), 'ok');
+          await loadLegendLibrary();
+          modal._state.tab = 'library';
+          modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === 'library'));
+          renderGrid();
+        } catch (err) {
+          addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
+        }
+      }, { once: true });
+      input.click();
+    });
+
+    modal.addEventListener('click', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLElement)) return;
+      if (el.hasAttribute('data-close-legend-picker')) modal.classList.remove('is-active');
+      const pick = el.closest('[data-legend-pick]');
+      if (pick) {
+        const url = String(pick.getAttribute('data-legend-pick') || '').trim();
+        const cb = modal._pickCb;
+        modal.classList.remove('is-active');
+        if (url && typeof cb === 'function') cb(url);
+      }
+    });
+  }
+  modal._pickCb = targetCallback;
+  modal._state.filter = '';
+  const searchInput = modal.querySelector('.Qtiler2Hajk-legend-picker__search');
+  if (searchInput) searchInput.value = '';
+  modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === modal._state.tab));
+  modal.classList.add('is-active');
+  loadLegendLibrary().then(() => modal._renderGrid());
+}
+
+function loadLayerFields(projectId, layerName) {
+  if (!projectId || !layerName) return Promise.resolve({ fields: [], geometryType: '' });
+  return fetch(`/Qtiler2Hajk/layer-fields?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(layerName)}`)
+    .then(r => r.ok ? r.json() : { fields: [], geometryType: '' })
+    .then(d => ({ fields: Array.isArray(d.fields) ? d.fields : [], geometryType: d.geometryType || '' }))
+    .catch(() => ({ fields: [], geometryType: '' }));
+}
+
+function loadSvgLibrary() {
+  if (svgLibraryCache) return Promise.resolve(svgLibraryCache);
+  return fetch('/Qtiler2Hajk/qgis-svg-list')
+    .then(r => r.ok ? r.json() : { categories: [] })
+    .then(d => { svgLibraryCache = d.categories || []; return svgLibraryCache; })
+    .catch(() => []);
+}
+
+function openSvgPicker(targetCallback) {
+  svgPickerTargetCb = targetCallback;
+  openManagedModal(svgPickerModal, svgPickerFullscreenBtn);
+  if (svgPickerSearch) svgPickerSearch.value = '';
+  loadSvgLibrary().then(cats => renderSvgGrid(cats, ''));
+}
+function closeSvgPicker() {
+  closeManagedModal(svgPickerModal, svgPickerFullscreenBtn);
+  svgPickerTargetCb = null;
+}
+window.closeSvgPicker = closeSvgPicker;
+
+function renderSvgGrid(cats, filter) {
+  if (!svgPickerGrid) return;
+  svgPickerGrid.innerHTML = '';
+  const f = (filter || '').toLowerCase();
+  for (const cat of cats) {
+    for (const ic of cat.icons) {
+      if (f && !`${cat.name}/${ic.name}`.toLowerCase().includes(f)) continue;
+      const el = document.createElement('div');
+      el.style.cssText = 'border:1px solid #ddd;padding:4px;cursor:pointer;text-align:center;background:#fff';
+      el.title = `${cat.name}/${ic.name}`;
+      el.innerHTML = `<img src="${ic.url}" style="width:60px;height:60px;object-fit:contain" /><div style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic.name}</div>`;
+      el.addEventListener('click', () => {
+        if (svgPickerTargetCb) svgPickerTargetCb(ic.url);
+        closeSvgPicker();
+      });
+      svgPickerGrid.appendChild(el);
+    }
+  }
+}
+svgPickerSearch?.addEventListener('input', () => loadSvgLibrary().then(cats => renderSvgGrid(cats, svgPickerSearch.value)));
+
+function buildRuleEditorMarkup(rule, idx) {
+  const T = (k) => t('Qtiler2Hajk.' + k);
+  const fieldOptions = [`<option value="">${T('wfs_no_filter')}</option>`]
+    .concat(currentLayerFields.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`)).join('');
+  const ui = parseFilterToUi(rule.filter);
+  const sel = currentLayerFields.find(f => f.name === ui.field);
+  const opOptions = buildOperatorList(sel?.type).map(o => `<option value="${o}"${o === ui.op ? ' selected' : ''}>${o}</option>`).join('');
+
+  let geomHtml = '';
+  if (currentLayerGeomFamily === 'point') {
+    const isIcon = rule.point.mode === 'icon';
+    geomHtml = `
+      <div style="display:flex;gap:0.4rem;margin-bottom:0.4rem">
+        <label style="display:inline-flex;align-items:center;gap:6px"><input type="radio" name="ptmode-${idx}" value="circle" ${!isIcon ? 'checked' : ''}/> ${T('wfs_circle')}</label>
+        <label style="display:inline-flex;align-items:center;gap:6px"><input type="radio" name="ptmode-${idx}" value="icon" ${isIcon ? 'checked' : ''}/> ${T('wfs_svg_icon')}</label>
+      </div>
+      <div data-ptpanel="circle" ${isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
+        <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="circle.fillNone" ${rule.point.circle.fillNone ? 'checked' : ''}/> ${T('wfs_no_fill')}</label>
+        <label>${T('wfs_fill_color')}<input type="color" data-rk="circle.fill" value="${rule.point.circle.fill}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
+        <label>${T('wfs_fill_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.fillOpacity" value="${rule.point.circle.fillOpacity}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
+        <label>${T('wfs_radius')}<input type="number" data-rk="circle.radius" value="${rule.point.circle.radius}" min="1" max="50" /></label>
+        <label>${T('wfs_stroke_color')}<input type="color" data-rk="circle.stroke" value="${rule.point.circle.stroke}" /></label>
+        <label>${T('wfs_stroke_width')}<input type="number" step="0.5" min="0" max="10" data-rk="circle.strokeWidth" value="${rule.point.circle.strokeWidth}" /></label>
+        <label style="grid-column:1/4">${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.strokeOpacity" value="${rule.point.circle.strokeOpacity}" /></label>
+      </div>
+      <div data-ptpanel="icon" ${!isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
+        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:calc(${(rule.point.icon.scale || 1)} * 32px);height:calc(${(rule.point.icon.scale || 1)} * 32px);max-width:120px;max-height:120px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
+        <button type="button" class="button small" data-rk="icon.pick">${T('wfs_pick_svg')}</button>
+        <div></div>
+        <label style="grid-column:1/4">${T('wfs_url')}<input type="text" style="width:100%" data-rk="icon.src" value="${rule.point.icon.src}" /></label>
+        <label>${T('wfs_scale_field')}<input type="number" step="0.01" min="0.01" max="5" data-rk="icon.scale" value="${rule.point.icon.scale}" /></label>
+        <label>${T('wfs_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="icon.opacity" value="${rule.point.icon.opacity}" /></label>
+        <label>${T('wfs_tint_color')}<input type="color" data-rk="icon.color" value="${rule.point.icon.color || '#000000'}" /></label>
+        <div style="grid-column:1/4"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;width:auto"><input type="checkbox" data-rk="icon.useColor" ${rule.point.icon.useColor ? 'checked' : ''} /> ${T('wfs_enable_svg_tint')}</label></div>
+      </div>
+    `;
+  } else if (currentLayerGeomFamily === 'line') {
+    geomHtml = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label>${T('wfs_color')}<input type="color" data-rk="stroke.color" value="${rule.stroke.color}" /></label>
+        <label>${T('wfs_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="stroke.opacity" value="${rule.stroke.opacity}" /></label>
+        <label>${T('wfs_width')}<input type="number" step="0.5" min="0" max="20" data-rk="stroke.width" value="${rule.stroke.width}" /></label>
+        <label>${T('wfs_pattern')}<select data-rk="stroke.dash">
+          <option value="solid"${rule.stroke.dash === 'solid' ? ' selected' : ''}>${T('wfs_solid')}</option>
+          <option value="dashed"${rule.stroke.dash === 'dashed' ? ' selected' : ''}>${T('wfs_dashed')}</option>
+          <option value="dotted"${rule.stroke.dash === 'dotted' ? ' selected' : ''}>${T('wfs_dotted')}</option>
+          <option value="dashdot"${rule.stroke.dash === 'dashdot' ? ' selected' : ''}>${T('wfs_dashdot')}</option>
+        </select></label>
+      </div>
+    `;
+  } else {
+    const noFill = !!rule.fill.none;
+    const noStroke = !!rule.stroke.none;
+    geomHtml = `
+      <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
+        <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="fill.none" ${noFill ? 'checked' : ''}/> ${T('wfs_no_fill_only_stroke')}</label>
+        <label>${T('wfs_fill_color')}<input type="color" data-rk="fill.color" value="${rule.fill.color}" ${noFill ? 'disabled' : ''}/></label>
+        <label>${T('wfs_fill_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="fill.opacity" value="${rule.fill.opacity}" ${noFill ? 'disabled' : ''}/></label>
+        <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="stroke.none" ${noStroke ? 'checked' : ''}/> ${T('wfs_no_stroke')}</label>
+        <label>${T('wfs_stroke_color')}<input type="color" data-rk="stroke.color" value="${rule.stroke.color}" ${noStroke ? 'disabled' : ''}/></label>
+        <label>${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="stroke.opacity" value="${rule.stroke.opacity}" ${noStroke ? 'disabled' : ''}/></label>
+        <label style="grid-column:1/4;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0">
+          <label>${T('wfs_stroke_width')}<input type="number" step="0.5" min="0" max="20" data-rk="stroke.width" value="${rule.stroke.width}" ${noStroke ? 'disabled' : ''}/></label>
+          <label>${T('wfs_stroke_pattern')}<select data-rk="stroke.dash" ${noStroke ? 'disabled' : ''}>
+            <option value="solid"${rule.stroke.dash === 'solid' ? ' selected' : ''}>${T('wfs_solid')}</option>
+            <option value="dashed"${rule.stroke.dash === 'dashed' ? ' selected' : ''}>${T('wfs_dashed')}</option>
+            <option value="dotted"${rule.stroke.dash === 'dotted' ? ' selected' : ''}>${T('wfs_dotted')}</option>
+            <option value="dashdot"${rule.stroke.dash === 'dashdot' ? ' selected' : ''}>${T('wfs_dashdot')}</option>
+          </select></label>
+        </label>
+      </div>
+    `;
+  }
+
+  const labelFieldOpts = currentLayerFields.map(f => `<option value="{{${f.name}}}">${f.name}</option>`).join('');
+  const isLine = currentLayerGeomFamily === 'line';
+  const placement = rule.label.placement || 'point';
+  const placementHtml = isLine ? `
+        <label>${T('wfs_label_placement')}<select data-rk="lab.placement">
+          <option value="point"${placement === 'point' ? ' selected' : ''}>${T('wfs_label_placement_point')}</option>
+          <option value="line"${placement === 'line' ? ' selected' : ''}>${T('wfs_label_placement_line')}</option>
+        </select></label>
+        <label>${T('wfs_label_offsetx')}<input type="number" step="1" data-rk="lab.offsetX" value="${rule.label.offsetX ?? 0}" /></label>
+  ` : '';
+  const offsetYHtml = `<label>${T('wfs_label_offsety')}<input type="number" step="1" data-rk="lab.offsetY" value="${rule.label.offsetY ?? -14}" /></label>`;
+
+  return `
+    <div class="Qtiler2Hajk-rule-editor-shell" data-rule-editor-root="${idx}" data-rule-editor-index="${idx}">
+      <fieldset>
+        <legend>${T('wfs_filter')}</legend>
+        <div style="display:grid;grid-template-columns:2fr 1fr 2fr;gap:10px;align-items:end">
+          <label>${T('wfs_attr')}<select data-rk="f.field">${fieldOptions.replace(`value="${ui.field}"`, `value="${ui.field}" selected`)}</select></label>
+          <label>${T('wfs_op')}<select data-rk="f.op">${opOptions}</select></label>
+          <label>${T('wfs_value')}<input type="text" data-rk="f.value" value="${ui.value}" placeholder="${T('wfs_value_placeholder_any')}" autocomplete="off" /></label>
+        </div>
+        <p class="help" data-rk="f.value-help" style="margin:8px 0 0">${T('wfs_value_help_pick_field')}</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>${T('wfs_symbol')}</legend>
+        <div style="margin-bottom:10px">
+          <label>${T('wfs_legend_label')}<input type="text" data-rk="legendLabel" value="${escapeHtml(rule.legendLabel || '')}" placeholder="${T('wfs_rule_default')}" /></label>
+        </div>
+        <div style="display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;margin-bottom:10px">
+          <div class="Qtiler2Hajk-rule-summary__sample">${rulePreviewSampleSvg(rule, currentLayerGeomFamily || 'polygon')}</div>
+          <div class="help" style="margin:0">${T('wfs_edit_visual_style')}</div>
+          <button type="button" class="button small is-link is-light" data-rk="stylebasic">${T('wfs_edit_visual_style')}</button>
+        </div>
+        ${geomHtml}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <label title="${T('wfs_visible_from_tip')}">${T('wfs_visible_from')}<input type="number" min="0" step="1" data-rk="r.maxScale" value="${rule.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+          <label title="${T('wfs_visible_to_tip')}">${T('wfs_visible_to')}<input type="number" min="0" step="1" data-rk="r.minScale" value="${rule.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend><label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" data-rk="lab.enabled" ${rule.label.enabled ? 'checked' : ''}/> ${T('wfs_label')}</label></legend>
+        <div style="display:grid;grid-template-columns:3fr 1fr;gap:10px;align-items:end">
+          <label>${T('wfs_text_help')}
+            <input type="text" data-rk="lab.text" value="${(rule.label.text || '').replace(/"/g,'&quot;')}" placeholder="${T('wfs_text_placeholder')}" />
+          </label>
+          <label>${T('wfs_insert_field')}
+            <select data-rk="lab.insertField"><option value="">--</option>${labelFieldOpts}</select>
+          </label>
+          <label>${T('wfs_color')}<input type="color" data-rk="lab.color" value="${rule.label.color}" /></label>
+          <label>${T('wfs_size')}<input type="number" min="6" max="48" data-rk="lab.size" value="${rule.label.size}" /></label>
+          ${placementHtml}
+          ${offsetYHtml}
+          <label title="${T('wfs_label_from_tip')}">${T('wfs_label_from')}<input type="number" min="0" step="1" data-rk="lab.maxScale" value="${rule.label.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+          <label title="${T('wfs_label_to_tip')}">${T('wfs_label_to')}<input type="number" min="0" step="1" data-rk="lab.minScale" value="${rule.label.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+        </div>
+      </fieldset>
+    </div>
+  `;
+}
+
+function attachRuleEditorHandlers(root, idx) {
+  if (!root) return;
+  root.querySelectorAll('[data-rk]').forEach((el) => {
+    const k = el.getAttribute('data-rk');
+    const handle = (val) => updateRuleField(idx, k, val);
+    if (el.tagName === 'INPUT' && el.type === 'checkbox') {
+      el.addEventListener('change', () => handle(el.checked));
+    } else if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+      el.addEventListener('input', () => handle(el.value));
+      el.addEventListener('change', () => handle(el.value));
+    } else if (el.tagName === 'BUTTON') {
+      el.addEventListener('click', () => handle(true));
+    }
+  });
+  wireRuleRadios(root);
+}
+
+function updateDesignerRuleModeNotice() {
+  if (!wfsStyleRuleModeNote) return;
+  if (!Number.isInteger(currentDesignerRuleIndex)) {
+    wfsStyleRuleModeNote.hidden = true;
+    wfsStyleRuleModeNote.textContent = '';
+    return;
+  }
+  wfsStyleRuleModeNote.hidden = false;
+  wfsStyleRuleModeNote.textContent = t('Qtiler2Hajk.wfs_rule_mode_note', { rule: String(currentDesignerRuleIndex + 1) });
+}
+
+function openBasicDesignerForRule(idx) {
+  if (!Number.isInteger(idx) || !currentRules[idx]) return;
+  currentDesignerRuleIndex = idx;
+  currentRuleIndex = idx;
+  const geometryType = getLayerGeometryType(currentEditingWfsLayer);
+  const styleDef = rulesToOrigoStyle([currentRules[idx]]);
+  applyStyleDefinitionToDesigner(styleDef, geometryType);
+  applyDesignerPatternOptions(currentRules[idx]?.designerOptions || { fillPattern: 'solid', ...getDefaultDesignerPatternOptions('solid') });
+  closeRuleStyleEditor();
+  setStyleEditorTab('designer');
+  updateDesignerRuleModeNotice();
+  syncStylePreview();
+}
+
+function renderRuleEditorModal() {
+  if (!wfsRuleEditorModal || !wfsRuleEditorHost) return;
+  if (currentRuleEditorIndex == null || !currentRules[currentRuleEditorIndex]) {
+    closeRuleStyleEditor();
+    return;
+  }
+  const idx = currentRuleEditorIndex;
+  const rule = currentRules[idx];
+  if (wfsRuleEditorTitle) wfsRuleEditorTitle.textContent = `${idx + 1}`;
+  wfsRuleEditorHost.innerHTML = buildRuleEditorMarkup(rule, idx);
+  const root = wfsRuleEditorHost.querySelector(`[data-rule-editor-root="${idx}"]`);
+  attachRuleEditorHandlers(root, idx);
+  if (currentLayerFields.length) attachValueDatalistForRule(idx, root || wfsRuleEditorHost);
+}
+
+function openRuleStyleEditor(idx) {
+  if (!Number.isInteger(idx) || !currentRules[idx] || !wfsRuleEditorModal) return;
+  currentRuleEditorIndex = idx;
+  currentRuleIndex = idx;
+  renderRuleEditorModal();
+  openManagedModal(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+}
+
+function closeRuleStyleEditor() {
+  currentRuleEditorIndex = null;
+  closeManagedModal(wfsRuleEditorModal, wfsRuleEditorFullscreenBtn);
+}
+window.closeRuleStyleEditor = closeRuleStyleEditor;
+
+function ruleCard(rule, idx) {
+  const T = (k) => t('Qtiler2Hajk.' + k);
+  const card = document.createElement('div');
+  card.dataset.ruleIndex = String(idx);
+  card.className = 'Qtiler2Hajk-rule-summary';
+  const filterText = rule.filter || T('wfs_rule_default');
+  const labelText = rule.label && rule.label.enabled && rule.label.text ? rule.label.text : '';
+  const chips = [];
+  if (String(rule.legendLabel || '').trim()) chips.push(`${T('wfs_legend_label')}: ${rule.legendLabel}`);
+  if (rule.maxScale || rule.minScale) chips.push(`${T('wfs_visible_from')} ${rule.maxScale || T('wfs_no_limit')} / ${T('wfs_visible_to')} ${rule.minScale || T('wfs_no_limit')}`);
+  if (labelText) chips.push(`${T('wfs_label')}: ${labelText}`);
+  card.innerHTML = `
+    <div class="Qtiler2Hajk-rule-summary__head">
+      <strong>${T('wfs_rule')} ${idx + 1}</strong>
+      <div class="Qtiler2Hajk-rule-summary__actions">
+        <button type="button" class="button small is-link is-light" data-rk="edit">${T('wfs_edit_rule')}</button>
+        <button type="button" class="button small" data-rk="up" title="${T('wfs_move_up')}">↑</button>
+        <button type="button" class="button small" data-rk="down" title="${T('wfs_move_down')}">↓</button>
+        <button type="button" class="button small is-danger" data-rk="del" title="${T('wfs_delete')}">✕</button>
+      </div>
+    </div>
+    <div class="Qtiler2Hajk-rule-summary__details">
+      <div class="Qtiler2Hajk-rule-summary__sample">${rulePreviewSampleSvg(rule, currentLayerGeomFamily || 'polygon')}</div>
+      <div class="Qtiler2Hajk-rule-summary__meta">
+        <code>${escapeHtml(filterText)}</code>
+        <div class="Qtiler2Hajk-rule-summary__chips">
+          ${chips.length ? chips.map((chip) => `<span class="Qtiler2Hajk-rule-summary__chip">${escapeHtml(chip)}</span>`).join('') : `<span class="Qtiler2Hajk-rule-summary__chip">${escapeHtml(T('wfs_symbol'))}</span>`}
+        </div>
+      </div>
+    </div>
+  `;
+  const details = card.querySelector('.Qtiler2Hajk-rule-summary__details');
+  if (details) {
+    details.style.cursor = 'pointer';
+    details.addEventListener('click', () => openRuleStyleEditor(idx));
+  }
+  card.querySelectorAll('[data-rk]').forEach((el) => {
+    const k = el.getAttribute('data-rk');
+    if (k === 'edit') {
+      el.addEventListener('click', () => openRuleStyleEditor(idx));
+      return;
+    }
+    el.addEventListener('click', () => updateRuleField(idx, k, true));
+  });
+  return card;
+}
+
+function updateRuleField(idx, key, value) {
+  const r = currentRules[idx];
+  if (!r) return;
+  
+  if (key === 'del') {
+    currentRules.splice(idx, 1);
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = null;
+    else if (Number.isInteger(currentRuleEditorIndex) && currentRuleEditorIndex > idx) currentRuleEditorIndex -= 1;
+    if (currentRuleIndex >= currentRules.length) currentRuleIndex = Math.max(0, currentRules.length - 1);
+    return renderRulesPanel();
+  }
+  if (key === 'up' && idx > 0) {
+    [currentRules[idx-1], currentRules[idx]] = [currentRules[idx], currentRules[idx-1]];
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = idx - 1;
+    else if (currentRuleEditorIndex === idx - 1) currentRuleEditorIndex = idx;
+    currentRuleIndex = idx - 1;
+    return renderRulesPanel();
+  }
+  if (key === 'down' && idx < currentRules.length - 1) {
+    [currentRules[idx+1], currentRules[idx]] = [currentRules[idx], currentRules[idx+1]];
+    if (currentRuleEditorIndex === idx) currentRuleEditorIndex = idx + 1;
+    else if (currentRuleEditorIndex === idx + 1) currentRuleEditorIndex = idx;
+    currentRuleIndex = idx + 1;
+    return renderRulesPanel();
+  }
+  if (key === 'edit') {
+    openRuleStyleEditor(idx);
+    return;
+  }
+  if (key === 'legendLabel') {
+    r.legendLabel = String(value || '');
+    afterRuleChange();
+    return;
+  }
+  if (key === 'stylebasic') {
+    openBasicDesignerForRule(idx);
+    return;
+  }
+  
+  if (key.startsWith('f.')) {
+    const editorRoot = document.querySelector(`[data-rule-editor-root="${idx}"]`);
+    if (!editorRoot) return;
+    const field = editorRoot.querySelector('[data-rk="f.field"]')?.value || '';
+    const op = editorRoot.querySelector('[data-rk="f.op"]')?.value || '==';
+    const val = editorRoot.querySelector('[data-rk="f.value"]')?.value || '';
+    const sel = currentLayerFields.find(f => f.name === field);
+    r.filter = field ? buildFilterFromUi(field, op, val, sel?.type) : '';
+    afterRuleChange();
+    if (key === 'f.field') {
+      renderRulesPanel();
+      if (currentRuleEditorIndex === idx) renderRuleEditorModal();
+    }
+    return;
+  }
+  if (key.startsWith('r.')) {
+    // Per-rule scale fields (geometry)
+    const sub = key.slice(2);
+    r[sub] = value === '' ? '' : (isNaN(Number(value)) ? value : Number(value));
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('lab.')) {
+    const sub = key.slice(4);
+    if (sub === 'insertField' && value) {
+      // Insert at the end; if text already ends with the same token, do nothing
+      const cur = r.label.text || '';
+      if (!cur.endsWith(value)) r.label.text = cur + value;
+      return renderRulesPanel();
+    }
+    if (sub === 'minScale' || sub === 'maxScale') {
+      r.label[sub] = value === '' ? '' : (isNaN(Number(value)) ? value : Number(value));
+      afterRuleChange();
+      return;
+    }
+    if (sub === 'offsetX' || sub === 'offsetY' || sub === 'size') {
+      const n = Number(value);
+      r.label[sub] = isNaN(n) ? 0 : n;
+      afterRuleChange();
+      return;
+    }
+    r.label[sub] = value;
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('circle.')) {
+    const sub = key.slice(7);
+    if (sub === 'fillNone') {
+      r.point.circle.fillNone = !!value;
+      return renderRulesPanel();
+    }
+    r.point.circle[sub] = (typeof value === 'boolean' || isNaN(Number(value))) ? value : Number(value);
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('icon.')) {
+    const sub = key.slice(5);
+    if (sub === 'pick') {
+      openSvgPicker((url) => {
+        r.point.icon.src = url;
+        renderRulesPanel();
+      });
+      return;
+    }
+    if (sub === 'preview') return;
+    if (sub === 'color') r.point.icon.color = value;
+    else if (sub === 'useColor') r.point.icon.useColor = !!value;
+    else r.point.icon[sub] = (sub === 'src') ? value : Number(value);
+    if (sub === 'scale') {
+      const img = document.querySelector(`[data-rule-editor-root="${idx}"] img[data-rk="icon.preview"]`);
+      if (img) {
+        img.style.width = `calc(${r.point.icon.scale || 1} * 32px)`;
+        img.style.height = `calc(${r.point.icon.scale || 1} * 32px)`;
+      }
+    }
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('fill.')) {
+    const sub = key.slice(5);
+    if (sub === 'none') { r.fill.none = !!value; return renderRulesPanel(); }
+    r.fill[sub] = sub === 'color' ? value : Number(value);
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('stroke.')) {
+    const sub = key.slice(7);
+    if (sub === 'none') { r.stroke.none = !!value; return renderRulesPanel(); }
+    r.stroke[sub] = (sub === 'color' || sub === 'dash') ? value : Number(value);
+    afterRuleChange();
+    return;
+  }
+  if (key.startsWith('ptmode-') || key.startsWith('ptmode')) { r.point.mode = value; return renderRulesPanel(); }
+  
+  // radio buttons via name (handled separately)
+}
+
+// Light update after a rule field changes: refresh preview and JSON sync
+function afterRuleChange() {
+  try { renderRulesPreviewGallery(); } catch {/* ignore */}
+  try { if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(rulesToOrigoStyle(currentRules), null, 2); } catch {/* ignore */}
+}
+
+// Wire radio button group manually
+function wireRuleRadios(root = document) {
+  root?.querySelectorAll('input[type=radio][name^="ptmode-"]').forEach(rb => {
+    rb.addEventListener('change', () => {
+      const m = rb.name.match(/^ptmode-(\d+)$/);
+      if (!m) return;
+      const idx = Number(m[1]);
+      if (currentRules[idx] && currentRules[idx].point) {
+        currentRules[idx].point.mode = rb.value;
+        renderRulesPanel();
+      }
+    });
+  });
+}
+
+function renderRulesPanel() {
+  if (!rulesContainer) return;
+  rulesContainer.innerHTML = '';
+  if (!currentRules.length) currentRules.push(defaultRule(currentLayerGeomFamily));
+  // Clamp the active rule index in case rules were deleted/added.
+  if (typeof currentRuleIndex !== 'number' || currentRuleIndex < 0 || currentRuleIndex >= currentRules.length) {
+    currentRuleIndex = 0;
+  }
+  // Rule selector dropdown — only one rule is rendered/visible at a time.
+  if (currentRules.length > 1 || true) {
+    const picker = document.createElement('div');
+    picker.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:0.6rem';
+    const opts = currentRules.map((_, i) => `<option value="${i}"${i === currentRuleIndex ? ' selected' : ''}>${t('Qtiler2Hajk.wfs_rule')} ${i + 1}</option>`).join('');
+    picker.innerHTML = `
+      <label style="margin-bottom:0;font-weight:600">${t('Qtiler2Hajk.wfs_rule') || 'Regla'}:</label>
+      <select id="wfs-rule-picker" style="min-width:140px">${opts}</select>
+    `;
+    rulesContainer.appendChild(picker);
+    picker.querySelector('#wfs-rule-picker').addEventListener('change', (e) => {
+      const idx = parseInt(e.target.value, 10);
+      if (!Number.isNaN(idx)) {
+        currentRuleIndex = idx;
+        renderRulesPanel();
+      }
+    });
+  }
+  // Render only the active rule's card.
+  rulesContainer.appendChild(ruleCard(currentRules[currentRuleIndex], currentRuleIndex));
+  // Sync JSON tab in background
+  if (wfsStyleJsonEditor) wfsStyleJsonEditor.value = JSON.stringify(rulesToOrigoStyle(currentRules), null, 2);
+  // Live preview gallery (shows ALL rules, regardless of selected card).
+  try { renderRulesPreviewGallery(); } catch {/* ignore */}
+  if (currentRuleEditorIndex != null) renderRuleEditorModal();
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Live preview gallery: shows one sample row per rule with the
+   geometry symbol rendered using the active rule's colors/strokes.
+   ────────────────────────────────────────────────────────────────── */
+function rulePreviewSampleSvg(rule, geomFamily) {
+  // Build a 80x48 SVG sample with the rule's symbol
+  const W = 80, H = 48;
+  const dashAttr = (s) => {
+    const arr = dashKeyToArray(s);
+    return (arr && arr[0]) ? ` stroke-dasharray="${arr.join(' ')}"` : '';
+  };
+  if (geomFamily === 'point') {
+    if (!rule.point) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="6" fill="#3b82f6" stroke="#2563eb" stroke-width="1"/></svg>`;
+    if (rule.point.mode === 'icon' && rule.point.icon && rule.point.icon.src) {
+      let src = rule.point.icon.src;
+      // If a color is set on a served SVG icon, route through the server-side
+      // colorizer so the preview reflects the chosen color.
+      const color = rule.point.icon.color;
+      if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && (src.startsWith('/qgis-svg/') || src.startsWith('/qtiler-symbology-svg/'))) {
+        const hex = String(color).trim().replace(/^#?/, '#');
+        src = src.startsWith('/qtiler-symbology-svg/')
+          ? src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/') + `?color=${encodeURIComponent(hex)}`
+          : src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><image href="${src}" x="${W/2-16}" y="${H/2-16}" width="32" height="32" preserveAspectRatio="xMidYMid meet"/></svg>`;
+    }
+    const c = rule.point.circle;
+    const fill = c.fillNone ? 'none' : hexToRgba(c.fill, c.fillOpacity);
+    const stroke = hexToRgba(c.stroke, c.strokeOpacity);
+    const r = Math.min(20, c.radius || 6);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${c.strokeWidth || 1}"/></svg>`;
+  }
+  if (geomFamily === 'line') {
+    if (!rule.stroke) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M6 ${H-10} Q ${W/3} 6 ${W/2} ${H/2} T ${W-6} 10" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/></svg>`;
+    const stroke = hexToRgba(rule.stroke.color, rule.stroke.opacity);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M6 ${H-10} Q ${W/3} 6 ${W/2} ${H/2} T ${W-6} 10" fill="none" stroke="${stroke}" stroke-width="${rule.stroke.width || 2}" stroke-linecap="round"${dashAttr(rule.stroke.dash)}/></svg>`;
+  }
+  // polygon
+  if (!rule.fill || !rule.stroke) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><path d="M8 ${H-6} L 18 8 L ${W-22} 6 L ${W-6} ${H-12} L ${W/2} ${H-4} Z" fill="rgba(59,130,246,0.25)" stroke="#2563eb" stroke-width="2"/></svg>`;
+  const fill = rule.fill.none ? 'none' : hexToRgba(rule.fill.color, rule.fill.opacity);
+  const stroke = rule.stroke.none ? 'none' : hexToRgba(rule.stroke.color, rule.stroke.opacity);
+  const sw = rule.stroke.none ? 0 : (rule.stroke.width || 1);
+  const patternMeta = rule?.designerOptions && typeof rule.designerOptions === 'object' ? rule.designerOptions : null;
+  const patternFill = patternMeta && ['slash', 'backslash', 'horizontal', 'vertical', 'cross', 'dots'].includes(String(patternMeta.fillPattern || '').trim().toLowerCase())
+    ? buildSvgPatternFill(fill === 'none' ? 'rgba(0,0,0,0)' : fill, stroke, sw || 1, patternMeta)
+    : { defs: '', fill };
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${patternFill.defs}<path d="M8 ${H-6} L 18 8 L ${W-22} 6 L ${W-6} ${H-12} L ${W/2} ${H-4} Z" fill="${patternFill.fill}" stroke="${stroke}" stroke-width="${sw}"${dashAttr(rule.stroke.dash)}/></svg>`;
+}
+
+function renderRulesPreviewGallery() {
+  if (!wfsStylePreview) return;
+  const fam = currentLayerGeomFamily || 'polygon';
+  const famLabel = { point: t('Qtiler2Hajk.fam_point'), line: t('Qtiler2Hajk.fam_line'), polygon: t('Qtiler2Hajk.fam_polygon') }[fam] || fam;
+  if (!Array.isArray(currentRules) || !currentRules.length) {
+    wfsStylePreview.innerHTML = `<div class="sample-row"><div class="sample-meta">${escapeHtml(t('Qtiler2Hajk.no_rules_yet'))}</div></div>`;
+    return;
+  }
+  const html = currentRules.map((rule, i) => {
+    const filterTxt = rule.filter ? rule.filter : '<em>(por defecto)</em>';
+    const labelTxt = rule.label && rule.label.enabled && rule.label.text ? `${escapeHtml(t('Qtiler2Hajk.wfs_label'))}: <code>${rule.label.text.replace(/</g,'&lt;')}</code>` : '';
+    const legendTxt = String(rule.legendLabel || '').trim()
+      ? `${escapeHtml(t('Qtiler2Hajk.wfs_legend_label'))}: <code>${escapeHtml(rule.legendLabel)}</code>`
+      : '';
+    const svg = rulePreviewSampleSvg(rule, fam);
+    return `<div class="sample-row">
+      <div class="sample-svg">${svg}</div>
+      <div class="sample-meta">
+        <strong>${escapeHtml(t('Qtiler2Hajk.wfs_rule'))} ${i + 1} <span style="color:#789;font-weight:normal">(${famLabel})</span></strong>
+        <code>${filterTxt}</code>
+        ${legendTxt ? `<code>${legendTxt}</code>` : ''}
+        ${labelTxt ? `<code>${labelTxt}</code>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  wfsStylePreview.innerHTML = html;
+}
+
+rulesAddBtn?.addEventListener('click', () => {
+  currentRules.push(defaultRule(currentLayerGeomFamily));
+  currentRuleIndex = currentRules.length - 1; // jump to the new rule
+  renderRulesPanel();
+});
+
+function populateRulesCopySelect(currentLayer) {
+  if (!rulesCopySelect) return;
+  rulesCopySelect.innerHTML = `<option value="">${t('Qtiler2Hajk.wfs_copy_rules')}</option>`;
+  for (const l of (publishState.mainLayers || [])) {
+    const lName = l.name || l.title;
+    if (!lName || lName === currentLayer) continue;
+    if (publishState.mainRules[lName] && publishState.mainRules[lName].wfsStyle) {
+      const opt = document.createElement('option');
+      opt.value = lName; opt.textContent = lName;
+      rulesCopySelect.appendChild(opt);
+    }
+  }
+}
+
+rulesCopySelect?.addEventListener('change', () => {
+  const src = rulesCopySelect.value;
+  if (!src) return;
+  const srcStyle = publishState.mainRules[src]?.wfsStyle;
+  if (srcStyle) {
+    currentRules = origoStyleToRules(srcStyle);
+    renderRulesPanel();
+  }
+  rulesCopySelect.value = '';
+});
+
+// Hook into openStyleEditor to initialize rule editor
+const _origOpenStyleEditor = openStyleEditor;
+openStyleEditor = function(layerName) {
+  currentRuleEditorIndex = null;
+  currentDesignerRuleIndex = null;
+  _origOpenStyleEditor(layerName);
+  const geomType = getLayerGeometryType(layerName);
+  currentLayerGeomFamily = geomFamilyOf(geomType);
+  const projectId = getLayerProjectId(layerName);
+  
+  // Initialize rules from existing wfsStyle or from JSON editor content
+  const existingRules = publishState.mainRules[layerName] || {};
+  const existingStyle = existingRules.wfsStyle;
+  if (existingStyle) {
+    currentRules = origoStyleToRules(existingStyle);
+  } else {
+    currentRules = [defaultRule(currentLayerGeomFamily)];
+  }
+  
+  populateRulesCopySelect(layerName);
+  
+  // Async: load fields for this layer (then re-render to populate dropdowns)
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  loadLayerFields(projectId, sourceLayerName).then(({ fields, geometryType }) => {
+    currentLayerFields = fields;
+    if (geometryType) {
+      currentLayerGeomFamily = geomFamilyOf(geometryType);
+      // Persist on rule + cached layer entry so future sessions remember
+      if (publishState.mainRules[layerName]) publishState.mainRules[layerName].geometryType = geometryType;
+      const layerObj = getMainLayerByName(layerName);
+      if (layerObj && !layerObj.geometry) layerObj.geometry = geometryType;
+    }
+    renderRulesPanel();
+    renderAttributesPanel();
+  });
+  
+  // Default to rules tab
+  setStyleEditorTab('rules');
+  updateDesignerRuleModeNotice();
+  renderRulesPanel();
+};
+
+// Override saveStyleEditor to save from active tab (rules → JSON)
+const _origSaveStyleEditor = saveStyleEditor;
+saveStyleEditor = function() {
+  const layerName = currentEditingWfsLayer;
+  if (!layerName) return;
+  const activeRules = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'rules' && !p.hidden);
+  const activeJson = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'json' && !p.hidden);
+  const activeDesigner = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'designer' && !p.hidden);
+  if (activeDesigner && Number.isInteger(currentDesignerRuleIndex) && currentRules[currentDesignerRuleIndex]) {
+    try {
+      const geometryType = getLayerGeometryType(layerName);
+      const styleObj = buildStyleDefinitionFromDesigner(geometryType);
+      const convertedRule = (origoStyleToRules(styleObj) || [defaultRule(currentLayerGeomFamily)])[0] || defaultRule(currentLayerGeomFamily);
+      const previousRule = currentRules[currentDesignerRuleIndex] || defaultRule(currentLayerGeomFamily);
+      convertedRule.filter = previousRule.filter;
+      convertedRule.legendLabel = previousRule.legendLabel;
+      convertedRule.maxScale = previousRule.maxScale;
+      convertedRule.minScale = previousRule.minScale;
+      convertedRule.label = JSON.parse(JSON.stringify(previousRule.label || defaultRule(currentLayerGeomFamily).label));
+      convertedRule.designerOptions = JSON.parse(JSON.stringify(getDesignerPatternOptions()));
+      currentRules[currentDesignerRuleIndex] = convertedRule;
+      currentRuleIndex = currentDesignerRuleIndex;
+      const reopenIndex = currentDesignerRuleIndex;
+      currentDesignerRuleIndex = null;
+      updateDesignerRuleModeNotice();
+      setStyleEditorTab('rules');
+      renderRulesPanel();
+      openRuleStyleEditor(reopenIndex);
+    } catch (err) {
+      if (wfsStyleError) {
+        wfsStyleError.innerText = (t('Qtiler2Hajk.wfs_invalid_json') || 'Invalid JSON: ') + err.message;
+        wfsStyleError.classList.remove('is-hidden');
+      }
+    }
+    return;
+  }
+  if (activeJson) {
+    // Save FULL layer config from the JSON editor
+    try {
+      const txt = getJsonEditorValue();
+      const parsed = JSON.parse(txt || '{}');
+      if (!publishState.mainRules[layerName]) {
+        publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: true };
+      }
+      const r = publishState.mainRules[layerName];
+      if (parsed.wfsStyle !== undefined) r.wfsStyle = parsed.wfsStyle;
+      if (parsed.searchable !== undefined) r.searchable = !!parsed.searchable;
+      if (parsed.editable !== undefined) r.editable = !!parsed.editable;
+      if (parsed.serveAsWfs !== undefined) r.serveAsWfs = !!parsed.serveAsWfs;
+      if (parsed.geometryType) r.geometryType = parsed.geometryType;
+      if (parsed.attributes !== undefined) r.attributes = normalizeAttributesList(parsed.attributes);
+      if (parsed.designerOptions && typeof parsed.designerOptions === 'object') {
+        r.designerOptions = JSON.parse(JSON.stringify(parsed.designerOptions));
+      }
+      const checkedNames = getCheckedLayerNames(projectLayersList);
+      closeStyleEditor();
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, checkedNames);
+      setJsonEditorStatus(t('Qtiler2Hajk.wfs_saved') || 'Guardado.', false);
+    } catch (err) {
+      setJsonEditorStatus((t('Qtiler2Hajk.wfs_invalid_json') || 'JSON inválido: ') + err.message, true);
+    }
+    return;
+  }
+  const activeAttributes = !!wfsStylePanels.find(p => p.getAttribute('data-style-panel') === 'attributes' && !p.hidden);
+  if (activeRules || activeAttributes) {
+    const styleObj = rulesToOrigoStyle(currentRules);
+    if (!publishState.mainRules[layerName]) {
+      publishState.mainRules[layerName] = { searchable: false, editable: true, serveAsWfs: true };
+    }
+    publishState.mainRules[layerName].serveAsWfs = true;
+    publishState.mainRules[layerName].wfsStyle = styleObj;
+    publishState.mainRules[layerName].attributes = normalizeAttributesList(currentAttributes);
+    publishState.mainRules[layerName].geometryType = getLayerGeometryType(layerName) || null;
+    publishState.mainRules[layerName].designerOptions = JSON.parse(JSON.stringify(getDesignerPatternOptions()));
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    closeStyleEditor();
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    return;
+  }
+  _origSaveStyleEditor();
+};
+
+/* ======================================================================
+   CodeMirror-backed JSON editor (with textarea fallback)
+   ====================================================================== */
+let _cmJsonEditor = null;
+let _cmInitTried = false;
+
+function ensureJsonEditor() {
+  if (_cmInitTried) return _cmJsonEditor;
+  _cmInitTried = true;
+  const host = document.getElementById('wfs-style-json-host');
+  const ta = document.getElementById('wfs-style-json-editor');
+  if (!host || !ta) return null;
+  if (typeof CodeMirror === 'undefined') {
+    // Fallback: show textarea
+    host.style.display = 'none';
+    ta.style.display = '';
+    return null;
+  }
+  try {
+    _cmJsonEditor = CodeMirror(host, {
+      value: ta.value || '',
+      mode: { name: 'javascript', json: true },
+      theme: 'eclipse',
+      lineNumbers: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      foldGutter: true,
+      gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: false
+    });
+    _cmJsonEditor.setSize('100%', 480);
+  } catch (err) {
+    console.warn('CodeMirror init failed, falling back to textarea:', err);
+    host.style.display = 'none';
+    ta.style.display = '';
+    _cmJsonEditor = null;
+  }
+  return _cmJsonEditor;
+}
+
+function setJsonEditorValue(text) {
+  ensureJsonEditor();
+  const ta = document.getElementById('wfs-style-json-editor');
+  if (ta) ta.value = text || '';
+  if (_cmJsonEditor) _cmJsonEditor.setValue(text || '');
+}
+function getJsonEditorValue() {
+  if (_cmJsonEditor) return _cmJsonEditor.getValue();
+  const ta = document.getElementById('wfs-style-json-editor');
+  return ta ? ta.value : '';
+}
+function setJsonEditorStatus(msg, isError) {
+  const el = document.getElementById('wfs-style-json-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = isError ? '#c00' : '#0a7d2c';
+}
+
+document.getElementById('wfs-style-format-json')?.addEventListener('click', () => {
+  try {
+    const obj = JSON.parse(getJsonEditorValue() || '{}');
+    setJsonEditorValue(JSON.stringify(obj, null, 2));
+    setJsonEditorStatus('Formateado.', false);
+  } catch (err) {
+    setJsonEditorStatus((t('Qtiler2Hajk.wfs_invalid_json') || 'Invalid JSON: ') + err.message, true);
+  }
+});
+
+/* ======================================================================
+   Full Map JSON Editor
+   ====================================================================== */
+let _cmMapJsonEditor = null;
+let _cmMapJsonInitTried = false;
+let _mapJsonDirty = false;
+let _mapJsonSettingValue = false;
+let _mapJsonValidationTimer = null;
+let _mapJsonErrorLine = null;
+
+function setMapJsonLiveStatus(message, state = '') {
+  if (!jsonLiveStatus) return;
+  jsonLiveStatus.textContent = message;
+  jsonLiveStatus.classList.toggle('is-valid', state === 'valid');
+  jsonLiveStatus.classList.toggle('is-invalid', state === 'invalid');
+}
+
+function validateMapConfigObject(config) {
+  const errors = [];
+  if (!config || typeof config !== 'object' || Array.isArray(config)) errors.push('The root value must be an object');
+  if (!config?.name || typeof config.name !== 'string' || !config.name.trim()) errors.push('Missing or invalid "name" field');
+  if (!config?.projectId || typeof config.projectId !== 'string' || !config.projectId.trim()) errors.push('Missing or invalid "projectId" field');
+  if (!Array.isArray(config?.layers)) errors.push('"layers" must be an array');
+  else if (!config.layers.length) errors.push('At least one layer is required');
+  else config.layers.forEach((layer, index) => {
+    if (!layer || typeof layer !== 'object' || !String(layer.name || '').trim()) errors.push(`Layer ${index + 1} needs a valid "name"`);
+  });
+  return errors;
+}
+
+function inspectMapJson({ writeLog = false } = {}) {
+  ensureMapJsonEditor();
+  if (!_cmMapJsonEditor) return { valid: false, config: null, errors: ['Editor not initialized'] };
+  if (_mapJsonErrorLine !== null) {
+    _cmMapJsonEditor.removeLineClass(_mapJsonErrorLine, 'background', 'json-error-line');
+    _mapJsonErrorLine = null;
+  }
+  try {
+    const raw = _cmMapJsonEditor.getValue();
+    const config = JSON.parse(raw);
+    const errors = validateMapConfigObject(config);
+    if (errors.length) {
+      setMapJsonLiveStatus(`${errors.length} validation error${errors.length === 1 ? '' : 's'}`, 'invalid');
+      if (writeLog) logJsonEditor(`Validation failed: ${errors.join('; ')}`, 'error');
+      return { valid: false, config, errors };
+    }
+    setMapJsonLiveStatus('Valid JSON', 'valid');
+    if (writeLog) logJsonEditor('✓ JSON is valid', 'info');
+    return { valid: true, config, errors: [] };
+  } catch (err) {
+    const position = Number(String(err?.message || '').match(/position\s+(\d+)/i)?.[1]);
+    if (Number.isFinite(position)) {
+      const before = _cmMapJsonEditor.getValue().slice(0, position);
+      _mapJsonErrorLine = before.split('\n').length - 1;
+      _cmMapJsonEditor.addLineClass(_mapJsonErrorLine, 'background', 'json-error-line');
+    }
+    setMapJsonLiveStatus('Invalid JSON', 'invalid');
+    if (writeLog) logJsonEditor(`Validation error: ${err.message || err}`, 'error');
+    return { valid: false, config: null, errors: [String(err?.message || err)] };
+  }
+}
+
+function setMapJsonEditorValue(value, { dirty = false } = {}) {
+  ensureMapJsonEditor();
+  if (!_cmMapJsonEditor) return;
+  _mapJsonSettingValue = true;
+  _cmMapJsonEditor.setValue(String(value || ''));
+  _mapJsonSettingValue = false;
+  _mapJsonDirty = dirty;
+  inspectMapJson();
+}
+
+function readFeatureEditorState() {
+  return {
+    search: featureSearch?.checked !== false,
+    searchGlobal: featureSearchGlobal?.checked === true,
+    view3d: featureView3D?.checked !== false,
+    editing: featureEditing?.checked !== false,
+    identify: featureIdentify?.checked !== false,
+    layerTree: featureLayerTree?.checked !== false,
+    legend: featureLegend?.checked !== false,
+    measurement: featureMeasurement?.checked === true,
+    print: featurePrint?.checked !== false,
+    mapTip: featureMapTip?.checked !== false,
+    share: featureShare?.checked === true,
+    redlining: featureRedlining?.checked === true,
+    bookmark: featureBookmark?.checked === true,
+    heightProfile: featureHeightProfile?.checked === true,
+    dxfExport: featureDxfExport?.checked === true,
+    attributeTable: featureAttributeTable?.checked === true,
+    routing: featureRouting?.checked === true
+  };
+}
+
+function applyFeatureEditorState(features = {}) {
+  const set = (input, key, fallback) => {
+    if (input) input.checked = Object.prototype.hasOwnProperty.call(features, key) ? features[key] === true : fallback;
+  };
+  set(featureSearch, 'search', true);
+  set(featureSearchGlobal, 'searchGlobal', false);
+  set(featureView3D, 'view3d', true);
+  set(featureEditing, 'editing', true);
+  set(featureIdentify, 'identify', true);
+  set(featureLayerTree, 'layerTree', true);
+  set(featureLegend, 'legend', true);
+  set(featureMeasurement, 'measurement', false);
+  set(featurePrint, 'print', true);
+  set(featureMapTip, 'mapTip', true);
+  set(featureShare, 'share', false);
+  set(featureRedlining, 'redlining', false);
+  set(featureBookmark, 'bookmark', false);
+  set(featureHeightProfile, 'heightProfile', false);
+  set(featureDxfExport, 'dxfExport', false);
+  set(featureAttributeTable, 'attributeTable', false);
+  set(featureRouting, 'routing', false);
+}
+
+function ensureMapJsonEditor() {
+  if (_cmMapJsonInitTried) return _cmMapJsonEditor;
+  _cmMapJsonInitTried = true;
+  const host = jsonEditorContainer;
+  if (!host) return null;
+  if (typeof CodeMirror === 'undefined') {
+    host.innerHTML = '<p class="help is-danger">CodeMirror not loaded. Cannot initialize JSON editor.</p>';
+    return null;
+  }
+  try {
+    _cmMapJsonEditor = CodeMirror(host, {
+      value: '{}',
+      mode: { name: 'javascript', json: true },
+      theme: 'eclipse',
+      lineNumbers: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      foldGutter: true,
+      gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: false,
+      extraKeys: {
+        'Ctrl-S': () => { void applyMapJsonChanges(); },
+        'Cmd-S': () => { void applyMapJsonChanges(); },
+        'Shift-Ctrl-F': formatMapJson,
+        'Shift-Cmd-F': formatMapJson
+      }
+    });
+    _cmMapJsonEditor.setSize('100%', '500px');
+    _cmMapJsonEditor.on('change', () => {
+      if (_mapJsonSettingValue) return;
+      _mapJsonDirty = true;
+      markEditorDirty();
+      window.clearTimeout(_mapJsonValidationTimer);
+      _mapJsonValidationTimer = window.setTimeout(() => inspectMapJson(), 250);
+    });
+    return _cmMapJsonEditor;
+  } catch (err) {
+    console.error('Map JSON editor init failed:', err);
+    if (host) host.innerHTML = `<p class="help is-danger">JSON editor init failed: ${String(err.message || err)}</p>`;
+    return null;
+  }
+}
+
+function logJsonEditor(message, type = 'info') {
+  if (!jsonLogContainer) return;
+  const timestamp = new Date().toLocaleTimeString();
+  const prefix = type === 'error' ? '[ERROR]' : type === 'warning' ? '[WARN]' : '[INFO]';
+  const color = type === 'error' ? '#c00' : type === 'warning' ? '#f90' : '#0a7d2c';
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = `${timestamp} ${prefix} ${message}`;
+  jsonLogContainer.appendChild(line);
+  jsonLogContainer.scrollTop = jsonLogContainer.scrollHeight;
+}
+
+function clearJsonEditorLog() {
+  if (!jsonLogContainer) return;
+  jsonLogContainer.innerHTML = '';
+  logJsonEditor('Log cleared.', 'info');
+}
+
+function generateMapConfigJson() {
+  try {
+    const mapName = String(publishName?.value || '').trim();
+    const mapDescription = String(publishDescription?.value || '').trim();
+    const projectId = String(publishProjectSelect?.value || '').trim();
+    
+    const allLayers = getAllPublishLayers();
+    const checkedSet = new Set(getCheckedLayerNames(projectLayersList));
+    const selectedLayers = allLayers.filter((layer) => checkedSet.has(getLayerKey(layer)));
+    
+    const layersPayload = selectedLayers.map((layer) => {
+      const key = getLayerKey(layer);
+      const rules = publishState.mainRules[key] || {};
+      return {
+        name: layer.name,
+        title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+        sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+        visible: publishState.initialVisibility[key] !== false,
+        group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
+        searchable: rules.searchable || false,
+        editable: rules.editable || false,
+        serveAsWfs: rules.serveAsWfs || false,
+        wfsStyle: rules.wfsStyle || undefined,
+        attributes: rules.attributes || undefined,
+        geometryType: rules.geometryType || undefined
+      };
+    });
+
+    const backgroundProjectId = String(backgroundProjectSelect?.value || '').trim();
+    const backgroundLayerNames = getCheckedLayers(backgroundLayersList, publishState.backgroundLayers || [])
+      .map((layer) => String(layer?.name || '').trim())
+      .filter(Boolean);
+    
+    refreshBackgroundOptions();
+    const backgrounds = (publishState.backgroundOptions || []).map((item) => ({
+      key: item.key,
+      type: item.type,
+      title: item.title,
+      sourceProjectId: item.type === 'layer' ? item.sourceProjectId : null,
+      name: item.type === 'layer' ? item.name : null,
+      isTheme: item.type === 'layer' ? item.isTheme === true : false,
+      themeName: item.type === 'layer' ? item.themeName || null : null,
+      isDefault: item.key === publishState.defaultBackgroundKey,
+      imageUrl: item.customImageUrl ? item.customImageUrl : (item.thumbnail || null)
+    }));
+
+    let controls = [];
+    try {
+      controls = JSON.parse(controlsJsonInput?.value || '[]');
+    } catch (e) {
+      controls = [];
+    }
+
+    let pageSettings = undefined;
+    let featureinfoOptions = undefined;
+    try {
+      const extra = JSON.parse(extraJsonInput?.value || '{}');
+      pageSettings = extra.pageSettings;
+      featureinfoOptions = extra.featureinfoOptions;
+    } catch (e) {}
+
+    let extent = undefined;
+    try {
+      const v = JSON.parse(extentInput?.value || 'null');
+      extent = Array.isArray(v) ? v : undefined;
+    } catch (e) {}
+
+    let center = undefined;
+    let centerCrs = undefined;
+    try {
+      const v = JSON.parse(centerInput?.value || 'null');
+      center = Array.isArray(v) ? v : undefined;
+      centerCrs = String(centerInput?.dataset?.crs || '').trim() || undefined;
+    } catch (e) {}
+
+    let zoom = undefined;
+    try {
+      const z = parseFloat(zoomInput?.value);
+      zoom = isNaN(z) ? undefined : z;
+    } catch (e) {}
+
+    const minZoom = (() => { const z = parseInt(minZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
+    const maxZoom = (() => { const z = parseInt(maxZoomInput?.value, 10); return Number.isFinite(z) ? z : undefined; })();
+
+    const groups = (publishState.groups || [])
+      .map((g) => ({
+        name: String(g?.name || '').trim(),
+        title: String(g?.title || g?.name || '').trim(),
+        parent: String(g?.parent || '').trim(),
+        expanded: g?.expanded !== false
+      }))
+      .filter((g) => g.name && g.name !== 'root' && g.name !== 'background');
+
+    const searchSources = (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
+      .map((src) => ({
+        projectId: String(src?.projectId || '').trim(),
+        layers: Array.isArray(src?.layers)
+          ? src.layers.map((l) => String(l || '').trim()).filter(Boolean)
+          : []
+      }))
+      .filter((s) => s.projectId);
+
+    const config = {
+      name: mapName,
+      description: mapDescription,
+      editingProfileId: publishState.editingProfileId || null,
+      projectId,
+      layers: layersPayload,
+      backgroundProjectId: backgroundProjectId || null,
+      backgroundLayerNames,
+      backgrounds,
+      defaultBackgroundKey: publishState.defaultBackgroundKey || 'none',
+      controls,
+      pageSettings,
+      featureinfoOptions,
+      extent,
+      center,
+      centerCrs,
+      zoom,
+      minZoom,
+      maxZoom,
+      toolConfig: {
+        shareServiceUrl: String(cfgShareUrl?.value || '').trim() || undefined,
+        routingServiceUrl: String(cfgRoutingUrl?.value || '').trim() || undefined,
+        elevationServiceUrl: String(cfgElevationUrl?.value || '').trim() || undefined,
+        dxfExportServiceUrl: String(cfgDxfUrl?.value || '').trim() || undefined
+      },
+      groups,
+      features: {
+        ...readFeatureEditorState(),
+        searchSources
+      }
+    };
+
+    return config;
+  } catch (err) {
+    logJsonEditor(`Error generating config: ${err.message || err}`, 'error');
+    throw err;
+  }
+}
+
+function loadCurrentConfigToEditor() {
+  try {
+    logJsonEditor('Loading current configuration...', 'info');
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    const config = generateMapConfigJson();
+    const json = JSON.stringify(config, null, 2);
+    setMapJsonEditorValue(json);
+    logJsonEditor(`Loaded ${json.split('\\n').length} lines`, 'info');
+  } catch (err) {
+    logJsonEditor(`Failed to load config: ${err.message || err}`, 'error');
+  }
+}
+
+function formatMapJson() {
+  try {
+    ensureMapJsonEditor();
+    if (!_cmMapJsonEditor) {
+      logJsonEditor('Editor not initialized', 'error');
+      return;
+    }
+    
+    const raw = _cmMapJsonEditor.getValue();
+    const obj = JSON.parse(raw);
+    const formatted = JSON.stringify(obj, null, 2);
+    setMapJsonEditorValue(formatted, { dirty: true });
+    markEditorDirty();
+    logJsonEditor('JSON formatted successfully', 'info');
+  } catch (err) {
+    logJsonEditor(`Format error: ${err.message || err}`, 'error');
+  }
+}
+
+function validateMapJson() {
+  return inspectMapJson({ writeLog: true }).valid;
+}
+
+async function applyMapJsonChanges({ automatic = false } = {}) {
+  try {
+    const validation = inspectMapJson({ writeLog: !automatic });
+    if (!validation.valid) {
+      if (automatic) logJsonEditor('Cannot save: fix the JSON errors first.', 'error');
+      setPublishModalTab('jsoneditor');
+      return false;
+    }
+
+    const config = validation.config;
+    const mainProjectId = String(config.projectId || '').trim();
+    if (publishProjectSelect && !Array.from(publishProjectSelect.options).some((option) => option.value === mainProjectId)) {
+      throw new Error(`Unknown main project "${mainProjectId}"`);
+    }
+    if (!automatic) logJsonEditor('Applying changes to editor state...', 'info');
+
+    if (publishName) publishName.value = String(config.name || '');
+    if (publishDescription) publishDescription.value = String(config.description || '');
+    if (publishProjectSelect) publishProjectSelect.value = mainProjectId;
+    publishState.editingProfileId = config.editingProfileId || publishState.editingProfileId || null;
+
+    publishState.extraLayers = [];
+    await loadProjectLayers(mainProjectId, 'main');
+    const configuredLayers = config.layers.filter((layer) => layer && typeof layer === 'object' && String(layer.name || '').trim());
+    const externalByProject = new Map();
+    for (const layer of configuredLayers) {
+      const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
+      if (sourceProjectId === mainProjectId) continue;
+      if (!externalByProject.has(sourceProjectId)) externalByProject.set(sourceProjectId, []);
+      externalByProject.get(sourceProjectId).push({
+        ...layer,
+        mode: layer.serveAsWfs === true ? 'WFS' : 'WMS'
+      });
+    }
+    for (const [sourceProjectId, layers] of externalByProject) {
+      await addExternalLayers(sourceProjectId, layers);
+    }
+
+    const discoveredRules = { ...(publishState.mainRules || {}) };
+    publishState.initialVisibility = {};
+    publishState.layerGroups = {};
+    publishState.layerTitles = {};
+    publishState.mainRules = {};
+    const includedKeys = [];
+    for (const layer of configuredLayers) {
+      const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
+      const key = makeLayerKey(sourceProjectId, String(layer.name || '').trim());
+      if (!key) continue;
+      const explicitRule = config.layerRules?.[key] || config.layerRules?.[layer.name] || {};
+      const nextRule = { ...(discoveredRules[key] || {}), ...explicitRule };
+      for (const field of ['searchable', 'editable', 'serveAsWfs', 'wfsStyle', 'wmsLegendMode', 'wmsLegendIcon', 'wmsLegendUrl', 'designerOptions', 'attributes', 'geometryType']) {
+        if (Object.prototype.hasOwnProperty.call(layer, field)) nextRule[field] = layer[field];
+      }
+      publishState.mainRules[key] = nextRule;
+      publishState.initialVisibility[key] = layer.visible !== false;
+      publishState.layerGroups[key] = String(layer.group || 'root').trim() || 'root';
+      const importedTitle = String(layer.title || '').trim();
+      publishState.layerTitles[key] = importedTitle && importedTitle !== String(layer.name || '').trim() ? importedTitle : '';
+      includedKeys.push(key);
+    }
+
+    if (extentInput) extentInput.value = Array.isArray(config.extent) ? JSON.stringify(config.extent) : '';
+    if (centerInput) {
+      centerInput.value = Array.isArray(config.center) ? JSON.stringify(config.center) : '';
+      if (config.centerCrs) centerInput.dataset.crs = String(config.centerCrs);
+      else delete centerInput.dataset.crs;
+    }
+    if (zoomInput) zoomInput.value = config.zoom != null ? String(config.zoom) : '';
+    if (minZoomInput) minZoomInput.value = config.minZoom != null ? String(config.minZoom) : '';
+    if (maxZoomInput) maxZoomInput.value = config.maxZoom != null ? String(config.maxZoom) : '';
+
+    const controls = Array.isArray(config.controls) ? config.controls : [];
+    publishState.controls = controls;
+    if (controlsJsonInput) controlsJsonInput.value = JSON.stringify(controls, null, 2);
+    syncCheckboxesFromControls(controls);
+    if (extraJsonInput) {
+      const extra = {};
+      if (config.pageSettings !== undefined) extra.pageSettings = config.pageSettings;
+      if (config.featureinfoOptions !== undefined) extra.featureinfoOptions = config.featureinfoOptions;
+      extraJsonInput.value = JSON.stringify(extra, null, 2);
+    }
+
+    const toolConfig = config.toolConfig && typeof config.toolConfig === 'object' ? config.toolConfig : {};
+    if (cfgShareUrl) cfgShareUrl.value = toolConfig.shareServiceUrl || '';
+    if (cfgRoutingUrl) cfgRoutingUrl.value = toolConfig.routingServiceUrl || '';
+    if (cfgElevationUrl) cfgElevationUrl.value = toolConfig.elevationServiceUrl || '';
+    if (cfgDxfUrl) cfgDxfUrl.value = toolConfig.dxfExportServiceUrl || '';
+    applyFeatureEditorState(config.features || {});
+
+    const importedGroups = [];
+    const collectGroup = (group, parent = '') => {
+      if (!group || typeof group !== 'object') return;
+      const name = String(group.name || '').trim();
+      if (name) importedGroups.push({ name, title: String(group.title || name).trim(), parent: String(group.parent || parent).trim(), expanded: group.expanded !== false });
+      for (const child of (Array.isArray(group.groups) ? group.groups : [])) collectGroup(child, name);
+    };
+    for (const group of (Array.isArray(config.groups) ? config.groups : [])) collectGroup(group);
+    publishState.groups = importedGroups;
+    publishState.searchSources = Array.isArray(config.features?.searchSources)
+      ? config.features.searchSources.map((source) => ({
+          projectId: String(source?.projectId || '').trim(),
+          layers: Array.isArray(source?.layers) ? source.layers.map((name) => String(name || '').trim()).filter(Boolean) : []
+        })).filter((source) => source.projectId)
+      : [];
+    publishState.searchSourceCatalog = {};
+
+    const backgroundProjectId = String(config.backgroundProjectId || '').trim();
+    if (backgroundProjectSelect) backgroundProjectSelect.value = backgroundProjectId;
+    if (backgroundProjectId) {
+      await loadProjectLayers(backgroundProjectId, 'background');
+      const configuredBackgrounds = Array.isArray(config.backgrounds) ? config.backgrounds : [];
+      const selectedBackgroundNames = Array.isArray(config.backgroundLayerNames) && config.backgroundLayerNames.length
+        ? config.backgroundLayerNames.map((name) => String(name || '').trim()).filter(Boolean)
+        : configuredBackgrounds.filter((item) => item?.type === 'layer' && String(item.sourceProjectId || '').trim() === backgroundProjectId).map((item) => String(item.name || '').trim()).filter(Boolean);
+      const selectedBackgroundKeys = publishState.backgroundLayers
+        .filter((layer) => selectedBackgroundNames.includes(String(layer.name || '').trim()))
+        .map((layer) => getLayerKey(layer));
+      setCheckedLayerNames(backgroundLayersList, selectedBackgroundKeys);
+      refreshBackgroundOptions();
+      for (const imported of configuredBackgrounds) {
+        const option = publishState.backgroundOptions.find((item) => item?.key === imported?.key);
+        if (option && imported?.imageUrl) option.customImageUrl = imported.imageUrl;
+      }
+    } else {
+      publishState.backgroundLayers = [];
+      if (backgroundLayersList) backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.optional_select'))}</p>`;
+      refreshBackgroundOptions();
+    }
+    publishState.defaultBackgroundKey = String(config.defaultBackgroundKey || 'none');
+    renderDefaultBackgroundOptions();
+
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, includedKeys);
+    refreshExtraSections();
+    await renderSearchSources();
+    syncToolCardClasses();
+    schedulePreviewRefresh();
+    _mapJsonDirty = false;
+    markEditorDirty();
+    setMapJsonLiveStatus('Applied', 'valid');
+    if (!automatic) logJsonEditor('✓ Changes applied successfully', 'info');
+    return true;
+  } catch (err) {
+    setMapJsonLiveStatus('Apply failed', 'invalid');
+    logJsonEditor(`Apply error: ${err.message || err}`, 'error');
+    setPublishModalTab('jsoneditor');
+    return false;
+  }
+}
+
+async function applyPendingMapJsonChanges() {
+  if (!_mapJsonDirty) return true;
+  return applyMapJsonChanges({ automatic: true });
+}
+
+function downloadMapJson() {
+  const validation = inspectMapJson({ writeLog: true });
+  if (!validation.valid) return;
+  const json = JSON.stringify(validation.config, null, 2);
+  setMapJsonEditorValue(json, { dirty: _mapJsonDirty });
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = String(validation.config.name || 'map-config').replace(/[^a-z0-9_-]/gi, '_');
+  link.href = url;
+  link.download = `${name}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Event listeners for JSON editor buttons
+jsonLoadBtn?.addEventListener('click', loadCurrentConfigToEditor);
+jsonFormatBtn?.addEventListener('click', formatMapJson);
+jsonValidateBtn?.addEventListener('click', validateMapJson);
+jsonApplyBtn?.addEventListener('click', () => { void applyMapJsonChanges(); });
+jsonClearLogBtn?.addEventListener('click', clearJsonEditorLog);
+jsonUndoBtn?.addEventListener('click', () => _cmMapJsonEditor?.undo());
+jsonRedoBtn?.addEventListener('click', () => _cmMapJsonEditor?.redo());
+jsonDownloadBtn?.addEventListener('click', downloadMapJson);
+jsonImportBtn?.addEventListener('click', () => jsonImportFile?.click());
+jsonImportFile?.addEventListener('change', async () => {
+  const file = jsonImportFile.files?.[0];
+  if (!file) return;
+  try {
+    setMapJsonEditorValue(await file.text(), { dirty: true });
+    markEditorDirty();
+    if (await applyMapJsonChanges()) logJsonEditor(`Imported ${file.name}`, 'info');
+  } catch (err) {
+    logJsonEditor(`Import failed: ${err.message || err}`, 'error');
+  } finally {
+    jsonImportFile.value = '';
+  }
+});
+
+// Initialize when switching to JSON editor tab
+const originalSetPublishModalTab = setPublishModalTab;
+setPublishModalTab = function(tab) {
+  originalSetPublishModalTab(tab);
+  if (tab === 'jsoneditor') {
+    ensureMapJsonEditor();
+    if (jsonLogContainer && !jsonLogContainer.hasChildNodes()) {
+      logJsonEditor('JSON Editor initialized. Click "Load current config" to begin.', 'info');
+    }
+  }
+};
+
+/* ======================================================================
+   Per-attribute value loader (for filter value dropdown)
+   ====================================================================== */
+const _layerValuesCache = new Map(); // key: layer|field -> string[]
+function loadLayerValues(projectId, layerName, fieldName) {
+  const sourceLayerName = String(getMainLayerByName(layerName)?.name || layerName).trim();
+  const key = `${projectId}||${sourceLayerName}||${fieldName}`;
+  if (_layerValuesCache.has(key)) return Promise.resolve(_layerValuesCache.get(key));
+  if (!projectId || !sourceLayerName || !fieldName) return Promise.resolve([]);
+  return fetch(`/Qtiler2Hajk/layer-values?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(sourceLayerName)}&field=${encodeURIComponent(fieldName)}&limit=500`)
+    .then(r => r.ok ? r.json() : { values: [] })
+    .then(d => {
+      const arr = Array.isArray(d.values) ? d.values : [];
+      _layerValuesCache.set(key, arr);
+      return arr;
+    })
+    .catch(() => []);
+}
+
+function attachValueDatalistForRule(idx) {
+  const card = document.querySelector(`[data-rule-editor-root="${idx}"]`);
+  if (!card) return;
+  const fieldSel = card.querySelector('[data-rk="f.field"]');
+  const valueInput = card.querySelector('[data-rk="f.value"]');
+  const valueHelp = card.querySelector('[data-rk="f.value-help"]');
+  if (!fieldSel || !valueInput) return;
+  if (!fieldSel.dataset.dlBound) {
+    fieldSel.dataset.dlBound = '1';
+    fieldSel.addEventListener('change', () => attachValueDatalistForRule(idx));
+  }
+  const field = fieldSel.value;
+  if (!field) {
+    valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Hajk.wfs_value_placeholder_any') || 'Write a value';
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Hajk.wfs_value_help_pick_field') || 'Select an attribute first to filter by a value.';
+    return;
+  }
+  const projectId = getLayerProjectId(currentEditingWfsLayer);
+  const dlId = `dl-rule-${idx}-${field.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  loadLayerValues(projectId, currentEditingWfsLayer, field).then(values => {
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
+    let dl = document.getElementById(dlId);
+    if (Array.isArray(values) && values.length) {
+      if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = dlId;
+        card.appendChild(dl);
+      }
+      dl.innerHTML = values.map(v => `<option value="${String(v).replace(/"/g, '&quot;')}"></option>`).join('');
+      valueInput.setAttribute('list', dlId);
+      valueInput.placeholder = t('Qtiler2Hajk.wfs_value_placeholder_suggested') || 'Write a value or choose a suggestion';
+      if (valueHelp) valueHelp.textContent = t('Qtiler2Hajk.wfs_value_help_suggested') || 'Use an existing value or write a new one manually.';
+      return;
+    }
+    if (dl) {
+      try { dl.remove(); } catch {}
+    }
+    valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Hajk.wfs_value_placeholder_any') || 'Write a value';
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Hajk.wfs_value_help_manual') || 'You can type a value manually even if the attribute has no detected values.';
+  }).catch(() => {
+    valueInput.disabled = false;
+    valueInput.readOnly = false;
+    valueInput.removeAttribute('list');
+    valueInput.placeholder = t('Qtiler2Hajk.wfs_value_placeholder_any') || 'Write a value';
+    if (valueHelp) valueHelp.textContent = t('Qtiler2Hajk.wfs_value_help_manual') || 'You can type a value manually even if the attribute has no detected values.';
+  });
+}
+window.openStyleEditor = openStyleEditor;
+window.saveStyleEditor = saveStyleEditor;
+
+
+
+
+
+/* === How it works modal wiring === */
+(function () {
+  const modal = document.getElementById('q2o-hiw-modal');
+  const openBtn = document.getElementById('q2o-open-hiw');
+  if (!modal || !openBtn) return;
+  const open = () => { modal.hidden = false; modal.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; };
+  const close = () => { modal.hidden = true; modal.setAttribute('aria-hidden','true'); document.body.style.overflow=''; };
+  openBtn.addEventListener('click', open);
+  modal.querySelectorAll('[data-hiw-close]').forEach((el) => el.addEventListener('click', close));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
+
