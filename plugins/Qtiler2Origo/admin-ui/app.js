@@ -23,13 +23,13 @@
 const QTWC_I18N = {
   en: {
     'Qtiler2Origo.title': 'Origo Bridge for Qtiler',
-    'Qtiler2Origo.subtitle': 'Install Origo from GitHub, publish maps visually, and power a public portal with or without QtilerAuth.',
+    'Qtiler2Origo.subtitle': 'Install Origo from GitHub, publish QGIS maps visually, and manage access with or without QtilerAuth.',
     'Qtiler2Origo.how_title': 'How Qtiler2Origo works',
-    'Qtiler2Origo.how_intro': 'Qtiler2Origo is the base bridge between Qtiler and Origo: it publishes QGIS-backed web maps and now also drives a visual portal/CMS for the public /Qtiler2Origo/maps site without leaving the admin console.',
+    'Qtiler2Origo.how_intro': 'Qtiler2Origo connects Qtiler to Origo, turning QGIS projects into configured web maps from one administration interface.',
     'Qtiler2Origo.how_step_install': 'Install Origo — pick a release tag from the official GitHub repository. Qtiler downloads the build and serves it from the plugin so the viewer stays inside the same deployment.',
     'Qtiler2Origo.how_step_publish': 'Publish maps — open the Maps tab, configure CRS, zoom, layers, backgrounds and tools, then save. Qtiler generates the Origo configuration automatically and keeps non-WFS layers published through the correct WMS path unless WFS/editing is explicitly enabled.',
-    'Qtiler2Origo.how_step_share': 'Share maps and pages — published viewers are reachable directly and the portal home lives at /Qtiler2Origo/maps, where admins can present selected maps as thumbnails, embeds or open-link cards.',
-    'Qtiler2Origo.how_step_brand': 'Brand and customise — upload a logo, configure toolbar controls, and design portal pages with header options, cards, rich text and map sections. Changes hot-reload without restarting Qtiler.',
+    'Qtiler2Origo.how_step_share': 'Share maps — every published profile gets a stable direct link that can also be used by QtilerStories.',
+    'Qtiler2Origo.how_step_brand': 'Brand and customise — upload a viewer logo and configure layers, backgrounds, search, editing and toolbar controls.',
     'Qtiler2Origo.how_outro': 'Open source under MPL-2.0. The plugin only talks to GitHub during install; at runtime it works with QtilerAuth when available and degrades safely to public access when it is not, without telemetry or external data export.',
     'Qtiler2Origo.installation': 'Installation',
     'Qtiler2Origo.github_repo': 'GitHub repo',
@@ -186,6 +186,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.log_deleted': 'Profile "{id}" deleted.',
     'Qtiler2Origo.regen_thumb': 'Regenerate thumbnail',
     'Qtiler2Origo.regen_thumb_title': 'Clear cached thumbnails for this project so a fresh one is generated on next view.',
+    'Qtiler2Origo.thumbnail_change': 'Change thumbnail',
+    'Qtiler2Origo.thumbnail_setup_title': 'Map thumbnails',
+    'Qtiler2Origo.thumbnail_setup_help': 'Replace an automatically generated thumbnail with your own image. Publishing the map again keeps this image; Regenerate thumbnail returns to automatic mode.',
+    'Qtiler2Origo.thumbnail_setup_map': 'Published map',
+    'Qtiler2Origo.thumbnail_setup_file': 'PNG, JPG or WEBP image',
+    'Qtiler2Origo.thumbnail_setup_upload': 'Upload thumbnail',
     'Qtiler2Origo.log_thumb_regen': 'Thumbnail cache cleared for "{id}" ({n} files).',
     'Qtiler2Origo.log_error': 'Error: {msg}',
     'Qtiler2Origo.requires_install': 'Install Origo first to use this section.',
@@ -236,107 +242,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.bg_count': '{n} backgrounds',
     'Qtiler2Origo.tab_setup': 'Setup',
     'Qtiler2Origo.tab_maps': 'Maps',
-    'Qtiler2Origo.tab_portal': 'Portal',
     'Qtiler2Origo.tab_log': 'Log',
-    'Qtiler2Origo.portal_section': 'Portal pages',
-    'Qtiler2Origo.portal_desc': 'Create editorial landing pages for the public maps portal, with sections, featured maps and audience rules.',
-    'Qtiler2Origo.portal_add_page': 'New page',
-    'Qtiler2Origo.portal_duplicate_page': 'Duplicate page',
-    'Qtiler2Origo.portal_save': 'Save portal',
-    'Qtiler2Origo.portal_open_page': 'Open page',
-    'Qtiler2Origo.portal_templates': 'Templates',
-    'Qtiler2Origo.portal_templates_help': 'Start from a polished layout and then adapt text, maps and news blocks.',
-    'Qtiler2Origo.portal_apply_template': 'Apply template',
-    'Qtiler2Origo.portal_pages_list': 'Pages',
-    'Qtiler2Origo.portal_empty': 'Create the first page to turn the maps portal into an editorial landing page.',
-    'Qtiler2Origo.portal_page_title': 'Page title',
-    'Qtiler2Origo.portal_page_slug': 'Slug',
-    'Qtiler2Origo.portal_page_nav': 'Navigation label',
-    'Qtiler2Origo.portal_page_summary': 'Short summary',
-    'Qtiler2Origo.portal_site_header_height': 'Header height',
-    'Qtiler2Origo.portal_site_header_font': 'Header font',
-    'Qtiler2Origo.portal_site_header_color1': 'Header color 1',
-    'Qtiler2Origo.portal_site_header_color2': 'Header color 2',
-    'Qtiler2Origo.portal_site_header_text_color': 'Header text color',
-    'Qtiler2Origo.portal_site_header_background_url': 'Header background image URL',
-    'Qtiler2Origo.portal_site_footer_text': 'Footer text',
-    'Qtiler2Origo.portal_site_footer_link_label': 'Footer link label',
-    'Qtiler2Origo.portal_site_footer_link_url': 'Footer link URL',
-    'Qtiler2Origo.portal_site_footer_background_color': 'Footer background color',
-    'Qtiler2Origo.portal_site_footer_text_color': 'Footer text color',
-    'Qtiler2Origo.portal_site_footer_link_color': 'Footer link color',
-    'Qtiler2Origo.portal_header_logo': 'Header logo URL',
-    'Qtiler2Origo.portal_header_height': 'Header height',
-    'Qtiler2Origo.portal_show_header': 'Show header',
-    'Qtiler2Origo.portal_visibility': 'Page visibility',
-    'Qtiler2Origo.portal_vis_public': 'Public',
-    'Qtiler2Origo.portal_vis_authenticated': 'Authenticated users',
-    'Qtiler2Origo.portal_vis_restricted': 'Specific users / roles',
-    'Qtiler2Origo.portal_users': 'Allowed users',
-    'Qtiler2Origo.portal_roles': 'Allowed roles',
-    'Qtiler2Origo.portal_users_catalog': 'Users list',
-    'Qtiler2Origo.portal_roles_catalog': 'Roles list',
-    'Qtiler2Origo.portal_show_in_nav': 'Show in navigation',
-    'Qtiler2Origo.portal_set_home': 'Use as portal home',
-    'Qtiler2Origo.portal_blocks': 'Sections',
-    'Qtiler2Origo.portal_blocks_help': 'Combine hero, text, card, social and map sections to build a polished landing page.',
-    'Qtiler2Origo.portal_add_block': 'Add section',
-    'Qtiler2Origo.portal_preview': 'Live preview',
-    'Qtiler2Origo.portal_preview_note': 'Desktop preview',
-    'Qtiler2Origo.portal_fullscreen': 'Fullscreen editor',
-    'Qtiler2Origo.portal_device_desktop': 'Desktop',
-    'Qtiler2Origo.portal_device_tablet': 'Tablet',
-    'Qtiler2Origo.portal_device_mobile': 'Mobile',
-    'Qtiler2Origo.portal_block_hero': 'Hero',
-    'Qtiler2Origo.portal_block_text': 'Text',
-    'Qtiler2Origo.portal_block_cards': 'Cards / news',
-    'Qtiler2Origo.portal_block_maps': 'Featured maps',
-    'Qtiler2Origo.portal_block_social': 'Social links',
-    'Qtiler2Origo.portal_block_visibility': 'Section visibility',
-    'Qtiler2Origo.portal_vis_inherit': 'Same as page',
-    'Qtiler2Origo.portal_intro': 'Intro text',
-    'Qtiler2Origo.portal_body': 'Body text',
-    'Qtiler2Origo.portal_eyebrow': 'Eyebrow',
-    'Qtiler2Origo.portal_background_url': 'Background image URL',
-    'Qtiler2Origo.portal_cta_label': 'Button label',
-    'Qtiler2Origo.portal_cta_url': 'Button URL',
-    'Qtiler2Origo.portal_layout': 'Layout',
-    'Qtiler2Origo.portal_layout_grid': 'Grid',
-    'Qtiler2Origo.portal_layout_featured': 'Featured',
-    'Qtiler2Origo.portal_map_display': 'Map display',
-    'Qtiler2Origo.portal_map_display_thumbnail': 'Thumbnail cards',
-    'Qtiler2Origo.portal_map_display_embed': 'Integrated map',
-    'Qtiler2Origo.portal_map_display_open': 'Open map link',
-    'Qtiler2Origo.portal_map_profiles': 'Map profiles',
-    'Qtiler2Origo.portal_maps_catalog': 'Published maps',
-    'Qtiler2Origo.portal_add_item': 'Add item',
-    'Qtiler2Origo.portal_item_title': 'Item title',
-    'Qtiler2Origo.portal_item_text': 'Item text',
-    'Qtiler2Origo.portal_item_url': 'Link URL',
-    'Qtiler2Origo.portal_item_label': 'Link label',
-    'Qtiler2Origo.portal_item_icon': 'Icon',
-    'Qtiler2Origo.portal_item_meta': 'Meta / date',
-    'Qtiler2Origo.portal_item_image': 'Image URL',
-    'Qtiler2Origo.portal_move_up': 'Up',
-    'Qtiler2Origo.portal_move_down': 'Down',
-    'Qtiler2Origo.portal_edit_page': 'Edit page',
-    'Qtiler2Origo.portal_delete': 'Delete',
-    'Qtiler2Origo.portal_home_badge': 'Home',
-    'Qtiler2Origo.portal_hidden_badge': 'Hidden from nav',
-    'Qtiler2Origo.portal_saved': 'Portal pages saved.',
-    'Qtiler2Origo.portal_backup_title': 'Export / import portal backup',
-    'Qtiler2Origo.portal_backup_pages': 'Portal pages to export',
-    'Qtiler2Origo.portal_backup_maps': 'Published maps to export',
-    'Qtiler2Origo.portal_backup_export': 'Export JSON',
-    'Qtiler2Origo.portal_backup_import': 'Import / restore JSON',
-    'Qtiler2Origo.portal_backup_replace_portal': 'Replace portal pages',
-    'Qtiler2Origo.portal_backup_replace_maps': 'Replace published maps with same key',
-    'Qtiler2Origo.portal_backup_help': 'The backup JSON includes selected portal content and selected published map configurations. It does not include tile caches or QGIS project files.',
-    'Qtiler2Origo.portal_backup_exported': 'Portal backup exported.',
-    'Qtiler2Origo.portal_backup_imported': 'Portal backup imported ({n} maps).',
-    'Qtiler2Origo.portal_no_blocks_preview': 'Add sections to preview the page.',
-    'Qtiler2Origo.portal_no_users': 'No users found',
-    'Qtiler2Origo.portal_no_roles': 'No roles found',
     'Qtiler2Origo.map_name': 'Map name',
     'Qtiler2Origo.map_name_placeholder': 'Unique name for this map',
     'Qtiler2Origo.map_description': 'Description',
@@ -351,6 +257,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_json_editor': '5. JSON Editor',
     'Qtiler2Origo.json_editor_help': 'Edit the complete map configuration JSON. Changes are validated in real-time.',
     'Qtiler2Origo.json_load': 'Load current config',
+    'Qtiler2Origo.json_import': 'Import JSON',
+    'Qtiler2Origo.json_download': 'Download JSON',
     'Qtiler2Origo.json_format': 'Format JSON',
     'Qtiler2Origo.json_validate': 'Validate',
     'Qtiler2Origo.json_apply': 'Apply changes',
@@ -621,44 +529,35 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_edit_profile_title': 'Edit name, layers, backgrounds, groups and tools',
     'Qtiler2Origo.hiw.button': 'How it works & Security',
     'Qtiler2Origo.hiw.title': 'How Qtiler2Origo works & security',
-    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo embeds the Origo web map viewer inside Qtiler and now also includes a visual portal/CMS for the public /Qtiler2Origo/maps site. It downloads Origo from a pinned GitHub release, lets you configure each published map graphically from QGIS, and lets admins build landing pages with text, cards, CTA blocks and selected maps.',
+    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo embeds the Origo web map viewer in Qtiler. It installs a selected GitHub release and lets administrators configure each published map graphically from QGIS.',
     'Qtiler2Origo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
     'Qtiler2Origo.hiw.vs.1': 'Qrigo is for users who already run a standard Origo-map installation on their own server: it only generates JSON snippets to paste into your existing Origo index.json.',
     'Qtiler2Origo.hiw.vs.2': 'Qtiler2Origo installs Origo on top of Qtiler itself, with a graphical map editor backed by the QGIS library and Qtiler\'s cache and WMS/WFS layers — no separate Origo server required.',
     'Qtiler2Origo.hiw.arch.title': '1. Architecture',
     'Qtiler2Origo.hiw.arch.1': 'Express plugin under plugins/Qtiler2Origo/. The Origo build is downloaded from GitHub and served at /plugins/Qtiler2Origo/origo.',
-    'Qtiler2Origo.hiw.arch.2': 'Per-map JSON files are stored under data/Qtiler2Origo/maps/, while the portal/CMS state is stored separately and both are reloaded in place on edits — no server restart needed.',
-    'Qtiler2Origo.hiw.arch.3': 'The public site /Qtiler2Origo/maps lists and renders portal pages, while /Qtiler2Origo/maps/<name> still resolves directly to a published viewer. Reverse-proxy-safe routing keeps both entry points stable.',
     'Qtiler2Origo.hiw.flow.title': '2. Step by step',
     'Qtiler2Origo.hiw.flow.1': 'Setup tab: pick a GitHub release tag and click Install Origo-map.',
     'Qtiler2Origo.hiw.flow.2': 'Maps tab: select a project published in Qtiler, edit the map graphically (CRS, center, zoom, layers, backgrounds, tools) and publish it as an Origo viewer.',
-    'Qtiler2Origo.hiw.flow.3': 'Portal tab: create public pages visually, choose who can see each page or block, pick which published maps to feature, and choose whether each map is shown as a thumbnail, an embedded preview or an open-link card.',
-    'Qtiler2Origo.hiw.flow.4': 'Brand the experience with logo, header visibility/height and toolbar controls, then publish: maps are reachable at /Qtiler2Origo/maps/<name> and the portal home at /Qtiler2Origo/maps.',
     'Qtiler2Origo.hiw.maps.title': '3. Maps & QGIS library',
     'Qtiler2Origo.hiw.maps.1': 'Maps are built directly from QGIS projects: layers, styles, scales and CRS come from the project on disk.',
     'Qtiler2Origo.hiw.maps.2': 'Default WMTS background invariants ensure every map has a working base layer, and vector layers that are not explicitly marked for WFS stay published as WMS layers with their thumbnail-style presentation.',
-    'Qtiler2Origo.hiw.maps.3': 'Bookmarks, print layouts, themes and the portal map-picker all surface published maps automatically from the same base plugin state.',
     'Qtiler2Origo.hiw.wfs.title': '4. WFS edit & cache reuse',
     'Qtiler2Origo.hiw.wfs.1': 'Editable WFS layers reuse the Qtiler WFS endpoint, including multipart edits and edit-existing-feature-by-id. A layer is exposed as WFS only when it is explicitly enabled for WFS or editing.',
-    'Qtiler2Origo.hiw.wfs.2': 'Tile and vector tile caches generated by Qtiler are served as background and overlay layers without re-tiling, while non-WFS vector content can still be rendered safely through WMS-driven published maps and portal thumbnails.',
     'Qtiler2Origo.hiw.auth.title': '5. Authentication & visibility',
-    'Qtiler2Origo.hiw.auth.1': 'When QtilerAuth is active, its ACLs (public / authenticated / private) are enforced on maps, catalog responses and portal visibility. When QtilerAuth is not installed or not enabled, Qtiler2Origo stays operational and degrades to fully public access.',
     'Qtiler2Origo.hiw.auth.2': 'Cookie sessions and ?api_key=/x-api-key headers are both supported for QGIS Desktop and external integrations when auth is enabled, while the same routes continue to work without auth dependencies in public-only mode.',
     'Qtiler2Origo.hiw.auth.3': 'Standalone-port environment precedence is honoured so the plugin behaves consistently behind IIS or NGINX reverse proxies, independent of whether auth is enabled.',
     'Qtiler2Origo.hiw.security.title': '6. Security & privacy',
     'Qtiler2Origo.hiw.security.1': 'Network calls are limited to GitHub during install and, when enabled, to local auth/ACL checks; there is no runtime telemetry and the base plugin does not require the separate QtilerAuth plugin to stay alive.',
-    'Qtiler2Origo.hiw.security.2': 'Admin actions (install/uninstall, branding, publish/edit/delete maps, edit portal pages) remain admin-only when auth is enabled; with auth disabled, the public-facing routes stay readable without crashing the plugin.',
-    'Qtiler2Origo.hiw.security.3': 'Open source under MPL-2.0; auditable in plugins/Qtiler2Origo/, including the map publisher, portal builder and access-fallback logic.'
   },
   es: {
     'Qtiler2Origo.title': 'Qtiler2Origo',
-    'Qtiler2Origo.subtitle': 'Instala Origo desde GitHub, publica mapas visualmente y alimenta un portal público con o sin QtilerAuth.',
+    'Qtiler2Origo.subtitle': 'Instala Origo desde GitHub, publica mapas QGIS visualmente y gestiona el acceso con o sin QtilerAuth.',
     'Qtiler2Origo.how_title': 'Cómo funciona Qtiler2Origo',
-    'Qtiler2Origo.how_intro': 'Qtiler2Origo es el puente base entre Qtiler y Origo: publica mapas web respaldados por QGIS y ahora también alimenta un portal/CMS visual para el sitio público /Qtiler2Origo/maps sin salir de la consola de administración.',
+    'Qtiler2Origo.how_intro': 'Qtiler2Origo conecta Qtiler con Origo y convierte proyectos QGIS en mapas web configurados desde una sola interfaz de administración.',
     'Qtiler2Origo.how_step_install': 'Instalar Origo — elige una versión publicada en el repositorio oficial de GitHub. Qtiler descarga el build y lo sirve desde el propio plugin para que el visor quede dentro del mismo despliegue.',
     'Qtiler2Origo.how_step_publish': 'Publicar mapas — abre la pestaña Mapas, configura CRS, zoom, capas, fondos y herramientas, y guarda. Qtiler genera automáticamente la configuración de Origo y mantiene las capas no WFS por la ruta correcta de WMS salvo que WFS o edición estén activados explícitamente.',
-    'Qtiler2Origo.how_step_share': 'Compartir mapas y páginas — los visores publicados están disponibles directamente y la portada del portal vive en /Qtiler2Origo/maps, donde los administradores pueden presentar mapas seleccionados como thumbnails, embebidos o tarjetas con enlace abierto.',
-    'Qtiler2Origo.how_step_brand': 'Personalizar — sube un logotipo, configura los controles de la barra y diseña páginas del portal con opciones de header, tarjetas, texto enriquecido y secciones de mapas. Los cambios se aplican en caliente sin reiniciar Qtiler.',
+    'Qtiler2Origo.how_step_share': 'Comparte mapas: cada perfil publicado obtiene un enlace directo estable que también puede usar QtilerStories.',
+    'Qtiler2Origo.how_step_brand': 'Personaliza el visor: sube un logotipo y configura capas, fondos, búsqueda, edición y controles de la barra.',
     'Qtiler2Origo.how_outro': 'Software libre bajo MPL-2.0. El plugin solo se comunica con GitHub durante la instalación; en tiempo de ejecución trabaja con QtilerAuth cuando existe y degrada de forma segura a acceso público cuando no, sin telemetría ni salida de datos a terceros.',
     'Qtiler2Origo.installation': 'Instalación',
     'Qtiler2Origo.github_repo': 'Repositorio GitHub',
@@ -815,6 +714,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.log_deleted': 'Perfil "{id}" eliminado.',
     'Qtiler2Origo.regen_thumb': 'Regenerar miniatura',
     'Qtiler2Origo.regen_thumb_title': 'Borra las miniaturas en caché del proyecto para que se regeneren la próxima vez.',
+    'Qtiler2Origo.thumbnail_change': 'Cambiar miniatura',
+    'Qtiler2Origo.thumbnail_setup_title': 'Miniaturas de mapas',
+    'Qtiler2Origo.thumbnail_setup_help': 'Reemplaza la miniatura automática con una imagen propia. Volver a publicar conserva esta imagen; Regenerar miniatura vuelve al modo automático.',
+    'Qtiler2Origo.thumbnail_setup_map': 'Mapa publicado',
+    'Qtiler2Origo.thumbnail_setup_file': 'Imagen PNG, JPG o WEBP',
+    'Qtiler2Origo.thumbnail_setup_upload': 'Subir miniatura',
     'Qtiler2Origo.log_thumb_regen': 'Caché de miniaturas vaciada para "{id}" ({n} archivos).',
     'Qtiler2Origo.log_error': 'Error: {msg}',
     'Qtiler2Origo.requires_install': 'Instala Origo primero para usar esta sección.',
@@ -865,107 +770,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.bg_count': '{n} fondos',
     'Qtiler2Origo.tab_setup': 'Configuración',
     'Qtiler2Origo.tab_maps': 'Mapas',
-    'Qtiler2Origo.tab_portal': 'Portal',
     'Qtiler2Origo.tab_log': 'Registro',
-    'Qtiler2Origo.portal_section': 'Páginas del portal',
-    'Qtiler2Origo.portal_desc': 'Crea páginas editoriales para el portal público de mapas, con secciones, mapas destacados y reglas de audiencia.',
-    'Qtiler2Origo.portal_add_page': 'Nueva página',
-    'Qtiler2Origo.portal_duplicate_page': 'Duplicar página',
-    'Qtiler2Origo.portal_save': 'Guardar portal',
-    'Qtiler2Origo.portal_open_page': 'Abrir página',
-    'Qtiler2Origo.portal_templates': 'Plantillas',
-    'Qtiler2Origo.portal_templates_help': 'Parte de un layout trabajado y luego adapta textos, mapas y bloques de noticias.',
-    'Qtiler2Origo.portal_apply_template': 'Aplicar plantilla',
-    'Qtiler2Origo.portal_pages_list': 'Páginas',
-    'Qtiler2Origo.portal_empty': 'Crea la primera página para convertir el portal de mapas en una portada editorial.',
-    'Qtiler2Origo.portal_page_title': 'Título de la página',
-    'Qtiler2Origo.portal_page_slug': 'Slug',
-    'Qtiler2Origo.portal_page_nav': 'Etiqueta de navegación',
-    'Qtiler2Origo.portal_page_summary': 'Resumen corto',
-    'Qtiler2Origo.portal_site_header_height': 'Altura del header',
-    'Qtiler2Origo.portal_site_header_font': 'Fuente del header',
-    'Qtiler2Origo.portal_site_header_color1': 'Color 1 del header',
-    'Qtiler2Origo.portal_site_header_color2': 'Color 2 del header',
-    'Qtiler2Origo.portal_site_header_text_color': 'Color del texto del header',
-    'Qtiler2Origo.portal_site_header_background_url': 'URL de imagen de fondo del header',
-    'Qtiler2Origo.portal_site_footer_text': 'Texto del footer',
-    'Qtiler2Origo.portal_site_footer_link_label': 'Etiqueta del enlace del footer',
-    'Qtiler2Origo.portal_site_footer_link_url': 'URL del enlace del footer',
-    'Qtiler2Origo.portal_site_footer_background_color': 'Color de fondo del footer',
-    'Qtiler2Origo.portal_site_footer_text_color': 'Color del texto del footer',
-    'Qtiler2Origo.portal_site_footer_link_color': 'Color del enlace del footer',
-    'Qtiler2Origo.portal_header_logo': 'URL del logo del header',
-    'Qtiler2Origo.portal_header_height': 'Altura del header',
-    'Qtiler2Origo.portal_show_header': 'Mostrar header',
-    'Qtiler2Origo.portal_visibility': 'Visibilidad de la página',
-    'Qtiler2Origo.portal_vis_public': 'Pública',
-    'Qtiler2Origo.portal_vis_authenticated': 'Usuarios autenticados',
-    'Qtiler2Origo.portal_vis_restricted': 'Usuarios / roles concretos',
-    'Qtiler2Origo.portal_users': 'Usuarios permitidos',
-    'Qtiler2Origo.portal_roles': 'Roles permitidos',
-    'Qtiler2Origo.portal_users_catalog': 'Listado de usuarios',
-    'Qtiler2Origo.portal_roles_catalog': 'Listado de roles',
-    'Qtiler2Origo.portal_show_in_nav': 'Mostrar en la navegación',
-    'Qtiler2Origo.portal_set_home': 'Usar como portada del portal',
-    'Qtiler2Origo.portal_blocks': 'Secciones',
-    'Qtiler2Origo.portal_blocks_help': 'Combina hero, texto, tarjetas, redes sociales y mapas para construir una landing profesional.',
-    'Qtiler2Origo.portal_add_block': 'Añadir sección',
-    'Qtiler2Origo.portal_preview': 'Vista previa',
-    'Qtiler2Origo.portal_preview_note': 'Vista escritorio',
-    'Qtiler2Origo.portal_fullscreen': 'Editor a pantalla completa',
-    'Qtiler2Origo.portal_device_desktop': 'Escritorio',
-    'Qtiler2Origo.portal_device_tablet': 'Tablet',
-    'Qtiler2Origo.portal_device_mobile': 'Móvil',
-    'Qtiler2Origo.portal_block_hero': 'Hero',
-    'Qtiler2Origo.portal_block_text': 'Texto',
-    'Qtiler2Origo.portal_block_cards': 'Tarjetas / noticias',
-    'Qtiler2Origo.portal_block_maps': 'Mapas destacados',
-    'Qtiler2Origo.portal_block_social': 'Redes sociales',
-    'Qtiler2Origo.portal_block_visibility': 'Visibilidad de la sección',
-    'Qtiler2Origo.portal_vis_inherit': 'Igual que la página',
-    'Qtiler2Origo.portal_intro': 'Texto introductorio',
-    'Qtiler2Origo.portal_body': 'Texto principal',
-    'Qtiler2Origo.portal_eyebrow': 'Eyebrow',
-    'Qtiler2Origo.portal_background_url': 'URL de imagen de fondo',
-    'Qtiler2Origo.portal_cta_label': 'Texto del botón',
-    'Qtiler2Origo.portal_cta_url': 'URL del botón',
-    'Qtiler2Origo.portal_layout': 'Diseño',
-    'Qtiler2Origo.portal_layout_grid': 'Cuadrícula',
-    'Qtiler2Origo.portal_layout_featured': 'Destacado',
-    'Qtiler2Origo.portal_map_display': 'Visualización del mapa',
-    'Qtiler2Origo.portal_map_display_thumbnail': 'Tarjetas con miniatura',
-    'Qtiler2Origo.portal_map_display_embed': 'Mapa integrado',
-    'Qtiler2Origo.portal_map_display_open': 'Abrir mapa',
-    'Qtiler2Origo.portal_map_profiles': 'Perfiles de mapa',
-    'Qtiler2Origo.portal_maps_catalog': 'Mapas publicados',
-    'Qtiler2Origo.portal_add_item': 'Añadir elemento',
-    'Qtiler2Origo.portal_item_title': 'Título del elemento',
-    'Qtiler2Origo.portal_item_text': 'Texto del elemento',
-    'Qtiler2Origo.portal_item_url': 'URL del enlace',
-    'Qtiler2Origo.portal_item_label': 'Etiqueta del enlace',
-    'Qtiler2Origo.portal_item_icon': 'Icono',
-    'Qtiler2Origo.portal_item_meta': 'Meta / fecha',
-    'Qtiler2Origo.portal_item_image': 'URL de imagen',
-    'Qtiler2Origo.portal_move_up': 'Subir',
-    'Qtiler2Origo.portal_move_down': 'Bajar',
-    'Qtiler2Origo.portal_edit_page': 'Editar pagina',
-    'Qtiler2Origo.portal_delete': 'Eliminar',
-    'Qtiler2Origo.portal_home_badge': 'Inicio',
-    'Qtiler2Origo.portal_hidden_badge': 'Oculta en navegación',
-    'Qtiler2Origo.portal_saved': 'Páginas del portal guardadas.',
-    'Qtiler2Origo.portal_backup_title': 'Exportar / importar copia del portal',
-    'Qtiler2Origo.portal_backup_pages': 'Páginas del portal a exportar',
-    'Qtiler2Origo.portal_backup_maps': 'Mapas publicados a exportar',
-    'Qtiler2Origo.portal_backup_export': 'Exportar JSON',
-    'Qtiler2Origo.portal_backup_import': 'Importar / restaurar JSON',
-    'Qtiler2Origo.portal_backup_replace_portal': 'Reemplazar páginas del portal',
-    'Qtiler2Origo.portal_backup_replace_maps': 'Reemplazar mapas publicados con la misma clave',
-    'Qtiler2Origo.portal_backup_help': 'El JSON incluye el contenido seleccionado del portal y las configuraciones de los mapas publicados seleccionados. No incluye caches de tiles ni archivos de proyecto QGIS.',
-    'Qtiler2Origo.portal_backup_exported': 'Copia del portal exportada.',
-    'Qtiler2Origo.portal_backup_imported': 'Copia del portal importada ({n} mapas).',
-    'Qtiler2Origo.portal_no_blocks_preview': 'Añade secciones para previsualizar la página.',
-    'Qtiler2Origo.portal_no_users': 'No se encontraron usuarios',
-    'Qtiler2Origo.portal_no_roles': 'No se encontraron roles',
     'Qtiler2Origo.map_name': 'Nombre del mapa',
     'Qtiler2Origo.map_name_placeholder': 'Nombre único para este mapa',
     'Qtiler2Origo.map_description': 'Descripción',
@@ -980,6 +785,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_json_editor': '5. Editor JSON',
     'Qtiler2Origo.json_editor_help': 'Edita la configuración JSON completa del mapa. Los cambios se validan en tiempo real.',
     'Qtiler2Origo.json_load': 'Cargar configuración actual',
+    'Qtiler2Origo.json_import': 'Importar JSON',
+    'Qtiler2Origo.json_download': 'Descargar JSON',
     'Qtiler2Origo.json_format': 'Formatear JSON',
     'Qtiler2Origo.json_validate': 'Validar',
     'Qtiler2Origo.json_apply': 'Aplicar cambios',
@@ -1250,44 +1057,35 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_edit_profile_title': 'Editar nombre, capas, fondos, grupos y herramientas',
     'Qtiler2Origo.hiw.button': 'Cómo funciona y seguridad',
     'Qtiler2Origo.hiw.title': 'Cómo funciona Qtiler2Origo y por qué es seguro',
-    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo integra el visor web Origo dentro de Qtiler y ahora también incluye un portal/CMS visual para el sitio público /Qtiler2Origo/maps. Descarga Origo desde una release fija de GitHub, te permite configurar cada mapa publicado desde QGIS y deja a los administradores crear landing pages con texto, tarjetas, llamadas a la acción y mapas seleccionados.',
+    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo integra el visor web Origo en Qtiler. Instala una versión seleccionada desde GitHub y permite configurar gráficamente cada mapa publicado desde QGIS.',
     'Qtiler2Origo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
     'Qtiler2Origo.hiw.vs.1': 'Qrigo es para usuarios que ya tienen Origo-map instalado de forma estándar en su propio servidor: solo genera snippets JSON para pegar en el index.json de tu Origo existente.',
     'Qtiler2Origo.hiw.vs.2': 'Qtiler2Origo instala Origo sobre Qtiler, con un editor gráfico de mapas respaldado por la biblioteca de QGIS y por el caché y las capas WMS/WFS de Qtiler — sin necesidad de un servidor Origo aparte.',
     'Qtiler2Origo.hiw.arch.title': '1. Arquitectura',
     'Qtiler2Origo.hiw.arch.1': 'Plugin Express en plugins/Qtiler2Origo/. El build de Origo se descarga de GitHub y se sirve en /plugins/Qtiler2Origo/origo.',
-    'Qtiler2Origo.hiw.arch.2': 'Cada mapa se guarda como JSON en data/Qtiler2Origo/maps/, mientras que el estado del portal/CMS se guarda por separado; ambos se recargan en caliente en cada edición, sin reiniciar el servidor.',
-    'Qtiler2Origo.hiw.arch.3': 'El sitio público /Qtiler2Origo/maps lista y renderiza las páginas del portal, mientras que /Qtiler2Origo/maps/<nombre> sigue resolviendo directamente a un visor publicado. El enrutado es seguro detrás de reverse proxy para ambos accesos.',
     'Qtiler2Origo.hiw.flow.title': '2. Paso a paso',
     'Qtiler2Origo.hiw.flow.1': 'Pestaña Setup: elige un tag de release de GitHub y pulsa Instalar Origo-map.',
     'Qtiler2Origo.hiw.flow.2': 'Pestaña Mapas: selecciona un proyecto publicado en Qtiler, edita el mapa gráficamente (CRS, centro, zoom, capas, fondos, herramientas) y publícalo como visor Origo.',
-    'Qtiler2Origo.hiw.flow.3': 'Pestaña Portal: crea páginas públicas de forma visual, elige quién puede ver cada página o bloque, selecciona qué mapas publicados destacar y decide si cada mapa se muestra como thumbnail, vista integrada o tarjeta con enlace abierto.',
-    'Qtiler2Origo.hiw.flow.4': 'Personaliza la experiencia con logo, visibilidad/altura del header y controles de la barra; después publica: los mapas quedan en /Qtiler2Origo/maps/<nombre> y la portada del portal en /Qtiler2Origo/maps.',
     'Qtiler2Origo.hiw.maps.title': '3. Mapas y biblioteca QGIS',
     'Qtiler2Origo.hiw.maps.1': 'Los mapas se construyen directamente desde proyectos QGIS: capas, estilos, escalas y CRS provienen del proyecto en disco.',
     'Qtiler2Origo.hiw.maps.2': 'Se garantizan invariantes de fondo WMTS por defecto para que cada mapa tenga una capa base válida, y las capas vectoriales que no estén marcadas explícitamente como WFS siguen publicándose como WMS con su presentación tipo thumbnail.',
-    'Qtiler2Origo.hiw.maps.3': 'Marcadores, layouts de impresión, temas y el selector de mapas del portal se exponen automáticamente desde el mismo estado del plugin base.',
     'Qtiler2Origo.hiw.wfs.title': '4. Edición WFS y reuso de caché',
     'Qtiler2Origo.hiw.wfs.1': 'Las capas WFS editables reutilizan el endpoint WFS de Qtiler, incluyendo edición multipart y edición por id de feature existente. Una capa se expone como WFS solo cuando está marcada explícitamente para WFS o edición.',
-    'Qtiler2Origo.hiw.wfs.2': 'Los cachés de tiles y vector tiles generados por Qtiler se sirven como capas de fondo y de overlay sin re-tilear, mientras que el contenido vectorial no WFS puede seguir mostrándose de forma segura mediante mapas publicados por WMS y thumbnails del portal.',
     'Qtiler2Origo.hiw.auth.title': '5. Autenticación y visibilidad',
-    'Qtiler2Origo.hiw.auth.1': 'Cuando QtilerAuth está activo, sus ACL (public / authenticated / private) se aplican a mapas, respuestas del catálogo y visibilidad del portal. Cuando QtilerAuth no está instalado o no está habilitado, Qtiler2Origo sigue funcionando y degrada a acceso completamente público.',
     'Qtiler2Origo.hiw.auth.2': 'Se admiten sesiones por cookie y cabeceras ?api_key=/x-api-key para QGIS Desktop e integraciones externas cuando la auth está activa, pero las mismas rutas siguen funcionando sin depender de auth en modo totalmente público.',
     'Qtiler2Origo.hiw.auth.3': 'Se respeta la precedencia de variables de entorno del puerto standalone para que el plugin se comporte igual tras IIS o NGINX, con o sin autenticación activa.',
     'Qtiler2Origo.hiw.security.title': '6. Seguridad y privacidad',
     'Qtiler2Origo.hiw.security.1': 'Las llamadas de red se limitan a GitHub al instalar y, cuando existe, a comprobaciones locales de auth/ACL; no hay telemetría en tiempo de ejecución y el plugin base no necesita el plugin separado QtilerAuth para seguir vivo.',
-    'Qtiler2Origo.hiw.security.2': 'Las acciones de administración (instalar/desinstalar, branding, publicar/editar/borrar mapas, editar páginas del portal) siguen siendo solo para admins cuando la auth está activa; con auth desactivada, las rutas públicas siguen siendo legibles sin que el plugin crashee.',
-    'Qtiler2Origo.hiw.security.3': 'Open source bajo MPL-2.0; auditable en plugins/Qtiler2Origo/, incluyendo el publicador de mapas, el constructor del portal y la lógica de fallback de acceso.',
   },
   sv: {
     'Qtiler2Origo.title': 'Origo-brygga för Qtiler',
-    'Qtiler2Origo.subtitle': 'Installera Origo från GitHub, publicera kartor visuellt och driva en publik portal med eller utan QtilerAuth.',
+    'Qtiler2Origo.subtitle': 'Installera Origo från GitHub, publicera QGIS-kartor visuellt och hantera åtkomst med eller utan QtilerAuth.',
     'Qtiler2Origo.how_title': 'Så fungerar Qtiler2Origo',
-    'Qtiler2Origo.how_intro': 'Qtiler2Origo är basbryggan mellan Qtiler och Origo: den publicerar QGIS-baserade webbkartor och driver nu också en visuell portal/CMS för den publika sajten /Qtiler2Origo/maps utan att du lämnar administrationskonsolen.',
+    'Qtiler2Origo.how_intro': 'Qtiler2Origo kopplar Qtiler till Origo och omvandlar QGIS-projekt till konfigurerade webbkartor från ett administrationsgränssnitt.',
     'Qtiler2Origo.how_step_install': 'Installera Origo — välj en releasetagg från det officiella GitHub-arkivet. Qtiler laddar ner bygget och serverar det från själva pluginet så att visaren stannar i samma driftsättning.',
     'Qtiler2Origo.how_step_publish': 'Publicera kartor — öppna fliken Kartor, konfigurera CRS, zoom, lager, bakgrunder och verktyg och spara. Qtiler genererar Origo-konfigurationen automatiskt och håller lager som inte är WFS på rätt WMS-väg om inte WFS eller redigering uttryckligen aktiverats.',
-    'Qtiler2Origo.how_step_share': 'Dela kartor och sidor — publicerade visare nås direkt och portalens startsida finns på /Qtiler2Origo/maps, där administratörer kan visa utvalda kartor som miniatyrer, inbäddningar eller öppna-länk-kort.',
-    'Qtiler2Origo.how_step_brand': 'Varumärkesanpassa — ladda upp en logotyp, konfigurera verktygsfältskontroller och bygg portalsidor med header-val, kort, rik text och kartsektioner. Ändringar laddas om direkt utan omstart av Qtiler.',
+    'Qtiler2Origo.how_step_share': 'Dela kartor: varje publicerad profil får en stabil direktlänk som också kan användas av QtilerStories.',
+    'Qtiler2Origo.how_step_brand': 'Varumärkesanpassa visaren: ladda upp en logotyp och konfigurera lager, bakgrunder, sökning, redigering och verktygsfält.',
     'Qtiler2Origo.how_outro': 'Öppen källkod under MPL-2.0. Pluginet kommunicerar bara med GitHub vid installation; under drift använder det QtilerAuth när det finns och degraderar säkert till publik åtkomst när det inte gör det, utan telemetri eller extern dataexport.',
     'Qtiler2Origo.installation': 'Installation',
     'Qtiler2Origo.github_repo': 'GitHub-repo',
@@ -1444,6 +1242,12 @@ const QTWC_I18N = {
     'Qtiler2Origo.log_deleted': 'Profil "{id}" raderad.',
     'Qtiler2Origo.regen_thumb': 'Regenerera miniatyr',
     'Qtiler2Origo.regen_thumb_title': 'Rensa cachelagrade miniatyrer för projektet så att en ny skapas nästa gång.',
+    'Qtiler2Origo.thumbnail_change': 'Byt miniatyrbild',
+    'Qtiler2Origo.thumbnail_setup_title': 'Kartminiatyrer',
+    'Qtiler2Origo.thumbnail_setup_help': 'Ersätt den automatiska miniatyren med en egen bild. Ny publicering behåller bilden; Skapa om miniatyr återgår till automatiskt läge.',
+    'Qtiler2Origo.thumbnail_setup_map': 'Publicerad karta',
+    'Qtiler2Origo.thumbnail_setup_file': 'PNG-, JPG- eller WEBP-bild',
+    'Qtiler2Origo.thumbnail_setup_upload': 'Ladda upp miniatyr',
     'Qtiler2Origo.log_thumb_regen': 'Miniatyrcache rensad för "{id}" ({n} filer).',
     'Qtiler2Origo.log_error': 'Fel: {msg}',
     'Qtiler2Origo.requires_install': 'Installera Origo först för att använda denna sektion.',
@@ -1494,98 +1298,7 @@ const QTWC_I18N = {
     'Qtiler2Origo.bg_count': '{n} bakgrunder',
     'Qtiler2Origo.tab_setup': 'Inställningar',
     'Qtiler2Origo.tab_maps': 'Kartor',
-    'Qtiler2Origo.tab_portal': 'Portal',
     'Qtiler2Origo.tab_log': 'Logg',
-    'Qtiler2Origo.portal_section': 'Portalsidor',
-    'Qtiler2Origo.portal_desc': 'Skapa redaktionella landningssidor för den publika kartportalen, med sektioner, utvalda kartor och målgruppsregler.',
-    'Qtiler2Origo.portal_add_page': 'Ny sida',
-    'Qtiler2Origo.portal_duplicate_page': 'Duplicera sida',
-    'Qtiler2Origo.portal_save': 'Spara portal',
-    'Qtiler2Origo.portal_open_page': 'Öppna sida',
-    'Qtiler2Origo.portal_templates': 'Mallar',
-    'Qtiler2Origo.portal_templates_help': 'Börja från en genomarbetad layout och anpassa sedan text, kartor och nyhetsblock.',
-    'Qtiler2Origo.portal_apply_template': 'Använd mall',
-    'Qtiler2Origo.portal_pages_list': 'Sidor',
-    'Qtiler2Origo.portal_empty': 'Skapa den första sidan för att göra kartportalen till en redaktionell startsida.',
-    'Qtiler2Origo.portal_page_title': 'Sidtitel',
-    'Qtiler2Origo.portal_page_slug': 'Slug',
-    'Qtiler2Origo.portal_page_nav': 'Navigationsetikett',
-    'Qtiler2Origo.portal_page_summary': 'Kort sammanfattning',
-    'Qtiler2Origo.portal_site_header_height': 'Headerhöjd',
-    'Qtiler2Origo.portal_site_header_font': 'Header-typsnitt',
-    'Qtiler2Origo.portal_site_header_color1': 'Headerfärg 1',
-    'Qtiler2Origo.portal_site_header_color2': 'Headerfärg 2',
-    'Qtiler2Origo.portal_site_header_text_color': 'Textfärg i header',
-    'Qtiler2Origo.portal_site_header_background_url': 'URL till headerns bakgrundsbild',
-    'Qtiler2Origo.portal_site_footer_text': 'Footertext',
-    'Qtiler2Origo.portal_site_footer_link_label': 'Länketikett i footer',
-    'Qtiler2Origo.portal_site_footer_link_url': 'Länk-URL i footer',
-    'Qtiler2Origo.portal_site_footer_background_color': 'Bakgrundsfärg i footer',
-    'Qtiler2Origo.portal_site_footer_text_color': 'Textfärg i footer',
-    'Qtiler2Origo.portal_site_footer_link_color': 'Länkfärg i footer',
-    'Qtiler2Origo.portal_header_logo': 'URL till headerlogotyp',
-    'Qtiler2Origo.portal_header_height': 'Headerhöjd',
-    'Qtiler2Origo.portal_show_header': 'Visa header',
-    'Qtiler2Origo.portal_visibility': 'Sidans synlighet',
-    'Qtiler2Origo.portal_vis_public': 'Publik',
-    'Qtiler2Origo.portal_vis_authenticated': 'Autentiserade användare',
-    'Qtiler2Origo.portal_vis_restricted': 'Specifika användare / roller',
-    'Qtiler2Origo.portal_users': 'Tillåtna användare',
-    'Qtiler2Origo.portal_roles': 'Tillåtna roller',
-    'Qtiler2Origo.portal_users_catalog': 'Användarlista',
-    'Qtiler2Origo.portal_roles_catalog': 'Rollista',
-    'Qtiler2Origo.portal_show_in_nav': 'Visa i navigationen',
-    'Qtiler2Origo.portal_set_home': 'Använd som portalens startsida',
-    'Qtiler2Origo.portal_blocks': 'Sektioner',
-    'Qtiler2Origo.portal_blocks_help': 'Kombinera hero, text, kort, sociala länkar och kartor för att bygga en professionell landningssida.',
-    'Qtiler2Origo.portal_add_block': 'Lägg till sektion',
-    'Qtiler2Origo.portal_preview': 'Förhandsvisning',
-    'Qtiler2Origo.portal_preview_note': 'Skrivbordsförhandsvisning',
-    'Qtiler2Origo.portal_fullscreen': 'Helskärmseditor',
-    'Qtiler2Origo.portal_device_desktop': 'Skrivbord',
-    'Qtiler2Origo.portal_device_tablet': 'Surfplatta',
-    'Qtiler2Origo.portal_device_mobile': 'Mobil',
-    'Qtiler2Origo.portal_block_hero': 'Hero',
-    'Qtiler2Origo.portal_block_text': 'Text',
-    'Qtiler2Origo.portal_block_cards': 'Kort / nyheter',
-    'Qtiler2Origo.portal_block_maps': 'Utvalda kartor',
-    'Qtiler2Origo.portal_block_social': 'Sociala länkar',
-    'Qtiler2Origo.portal_block_visibility': 'Sektionens synlighet',
-    'Qtiler2Origo.portal_vis_inherit': 'Samma som sidan',
-    'Qtiler2Origo.portal_intro': 'Ingress',
-    'Qtiler2Origo.portal_body': 'Brödtext',
-    'Qtiler2Origo.portal_eyebrow': 'Överrubrik',
-    'Qtiler2Origo.portal_background_url': 'URL till bakgrundsbild',
-    'Qtiler2Origo.portal_cta_label': 'Knapptext',
-    'Qtiler2Origo.portal_cta_url': 'Knapp-URL',
-    'Qtiler2Origo.portal_layout': 'Layout',
-    'Qtiler2Origo.portal_layout_grid': 'Rutnät',
-    'Qtiler2Origo.portal_layout_featured': 'Utvald',
-    'Qtiler2Origo.portal_map_display': 'Kartvisning',
-    'Qtiler2Origo.portal_map_display_thumbnail': 'Kort med miniatyr',
-    'Qtiler2Origo.portal_map_display_embed': 'Integrerad karta',
-    'Qtiler2Origo.portal_map_display_open': 'Öppna karta',
-    'Qtiler2Origo.portal_map_profiles': 'Kartprofiler',
-    'Qtiler2Origo.portal_maps_catalog': 'Publicerade kartor',
-    'Qtiler2Origo.portal_add_item': 'Lägg till post',
-    'Qtiler2Origo.portal_item_title': 'Posttitel',
-    'Qtiler2Origo.portal_item_text': 'Posttext',
-    'Qtiler2Origo.portal_item_url': 'Länk-URL',
-    'Qtiler2Origo.portal_item_label': 'Länketikett',
-    'Qtiler2Origo.portal_item_icon': 'Ikon',
-    'Qtiler2Origo.portal_item_meta': 'Meta / datum',
-    'Qtiler2Origo.portal_item_image': 'Bild-URL',
-    'Qtiler2Origo.portal_move_up': 'Upp',
-    'Qtiler2Origo.portal_move_down': 'Ner',
-    'Qtiler2Origo.portal_edit_page': 'Redigera sida',
-    'Qtiler2Origo.portal_delete': 'Ta bort',
-    'Qtiler2Origo.portal_home_badge': 'Start',
-    'Qtiler2Origo.portal_hidden_badge': 'Dold i navigation',
-    'Qtiler2Origo.portal_saved': 'Portalsidor sparade.',
-    'Qtiler2Origo.portal_backup_exported': 'Portalbackup exporterad.',
-    'Qtiler2Origo.portal_no_blocks_preview': 'Lägg till sektioner för att förhandsvisa sidan.',
-    'Qtiler2Origo.portal_no_users': 'Inga användare hittades',
-    'Qtiler2Origo.portal_no_roles': 'Inga roller hittades',
     'Qtiler2Origo.map_name': 'Kartnamn',
     'Qtiler2Origo.map_name_placeholder': 'Unikt namn för denna karta',
     'Qtiler2Origo.map_description': 'Beskrivning',
@@ -1600,6 +1313,8 @@ const QTWC_I18N = {
     'Qtiler2Origo.step_json_editor': '5. JSON-redigerare',
     'Qtiler2Origo.json_editor_help': 'Redigera den fullständiga kartkonfigurations-JSON. Ändringar valideras i realtid.',
     'Qtiler2Origo.json_load': 'Ladda aktuell konfiguration',
+    'Qtiler2Origo.json_import': 'Importera JSON',
+    'Qtiler2Origo.json_download': 'Ladda ner JSON',
     'Qtiler2Origo.json_format': 'Formatera JSON',
     'Qtiler2Origo.json_validate': 'Validera',
     'Qtiler2Origo.json_apply': 'Tillämpa ändringar',
@@ -1870,34 +1585,25 @@ const QTWC_I18N = {
     'Qtiler2Origo.pub_edit_profile_title': 'Redigera namn, lager, bakgrunder, grupper och verktyg',
     'Qtiler2Origo.hiw.button': 'Så fungerar det & säkerhet',
     'Qtiler2Origo.hiw.title': 'Så fungerar Qtiler2Origo och varför det är säkert',
-    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo bäddar in webbkartvyn Origo i Qtiler och innehåller nu också en visuell portal/CMS för den publika sajten /Qtiler2Origo/maps. Det laddar ner Origo från en låst GitHub-release, låter dig konfigurera varje publicerad karta grafiskt från QGIS och låter administratörer bygga landningssidor med text, kort, call-to-action-block och utvalda kartor.',
+    'Qtiler2Origo.hiw.lead': 'Qtiler2Origo bäddar in webbkartvisaren Origo i Qtiler. Den installerar en vald GitHub-release och låter administratörer konfigurera varje publicerad karta grafiskt från QGIS.',
     'Qtiler2Origo.hiw.vs.title': 'Qrigo vs Qtiler2Origo',
     'Qtiler2Origo.hiw.vs.1': 'Qrigo riktar sig till användare som redan kör en standardinstallation av Origo-map på sin egen server: det genererar bara JSON-utdrag att klistra in i din befintliga Origo index.json.',
     'Qtiler2Origo.hiw.vs.2': 'Qtiler2Origo installerar Origo ovanpå själva Qtiler, med en grafisk kartredigerare som stödjer sig på QGIS-biblioteket och Qtilers cache och WMS/WFS-lager — utan en separat Origo-server.',
     'Qtiler2Origo.hiw.arch.title': '1. Arkitektur',
     'Qtiler2Origo.hiw.arch.1': 'Express-plugin under plugins/Qtiler2Origo/. Origo-bygget laddas ner från GitHub och serveras på /plugins/Qtiler2Origo/origo.',
-    'Qtiler2Origo.hiw.arch.2': 'Varje karta sparas som JSON under data/Qtiler2Origo/maps/, medan portalens/CMS:ets tillstånd sparas separat, och båda laddas om direkt vid ändringar utan omstart.',
-    'Qtiler2Origo.hiw.arch.3': 'Den publika sajten /Qtiler2Origo/maps listar och renderar portalsidor, medan /Qtiler2Origo/maps/<namn> fortfarande går direkt till en publicerad visare. Proxy-säker routing håller båda ingångarna stabila.',
     'Qtiler2Origo.hiw.flow.title': '2. Steg för steg',
     'Qtiler2Origo.hiw.flow.1': 'Setup-fliken: välj en GitHub-tagg och klicka Installera Origo-map.',
     'Qtiler2Origo.hiw.flow.2': 'Maps-fliken: välj ett projekt publicerat i Qtiler, redigera kartan grafiskt (CRS, centrum, zoom, lager, bakgrunder, verktyg) och publicera den som en Origo-visare.',
-    'Qtiler2Origo.hiw.flow.3': 'Portal-fliken: skapa publika sidor visuellt, välj vem som får se varje sida eller block, välj vilka publicerade kartor som ska lyftas fram och om varje karta ska visas som miniatyr, inbäddad vy eller öppna-länk-kort.',
-    'Qtiler2Origo.hiw.flow.4': 'Varumärkesanpassa upplevelsen med logotyp, headerns synlighet/höjd och verktygsfältskontroller, och publicera sedan: kartor nås på /Qtiler2Origo/maps/<namn> och portalens startsida på /Qtiler2Origo/maps.',
     'Qtiler2Origo.hiw.maps.title': '3. Kartor och QGIS-biblioteket',
     'Qtiler2Origo.hiw.maps.1': 'Kartor byggs direkt från QGIS-projekt: lager, stilar, skalor och CRS kommer från projektet på disk.',
     'Qtiler2Origo.hiw.maps.2': 'Standard-WMTS-bakgrund garanteras så varje karta har ett fungerande baslager, och vektorlager som inte uttryckligen markerats för WFS fortsätter att publiceras som WMS-lager med sin miniatyrbaserade presentation.',
-    'Qtiler2Origo.hiw.maps.3': 'Bokmärken, utskriftslayouter, teman och portalens kartväljare exponeras automatiskt från samma tillstånd i baspluginet.',
     'Qtiler2Origo.hiw.wfs.title': '4. WFS-redigering och cache-återanvändning',
     'Qtiler2Origo.hiw.wfs.1': 'Redigerbara WFS-lager återanvänder Qtilers WFS-endpoint, inklusive multipart-redigering och redigering av befintliga objekt via id. Ett lager exponeras som WFS bara när det uttryckligen aktiverats för WFS eller redigering.',
-    'Qtiler2Origo.hiw.wfs.2': 'Tile- och vector tile-cache som genereras av Qtiler serveras som bakgrunds- och overlay-lager utan ny tiling, medan icke-WFS-vektorinnehåll fortfarande kan visas säkert via WMS-baserade publicerade kartor och portalminiatyrer.',
     'Qtiler2Origo.hiw.auth.title': '5. Autentisering och synlighet',
-    'Qtiler2Origo.hiw.auth.1': 'När QtilerAuth är aktivt tillämpas dess ACL:er (public / authenticated / private) på kartor, katalogsvar och portalens synlighet. När QtilerAuth inte är installerat eller inte är aktiverat fortsätter Qtiler2Origo att fungera och degraderar till helt publik åtkomst.',
     'Qtiler2Origo.hiw.auth.2': 'Både cookie-sessioner och ?api_key=/x-api-key-headers stöds för QGIS Desktop och externa integrationer när auth är aktiv, medan samma rutter fortsätter att fungera utan auth-beroenden i helt publikt läge.',
     'Qtiler2Origo.hiw.auth.3': 'Miljövariabel-precedens för standalone-porten respekteras så plugin beter sig konsekvent bakom IIS eller NGINX, oavsett om auth är aktivt eller inte.',
     'Qtiler2Origo.hiw.security.title': '6. Säkerhet och integritet',
     'Qtiler2Origo.hiw.security.1': 'Nätverksanrop sker bara mot GitHub vid installation och, när det är aktiverat, mot lokala auth/ACL-kontroller; ingen körtidstelemetri, och baspluginet kräver inte det separata QtilerAuth-pluginet för att fortsätta fungera.',
-    'Qtiler2Origo.hiw.security.2': 'Adminhandlingar (installera/avinstallera, branding, publicera/redigera/radera kartor, redigera portalsidor) förblir admin-begränsade när auth är aktivt; med auth avstängt fortsätter de publika rutterna att vara läsbara utan att pluginet kraschar.',
-    'Qtiler2Origo.hiw.security.3': 'Öppen källkod under MPL-2.0; granskbart i plugins/Qtiler2Origo/, inklusive kartpubliceraren, portalbyggaren och logiken för åtkomstfallback.'
   }
 };
 
@@ -1911,7 +1617,7 @@ function normalizeBrandingLogoUrl(url) {
 
 QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.title': 'Origo-bro for Qtiler',
-  'Qtiler2Origo.subtitle': 'Installer Origo fra GitHub, publiser kart visuelt og drift en offentlig portal med eller uten QtilerAuth.',
+  'Qtiler2Origo.subtitle': 'Installer Origo fra GitHub, publiser QGIS-kart visuelt og administrer tilgang med eller uten QtilerAuth.',
   'Qtiler2Origo.hiw.button': 'Slik fungerer det og sikkerhet',
   'Qtiler2Origo.tab_setup': 'Oppsett',
   'Qtiler2Origo.tab_maps': 'Kart',
@@ -1927,25 +1633,13 @@ QTWC_I18N.no = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.wfs_search_helper': 'Søk bruker Qtilers søkbare lag. Marker lag som søkbare i QtilerAuth, og legg deretter til lokale kilder eller kilder fra andre prosjekter her; resultater følger prosjekttilgang.',
   'Qtiler2Origo.wfs_edit_helper': 'Redigering krever aktiv QtilerAuth, at laget er tillatt som redigerbart i QtilerAuth, redigeringstilgang for brukeren og at laget publiseres som WFS.',
   'Qtiler2Origo.wfs_generated_helper': 'Origo får fullstendige Qtiler WFS-metadata: attributter, geometrifelt, namespace og stiler.',
-  'Qtiler2Origo.portal_site_header_height': 'Headerhøyde',
-  'Qtiler2Origo.portal_site_header_font': 'Header-skrifttype',
-  'Qtiler2Origo.portal_site_header_color1': 'Headerfarge 1',
-  'Qtiler2Origo.portal_site_header_color2': 'Headerfarge 2',
-  'Qtiler2Origo.portal_site_header_text_color': 'Tekstfarge i header',
-  'Qtiler2Origo.portal_site_header_background_url': 'URL til bakgrunnsbilde i header',
-  'Qtiler2Origo.portal_site_footer_text': 'Footertekst',
-  'Qtiler2Origo.portal_site_footer_link_label': 'Lenketekst i footer',
-  'Qtiler2Origo.portal_site_footer_link_url': 'Lenke-URL i footer',
-  'Qtiler2Origo.portal_site_footer_background_color': 'Bakgrunnsfarge i footer',
-  'Qtiler2Origo.portal_site_footer_text_color': 'Tekstfarge i footer',
-  'Qtiler2Origo.portal_site_footer_link_color': 'Lenkefarge i footer'
 });
 QTWC_I18N.nb = QTWC_I18N.no;
 QTWC_I18N.nn = QTWC_I18N.no;
 
 QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.title': 'Origo-bro til Qtiler',
-  'Qtiler2Origo.subtitle': 'Installer Origo fra GitHub, publicér kort visuelt og drift en offentlig portal med eller uden QtilerAuth.',
+  'Qtiler2Origo.subtitle': 'Installer Origo fra GitHub, publicér QGIS-kort visuelt, og administrer adgang med eller uden QtilerAuth.',
   'Qtiler2Origo.hiw.button': 'Sådan fungerer det og sikkerhed',
   'Qtiler2Origo.tab_setup': 'Opsætning',
   'Qtiler2Origo.tab_maps': 'Kort',
@@ -1961,23 +1655,11 @@ QTWC_I18N.da = Object.assign({}, QTWC_I18N.sv, {
   'Qtiler2Origo.wfs_search_helper': 'Søgning bruger Qtilers søgbare lag. Markér lag som søgbare i QtilerAuth, og tilføj derefter lokale kilder eller kilder fra andre projekter her; resultater følger projektadgang.',
   'Qtiler2Origo.wfs_edit_helper': 'Redigering kræver aktiv QtilerAuth, at laget er tilladt som redigerbart i QtilerAuth, redigeringsadgang for brugeren og at laget publiceres som WFS.',
   'Qtiler2Origo.wfs_generated_helper': 'Origo får fulde Qtiler WFS-metadata: attributter, geometrifelt, namespace og stile.',
-  'Qtiler2Origo.portal_site_header_height': 'Headerhøjde',
-  'Qtiler2Origo.portal_site_header_font': 'Header-skrifttype',
-  'Qtiler2Origo.portal_site_header_color1': 'Headerfarve 1',
-  'Qtiler2Origo.portal_site_header_color2': 'Headerfarve 2',
-  'Qtiler2Origo.portal_site_header_text_color': 'Tekstfarve i header',
-  'Qtiler2Origo.portal_site_header_background_url': 'URL til baggrundsbillede i header',
-  'Qtiler2Origo.portal_site_footer_text': 'Footertekst',
-  'Qtiler2Origo.portal_site_footer_link_label': 'Linktekst i footer',
-  'Qtiler2Origo.portal_site_footer_link_url': 'Link-URL i footer',
-  'Qtiler2Origo.portal_site_footer_background_color': 'Baggrundsfarve i footer',
-  'Qtiler2Origo.portal_site_footer_text_color': 'Tekstfarve i footer',
-  'Qtiler2Origo.portal_site_footer_link_color': 'Linkfarve i footer'
 });
 
 QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
   'Qtiler2Origo.title': 'Origo-silta Qtilerille',
-  'Qtiler2Origo.subtitle': 'Asenna Origo GitHubista, julkaise karttoja visuaalisesti ja ylläpidä julkista portaalia QtilerAuthin kanssa tai ilman sitä.',
+  'Qtiler2Origo.subtitle': 'Asenna Origo GitHubista, julkaise QGIS-karttoja visuaalisesti ja hallitse käyttöoikeuksia QtilerAuthin kanssa tai ilman sitä.',
   'Qtiler2Origo.hiw.button': 'Miten se toimii ja turvallisuus',
   'Qtiler2Origo.tab_setup': 'Asetukset',
   'Qtiler2Origo.tab_maps': 'Kartat',
@@ -1993,24 +1675,11 @@ QTWC_I18N.fi = Object.assign({}, QTWC_I18N.en, {
   'Qtiler2Origo.wfs_search_helper': 'Haku käyttää Qtilerin haettavia tasoja. Merkitse tasot haettaviksi QtilerAuthissa ja lisää sitten tähän paikallisia tai muiden projektien lähteitä; tulokset noudattavat projektin käyttöoikeuksia.',
   'Qtiler2Origo.wfs_edit_helper': 'Muokkaus edellyttää aktiivista QtilerAuthia, että taso on sallittu muokattavaksi QtilerAuthissa, käyttäjällä on muokkausoikeus ja taso julkaistaan WFS:nä.',
   'Qtiler2Origo.wfs_generated_helper': 'Origo saa täydet Qtiler WFS -metatiedot: attribuutit, geometriakentän, namespacen ja tyylit.',
-  'Qtiler2Origo.portal_site_header_height': 'Ylätunnisteen korkeus',
-  'Qtiler2Origo.portal_site_header_font': 'Ylätunnisteen fontti',
-  'Qtiler2Origo.portal_site_header_color1': 'Ylätunnisteen väri 1',
-  'Qtiler2Origo.portal_site_header_color2': 'Ylätunnisteen väri 2',
-  'Qtiler2Origo.portal_site_header_text_color': 'Ylätunnisteen tekstiväri',
-  'Qtiler2Origo.portal_site_header_background_url': 'Ylätunnisteen taustakuvan URL',
-  'Qtiler2Origo.portal_site_footer_text': 'Alatunnisteen teksti',
-  'Qtiler2Origo.portal_site_footer_link_label': 'Alatunnisteen linkkiteksti',
-  'Qtiler2Origo.portal_site_footer_link_url': 'Alatunnisteen linkin URL',
-  'Qtiler2Origo.portal_site_footer_background_color': 'Alatunnisteen taustaväri',
-  'Qtiler2Origo.portal_site_footer_text_color': 'Alatunnisteen tekstiväri',
-  'Qtiler2Origo.portal_site_footer_link_color': 'Alatunnisteen linkkiväri'
 });
 
 /* ── DOM refs ── */
 // CRITICAL FIX: Moved tabMapsBadge to the top so syncUI doesn't crash on load!
 const tabMapsBadge = document.getElementById('tabMapsBadge');
-const tabPortalBadge = document.getElementById('tabPortalBadge');
 
 const repoEl = document.getElementById('repo');
 const versionEl = document.getElementById('version');
@@ -2037,78 +1706,18 @@ const publishSection = document.getElementById('publishSection');
 const profilesBadge = document.getElementById('profilesBadge');
 const openPublishModalBtn = document.getElementById('openPublishModalBtn');
 const publishedProfilesList = document.getElementById('publishedProfilesList');
-const galleryBrandingSection = document.getElementById('galleryBrandingSection');
+const thumbnailSetupSection = document.getElementById('thumbnailSetupSection');
+const thumbnailSetupBadge = document.getElementById('thumbnailSetupBadge');
+const thumbnailProfileSelect = document.getElementById('thumbnailProfileSelect');
+const thumbnailFileInput = document.getElementById('thumbnailFileInput');
+const thumbnailUploadBtn = document.getElementById('thumbnailUploadBtn');
+const thumbnailSetupPreview = document.getElementById('thumbnailSetupPreview');
 const catalogLink = document.getElementById('catalogLink');
-const portalPagesBadge = document.getElementById('portalPagesBadge');
-const portalAddPageBtn = document.getElementById('portalAddPageBtn');
-const portalDuplicatePageBtn = document.getElementById('portalDuplicatePageBtn');
-const portalToggleFullscreenBtn = document.getElementById('portalToggleFullscreenBtn');
-const portalSaveBtn = document.getElementById('portalSaveBtn');
-const portalOpenPageBtn = document.getElementById('portalOpenPageBtn');
-const portalBackupPagesSelect = document.getElementById('portalBackupPagesSelect');
-const portalBackupMapsSelect = document.getElementById('portalBackupMapsSelect');
-const portalExportBackupBtn = document.getElementById('portalExportBackupBtn');
-const portalImportBackupBtn = document.getElementById('portalImportBackupBtn');
-const portalImportBackupInput = document.getElementById('portalImportBackupInput');
-const portalImportReplacePortal = document.getElementById('portalImportReplacePortal');
-const portalImportReplaceMaps = document.getElementById('portalImportReplaceMaps');
-const portalGdprEnabled = document.getElementById('portalGdprEnabled');
-const portalSiteTitle = document.getElementById('portalSiteTitle');
-const portalSiteSubtitle = document.getElementById('portalSiteSubtitle');
-const portalSiteLogoUrl = document.getElementById('portalSiteLogoUrl');
-const portalGalleryTitle = document.getElementById('portalGalleryTitle');
-const portalGallerySubtitle = document.getElementById('portalGallerySubtitle');
-const portalGalleryLogoUrl = document.getElementById('portalGalleryLogoUrl');
-const galleryBrandingSaveBtn = document.getElementById('galleryBrandingSaveBtn');
-const portalSiteHeaderHeight = document.getElementById('portalSiteHeaderHeight');
-const portalSiteHeaderFont = document.getElementById('portalSiteHeaderFont');
-const portalSiteHeaderColor1 = document.getElementById('portalSiteHeaderColor1');
-const portalSiteHeaderColor2 = document.getElementById('portalSiteHeaderColor2');
-const portalSiteHeaderTextColor = document.getElementById('portalSiteHeaderTextColor');
-const portalSiteHeaderBackgroundUrl = document.getElementById('portalSiteHeaderBackgroundUrl');
-const portalSiteFooterText = document.getElementById('portalSiteFooterText');
-const portalSiteFooterLinkLabel = document.getElementById('portalSiteFooterLinkLabel');
-const portalSiteFooterLink = document.getElementById('portalSiteFooterLink');
-const portalSiteFooterBackgroundColor = document.getElementById('portalSiteFooterBackgroundColor');
-const portalSiteFooterTextColor = document.getElementById('portalSiteFooterTextColor');
-const portalSiteFooterLinkColor = document.getElementById('portalSiteFooterLinkColor');
-const portalGdprCompany = document.getElementById('portalGdprCompany');
-const portalGdprPrivacyUrl = document.getElementById('portalGdprPrivacyUrl');
-const portalGdprCookieUrl = document.getElementById('portalGdprCookieUrl');
-const portalGdprContactUrl = document.getElementById('portalGdprContactUrl');
-const portalGdprTitle = document.getElementById('portalGdprTitle');
-const portalGdprText = document.getElementById('portalGdprText');
-const portalSection = document.getElementById('portalSection');
-const portalPagesList = document.getElementById('portalPagesList');
-const portalPageEmpty = document.getElementById('portalPageEmpty');
-const portalPageEditor = document.getElementById('portalPageEditor');
-const portalPageTitle = document.getElementById('portalPageTitle');
-const portalPageSlug = document.getElementById('portalPageSlug');
-const portalPageNavLabel = document.getElementById('portalPageNavLabel');
-const portalPageSummary = document.getElementById('portalPageSummary');
-const portalPageHeaderLogoUrl = document.getElementById('portalPageHeaderLogoUrl');
-const portalPageHeaderHeight = document.getElementById('portalPageHeaderHeight');
-const portalPageVisibility = document.getElementById('portalPageVisibility');
-const portalPageUsers = document.getElementById('portalPageUsers');
-const portalPageUsersCatalog = document.getElementById('portalPageUsersCatalog');
-const portalPageRoles = document.getElementById('portalPageRoles');
-const portalPageRolesCatalog = document.getElementById('portalPageRolesCatalog');
-const portalPageShowInNav = document.getElementById('portalPageShowInNav');
-const portalPageIsHome = document.getElementById('portalPageIsHome');
-const portalPageShowHeader = document.getElementById('portalPageShowHeader');
-const portalTemplateSelect = document.getElementById('portalTemplateSelect');
-const portalApplyTemplateBtn = document.getElementById('portalApplyTemplateBtn');
-const portalAddBlockType = document.getElementById('portalAddBlockType');
-const portalAddBlockBtn = document.getElementById('portalAddBlockBtn');
-const portalBlocksList = document.getElementById('portalBlocksList');
-
 const adminEditorParams = new URLSearchParams(window.location.search);
 const detachedEditorMode = String(adminEditorParams.get('editor') || '').trim().toLowerCase();
 const detachedEditorProfile = String(adminEditorParams.get('profile') || '').trim();
-const detachedEditorPageId = String(adminEditorParams.get('page') || '').trim();
 const isDetachedMapEditor = detachedEditorMode === 'map';
-const isDetachedPortalEditor = detachedEditorMode === 'portal';
-const isDetachedEditorWindow = isDetachedMapEditor || isDetachedPortalEditor;
+const isDetachedEditorWindow = isDetachedMapEditor;
 const publishedProfilesRefreshKey = 'qtiler2origo-published-profiles-refresh';
 const publishedProfilesChannel = (() => {
   try { return 'BroadcastChannel' in window ? new BroadcastChannel('qtiler2origo-published-profiles') : null; } catch (_) { return null; }
@@ -2165,9 +1774,7 @@ function getDetachedEditorUrl(mode, id = '') {
   const url = new URL(window.location.href);
   url.searchParams.set('editor', mode);
   url.searchParams.delete('profile');
-  url.searchParams.delete('page');
   if (mode === 'map' && id) url.searchParams.set('profile', id);
-  if (mode === 'portal' && id) url.searchParams.set('page', id);
   url.hash = '';
   return url.toString();
 }
@@ -2192,8 +1799,6 @@ function openDetachedEditorWindow(mode, id = '') {
 if (isDetachedEditorWindow) {
   document.body.classList.add('admin-editor-detached', `admin-editor-detached--${detachedEditorMode}`);
 }
-const portalPreviewHost = document.getElementById('portalPreviewHost');
-const portalPreviewDeviceButtons = Array.from(document.querySelectorAll('[data-portal-preview-device]'));
 const publishModal = document.getElementById('publishModal');
 const modalTitle = document.getElementById('modalTitle');
 const closePublishModalTop = document.getElementById('closePublishModalTop');
@@ -2307,11 +1912,17 @@ const origoConfigSummary = document.getElementById('origo-config-summary');
 /* ── JSON Editor panel ── */
 const jsonEditorContainer = document.getElementById('json-editor-container');
 const jsonLoadBtn = document.getElementById('btn-json-load');
+const jsonImportBtn = document.getElementById('btn-json-import');
+const jsonImportFile = document.getElementById('map-json-import-file');
+const jsonDownloadBtn = document.getElementById('btn-json-download');
+const jsonUndoBtn = document.getElementById('btn-json-undo');
+const jsonRedoBtn = document.getElementById('btn-json-redo');
 const jsonFormatBtn = document.getElementById('btn-json-format');
 const jsonValidateBtn = document.getElementById('btn-json-validate');
 const jsonApplyBtn = document.getElementById('btn-json-apply');
 const jsonClearLogBtn = document.getElementById('btn-json-clear-log');
 const jsonLogContainer = document.getElementById('json-log-container');
+const jsonLiveStatus = document.getElementById('json-editor-live-status');
 
 /* Map of configurable tools: checkbox id → config panel + input */
 const TOOL_CONFIG_MAP = {
@@ -3086,7 +2697,7 @@ function applyI18n() {
 }
 
 if (window.qtilerLang && typeof window.qtilerLang.subscribe === 'function') {
-  window.qtilerLang.subscribe(() => { applyI18n(); syncUI(); renderPortalEditor(); });
+  window.qtilerLang.subscribe(() => { applyI18n(); syncUI(); });
 }
 
 /* ── Utilities ── */
@@ -3928,10 +3539,7 @@ clearLogBtn?.addEventListener('click', () => {
 /* ── Global state ── */
 let currentStatus = null;
 let publishedItems = [];
-let portalPagesState = { homePageSlug: '', pages: [] };
-let selectedPortalPageId = '';
-let portalPreviewDevice = 'desktop';
-let portalEditorFullscreen = false;
+let thumbnailPreviewObjectUrl = '';
 
 const publishState = {
   projects: [],
@@ -3952,831 +3560,6 @@ const publishState = {
   projectLayerCatalog: {}, // { projectId: normalizedLayer[] } — cached for external layer picker
   editingProfileId: null  // non-null = edit mode
 };
-
-function slugifyPortalValue(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function parsePortalCsv(value) {
-  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
-}
-
-function toPortalCsv(value) {
-  return Array.isArray(value) ? value.join(', ') : '';
-}
-
-const PORTAL_SOCIAL_PLATFORMS = [
-  ['facebook', 'Facebook'],
-  ['instagram', 'Instagram'],
-  ['linkedin', 'LinkedIn'],
-  ['x', 'X / Twitter'],
-  ['youtube', 'YouTube'],
-  ['tiktok', 'TikTok'],
-  ['whatsapp', 'WhatsApp'],
-  ['telegram', 'Telegram'],
-  ['email', 'Email'],
-  ['web', 'Website']
-];
-
-function getPortalSocialPlatformLabel(value) {
-  const key = String(value || '').trim().toLowerCase();
-  return PORTAL_SOCIAL_PLATFORMS.find(([platform]) => platform === key)?.[1] || (key ? key : 'Social');
-}
-
-function getPortalSocialPlatformOptionsHtml(selected) {
-  const current = String(selected || '').trim().toLowerCase();
-  return PORTAL_SOCIAL_PLATFORMS.map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
-}
-
-function renderPortalBackupOptions() {
-  if (portalBackupPagesSelect) {
-    const current = new Set(getPortalSelectedOptions(portalBackupPagesSelect));
-    portalBackupPagesSelect.innerHTML = getPortalPages().map((page) => {
-      const value = String(page.id || page.slug || '').trim();
-      if (!value) return '';
-      const label = `${page.title || page.navLabel || page.slug || value} /${page.slug || ''}`;
-      return `<option value="${escapeHtml(value)}" ${!current.size || current.has(value) ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-    }).join('');
-  }
-  if (portalBackupMapsSelect) {
-    const current = new Set(getPortalSelectedOptions(portalBackupMapsSelect));
-    portalBackupMapsSelect.innerHTML = (publishedItems || []).map((item) => {
-      const value = String(item.profileKey || item.name || item.projectId || '').trim();
-      if (!value) return '';
-      const label = `${item.name || value}${item.projectId ? ` (${item.projectId})` : ''}`;
-      return `<option value="${escapeHtml(value)}" ${!current.size || current.has(value) ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-    }).join('');
-  }
-}
-
-function downloadJsonFile(payload, fileName) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-function getPortalSocialPlatformKey(value) {
-  const key = String(value || '').trim().toLowerCase();
-  if (key === 'twitter') return 'x';
-  return PORTAL_SOCIAL_PLATFORMS.some(([platform]) => platform === key) ? key : 'web';
-}
-
-function renderPortalSocialIconBadge(platform, extraClass = '') {
-  const key = getPortalSocialPlatformKey(platform);
-  return `<span class="portal-social-icon portal-social-icon--${escapeHtml(key)} ${escapeHtml(extraClass)}" aria-hidden="true">${escapeHtml(getPortalSocialIcon(key))}</span>`;
-}
-
-function makePortalId(prefix = 'portal') {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function getPortalPages() {
-  return Array.isArray(portalPagesState?.pages) ? portalPagesState.pages : [];
-}
-
-function getSelectedPortalPage() {
-  return getPortalPages().find((page) => page.id === selectedPortalPageId) || null;
-}
-
-function buildUniquePortalSlug(baseValue, excludePageId = '') {
-  const base = slugifyPortalValue(baseValue) || 'page';
-  const taken = new Set(getPortalPages()
-    .filter((page) => page.id !== excludePageId)
-    .map((page) => String(page.slug || '').trim())
-    .filter(Boolean));
-  if (!taken.has(base)) return base;
-  let idx = 2;
-  while (taken.has(`${base}-${idx}`)) idx += 1;
-  return `${base}-${idx}`;
-}
-
-function createDefaultPortalBlock(type = 'text') {
-  const blockType = ['hero', 'text', 'maps', 'cards', 'social'].includes(String(type || '').trim()) ? String(type).trim() : 'text';
-  const common = {
-    id: makePortalId(blockType),
-    type: blockType,
-    title: '',
-    eyebrow: '',
-    subtitle: '',
-    body: '',
-    backgroundUrl: '',
-    imageUrl: '',
-    ctaLabel: '',
-    ctaUrl: '',
-    intro: '',
-    layout: 'grid',
-    profileKeys: [],
-    items: [],
-    visibility: { access: 'inherit', users: [], roles: [] }
-  };
-  if (blockType === 'hero') {
-    return {
-      ...common,
-      eyebrow: 'Featured maps',
-      title: 'Discover the territory',
-      subtitle: 'Build a clear landing page with editorial context, highlighted maps and curated links.',
-      ctaLabel: 'Explore maps',
-      ctaUrl: '/Qtiler2Origo/maps'
-    };
-  }
-  if (blockType === 'maps') {
-    return {
-      ...common,
-      title: 'Featured maps',
-      intro: 'Choose the published map profiles to highlight in this section.',
-      layout: 'grid',
-      displayMode: 'thumbnail'
-    };
-  }
-  if (blockType === 'cards') {
-    return {
-      ...common,
-      title: 'Highlights',
-      intro: 'Use cards for news, campaigns or curated content.',
-      items: [{ id: makePortalId('card'), title: 'News item', text: 'Short teaser for this story or announcement.', url: '', label: 'Read more', icon: 'news', meta: 'Latest update', imageUrl: '' }]
-    };
-  }
-  if (blockType === 'social') {
-    return {
-      ...common,
-      title: 'Follow us',
-      intro: 'Share social channels, contact links or external resources.',
-      items: [{ id: makePortalId('social'), title: 'Facebook', text: '', url: 'https://facebook.com/', label: 'Open', icon: 'facebook', meta: '', imageUrl: '' }]
-    };
-  }
-  return {
-    ...common,
-    title: 'Text section',
-    body: 'Add editorial text, context, descriptions or instructions here.'
-  };
-}
-
-function createDefaultPortalPage() {
-  const pageNumber = getPortalPages().length + 1;
-  const title = `${t('Qtiler2Origo.portal_page_title')} ${pageNumber}`;
-  const slug = buildUniquePortalSlug(`page-${pageNumber}`);
-  return {
-    id: makePortalId('page'),
-    slug,
-    title,
-    navLabel: title,
-    summary: '',
-    showHeader: true,
-    headerHeight: 120,
-    headerLogoUrl: '',
-    showInNav: true,
-    visibility: { access: 'public', users: [], roles: [] },
-    blocks: [createDefaultPortalBlock('hero'), createDefaultPortalBlock('maps')]
-  };
-}
-
-function buildPortalTemplate(templateKey) {
-  const key = String(templateKey || 'story').trim().toLowerCase();
-  if (key === 'newsroom') {
-    return {
-      title: 'Newsroom',
-      navLabel: 'Newsroom',
-      summary: 'Updates, launches and editorial highlights around your maps.',
-      blocks: [
-        {
-          ...createDefaultPortalBlock('hero'),
-          eyebrow: 'Editorial hub',
-          title: 'A newsroom for your maps',
-          subtitle: 'Combine releases, map stories and direct access to the most important viewers in one polished front page.',
-          ctaLabel: 'Latest maps'
-        },
-        {
-          ...createDefaultPortalBlock('cards'),
-          title: 'Latest news',
-          intro: 'Showcase launches, updates and important notices.',
-          items: [
-            { id: makePortalId('card'), title: 'Summer campaign', text: 'Announce a campaign, map release or new dataset with a short and direct teaser.', url: '#', label: 'Read more', icon: 'news', meta: 'May 2026', imageUrl: '' },
-            { id: makePortalId('card'), title: 'Operational update', text: 'Use the same block for notices that matter to internal or authenticated audiences.', url: '#', label: 'Open note', icon: 'web', meta: 'Internal', imageUrl: '' }
-          ]
-        },
-        createDefaultPortalBlock('maps')
-      ]
-    };
-  }
-  if (key === 'campaign') {
-    return {
-      title: 'Campaign landing',
-      navLabel: 'Campaign',
-      summary: 'Promote one offer, one area or one initiative with strong visuals and selected maps.',
-      blocks: [
-        {
-          ...createDefaultPortalBlock('hero'),
-          eyebrow: 'Featured initiative',
-          title: 'Maps that support a clear campaign',
-          subtitle: 'Lead with one strong statement, then stack selected maps and actions below.',
-          ctaLabel: 'See featured map'
-        },
-        {
-          ...createDefaultPortalBlock('text'),
-          title: 'Why this matters',
-          body: 'Use this section for the editorial pitch, context or operational summary that frames the maps below.'
-        },
-        {
-          ...createDefaultPortalBlock('maps'),
-          layout: 'featured',
-          title: 'Featured viewers',
-          intro: 'The first map becomes the hero card. Add two or three more to complete the story.'
-        },
-        createDefaultPortalBlock('social')
-      ]
-    };
-  }
-  return {
-    title: 'Story landing',
-    navLabel: 'Story',
-    summary: 'Blend editorial narrative, featured maps and support links in a premium landing page.',
-    blocks: [
-      createDefaultPortalBlock('hero'),
-      {
-        ...createDefaultPortalBlock('text'),
-        title: 'Context',
-        body: 'Write the opening narrative, explain the map collection and help the visitor understand why these layers or viewers matter.'
-      },
-      {
-        ...createDefaultPortalBlock('maps'),
-        layout: 'featured',
-        title: 'Explore the main maps',
-        intro: 'Lead with one primary viewer and then support it with secondary maps.'
-      },
-      createDefaultPortalBlock('social')
-    ]
-  };
-}
-
-function getPortalBlockTypeLabel(type) {
-  return t(`Qtiler2Origo.portal_block_${String(type || 'text').trim()}`);
-}
-
-function getPortalAccessLabel(access, inherit = false) {
-  const key = inherit ? 'Qtiler2Origo.portal_vis_inherit' : `Qtiler2Origo.portal_vis_${String(access || 'public').trim()}`;
-  return t(key);
-}
-
-function updatePortalBadges() {
-  const count = getPortalPages().length;
-  if (tabPortalBadge) tabPortalBadge.textContent = String(count);
-  if (portalPagesBadge) portalPagesBadge.textContent = String(count);
-}
-
-function findPublishedMapProfile(token) {
-  const wanted = String(token || '').trim().toLowerCase();
-  if (!wanted) return null;
-  return (publishedItems || []).find((item) => {
-    return [item?.profileKey, item?.name, item?.projectId].some((candidate) => String(candidate || '').trim().toLowerCase() === wanted);
-  }) || null;
-}
-
-function getPortalAuthCatalog() {
-  return currentStatus?.authCatalog || { users: [], roles: [] };
-}
-
-function renderPortalMultiSelectOptions(items, selectedValues, emptyLabel) {
-  const options = Array.isArray(items) ? items : [];
-  const selected = new Set((Array.isArray(selectedValues) ? selectedValues : []).map((item) => String(item || '').trim()));
-  if (!options.length) return `<option value="">${escapeHtml(emptyLabel)}</option>`;
-  return options.map((item) => {
-    const value = String(item || '').trim();
-    return `<option value="${escapeHtml(value)}" ${selected.has(value) ? 'selected' : ''}>${escapeHtml(value)}</option>`;
-  }).join('');
-}
-
-function getPortalSelectedOptions(selectEl) {
-  if (!selectEl) return [];
-  return Array.from(selectEl.selectedOptions || []).map((option) => String(option.value || '').trim()).filter(Boolean);
-}
-
-function setPortalFullscreen(enabled) {
-  portalEditorFullscreen = !!enabled;
-  portalSection?.classList.toggle('portal-section--fullscreen', portalEditorFullscreen);
-  document.body.classList.toggle('portal-builder-fullscreen-open', portalEditorFullscreen);
-  if (portalToggleFullscreenBtn) {
-    portalToggleFullscreenBtn.classList.toggle('is-primary', portalEditorFullscreen);
-    portalToggleFullscreenBtn.textContent = portalEditorFullscreen ? 'Exit fullscreen' : t('Qtiler2Origo.portal_fullscreen');
-  }
-}
-
-function getPortalPageUrl(page) {
-  if (!page) return '/Qtiler2Origo/portal';
-  const slug = String(page.slug || '').trim();
-  if (!slug) return '/Qtiler2Origo/portal';
-  return portalPagesState.homePageSlug && slug === portalPagesState.homePageSlug
-    ? '/Qtiler2Origo/portal'
-    : `/Qtiler2Origo/portal/${encodeURIComponent(slug)}`;
-}
-
-function updatePortalPublicLink() {
-  if (!portalOpenPageBtn) return;
-  const page = getSelectedPortalPage();
-  const href = getPortalPageUrl(page);
-  portalOpenPageBtn.href = href;
-  const hasPages = getPortalPages().length > 0;
-  portalOpenPageBtn.classList.toggle('is-disabled', !hasPages);
-  portalOpenPageBtn.setAttribute('aria-disabled', hasPages ? 'false' : 'true');
-}
-
-function renderPortalPageList() {
-  if (!portalPagesList) return;
-  updatePortalBadges();
-  const pages = getPortalPages();
-  if (!pages.length) {
-    portalPagesList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.portal_empty'))}</p>`;
-    updatePortalPublicLink();
-    return;
-  }
-  portalPagesList.innerHTML = pages.map((page, index) => {
-    const isActive = page.id === selectedPortalPageId;
-    const badges = [
-      portalPagesState.homePageSlug === page.slug ? t('Qtiler2Origo.portal_home_badge') : '',
-      page.showInNav === false ? t('Qtiler2Origo.portal_hidden_badge') : ''
-    ].filter(Boolean).join(' · ');
-    return `
-      <div class="portal-page-item ${isActive ? 'is-active' : ''}">
-        <button type="button" class="button ghost small" data-portal-select="${escapeHtml(page.id)}">${escapeHtml(page.title || page.slug)}</button>
-        <div class="portal-page-item__meta">/${escapeHtml(page.slug)} · ${escapeHtml(getPortalAccessLabel(page.visibility?.access || 'public'))}${badges ? ` · ${escapeHtml(badges)}` : ''}</div>
-        <div class="portal-page-item__actions">
-          <button type="button" class="button small is-info" data-portal-edit-window="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_edit_page'))}</button>
-          <button type="button" class="button small" data-portal-move="up" data-portal-page-id="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_up'))}</button>
-          <button type="button" class="button small" data-portal-move="down" data-portal-page-id="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_down'))}</button>
-          <button type="button" class="button small" data-portal-delete-page="${escapeHtml(page.id)}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
-        </div>
-      </div>`;
-  }).join('');
-  updatePortalPublicLink();
-}
-
-function getPortalBlockTypeOptionsHtml(selected) {
-  const options = ['hero', 'text', 'cards', 'maps', 'social'];
-  return options.map((type) => `<option value="${escapeHtml(type)}" ${type === selected ? 'selected' : ''}>${escapeHtml(getPortalBlockTypeLabel(type))}</option>`).join('');
-}
-
-function getPortalVisibilityOptionsHtml(selected, includeInherit = false) {
-  const values = includeInherit ? ['inherit', 'public', 'authenticated', 'restricted'] : ['public', 'authenticated', 'restricted'];
-  return values.map((value) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(getPortalAccessLabel(value, includeInherit && value === 'inherit'))}</option>`).join('');
-}
-
-function renderPortalRichEditorField(labelKey, field, blockId, value, rows = 4) {
-  return `<div class="portal-rich-field"><span class="portal-rich-field__label">${escapeHtml(t(labelKey))}</span><textarea class="textarea" rows="${Number(rows) || 4}" data-portal-block-field="${escapeHtml(field)}" data-portal-block-id="${escapeHtml(blockId)}">${escapeHtml(value || '')}</textarea></div>`;
-}
-
-function renderPortalRepeaterItems(block) {
-  const items = Array.isArray(block.items) ? block.items : [];
-  if (!items.length) return `<p class="help">${escapeHtml(t('Qtiler2Origo.portal_no_blocks_preview'))}</p>`;
-  return `<div class="portal-repeater">${items.map((item, index) => `
-      <div class="portal-repeater__item">
-        <div class="portal-block-card__actions">
-          <button type="button" class="button small" data-portal-item-delete="${escapeHtml(block.id)}" data-item-index="${index}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
-        </div>
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_title'))}</span><input class="input" type="text" value="${escapeHtml(item.title || '')}" data-portal-item-field="title" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_meta'))}</span><input class="input" type="text" value="${escapeHtml(item.meta || '')}" data-portal-item-field="meta" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_label'))}</span><input class="input" type="text" value="${escapeHtml(item.label || '')}" data-portal-item-field="label" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_url'))}</span><input class="input" type="text" value="${escapeHtml(item.url || '')}" data-portal-item-field="url" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_icon'))}</span><input class="input" type="text" value="${escapeHtml(item.icon || '')}" data-portal-item-field="icon" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_image'))}</span><input class="input" type="text" value="${escapeHtml(item.imageUrl || '')}" data-portal-item-field="imageUrl" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-        </div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_text'))}</span><textarea class="textarea" rows="3" data-portal-item-field="text" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}">${escapeHtml(item.text || '')}</textarea></label>
-      </div>`).join('')}</div>`;
-}
-
-function renderPortalSocialItems(block) {
-  const items = Array.isArray(block.items) ? block.items : [];
-  if (!items.length) return `<p class="help">${escapeHtml(t('Qtiler2Origo.portal_no_blocks_preview'))}</p>`;
-  return `<div class="portal-social-list">${items.map((item, index) => {
-    const platform = String(item.icon || 'facebook').trim().toLowerCase();
-    const label = item.title || getPortalSocialPlatformLabel(platform);
-    return `
-      <div class="portal-social-item">
-        <div class="portal-social-item__icon">${renderPortalSocialIconBadge(platform)}</div>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_block_social'))}</span><select class="input" data-portal-item-field="icon" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}">${getPortalSocialPlatformOptionsHtml(platform)}</select></label>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_url'))}</span><input class="input" type="url" value="${escapeHtml(item.url || '')}" placeholder="https://" data-portal-item-field="url" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_item_label'))}</span><input class="input" type="text" value="${escapeHtml(label)}" data-portal-item-field="title" data-portal-block-id="${escapeHtml(block.id)}" data-item-index="${index}" /></label>
-        <button type="button" class="button danger small" data-portal-item-delete="${escapeHtml(block.id)}" data-item-index="${index}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
-      </div>`;
-  }).join('')}</div>`;
-}
-
-function renderPortalBlocksList() {
-  if (!portalBlocksList) return;
-  quillInstances = {};
-  const page = getSelectedPortalPage();
-  if (!page) {
-    portalBlocksList.innerHTML = '';
-    return;
-  }
-  if (portalAddBlockType) portalAddBlockType.innerHTML = getPortalBlockTypeOptionsHtml(String(portalAddBlockType.value || 'hero'));
-  const blocks = Array.isArray(page.blocks) ? page.blocks : [];
-  if (!blocks.length) {
-    portalBlocksList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.portal_no_blocks_preview'))}</p>`;
-    return;
-  }
-  portalBlocksList.innerHTML = blocks.map((block, index) => {
-    let specific = '';
-    if (block.type === 'hero') {
-      specific = `
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_eyebrow'))}</span><input class="input" type="text" value="${escapeHtml(block.eyebrow || '')}" data-portal-block-field="eyebrow" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_background_url'))}</span><input class="input" type="text" value="${escapeHtml(block.backgroundUrl || '')}" data-portal-block-field="backgroundUrl" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_cta_label'))}</span><input class="input" type="text" value="${escapeHtml(block.ctaLabel || '')}" data-portal-block-field="ctaLabel" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_cta_url'))}</span><input class="input" type="text" value="${escapeHtml(block.ctaUrl || '')}" data-portal-block-field="ctaUrl" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        </div>
-        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'subtitle', block.id, block.subtitle, 5)}`;
-    } else if (block.type === 'text') {
-      specific = `
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        </div>
-        ${renderPortalRichEditorField('Qtiler2Origo.portal_body', 'body', block.id, block.body, 8)}`;
-    } else if (block.type === 'maps') {
-      const mapOptions = (publishedItems || []).map((item) => ({
-        value: String(item.profileKey || item.projectId || item.name || '').trim(),
-        label: String(item.name || item.profileKey || item.projectId || '').trim()
-      })).filter((item) => item.value && item.label);
-      specific = `
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_layout'))}</span><select class="input" data-portal-block-field="layout" data-portal-block-id="${escapeHtml(block.id)}"><option value="grid" ${block.layout !== 'featured' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_layout_grid'))}</option><option value="featured" ${block.layout === 'featured' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_layout_featured'))}</option></select></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_map_display'))}</span><select class="input" data-portal-block-field="displayMode" data-portal-block-id="${escapeHtml(block.id)}"><option value="thumbnail" ${String(block.displayMode || 'thumbnail') === 'thumbnail' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_thumbnail'))}</option><option value="embed" ${String(block.displayMode || '') === 'embed' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_embed'))}</option><option value="open" ${String(block.displayMode || '') === 'open' ? 'selected' : ''}>${escapeHtml(t('Qtiler2Origo.portal_map_display_open'))}</option></select></label>
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_map_profiles'))}</span><input class="input" type="text" value="${escapeHtml(toPortalCsv(block.profileKeys))}" data-value-kind="csv" data-portal-block-field="profileKeys" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        </div>
-        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
-        <label><span>${escapeHtml(t('Qtiler2Origo.portal_maps_catalog'))}</span><select class="input portal-multiselect" multiple size="8" data-portal-block-field="profileKeys" data-value-kind="multi-option" data-portal-block-id="${escapeHtml(block.id)}">${mapOptions.length ? mapOptions.map((item) => `<option value="${escapeHtml(item.value)}" ${Array.isArray(block.profileKeys) && block.profileKeys.includes(item.value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('') : `<option value="">${escapeHtml(t('Qtiler2Origo.no_profiles'))}</option>`}</select></label>`;
-    } else if (block.type === 'social') {
-      specific = `
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        </div>
-        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
-        ${renderPortalSocialItems(block)}
-        <button type="button" class="button small info" data-portal-add-item="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_add_item'))}</button>`;
-    } else {
-      specific = `
-        <div class="portal-block-card__grid">
-          <label><span>${escapeHtml(t('Qtiler2Origo.portal_page_title'))}</span><input class="input" type="text" value="${escapeHtml(block.title || '')}" data-portal-block-field="title" data-portal-block-id="${escapeHtml(block.id)}" /></label>
-        </div>
-        ${renderPortalRichEditorField('Qtiler2Origo.portal_intro', 'intro', block.id, block.intro, 5)}
-        ${renderPortalRepeaterItems(block)}
-        <button type="button" class="button small" data-portal-add-item="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_add_item'))}</button>`;
-    }
-    return `
-      <article class="portal-block-card">
-        <div class="portal-block-card__head">
-          <div>
-            <strong>${escapeHtml(getPortalBlockTypeLabel(block.type))}</strong>
-          </div>
-          <div class="portal-block-card__actions">
-            <select class="input" data-portal-block-field="type" data-portal-block-id="${escapeHtml(block.id)}">${getPortalBlockTypeOptionsHtml(block.type)}</select>
-            <button type="button" class="button small" data-portal-block-move="up" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_up'))}</button>
-            <button type="button" class="button small" data-portal-block-move="down" data-portal-block-id="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_move_down'))}</button>
-            <button type="button" class="button small" data-portal-block-delete="${escapeHtml(block.id)}">${escapeHtml(t('Qtiler2Origo.portal_delete'))}</button>
-          </div>
-        </div>
-        ${specific}
-      </article>`;
-  }).join('');
-  
-  if (typeof initRichTextEditors === 'function') {
-    initRichTextEditors();
-  }
-}
-
-let quillInstances = {};
-
-function uploadPortalEditorImage(file) {
-  if (!file) return Promise.reject(new Error('image_required'));
-  const body = new FormData();
-  body.append('image', file);
-  return api('/plugins/Qtiler2Origo/api/portal-assets/image', { method: 'POST', body })
-    .then((payload) => {
-      const url = String(payload?.url || '').trim();
-      if (!url) throw new Error('missing_uploaded_image_url');
-      return url;
-    });
-}
-
-function selectAndInsertPortalEditorImage(quill) {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/png,image/jpeg,image/webp,image/gif';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    const range = quill.getSelection(true);
-    try {
-      const url = await uploadPortalEditorImage(file);
-      quill.insertEmbed(range?.index ?? quill.getLength(), 'image', url, 'user');
-      quill.setSelection((range?.index ?? quill.getLength()) + 1, 0, 'silent');
-    } catch (err) {
-      addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-    }
-  });
-  input.click();
-}
-
-function initRichTextEditors() {
-  if (typeof Quill === 'undefined') return;
-  const richTextareas = portalBlocksList?.querySelectorAll('textarea[data-portal-block-field="body"], textarea[data-portal-block-field="intro"], textarea[data-portal-block-field="subtitle"]');
-  if (!richTextareas) return;
-  richTextareas.forEach(textarea => {
-    if (textarea.dataset.quillInitialized) return;
-    
-    const container = document.createElement('div');
-    container.className = 'quill-editor-container';
-    container.style.backgroundColor = 'white';
-    container.style.color = 'black';
-    // Remove pointer-events if we get an issue, but standard Quill should work.
-    textarea.style.display = 'none';
-    textarea.parentNode.insertBefore(container, textarea.nextSibling);
-    
-    const quill = new Quill(container, {
-      theme: 'snow',
-      modules: {
-        toolbar: {
-          container: [
-            [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
-            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'color': [] }, { 'background': [] }],
-            [{ 'script': 'sub'}, { 'script': 'super' }],
-            ['blockquote', 'code-block'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            [{ 'indent': '-1'}, { 'indent': '+1' }],
-            [{ 'direction': 'rtl' }],
-            [{ 'align': [] }],
-            ['link', 'image', 'video'],
-            ['clean']
-          ],
-          handlers: {
-            image() { selectAndInsertPortalEditorImage(this.quill); }
-          }
-        }
-      }
-    });
-
-    const initialHtml = textarea.value || '';
-    if (initialHtml) {
-      quill.clipboard.dangerouslyPasteHTML(0, initialHtml, 'silent');
-    } else {
-      quill.setText('', 'silent');
-    }
-
-    quill.on('text-change', () => {
-      textarea.value = quill.root.innerHTML;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    
-    textarea.dataset.quillInitialized = 'true';
-    const id = textarea.getAttribute('data-portal-block-id');
-    const field = textarea.getAttribute('data-portal-block-field');
-    quillInstances[id + '-' + field] = quill;
-  });
-}
-
-function getPortalSocialIcon(icon) {
-  const raw = String(icon || '').trim().toLowerCase();
-  const map = {
-    facebook: 'f',
-    instagram: '◎',
-    linkedin: 'in',
-    x: 'x',
-    twitter: 'x',
-    youtube: '▶',
-    tiktok: '♪',
-    whatsapp: '☎',
-    telegram: '➤',
-    email: '@',
-    web: 'www',
-    news: 'n'
-  };
-  return map[raw] || (raw ? raw.slice(0, 2) : '•');
-}
-
-function renderPortalPreview() {
-  if (!portalPreviewHost) return;
-  const page = getSelectedPortalPage();
-  if (!page) {
-    portalPreviewHost.innerHTML = `<div class="portal-preview__empty">${escapeHtml(t('Qtiler2Origo.portal_empty'))}</div>`;
-    return;
-  }
-  const blocks = Array.isArray(page.blocks) ? page.blocks : [];
-  if (!blocks.length) {
-    portalPreviewHost.innerHTML = `<div class="portal-preview__empty">${escapeHtml(t('Qtiler2Origo.portal_no_blocks_preview'))}</div>`;
-    return;
-  }
-  const previewClass = portalPreviewDevice === 'mobile'
-    ? 'portal-preview-frame portal-preview-frame--mobile'
-    : portalPreviewDevice === 'tablet'
-      ? 'portal-preview-frame portal-preview-frame--tablet'
-      : 'portal-preview-frame';
-  portalPreviewDeviceButtons.forEach((button) => {
-    button.classList.toggle('is-active', button.getAttribute('data-portal-preview-device') === portalPreviewDevice);
-  });
-  const previewHeader = page.showHeader !== false
-    ? `<div class="portal-preview__site-header" style="min-height:${Math.max(0, Number(page.headerHeight) || 120)}px">${page.headerLogoUrl ? `<img class="portal-preview__site-logo" src="${escapeHtml(page.headerLogoUrl)}" alt="" />` : ''}<div class="portal-preview__site-brand"><strong>${escapeHtml(page.title || t('Qtiler2Origo.portal_page_title'))}</strong>${page.summary ? `<span>${escapeHtml(page.summary)}</span>` : ''}</div></div>`
-    : '';
-  const sanitizePortalRichHtml = (html) => String(html || '')
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/javascript:/gi, '');
-  portalPreviewHost.innerHTML = `<div class="${previewClass}"><div class="portal-preview-frame__topbar"><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__dot"></span><span class="portal-preview-frame__url">${escapeHtml(getPortalPageUrl(page))}</span></div><div class="portal-preview">${previewHeader}${blocks.map((block) => {
-    if (block.type === 'hero') {
-      const bg = block.backgroundUrl ? ` style="background-image: linear-gradient(135deg, rgba(0, 87, 216, 0.92), rgba(13, 148, 136, 0.72)), url('${escapeHtml(block.backgroundUrl)}');"` : '';
-      return `<section class="portal-preview__hero"${bg}><div class="portal-preview__eyebrow">${escapeHtml(block.eyebrow || '')}</div><h1>${escapeHtml(block.title || page.title)}</h1><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.subtitle || '')}</div>${block.ctaLabel ? `<a class="portal-preview__cta" href="${escapeHtml(block.ctaUrl || '#')}">${escapeHtml(block.ctaLabel)}</a>` : ''}</section>`;
-    }
-    if (block.type === 'text') {
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3><div class="portal-preview__richtext">${sanitizePortalRichHtml(block.body || '')}</div></section>`;
-    }
-    if (block.type === 'maps') {
-      const cards = (block.profileKeys || []).map((token) => findPublishedMapProfile(token)).filter(Boolean);
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__maps ${block.layout === 'featured' ? 'is-featured' : ''} ${block.displayMode === 'embed' ? 'is-embed' : ''} ${block.displayMode === 'open' ? 'is-open' : ''}">${cards.map((item) => {
-        const thumbUrl = item?.projectId ? `/plugins/Qtiler2Origo/api/thumbnail/${encodeURIComponent(item.projectId)}` : '';
-        if (block.displayMode === 'embed') {
-          return `<div class="portal-preview__map portal-preview__map--embed"><div class="portal-preview__embed-shell"><iframe src="${escapeHtml(item?.launchUrl || '/Qtiler2Origo/maps')}" loading="lazy" referrerpolicy="same-origin"></iframe></div><strong>${escapeHtml(item?.name || item?.profileKey || '')}</strong><p>${escapeHtml(item?.description || '')}</p></div>`;
-        }
-        if (block.displayMode === 'open') {
-          return `<div class="portal-preview__map portal-preview__map--open"><strong>${escapeHtml(item?.name || item?.profileKey || '')}</strong><p>${escapeHtml(item?.description || '')}</p><a class="portal-preview__cta" href="${escapeHtml(item?.launchUrl || '/Qtiler2Origo/maps')}" target="_blank" rel="noreferrer">${escapeHtml(t('Qtiler2Origo.portal_map_display_open'))}</a></div>`;
-        }
-        return `<div class="portal-preview__map"><div class="portal-preview__map-thumb"${thumbUrl ? ` style="background-image:url('${escapeHtml(thumbUrl)}')"` : ''}></div><strong>${escapeHtml(item?.name || item?.profileKey || '')}</strong><p>${escapeHtml(item?.description || '')}</p></div>`;
-      }).join('') || `<div class="portal-preview__card">${escapeHtml(t('Qtiler2Origo.no_profiles'))}</div>`}</div></section>`;
-    }
-    if (block.type === 'social') {
-      return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__social">${(block.items || []).map((item) => `<a class="portal-preview__social-link" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noreferrer">${item.imageUrl ? `<span class="portal-preview__social-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></span>` : renderPortalSocialIconBadge(item.icon, 'portal-preview__social-icon')}<span>${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || getPortalSocialPlatformLabel(item.icon))}</strong>${item.text ? `<br>${escapeHtml(item.text)}` : ''}</span></a>`).join('')}</div></section>`;
-    }
-    return `<section class="portal-preview__section"><h3>${escapeHtml(block.title || '')}</h3>${block.intro ? `<div class="portal-preview__lead portal-preview__richtext">${sanitizePortalRichHtml(block.intro)}</div>` : ''}<div class="portal-preview__cards">${(block.items || []).map((item) => `<article class="portal-preview__card">${item.imageUrl ? `<div class="portal-preview__card-image" style="background-image:url('${escapeHtml(item.imageUrl)}')"></div>` : ''}${item.meta ? `<small class="portal-preview__item-meta">${escapeHtml(item.meta)}</small>` : ''}<strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.text || '')}</p>${item.label ? `<span class="button small">${escapeHtml(item.label)}</span>` : ''}</article>`).join('')}</div></section>`;
-  }).join('')}</div></div>`;
-}
-
-function renderPortalEditor() {
-  renderPortalPageList();
-  renderPortalBackupOptions();
-  
-  const site = portalPagesState?.site || {};
-  const setIfNotActive = (input, value) => { if (input && document.activeElement !== input) input.value = value; };
-  setIfNotActive(portalSiteTitle, site.title || '');
-  setIfNotActive(portalSiteSubtitle, site.subtitle || '');
-  setIfNotActive(portalSiteLogoUrl, site.headerLogoUrl || '');
-  setIfNotActive(portalGalleryTitle, site.galleryTitle || '');
-  setIfNotActive(portalGallerySubtitle, site.gallerySubtitle || '');
-  setIfNotActive(portalGalleryLogoUrl, site.galleryHeaderLogoUrl || '');
-  setIfNotActive(portalSiteHeaderHeight, site.headerHeight ? String(site.headerHeight) : '');
-  setIfNotActive(portalSiteHeaderFont, site.headerFont || 'fraunces');
-  setIfNotActive(portalSiteHeaderColor1, site.headerColor1 || '#0f766e');
-  setIfNotActive(portalSiteHeaderColor2, site.headerColor2 || '#2563eb');
-  setIfNotActive(portalSiteHeaderTextColor, site.headerTextColor || '#ffffff');
-  setIfNotActive(portalSiteHeaderBackgroundUrl, site.headerBackgroundUrl || '');
-  setIfNotActive(portalSiteFooterText, site.footerText || '');
-  setIfNotActive(portalSiteFooterLinkLabel, site.footerLinkLabel || '');
-  setIfNotActive(portalSiteFooterLink, site.footerLink || '');
-  setIfNotActive(portalSiteFooterBackgroundColor, site.footerBackgroundColor || '#1f2933');
-  setIfNotActive(portalSiteFooterTextColor, site.footerTextColor || '#cbd5e1');
-  setIfNotActive(portalSiteFooterLinkColor, site.footerLinkColor || '#93c5fd');
-
-  const gdpr = portalPagesState?.gdpr || {};
-  if (portalGdprEnabled) portalGdprEnabled.checked = gdpr.enabled === true;
-  if (portalGdprCompany) portalGdprCompany.value = gdpr.companyName || '';
-  if (portalGdprPrivacyUrl) portalGdprPrivacyUrl.value = gdpr.privacyUrl || '';
-  if (portalGdprCookieUrl) portalGdprCookieUrl.value = gdpr.cookiePolicyUrl || '';
-  if (portalGdprContactUrl) portalGdprContactUrl.value = gdpr.contactUrl || '';
-  if (portalGdprTitle) portalGdprTitle.value = gdpr.bannerTitle || '';
-  if (portalGdprText) portalGdprText.value = gdpr.bannerText || '';
-  const page = getSelectedPortalPage();
-  if (!page) {
-    if (portalPageEmpty) portalPageEmpty.hidden = false;
-    if (portalPageEditor) portalPageEditor.hidden = true;
-    renderPortalPreview();
-    return;
-  }
-  if (portalPageEmpty) portalPageEmpty.hidden = true;
-  if (portalPageEditor) portalPageEditor.hidden = false;
-  if (portalPageTitle) portalPageTitle.value = page.title || '';
-  if (portalPageSlug) portalPageSlug.value = page.slug || '';
-  if (portalPageNavLabel) portalPageNavLabel.value = page.navLabel || '';
-  if (portalPageSummary) portalPageSummary.value = page.summary || '';
-  if (portalPageHeaderLogoUrl) portalPageHeaderLogoUrl.value = page.headerLogoUrl || '';
-  if (portalPageHeaderHeight) portalPageHeaderHeight.value = String(Number(page.headerHeight) || 120);
-  if (portalPageVisibility) portalPageVisibility.value = page.visibility?.access || 'public';
-  if (portalPageUsers) portalPageUsers.value = toPortalCsv(page.visibility?.users);
-  if (portalPageUsersCatalog) portalPageUsersCatalog.innerHTML = renderPortalMultiSelectOptions(getPortalAuthCatalog().users, page.visibility?.users, t('Qtiler2Origo.portal_no_users'));
-  if (portalPageRoles) portalPageRoles.value = toPortalCsv(page.visibility?.roles);
-  if (portalPageRolesCatalog) portalPageRolesCatalog.innerHTML = renderPortalMultiSelectOptions(getPortalAuthCatalog().roles, page.visibility?.roles, t('Qtiler2Origo.portal_no_roles'));
-  if (portalPageShowHeader) portalPageShowHeader.checked = page.showHeader !== false;
-  if (portalPageShowInNav) portalPageShowInNav.checked = page.showInNav !== false;
-  if (portalPageIsHome) portalPageIsHome.checked = portalPagesState.homePageSlug === page.slug;
-  renderPortalBlocksList();
-  renderPortalPreview();
-  updatePortalPublicLink();
-}
-
-function updatePortalPageField(field, rawValue) {
-  const page = getSelectedPortalPage();
-  if (!page) return;
-  if (field === 'title') {
-    page.title = String(rawValue || '');
-    if (!String(page.navLabel || '').trim()) page.navLabel = String(rawValue || '');
-  } else if (field === 'slug') {
-    const wasHome = portalPagesState.homePageSlug === page.slug;
-    page.slug = buildUniquePortalSlug(rawValue, page.id);
-    if (wasHome || portalPageIsHome?.checked) {
-      portalPagesState.homePageSlug = page.slug;
-    }
-  } else if (field === 'navLabel') page.navLabel = String(rawValue || '');
-  else if (field === 'summary') page.summary = String(rawValue || '');
-  else if (field === 'headerLogoUrl') page.headerLogoUrl = String(rawValue || '');
-  else if (field === 'headerHeight') page.headerHeight = Math.max(0, Math.min(320, Number(rawValue) || 0));
-  else if (field === 'showHeader') page.showHeader = !!rawValue;
-  else if (field === 'showInNav') page.showInNav = !!rawValue;
-  else if (field === 'visibility.access') page.visibility.access = String(rawValue || 'public');
-  else if (field === 'visibility.users') page.visibility.users = parsePortalCsv(rawValue);
-  else if (field === 'visibility.roles') page.visibility.roles = parsePortalCsv(rawValue);
-  if (field === 'visibility.users' && portalPageUsersCatalog) {
-    portalPageUsersCatalog.innerHTML = renderPortalMultiSelectOptions(getPortalAuthCatalog().users, page.visibility?.users, t('Qtiler2Origo.portal_no_users'));
-  }
-  if (field === 'visibility.roles' && portalPageRolesCatalog) {
-    portalPageRolesCatalog.innerHTML = renderPortalMultiSelectOptions(getPortalAuthCatalog().roles, page.visibility?.roles, t('Qtiler2Origo.portal_no_roles'));
-  }
-  renderPortalPageList();
-  renderPortalPreview();
-  updatePortalPublicLink();
-  queuePortalPersist();
-}
-
-function loadPortalPagesState(payload) {
-  portalPagesState = {
-    gdpr: payload?.gdpr && typeof payload.gdpr === 'object' ? { ...payload.gdpr } : {},
-    site: payload?.site && typeof payload.site === 'object' ? { ...payload.site } : {},
-    homePageSlug: String(payload?.homePageSlug || '').trim(),
-    pages: Array.isArray(payload?.pages) ? payload.pages : []
-  };
-  const pages = getPortalPages();
-  if (!pages.some((page) => page.id === selectedPortalPageId)) selectedPortalPageId = pages[0]?.id || '';
-  renderPortalEditor();
-}
-
-async function loadPortalPages() {
-  const payload = await api('/plugins/Qtiler2Origo/api/portal-pages');
-  loadPortalPagesState(payload);
-}
-
-function syncPortalRichEditorsToState() {
-  const richFields = portalBlocksList?.querySelectorAll('textarea[data-portal-block-field]');
-  if (!richFields) return;
-  richFields.forEach((textarea) => {
-    const blockId = textarea.getAttribute('data-portal-block-id');
-    const field = textarea.getAttribute('data-portal-block-field');
-    const { block } = getPortalBlockById(blockId);
-    if (!block || !field) return;
-    setPortalFieldValue(block, field, textarea.value, textarea.getAttribute('data-value-kind') || 'text');
-  });
-}
-
-async function savePortalPages(options = {}) {
-  syncPortalRichEditorsToState();
-  const payload = await api('/plugins/Qtiler2Origo/api/portal-pages', { method: 'POST', body: portalPagesState });
-  if (options.refresh !== false) loadPortalPagesState(payload);
-  if (!options.silent) addLog(t('Qtiler2Origo.portal_saved'), 'ok');
-}
-
-function updatePortalSiteField(field, rawValue) {
-  if (!portalPagesState.site || typeof portalPagesState.site !== 'object') portalPagesState.site = {};
-  if (field === 'headerHeight') portalPagesState.site[field] = Math.max(72, Math.min(360, Number(rawValue) || 120));
-  else portalPagesState.site[field] = String(rawValue || '');
-  queuePortalPersist();
-}
-
-function updatePortalGdprField(field, rawValue) {
-  if (!portalPagesState.gdpr || typeof portalPagesState.gdpr !== 'object') portalPagesState.gdpr = {};
-  if (field === 'enabled') portalPagesState.gdpr.enabled = !!rawValue;
-  else portalPagesState.gdpr[field] = String(rawValue || '');
-  queuePortalPersist();
-}
-
-let portalPersistTimer = null;
-function queuePortalPersist() {
-  if (portalPersistTimer) window.clearTimeout(portalPersistTimer);
-  portalPersistTimer = window.setTimeout(async () => {
-    portalPersistTimer = null;
-    try {
-      await savePortalPages({ refresh: false, silent: true });
-    } catch (err) {
-      addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-    }
-  }, 350);
-}
 
 function getFixedBackgroundOptions() {
   return [
@@ -4838,7 +3621,6 @@ function syncUI() {
 
   /* ── Logo card ── */
   if (logoSection) logoSection.classList.remove('card--disabled');
-  if (galleryBrandingSection) galleryBrandingSection.classList.remove('card--disabled');
   if (logoBadge) {
     logoBadge.textContent = t(hasLogo ? 'Qtiler2Origo.logo_active' : 'Qtiler2Origo.no_logo');
     logoBadge.className = `badge ${hasLogo ? 'badge--ok' : 'badge--muted'}`;
@@ -4925,6 +3707,7 @@ function renderPublishedProfiles(items) {
             <a class="button ghost small" href="${openUrl}" target="_blank" rel="noreferrer">${escapeHtml(t('Qtiler2Origo.open_json'))}</a>
             <a class="button ghost small ${launchDisabled}" href="${launchDisabled ? '#' : launchUrl}" target="_blank" rel="noreferrer">${escapeHtml(t('Qtiler2Origo.open_Origo_link'))}</a>
             <button class="button ghost small" data-regen-thumb="${profileKey}" title="${escapeHtml(t('Qtiler2Origo.regen_thumb_title'))}">↻ ${escapeHtml(t('Qtiler2Origo.regen_thumb'))}</button>
+            <button class="button ghost small" data-manual-thumb="${profileKey}">${escapeHtml(t('Qtiler2Origo.thumbnail_change'))}</button>
             <button class="button danger small" data-delete-published="${profileKey}">${escapeHtml(t('Qtiler2Origo.delete'))}</button>
           </div>
         </div>
@@ -4977,7 +3760,6 @@ async function loadReleases() {
 async function loadStatus() {
   currentStatus = await api('/plugins/Qtiler2Origo/api/status');
   syncUI();
-  renderPortalEditor();
   loadLegendLibrary().catch(() => {});
   // Warn once per page load if Lantmäteriet is running on DEMO data.
   if (currentStatus?.lantmateriDemo && !loadStatus._lmvWarned) {
@@ -4991,185 +3773,76 @@ async function loadPublishedProfiles() {
   // CRITICAL FIX: Handles if payload is already an Array directly
   publishedItems = payload?.items || (Array.isArray(payload) ? payload : []);
   syncUI();
-  renderPortalEditor();
-  renderPortalBackupOptions();
+  renderThumbnailSetup();
 }
+
+
+function renderThumbnailSetup(preferredProfileKey = '') {
+  if (!thumbnailProfileSelect) return;
+  const previous = String(preferredProfileKey || thumbnailProfileSelect.value || '').trim();
+  thumbnailProfileSelect.innerHTML = publishedItems.length
+    ? publishedItems.map((item) => `<option value="${escapeHtml(item.profileKey || '')}">${escapeHtml(item.name || item.profileKey || '')}</option>`).join('')
+    : `<option value="">${escapeHtml(t('Qtiler2Origo.no_profiles'))}</option>`;
+  if (previous && publishedItems.some((item) => item.profileKey === previous)) thumbnailProfileSelect.value = previous;
+  if (thumbnailSetupBadge) thumbnailSetupBadge.textContent = String(publishedItems.length);
+  const selected = publishedItems.find((item) => item.profileKey === thumbnailProfileSelect.value);
+  if (thumbnailSetupPreview && !thumbnailPreviewObjectUrl) {
+    const url = String(selected?.thumbnailUrl || '').trim();
+    thumbnailSetupPreview.src = url ? `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}` : '';
+    thumbnailSetupPreview.classList.toggle('has-image', !!url);
+  }
+  if (thumbnailUploadBtn) thumbnailUploadBtn.disabled = !selected;
+}
+
+function openThumbnailSetup(profileKey) {
+  document.querySelector('.tab-btn[data-tab="setup"]')?.click();
+  renderThumbnailSetup(profileKey);
+  thumbnailSetupSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+thumbnailProfileSelect?.addEventListener('change', () => {
+  if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+  thumbnailPreviewObjectUrl = '';
+  renderThumbnailSetup();
+});
+
+thumbnailFileInput?.addEventListener('change', () => {
+  if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+  thumbnailPreviewObjectUrl = thumbnailFileInput.files?.[0] ? URL.createObjectURL(thumbnailFileInput.files[0]) : '';
+  if (thumbnailSetupPreview) {
+    thumbnailSetupPreview.src = thumbnailPreviewObjectUrl;
+    thumbnailSetupPreview.classList.toggle('has-image', !!thumbnailPreviewObjectUrl);
+  }
+});
+
+thumbnailUploadBtn?.addEventListener('click', async () => {
+  const profileKey = String(thumbnailProfileSelect?.value || '').trim();
+  const file = thumbnailFileInput?.files?.[0];
+  if (!profileKey || !file) return;
+  thumbnailUploadBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('image', file);
+    await api(`/plugins/Qtiler2Origo/api/publish/thumbnail/${encodeURIComponent(profileKey)}/upload`, { method: 'POST', body });
+    addLog(`Thumbnail updated for ${profileKey}.`, 'ok');
+    if (thumbnailPreviewObjectUrl) URL.revokeObjectURL(thumbnailPreviewObjectUrl);
+    thumbnailPreviewObjectUrl = '';
+    thumbnailFileInput.value = '';
+    await loadPublishedProfiles();
+    renderThumbnailSetup(profileKey);
+  } catch (err) {
+    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
+  } finally {
+    thumbnailUploadBtn.disabled = false;
+  }
+});
 
 async function initDetachedEditorWindow() {
-  if (!isDetachedEditorWindow) return;
-  document.body.classList.add('admin-editor-detached', `admin-editor-detached--${detachedEditorMode}`);
-
-  if (isDetachedMapEditor) {
-    document.title = detachedEditorProfile ? `Edit map - ${detachedEditorProfile}` : 'New map';
-    await preparePublishModal(detachedEditorProfile || null);
-    publishModal?.classList.add('publish-editor--detached');
-    return;
-  }
-
-  if (isDetachedPortalEditor) {
-    const pages = getPortalPages();
-    const requestedPage = pages.find((page) => page.id === detachedEditorPageId || page.slug === detachedEditorPageId);
-    if (requestedPage) {
-      selectedPortalPageId = requestedPage.id;
-    } else if (!pages.length) {
-      const page = createDefaultPortalPage();
-      portalPagesState.pages = [page];
-      portalPagesState.homePageSlug = page.slug;
-      selectedPortalPageId = page.id;
-      queuePortalPersist();
-    } else {
-      selectedPortalPageId = selectedPortalPageId || pages[0].id;
-    }
-
-    document.querySelectorAll('.tab-btn').forEach((button) => button.classList.toggle('tab-btn--active', button.getAttribute('data-tab') === 'portal'));
-    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('tab-panel--active', panel.getAttribute('data-panel') === 'portal'));
-    portalSection?.classList.add('portal-section--detached');
-    const selectedPage = getSelectedPortalPage();
-    document.title = selectedPage?.title ? `Portal editor - ${selectedPage.title}` : 'Portal editor';
-    renderPortalEditor();
-  }
-}
-
-function movePortalArrayItem(items, fromIndex, toIndex) {
-  if (!Array.isArray(items)) return;
-  if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return;
-  const [entry] = items.splice(fromIndex, 1);
-  if (!entry) return;
-  items.splice(toIndex, 0, entry);
-}
-
-function selectPortalPage(pageId) {
-  selectedPortalPageId = String(pageId || '').trim();
-  renderPortalEditor();
-}
-
-function getPortalBlockById(blockId) {
-  const page = getSelectedPortalPage();
-  if (!page) return { page: null, block: null, blockIndex: -1 };
-  const blockIndex = (Array.isArray(page.blocks) ? page.blocks : []).findIndex((block) => block.id === blockId);
-  return {
-    page,
-    blockIndex,
-    block: blockIndex >= 0 ? page.blocks[blockIndex] : null
-  };
-}
-
-function setPortalFieldValue(target, field, rawValue, kind = 'text') {
-  const path = String(field || '').split('.').filter(Boolean);
-  if (!path.length) return;
-  let cursor = target;
-  while (path.length > 1) {
-    const key = path.shift();
-    if (!cursor[key] || typeof cursor[key] !== 'object') cursor[key] = {};
-    cursor = cursor[key];
-  }
-  const last = path[0];
-  let value = rawValue;
-  if (kind === 'csv') value = parsePortalCsv(rawValue);
-  else if (kind === 'multi-option') value = Array.isArray(rawValue) ? rawValue : [];
-  else if (kind === 'bool') value = !!rawValue;
-  else value = String(rawValue || '');
-  cursor[last] = value;
-}
-
-function updatePortalBlockField(blockId, field, rawValue, kind = 'text') {
-  const { block } = getPortalBlockById(blockId);
-  if (!block) return;
-  if (field === 'type') {
-    const { page, blockIndex } = getPortalBlockById(blockId);
-    const replacement = createDefaultPortalBlock(rawValue);
-    replacement.id = block.id;
-    replacement.visibility = block.visibility || replacement.visibility;
-    page.blocks[blockIndex] = replacement;
-    renderPortalEditor();
-    queuePortalPersist();
-    return;
-  }
-  setPortalFieldValue(block, field, rawValue, kind);
-  renderPortalPreview();
-  queuePortalPersist();
-}
-
-function addPortalItem(blockId) {
-  const { block } = getPortalBlockById(blockId);
-  if (!block) return;
-  if (!Array.isArray(block.items)) block.items = [];
-  if (block.type === 'social') {
-    block.items.push({ id: makePortalId('social'), title: 'Instagram', text: '', url: 'https://instagram.com/', label: '', icon: 'instagram', meta: '', imageUrl: '' });
-  } else {
-    block.items.push({ id: makePortalId('item'), title: '', text: '', url: '', label: '', icon: '', meta: '', imageUrl: '' });
-  }
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function deletePortalItem(blockId, itemIndex) {
-  const { block } = getPortalBlockById(blockId);
-  if (!block || !Array.isArray(block.items)) return;
-  block.items.splice(itemIndex, 1);
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function updatePortalItemField(blockId, itemIndex, field, rawValue) {
-  const { block } = getPortalBlockById(blockId);
-  if (!block || !Array.isArray(block.items) || !block.items[itemIndex]) return;
-  block.items[itemIndex][field] = String(rawValue || '');
-  if (block.type === 'social' && field === 'icon') {
-    block.items[itemIndex].title = getPortalSocialPlatformLabel(rawValue);
-  }
-  renderPortalPreview();
-  queuePortalPersist();
-}
-
-function addPortalBlock() {
-  const page = getSelectedPortalPage();
-  if (!page) return;
-  const type = String(portalAddBlockType?.value || 'text').trim();
-  if (!Array.isArray(page.blocks)) page.blocks = [];
-  page.blocks.push(createDefaultPortalBlock(type));
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function movePortalBlock(blockId, direction) {
-  const { page, blockIndex } = getPortalBlockById(blockId);
-  if (!page || blockIndex < 0) return;
-  const nextIndex = direction === 'up' ? blockIndex - 1 : blockIndex + 1;
-  movePortalArrayItem(page.blocks, blockIndex, nextIndex);
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function deletePortalBlock(blockId) {
-  const { page, blockIndex } = getPortalBlockById(blockId);
-  if (!page || blockIndex < 0) return;
-  page.blocks.splice(blockIndex, 1);
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function movePortalPage(pageId, direction) {
-  const pages = getPortalPages();
-  const index = pages.findIndex((page) => page.id === pageId);
-  if (index < 0) return;
-  const nextIndex = direction === 'up' ? index - 1 : index + 1;
-  movePortalArrayItem(pages, index, nextIndex);
-  renderPortalEditor();
-  queuePortalPersist();
-}
-
-function deletePortalPage(pageId) {
-  const pages = getPortalPages();
-  const index = pages.findIndex((page) => page.id === pageId);
-  if (index < 0) return;
-  const [removed] = pages.splice(index, 1);
-  if (removed && portalPagesState.homePageSlug === removed.slug) {
-    portalPagesState.homePageSlug = pages[0]?.slug || '';
-  }
-  if (selectedPortalPageId === pageId) selectedPortalPageId = pages[0]?.id || '';
-  renderPortalEditor();
-  queuePortalPersist();
+  if (!isDetachedMapEditor) return;
+  document.body.classList.add('admin-editor-detached', 'admin-editor-detached--map');
+  document.title = detachedEditorProfile ? `Edit map - ${detachedEditorProfile}` : 'New map';
+  await preparePublishModal(detachedEditorProfile || null);
+  publishModal?.classList.add('publish-editor--detached');
 }
 
 /* ── Layer helpers ── */
@@ -5522,15 +4195,25 @@ async function chooseBackgroundImageForKey(key) {
   return picked;
 }
 
-async function fetchPortalAssets() {
-  const payload = await api('/plugins/Qtiler2Origo/api/portal-assets', { method: 'GET' });
+async function fetchBackgroundAssets() {
+  const payload = await api('/plugins/Qtiler2Origo/api/background-assets', { method: 'GET' });
   return Array.isArray(payload?.items) ? payload.items : [];
+}
+
+async function uploadBackgroundAsset(file) {
+  if (!file) throw new Error('image_required');
+  const body = new FormData();
+  body.append('image', file);
+  const payload = await api('/plugins/Qtiler2Origo/api/background-assets/image', { method: 'POST', body });
+  const url = String(payload?.url || '').trim();
+  if (!url) throw new Error('missing_uploaded_image_url');
+  return url;
 }
 
 function showAssetPickerModal() {
   return new Promise(async (resolve, reject) => {
     try {
-      const assets = await fetchPortalAssets().catch(() => []);
+      const assets = await fetchBackgroundAssets().catch(() => []);
       const overlay = document.createElement('div');
       overlay.className = 'Qtiler2Origo-asset-modal overlay';
       const modal = document.createElement('div');
@@ -5588,9 +4271,9 @@ function showAssetPickerModal() {
           const file = input.files?.[0];
           if (!file) return;
           try {
-            const url = await uploadPortalEditorImage(file);
+            const url = await uploadBackgroundAsset(file);
             // re-fetch assets list and select the uploaded one
-            const updated = await fetchPortalAssets().catch(() => []);
+            const updated = await fetchBackgroundAssets().catch(() => []);
             renderList(updated);
             // auto-select uploaded
             resolve(url);
@@ -5822,8 +4505,13 @@ async function addExternalLayers(projectId, selectedItems) {
   for (const item of selectedItems) {
     const layerName = String(item?.name || '').trim();
     if (!layerName) continue;
-    const layerObj = catalog.find((layer) => String(layer?.name || '') === layerName);
-    if (!layerObj) continue;
+    const layerObj = catalog.find((layer) => String(layer?.name || '') === layerName) || {
+      key: makeLayerKey(pid, layerName),
+      name: layerName,
+      title: String(item?.title || layerName).trim() || layerName,
+      sourceProjectId: pid,
+      geometry: String(item?.geometryType || item?.geometry || '').trim()
+    };
     const layerKey = getLayerKey(layerObj);
     if (!publishState.extraLayers.some((layer) => getLayerKey(layer) === layerKey)) {
       publishState.extraLayers.push({ ...layerObj });
@@ -5836,8 +4524,8 @@ async function addExternalLayers(projectId, selectedItems) {
     publishState.mainRules[layerKey] = {
       ...existingRule,
       searchable: baseRule.searchable === true,
-      editable: item.mode === 'WFS' ? baseRule.editable === true : false,
-      serveAsWfs: item.mode === 'WFS',
+      editable: String(item.mode || '').toUpperCase() === 'WFS' ? baseRule.editable === true : false,
+      serveAsWfs: String(item.mode || '').toUpperCase() === 'WFS',
       searchAttribute: baseRule.searchAttribute || null,
       idAttribute: baseRule.idAttribute || null,
       geometryAttribute: baseRule.geometryAttribute || null,
@@ -6282,16 +4970,29 @@ async function loadProjectLayers(projectId, target = 'main') {
   const normalized = normalizeLayersPayload(payload, { sourceProjectId: projectId });
   publishState.projectLayerCatalog[projectId] = normalized;
   if (target === 'main') {
+    const retainedExtraLayers = (publishState.extraLayers || [])
+      .filter((layer) => String(layer?.sourceProjectId || '').trim() !== projectId);
+    const retainedExtraKeys = new Set(retainedExtraLayers.map((layer) => getLayerKey(layer)));
+    const retainedRules = Object.fromEntries(Object.entries(publishState.mainRules || {})
+      .filter(([key]) => retainedExtraKeys.has(key)));
+    const retainedVisibility = Object.fromEntries(Array.from(retainedExtraKeys)
+      .map((key) => [key, publishState.initialVisibility?.[key] !== false]));
+    const previousOrder = Array.isArray(publishState.layerOrder) ? publishState.layerOrder.slice() : [];
     publishState.mainLayers = normalized;
-    publishState.extraLayers = [];
-    publishState.mainRules = await loadLayerRules(projectId);
-    publishState.initialVisibility = Object.fromEntries(normalized.map((layer) => [getLayerKey(layer), true]));
+    publishState.extraLayers = retainedExtraLayers;
+    publishState.mainRules = { ...(await loadLayerRules(projectId)), ...retainedRules };
+    publishState.initialVisibility = {
+      ...Object.fromEntries(normalized.map((layer) => [getLayerKey(layer), true])),
+      ...retainedVisibility
+    };
+    publishState.layerOrder = previousOrder;
+    ensureLayerOrderKeys(getAllPublishLayers().map((layer) => getLayerKey(layer)));
     renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     // Default visibility = on, but DO NOT force-check the per-row WFS toggle —
     // that would override the saved profile's per-layer `serveAsWfs` flag and
     // make every layer appear as WFS until the user toggles one (which then
     // re-renders all the others as unchecked, looking like a mass-deselect).
-    setCheckedLayerNames(projectLayersList, normalized.map((layer) => getLayerKey(layer)).filter(Boolean));
+    setCheckedLayerNames(projectLayersList, getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean));
     refreshExtraSections();
     return;
   }
@@ -6525,6 +5226,14 @@ function closePublishModal({ force = false } = {}) {
 }
 
 async function preparePublishModal(editProfileId = null) {
+  _mapJsonDirty = false;
+  if (_cmMapJsonEditor) {
+    _mapJsonSettingValue = true;
+    _cmMapJsonEditor.setValue('{}');
+    _cmMapJsonEditor.clearHistory();
+    _mapJsonSettingValue = false;
+  }
+  setMapJsonLiveStatus('Ready');
   publishState.editingProfileId = editProfileId;
   await loadProjectsForPublish();
 
@@ -6854,317 +5563,6 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
     const panel = document.querySelector(`.tab-panel[data-panel="${target}"]`);
     if (panel) panel.classList.add('tab-panel--active');
   });
-});
-
-portalAddPageBtn?.addEventListener('click', async () => {
-  const page = createDefaultPortalPage();
-  portalPagesState.pages = getPortalPages().concat(page);
-  if (!portalPagesState.homePageSlug) portalPagesState.homePageSlug = page.slug;
-  selectedPortalPageId = page.id;
-  renderPortalEditor();
-  queuePortalPersist();
-});
-
-portalDuplicatePageBtn?.addEventListener('click', () => {
-  const page = getSelectedPortalPage();
-  if (!page) return;
-  const clone = JSON.parse(JSON.stringify(page));
-  clone.id = makePortalId('page');
-  clone.slug = buildUniquePortalSlug(`${page.slug}-copy`, clone.id);
-  clone.title = `${page.title} Copy`;
-  clone.navLabel = `${page.navLabel || page.title} Copy`;
-  portalPagesState.pages = getPortalPages().concat(clone);
-  selectedPortalPageId = clone.id;
-  renderPortalEditor();
-  queuePortalPersist();
-});
-
-portalToggleFullscreenBtn?.addEventListener('click', async () => {
-  const page = getSelectedPortalPage();
-  if (!page || isDetachedPortalEditor) {
-    setPortalFullscreen(!portalEditorFullscreen);
-    return;
-  }
-  try {
-    await savePortalPages();
-  } catch (err) {
-    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-  }
-  if (!openDetachedEditorWindow('portal', page.id)) {
-    setPortalFullscreen(true);
-  }
-});
-
-portalGdprEnabled?.addEventListener('change', () => updatePortalGdprField('enabled', portalGdprEnabled.checked));
-
-portalSiteTitle?.addEventListener('input', () => updatePortalSiteField('title', portalSiteTitle.value));
-portalSiteSubtitle?.addEventListener('input', () => updatePortalSiteField('subtitle', portalSiteSubtitle.value));
-portalSiteLogoUrl?.addEventListener('input', () => updatePortalSiteField('headerLogoUrl', portalSiteLogoUrl.value));
-portalGalleryTitle?.addEventListener('input', () => updatePortalSiteField('galleryTitle', portalGalleryTitle.value));
-portalGallerySubtitle?.addEventListener('input', () => updatePortalSiteField('gallerySubtitle', portalGallerySubtitle.value));
-portalGalleryLogoUrl?.addEventListener('input', () => updatePortalSiteField('galleryHeaderLogoUrl', portalGalleryLogoUrl.value));
-portalSiteHeaderHeight?.addEventListener('input', () => updatePortalSiteField('headerHeight', portalSiteHeaderHeight.value));
-portalSiteHeaderFont?.addEventListener('change', () => updatePortalSiteField('headerFont', portalSiteHeaderFont.value));
-portalSiteHeaderColor1?.addEventListener('input', () => updatePortalSiteField('headerColor1', portalSiteHeaderColor1.value));
-portalSiteHeaderColor2?.addEventListener('input', () => updatePortalSiteField('headerColor2', portalSiteHeaderColor2.value));
-portalSiteHeaderTextColor?.addEventListener('input', () => updatePortalSiteField('headerTextColor', portalSiteHeaderTextColor.value));
-portalSiteHeaderBackgroundUrl?.addEventListener('input', () => updatePortalSiteField('headerBackgroundUrl', portalSiteHeaderBackgroundUrl.value));
-portalSiteFooterText?.addEventListener('input', () => updatePortalSiteField('footerText', portalSiteFooterText.value));
-portalSiteFooterLinkLabel?.addEventListener('input', () => updatePortalSiteField('footerLinkLabel', portalSiteFooterLinkLabel.value));
-portalSiteFooterLink?.addEventListener('input', () => updatePortalSiteField('footerLink', portalSiteFooterLink.value));
-portalSiteFooterBackgroundColor?.addEventListener('input', () => updatePortalSiteField('footerBackgroundColor', portalSiteFooterBackgroundColor.value));
-portalSiteFooterTextColor?.addEventListener('input', () => updatePortalSiteField('footerTextColor', portalSiteFooterTextColor.value));
-portalSiteFooterLinkColor?.addEventListener('input', () => updatePortalSiteField('footerLinkColor', portalSiteFooterLinkColor.value));
-galleryBrandingSaveBtn?.addEventListener('click', async () => {
-  galleryBrandingSaveBtn.disabled = true;
-  try {
-    await savePortalPages();
-  } catch (err) {
-    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-  } finally {
-    galleryBrandingSaveBtn.disabled = false;
-  }
-});
-
-[portalGdprCompany, portalGdprPrivacyUrl, portalGdprCookieUrl, portalGdprContactUrl, portalGdprTitle, portalGdprText]
-  .filter(Boolean)
-  .forEach((input) => {
-    input.addEventListener('input', () => {
-      const fieldMap = new Map([
-        [portalGdprCompany, 'companyName'],
-        [portalGdprPrivacyUrl, 'privacyUrl'],
-        [portalGdprCookieUrl, 'cookiePolicyUrl'],
-        [portalGdprContactUrl, 'contactUrl'],
-        [portalGdprTitle, 'bannerTitle'],
-        [portalGdprText, 'bannerText']
-      ]);
-      const field = fieldMap.get(input);
-      if (field) updatePortalGdprField(field, input.value);
-    });
-  });
-
-portalSaveBtn?.addEventListener('click', async () => {
-  portalSaveBtn.disabled = true;
-  try {
-    await savePortalPages();
-  } catch (err) {
-    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-  } finally {
-    portalSaveBtn.disabled = false;
-  }
-});
-
-portalExportBackupBtn?.addEventListener('click', async () => {
-  portalExportBackupBtn.disabled = true;
-  try {
-    await savePortalPages({ refresh: false, silent: true });
-    const pageIds = getPortalSelectedOptions(portalBackupPagesSelect);
-    const mapKeys = getPortalSelectedOptions(portalBackupMapsSelect);
-    const backup = await api('/plugins/Qtiler2Origo/api/portal-backup/export', {
-      method: 'POST',
-      body: { pageIds, mapKeys }
-    });
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    downloadJsonFile(backup, `qtiler2origo-portal-backup-${stamp}.json`);
-    addLog(t('Qtiler2Origo.portal_backup_exported'), 'ok');
-  } catch (err) {
-    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-  } finally {
-    portalExportBackupBtn.disabled = false;
-  }
-});
-
-portalImportBackupBtn?.addEventListener('click', () => {
-  portalImportBackupInput?.click();
-});
-
-portalImportBackupInput?.addEventListener('change', async () => {
-  const file = portalImportBackupInput.files?.[0];
-  portalImportBackupInput.value = '';
-  if (!file) return;
-  portalImportBackupBtn.disabled = true;
-  try {
-    const backup = JSON.parse(await file.text());
-    const result = await api('/plugins/Qtiler2Origo/api/portal-backup/import', {
-      method: 'POST',
-      body: {
-        backup,
-        replacePortal: portalImportReplacePortal?.checked !== false,
-        replaceMaps: portalImportReplaceMaps?.checked !== false
-      }
-    });
-    await loadPortalPages();
-    await loadPublishedProfiles();
-    addLog(t('Qtiler2Origo.portal_backup_imported', { n: result?.maps?.length || 0 }), 'ok');
-  } catch (err) {
-    addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
-  } finally {
-    portalImportBackupBtn.disabled = false;
-  }
-});
-
-[portalPageTitle, portalPageSlug, portalPageNavLabel, portalPageSummary, portalPageHeaderLogoUrl, portalPageHeaderHeight, portalPageUsers, portalPageRoles]
-  .filter(Boolean)
-  .forEach((input) => {
-    input.addEventListener('input', () => {
-      const fieldMap = new Map([
-        [portalPageTitle, 'title'],
-        [portalPageSlug, 'slug'],
-        [portalPageNavLabel, 'navLabel'],
-        [portalPageSummary, 'summary'],
-        [portalPageHeaderLogoUrl, 'headerLogoUrl'],
-        [portalPageHeaderHeight, 'headerHeight'],
-        [portalPageUsers, 'visibility.users'],
-        [portalPageRoles, 'visibility.roles']
-      ]);
-      const field = fieldMap.get(input);
-      updatePortalPageField(field, input.value);
-    });
-  });
-
-portalPageVisibility?.addEventListener('change', () => updatePortalPageField('visibility.access', portalPageVisibility.value));
-portalPageUsersCatalog?.addEventListener('change', () => {
-  const values = getPortalSelectedOptions(portalPageUsersCatalog);
-  if (portalPageUsers) portalPageUsers.value = toPortalCsv(values);
-  updatePortalPageField('visibility.users', values.join(','));
-});
-portalPageRolesCatalog?.addEventListener('change', () => {
-  const values = getPortalSelectedOptions(portalPageRolesCatalog);
-  if (portalPageRoles) portalPageRoles.value = toPortalCsv(values);
-  updatePortalPageField('visibility.roles', values.join(','));
-});
-portalPageShowInNav?.addEventListener('change', () => updatePortalPageField('showInNav', portalPageShowInNav.checked));
-portalPageShowHeader?.addEventListener('change', () => updatePortalPageField('showHeader', portalPageShowHeader.checked));
-portalPageIsHome?.addEventListener('change', () => {
-  const page = getSelectedPortalPage();
-  if (!page) return;
-  if (portalPageIsHome.checked) portalPagesState.homePageSlug = page.slug;
-  else if (portalPagesState.homePageSlug === page.slug) portalPagesState.homePageSlug = getPortalPages()[0]?.slug || '';
-  renderPortalPageList();
-  updatePortalPublicLink();
-  queuePortalPersist();
-});
-
-portalAddBlockBtn?.addEventListener('click', addPortalBlock);
-portalApplyTemplateBtn?.addEventListener('click', () => {
-  const page = getSelectedPortalPage();
-  if (!page) return;
-  const template = buildPortalTemplate(portalTemplateSelect?.value || 'story');
-  page.title = template.title;
-  page.navLabel = template.navLabel;
-  page.summary = template.summary;
-  page.blocks = template.blocks.map((block) => ({ ...block, id: makePortalId(block.type || 'block') }));
-  renderPortalEditor();
-  queuePortalPersist();
-});
-portalPreviewDeviceButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    portalPreviewDevice = button.getAttribute('data-portal-preview-device') || 'desktop';
-    renderPortalPreview();
-  });
-});
-
-portalPagesList?.addEventListener('click', (event) => {
-  const editWindowBtn = event.target.closest('[data-portal-edit-window]');
-  if (editWindowBtn) {
-    const pageId = String(editWindowBtn.getAttribute('data-portal-edit-window') || '').trim();
-    selectPortalPage(pageId);
-    return;
-  }
-  const selectBtn = event.target.closest('[data-portal-select]');
-  if (selectBtn) {
-    selectPortalPage(selectBtn.getAttribute('data-portal-select'));
-    return;
-  }
-  const moveBtn = event.target.closest('[data-portal-move]');
-  if (moveBtn) {
-    movePortalPage(moveBtn.getAttribute('data-portal-page-id'), moveBtn.getAttribute('data-portal-move'));
-    return;
-  }
-  const delBtn = event.target.closest('[data-portal-delete-page]');
-  if (delBtn) deletePortalPage(delBtn.getAttribute('data-portal-delete-page'));
-});
-
-portalBlocksList?.addEventListener('click', (event) => {
-  const moveBtn = event.target.closest('[data-portal-block-move]');
-  if (moveBtn) {
-    movePortalBlock(moveBtn.getAttribute('data-portal-block-id'), moveBtn.getAttribute('data-portal-block-move'));
-    return;
-  }
-  const delBtn = event.target.closest('[data-portal-block-delete]');
-  if (delBtn) {
-    deletePortalBlock(delBtn.getAttribute('data-portal-block-delete'));
-    return;
-  }
-  const addItemBtn = event.target.closest('[data-portal-add-item]');
-  if (addItemBtn) {
-    addPortalItem(addItemBtn.getAttribute('data-portal-add-item'));
-    return;
-  }
-  const delItemBtn = event.target.closest('[data-portal-item-delete]');
-  if (delItemBtn) {
-    deletePortalItem(delItemBtn.getAttribute('data-portal-item-delete'), Number(delItemBtn.getAttribute('data-item-index')));
-  }
-});
-
-portalBlocksList?.addEventListener('input', (event) => {
-  const blockField = event.target.closest('[data-portal-block-field]');
-  if (blockField) {
-    const valueKind = blockField.getAttribute('data-value-kind') || (blockField.type === 'checkbox' ? 'bool' : 'text');
-    const nextValue = valueKind === 'multi-option' ? getPortalSelectedOptions(blockField) : (blockField.type === 'checkbox' ? blockField.checked : blockField.value);
-    updatePortalBlockField(
-      blockField.getAttribute('data-portal-block-id'),
-      blockField.getAttribute('data-portal-block-field'),
-      nextValue,
-      valueKind
-    );
-    return;
-  }
-  const itemField = event.target.closest('[data-portal-item-field]');
-  if (itemField) {
-    updatePortalItemField(
-      itemField.getAttribute('data-portal-block-id'),
-      Number(itemField.getAttribute('data-item-index')),
-      itemField.getAttribute('data-portal-item-field'),
-      itemField.value
-    );
-  }
-});
-
-portalBlocksList?.addEventListener('change', (event) => {
-  const blockField = event.target.closest('[data-portal-block-field]');
-  if (blockField && blockField.tagName === 'SELECT') {
-    const valueKind = blockField.getAttribute('data-value-kind') || 'text';
-    updatePortalBlockField(
-      blockField.getAttribute('data-portal-block-id'),
-      blockField.getAttribute('data-portal-block-field'),
-      valueKind === 'multi-option' ? getPortalSelectedOptions(blockField) : blockField.value,
-      valueKind
-    );
-  }
-  const itemField = event.target.closest('[data-portal-item-field]');
-  if (itemField && itemField.tagName === 'SELECT') {
-    const fieldName = itemField.getAttribute('data-portal-item-field');
-    const blockId = itemField.getAttribute('data-portal-block-id');
-    const itemIndex = Number(itemField.getAttribute('data-item-index'));
-    updatePortalItemField(
-      blockId,
-      itemIndex,
-      fieldName,
-      itemField.value
-    );
-    if (fieldName === 'icon') {
-      const labelInput = Array.from(portalBlocksList.querySelectorAll('input[data-portal-item-field="title"]'))
-        .find((input) => input.getAttribute('data-portal-block-id') === blockId && Number(input.getAttribute('data-item-index')) === itemIndex);
-      if (labelInput) labelInput.value = getPortalSocialPlatformLabel(itemField.value);
-      const iconHost = itemField.closest('.portal-social-item')?.querySelector('.portal-social-item__icon');
-      if (iconHost) iconHost.innerHTML = renderPortalSocialIconBadge(itemField.value);
-    }
-  }
-});
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && portalEditorFullscreen) setPortalFullscreen(false);
 });
 
 /* ══════════════════════════════════════════
@@ -7601,6 +5999,7 @@ function draftIdForCurrentEditor() {
 }
 
 async function saveDraftToServer() {
+  if (!(await applyPendingMapJsonChanges())) throw new Error('Fix the JSON errors before saving.');
   const draftId = draftIdForCurrentEditor();
   const { body } = buildPublishApiBody();
   await api(`/plugins/Qtiler2Origo/api/drafts/${encodeURIComponent(draftId)}`, {
@@ -7690,7 +6089,8 @@ saveDraftBtn?.addEventListener('click', async () => {
   }
 });
 
-previewFooterBtn?.addEventListener('click', () => {
+previewFooterBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
   setPublishModalTab('config');
 });
 
@@ -7789,6 +6189,7 @@ function buildPublishApiBody() {
       },
       groups: buildNestedGroupsFromState(publishState.groups, publishState.layers),
       features: {
+        ...readFeatureEditorState(),
         searchSources: (Array.isArray(publishState.searchSources) ? publishState.searchSources : [])
           .map((src) => ({
             projectId: String(src?.projectId || '').trim(),
@@ -7803,6 +6204,7 @@ function buildPublishApiBody() {
 }
 
 preflightPublishBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
   if (currentEditingWfsLayer) {
     try { saveStyleEditor(); } catch (err) { showPublishStatusError(`Could not save the current WFS style editor state: ${err?.message || err}`, 'layers'); return; }
   }
@@ -7837,6 +6239,7 @@ preflightPublishBtn?.addEventListener('click', async () => {
 });
 
 publishNowBtn?.addEventListener('click', async () => {
+  if (!(await applyPendingMapJsonChanges())) return;
   if (currentEditingWfsLayer) {
     try {
       saveStyleEditor();
@@ -7943,6 +6346,7 @@ publishNowBtn?.addEventListener('click', async () => {
         },
         groups: buildNestedGroupsFromState(publishState.groups, publishState.layers),
         features: {
+          ...readFeatureEditorState(),
           // Cross-project search sources (other feature flags are derived
           // server-side from defaults; only fields we manage explicitly are
           // forwarded here).
@@ -8097,6 +6501,11 @@ document.addEventListener('click', async (event) => {
 
 /* ── Edit / delete published ── */
 publishedProfilesList?.addEventListener('click', async (event) => {
+  const manualThumbBtn = event.target.closest('button[data-manual-thumb]');
+  if (manualThumbBtn) {
+    openThumbnailSetup(String(manualThumbBtn.getAttribute('data-manual-thumb') || '').trim());
+    return;
+  }
   const editBtn = event.target.closest('button[data-edit-published]');
   if (editBtn) {
     const projectId = String(editBtn.getAttribute('data-edit-published') || '').trim();
@@ -8706,7 +7115,6 @@ applyI18n();
 Promise.all([
   loadStatus().catch((err) => addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error')),
   loadPublishedProfiles().catch(() => {}),
-  loadPortalPages().catch(() => {}),
   loadReleases().catch(() => {})
 ]).then(() => initDetachedEditorWindow().catch((err) => addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error')));
 
@@ -10832,6 +9240,117 @@ document.getElementById('wfs-style-format-json')?.addEventListener('click', () =
    ====================================================================== */
 let _cmMapJsonEditor = null;
 let _cmMapJsonInitTried = false;
+let _mapJsonDirty = false;
+let _mapJsonSettingValue = false;
+let _mapJsonValidationTimer = null;
+let _mapJsonErrorLine = null;
+
+function setMapJsonLiveStatus(message, state = '') {
+  if (!jsonLiveStatus) return;
+  jsonLiveStatus.textContent = message;
+  jsonLiveStatus.classList.toggle('is-valid', state === 'valid');
+  jsonLiveStatus.classList.toggle('is-invalid', state === 'invalid');
+}
+
+function validateMapConfigObject(config) {
+  const errors = [];
+  if (!config || typeof config !== 'object' || Array.isArray(config)) errors.push('The root value must be an object');
+  if (!config?.name || typeof config.name !== 'string' || !config.name.trim()) errors.push('Missing or invalid "name" field');
+  if (!config?.projectId || typeof config.projectId !== 'string' || !config.projectId.trim()) errors.push('Missing or invalid "projectId" field');
+  if (!Array.isArray(config?.layers)) errors.push('"layers" must be an array');
+  else if (!config.layers.length) errors.push('At least one layer is required');
+  else config.layers.forEach((layer, index) => {
+    if (!layer || typeof layer !== 'object' || !String(layer.name || '').trim()) errors.push(`Layer ${index + 1} needs a valid "name"`);
+  });
+  return errors;
+}
+
+function inspectMapJson({ writeLog = false } = {}) {
+  ensureMapJsonEditor();
+  if (!_cmMapJsonEditor) return { valid: false, config: null, errors: ['Editor not initialized'] };
+  if (_mapJsonErrorLine !== null) {
+    _cmMapJsonEditor.removeLineClass(_mapJsonErrorLine, 'background', 'json-error-line');
+    _mapJsonErrorLine = null;
+  }
+  try {
+    const raw = _cmMapJsonEditor.getValue();
+    const config = JSON.parse(raw);
+    const errors = validateMapConfigObject(config);
+    if (errors.length) {
+      setMapJsonLiveStatus(`${errors.length} validation error${errors.length === 1 ? '' : 's'}`, 'invalid');
+      if (writeLog) logJsonEditor(`Validation failed: ${errors.join('; ')}`, 'error');
+      return { valid: false, config, errors };
+    }
+    setMapJsonLiveStatus('Valid JSON', 'valid');
+    if (writeLog) logJsonEditor('✓ JSON is valid', 'info');
+    return { valid: true, config, errors: [] };
+  } catch (err) {
+    const position = Number(String(err?.message || '').match(/position\s+(\d+)/i)?.[1]);
+    if (Number.isFinite(position)) {
+      const before = _cmMapJsonEditor.getValue().slice(0, position);
+      _mapJsonErrorLine = before.split('\n').length - 1;
+      _cmMapJsonEditor.addLineClass(_mapJsonErrorLine, 'background', 'json-error-line');
+    }
+    setMapJsonLiveStatus('Invalid JSON', 'invalid');
+    if (writeLog) logJsonEditor(`Validation error: ${err.message || err}`, 'error');
+    return { valid: false, config: null, errors: [String(err?.message || err)] };
+  }
+}
+
+function setMapJsonEditorValue(value, { dirty = false } = {}) {
+  ensureMapJsonEditor();
+  if (!_cmMapJsonEditor) return;
+  _mapJsonSettingValue = true;
+  _cmMapJsonEditor.setValue(String(value || ''));
+  _mapJsonSettingValue = false;
+  _mapJsonDirty = dirty;
+  inspectMapJson();
+}
+
+function readFeatureEditorState() {
+  return {
+    search: featureSearch?.checked !== false,
+    searchGlobal: featureSearchGlobal?.checked === true,
+    view3d: featureView3D?.checked !== false,
+    editing: featureEditing?.checked !== false,
+    identify: featureIdentify?.checked !== false,
+    layerTree: featureLayerTree?.checked !== false,
+    legend: featureLegend?.checked !== false,
+    measurement: featureMeasurement?.checked === true,
+    print: featurePrint?.checked !== false,
+    mapTip: featureMapTip?.checked !== false,
+    share: featureShare?.checked === true,
+    redlining: featureRedlining?.checked === true,
+    bookmark: featureBookmark?.checked === true,
+    heightProfile: featureHeightProfile?.checked === true,
+    dxfExport: featureDxfExport?.checked === true,
+    attributeTable: featureAttributeTable?.checked === true,
+    routing: featureRouting?.checked === true
+  };
+}
+
+function applyFeatureEditorState(features = {}) {
+  const set = (input, key, fallback) => {
+    if (input) input.checked = Object.prototype.hasOwnProperty.call(features, key) ? features[key] === true : fallback;
+  };
+  set(featureSearch, 'search', true);
+  set(featureSearchGlobal, 'searchGlobal', false);
+  set(featureView3D, 'view3d', true);
+  set(featureEditing, 'editing', true);
+  set(featureIdentify, 'identify', true);
+  set(featureLayerTree, 'layerTree', true);
+  set(featureLegend, 'legend', true);
+  set(featureMeasurement, 'measurement', false);
+  set(featurePrint, 'print', true);
+  set(featureMapTip, 'mapTip', true);
+  set(featureShare, 'share', false);
+  set(featureRedlining, 'redlining', false);
+  set(featureBookmark, 'bookmark', false);
+  set(featureHeightProfile, 'heightProfile', false);
+  set(featureDxfExport, 'dxfExport', false);
+  set(featureAttributeTable, 'attributeTable', false);
+  set(featureRouting, 'routing', false);
+}
 
 function ensureMapJsonEditor() {
   if (_cmMapJsonInitTried) return _cmMapJsonEditor;
@@ -10854,9 +9373,22 @@ function ensureMapJsonEditor() {
       gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
       indentUnit: 2,
       tabSize: 2,
-      lineWrapping: false
+      lineWrapping: false,
+      extraKeys: {
+        'Ctrl-S': () => { void applyMapJsonChanges(); },
+        'Cmd-S': () => { void applyMapJsonChanges(); },
+        'Shift-Ctrl-F': formatMapJson,
+        'Shift-Cmd-F': formatMapJson
+      }
     });
     _cmMapJsonEditor.setSize('100%', '500px');
+    _cmMapJsonEditor.on('change', () => {
+      if (_mapJsonSettingValue) return;
+      _mapJsonDirty = true;
+      markEditorDirty();
+      window.clearTimeout(_mapJsonValidationTimer);
+      _mapJsonValidationTimer = window.setTimeout(() => inspectMapJson(), 250);
+    });
     return _cmMapJsonEditor;
   } catch (err) {
     console.error('Map JSON editor init failed:', err);
@@ -11003,6 +9535,7 @@ function generateMapConfigJson() {
       },
       groups,
       features: {
+        ...readFeatureEditorState(),
         searchSources
       }
     };
@@ -11025,7 +9558,7 @@ function loadCurrentConfigToEditor() {
     
     const config = generateMapConfigJson();
     const json = JSON.stringify(config, null, 2);
-    _cmMapJsonEditor.setValue(json);
+    setMapJsonEditorValue(json);
     logJsonEditor(`Loaded ${json.split('\\n').length} lines`, 'info');
   } catch (err) {
     logJsonEditor(`Failed to load config: ${err.message || err}`, 'error');
@@ -11043,7 +9576,8 @@ function formatMapJson() {
     const raw = _cmMapJsonEditor.getValue();
     const obj = JSON.parse(raw);
     const formatted = JSON.stringify(obj, null, 2);
-    _cmMapJsonEditor.setValue(formatted);
+    setMapJsonEditorValue(formatted, { dirty: true });
+    markEditorDirty();
     logJsonEditor('JSON formatted successfully', 'info');
   } catch (err) {
     logJsonEditor(`Format error: ${err.message || err}`, 'error');
@@ -11051,152 +9585,206 @@ function formatMapJson() {
 }
 
 function validateMapJson() {
-  try {
-    ensureMapJsonEditor();
-    if (!_cmMapJsonEditor) {
-      logJsonEditor('Editor not initialized', 'error');
-      return;
-    }
-    
-    const raw = _cmMapJsonEditor.getValue();
-    const obj = JSON.parse(raw);
-    
-    const errors = [];
-    if (!obj.name || typeof obj.name !== 'string' || !obj.name.trim()) {
-      errors.push('Missing or invalid "name" field');
-    }
-    if (!obj.projectId || typeof obj.projectId !== 'string') {
-      errors.push('Missing or invalid "projectId" field');
-    }
-    if (!Array.isArray(obj.layers)) {
-      errors.push('"layers" must be an array');
-    } else if (obj.layers.length === 0) {
-      errors.push('At least one layer is required');
-    }
-    
-    if (errors.length > 0) {
-      logJsonEditor(`Validation failed: ${errors.join('; ')}`, 'error');
-      return false;
-    }
-    
-    logJsonEditor('✓ JSON is valid', 'info');
-    return true;
-  } catch (err) {
-    logJsonEditor(`Validation error: ${err.message || err}`, 'error');
-    return false;
-  }
+  return inspectMapJson({ writeLog: true }).valid;
 }
 
-function applyMapJsonChanges() {
+async function applyMapJsonChanges({ automatic = false } = {}) {
   try {
-    ensureMapJsonEditor();
-    if (!_cmMapJsonEditor) {
-      logJsonEditor('Editor not initialized', 'error');
-      return;
+    const validation = inspectMapJson({ writeLog: !automatic });
+    if (!validation.valid) {
+      if (automatic) logJsonEditor('Cannot save: fix the JSON errors first.', 'error');
+      setPublishModalTab('jsoneditor');
+      return false;
     }
-    
-    if (!validateMapJson()) {
-      logJsonEditor('Cannot apply invalid JSON', 'error');
-      return;
+
+    const config = validation.config;
+    const mainProjectId = String(config.projectId || '').trim();
+    if (publishProjectSelect && !Array.from(publishProjectSelect.options).some((option) => option.value === mainProjectId)) {
+      throw new Error(`Unknown main project "${mainProjectId}"`);
     }
-    
-    const raw = _cmMapJsonEditor.getValue();
-    const config = JSON.parse(raw);
-    
-    logJsonEditor('Applying changes to editor state...', 'info');
-    
-    // Apply basic fields
-    if (publishName) publishName.value = config.name || '';
-    if (publishDescription) publishDescription.value = config.description || '';
-    if (publishProjectSelect) publishProjectSelect.value = config.projectId || '';
-    publishState.editingProfileId = config.editingProfileId || null;
-    
-    // Apply extent, center, zoom
-    if (extentInput) extentInput.value = config.extent ? JSON.stringify(config.extent) : '';
+    if (!automatic) logJsonEditor('Applying changes to editor state...', 'info');
+
+    if (publishName) publishName.value = String(config.name || '');
+    if (publishDescription) publishDescription.value = String(config.description || '');
+    if (publishProjectSelect) publishProjectSelect.value = mainProjectId;
+    publishState.editingProfileId = config.editingProfileId || publishState.editingProfileId || null;
+
+    publishState.extraLayers = [];
+    await loadProjectLayers(mainProjectId, 'main');
+    const configuredLayers = config.layers.filter((layer) => layer && typeof layer === 'object' && String(layer.name || '').trim());
+    const externalByProject = new Map();
+    for (const layer of configuredLayers) {
+      const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
+      if (sourceProjectId === mainProjectId) continue;
+      if (!externalByProject.has(sourceProjectId)) externalByProject.set(sourceProjectId, []);
+      externalByProject.get(sourceProjectId).push({
+        ...layer,
+        mode: layer.serveAsWfs === true ? 'WFS' : 'WMS'
+      });
+    }
+    for (const [sourceProjectId, layers] of externalByProject) {
+      await addExternalLayers(sourceProjectId, layers);
+    }
+
+    const discoveredRules = { ...(publishState.mainRules || {}) };
+    publishState.initialVisibility = {};
+    publishState.layerGroups = {};
+    publishState.mainRules = {};
+    const includedKeys = [];
+    for (const layer of configuredLayers) {
+      const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
+      const key = makeLayerKey(sourceProjectId, String(layer.name || '').trim());
+      if (!key) continue;
+      const explicitRule = config.layerRules?.[key] || config.layerRules?.[layer.name] || {};
+      const nextRule = { ...(discoveredRules[key] || {}), ...explicitRule };
+      for (const field of ['searchable', 'editable', 'serveAsWfs', 'wfsStyle', 'wmsLegendMode', 'wmsLegendIcon', 'wmsLegendUrl', 'designerOptions', 'attributes', 'geometryType']) {
+        if (Object.prototype.hasOwnProperty.call(layer, field)) nextRule[field] = layer[field];
+      }
+      if (layer.title) nextRule.title = String(layer.title).trim();
+      publishState.mainRules[key] = nextRule;
+      publishState.initialVisibility[key] = layer.visible !== false;
+      publishState.layerGroups[key] = String(layer.group || 'root').trim() || 'root';
+      includedKeys.push(key);
+    }
+    publishState.layerOrder = Array.isArray(config.layerOrder) && config.layerOrder.length
+      ? config.layerOrder.map((key) => String(key || '').trim()).filter(Boolean)
+      : includedKeys.slice();
+    ensureLayerOrderKeys(includedKeys);
+
+    if (extentInput) extentInput.value = Array.isArray(config.extent) ? JSON.stringify(config.extent) : '';
     if (centerInput) {
-      centerInput.value = config.center ? JSON.stringify(config.center) : '';
-      if (config.centerCrs) centerInput.dataset.crs = config.centerCrs;
+      centerInput.value = Array.isArray(config.center) ? JSON.stringify(config.center) : '';
+      if (config.centerCrs) centerInput.dataset.crs = String(config.centerCrs);
+      else delete centerInput.dataset.crs;
     }
     if (zoomInput) zoomInput.value = config.zoom != null ? String(config.zoom) : '';
     if (minZoomInput) minZoomInput.value = config.minZoom != null ? String(config.minZoom) : '';
     if (maxZoomInput) maxZoomInput.value = config.maxZoom != null ? String(config.maxZoom) : '';
-    
-    // Apply controls and extra JSON
-    if (controlsJsonInput) {
-      controlsJsonInput.value = Array.isArray(config.controls) ? JSON.stringify(config.controls, null, 2) : '[]';
-    }
+
+    const controls = Array.isArray(config.controls) ? config.controls : [];
+    publishState.controls = controls;
+    if (controlsJsonInput) controlsJsonInput.value = JSON.stringify(controls, null, 2);
+    syncCheckboxesFromControls(controls);
     if (extraJsonInput) {
       const extra = {};
-      if (config.pageSettings) extra.pageSettings = config.pageSettings;
-      if (config.featureinfoOptions) extra.featureinfoOptions = config.featureinfoOptions;
-      extraJsonInput.value = Object.keys(extra).length > 0 ? JSON.stringify(extra, null, 2) : '{}';
+      if (config.pageSettings !== undefined) extra.pageSettings = config.pageSettings;
+      if (config.featureinfoOptions !== undefined) extra.featureinfoOptions = config.featureinfoOptions;
+      extraJsonInput.value = JSON.stringify(extra, null, 2);
     }
-    
-    // Apply tool config
-    if (config.toolConfig) {
-      if (cfgShareUrl) cfgShareUrl.value = config.toolConfig.shareServiceUrl || '';
-      if (cfgRoutingUrl) cfgRoutingUrl.value = config.toolConfig.routingServiceUrl || '';
-      if (cfgElevationUrl) cfgElevationUrl.value = config.toolConfig.elevationServiceUrl || '';
-      if (cfgDxfUrl) cfgDxfUrl.value = config.toolConfig.dxfExportServiceUrl || '';
-    }
-    
-    // Apply backgrounds
-    if (config.backgroundProjectId && backgroundProjectSelect) {
-      backgroundProjectSelect.value = config.backgroundProjectId;
-    }
-    publishState.backgroundOptions = config.backgrounds || [];
-    publishState.defaultBackgroundKey = config.defaultBackgroundKey || 'none';
-    
-    // Apply groups
-    publishState.groups = config.groups || [];
-    
-    // Apply search sources
-    if (config.features && config.features.searchSources) {
-      publishState.searchSources = config.features.searchSources;
-    }
-    
-    // Apply layers and rules
-    if (Array.isArray(config.layers)) {
-      publishState.initialVisibility = {};
-      publishState.layerGroups = {};
-      publishState.mainRules = {};
-      publishState.layerOrder = [];
-      
-      config.layers.forEach(layer => {
-        const key = makeLayerKey(layer.sourceProjectId || config.projectId, layer.name);
-        publishState.initialVisibility[key] = layer.visible !== false;
-        publishState.layerGroups[key] = layer.group || 'root';
-        publishState.mainRules[key] = {
-          searchable: layer.searchable || false,
-          editable: layer.editable || false,
-          serveAsWfs: layer.serveAsWfs || false,
-          title: String(layer.title || '').trim() || undefined,
-          wfsStyle: layer.wfsStyle || undefined,
-          attributes: layer.attributes || undefined,
-          geometryType: layer.geometryType || undefined
-        };
-        if (!publishState.mainRules[key].title) delete publishState.mainRules[key].title;
-        if (key) publishState.layerOrder.push(key);
-      });
-      if (Array.isArray(config.layerOrder) && config.layerOrder.length) {
-        publishState.layerOrder = config.layerOrder.map((key) => String(key || '').trim()).filter(Boolean);
+
+    const toolConfig = config.toolConfig && typeof config.toolConfig === 'object' ? config.toolConfig : {};
+    if (cfgShareUrl) cfgShareUrl.value = toolConfig.shareServiceUrl || '';
+    if (cfgRoutingUrl) cfgRoutingUrl.value = toolConfig.routingServiceUrl || '';
+    if (cfgElevationUrl) cfgElevationUrl.value = toolConfig.elevationServiceUrl || '';
+    if (cfgDxfUrl) cfgDxfUrl.value = toolConfig.dxfExportServiceUrl || '';
+    applyFeatureEditorState(config.features || {});
+
+    const importedGroups = [];
+    const collectGroup = (group, parent = '') => {
+      if (!group || typeof group !== 'object') return;
+      const name = String(group.name || '').trim();
+      if (name) importedGroups.push({ name, title: String(group.title || name).trim(), parent: String(group.parent || parent).trim(), expanded: group.expanded !== false });
+      for (const child of (Array.isArray(group.groups) ? group.groups : [])) collectGroup(child, name);
+    };
+    for (const group of (Array.isArray(config.groups) ? config.groups : [])) collectGroup(group);
+    publishState.groups = importedGroups;
+    publishState.searchSources = Array.isArray(config.features?.searchSources)
+      ? config.features.searchSources.map((source) => ({
+          projectId: String(source?.projectId || '').trim(),
+          layers: Array.isArray(source?.layers) ? source.layers.map((name) => String(name || '').trim()).filter(Boolean) : []
+        })).filter((source) => source.projectId)
+      : [];
+    publishState.searchSourceCatalog = {};
+
+    const backgroundProjectId = String(config.backgroundProjectId || '').trim();
+    if (backgroundProjectSelect) backgroundProjectSelect.value = backgroundProjectId;
+    if (backgroundProjectId) {
+      await loadProjectLayers(backgroundProjectId, 'background');
+      const configuredBackgrounds = Array.isArray(config.backgrounds) ? config.backgrounds : [];
+      const selectedBackgroundNames = Array.isArray(config.backgroundLayerNames) && config.backgroundLayerNames.length
+        ? config.backgroundLayerNames.map((name) => String(name || '').trim()).filter(Boolean)
+        : configuredBackgrounds.filter((item) => item?.type === 'layer' && String(item.sourceProjectId || '').trim() === backgroundProjectId).map((item) => String(item.name || '').trim()).filter(Boolean);
+      const selectedBackgroundKeys = publishState.backgroundLayers
+        .filter((layer) => selectedBackgroundNames.includes(String(layer.name || '').trim()))
+        .map((layer) => getLayerKey(layer));
+      setCheckedLayerNames(backgroundLayersList, selectedBackgroundKeys);
+      refreshBackgroundOptions();
+      for (const imported of configuredBackgrounds) {
+        const option = publishState.backgroundOptions.find((item) => item?.key === imported?.key);
+        if (option && imported?.imageUrl) option.customImageUrl = imported.imageUrl;
       }
+    } else {
+      publishState.backgroundLayers = [];
+      if (backgroundLayersList) backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Origo.optional_select'))}</p>`;
+      refreshBackgroundOptions();
     }
-    
-    logJsonEditor('✓ Changes applied successfully', 'info');
-    logJsonEditor('Tip: Switch to other tabs to verify the changes', 'info');
-    
+    publishState.defaultBackgroundKey = String(config.defaultBackgroundKey || 'none');
+    renderDefaultBackgroundOptions();
+
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, includedKeys);
+    refreshExtraSections();
+    await renderSearchSources();
+    syncToolCardClasses();
+    schedulePreviewRefresh();
+    _mapJsonDirty = false;
+    markEditorDirty();
+    setMapJsonLiveStatus('Applied', 'valid');
+    if (!automatic) logJsonEditor('✓ Changes applied successfully', 'info');
+    return true;
   } catch (err) {
+    setMapJsonLiveStatus('Apply failed', 'invalid');
     logJsonEditor(`Apply error: ${err.message || err}`, 'error');
+    setPublishModalTab('jsoneditor');
+    return false;
   }
+}
+
+async function applyPendingMapJsonChanges() {
+  if (!_mapJsonDirty) return true;
+  return applyMapJsonChanges({ automatic: true });
+}
+
+function downloadMapJson() {
+  const validation = inspectMapJson({ writeLog: true });
+  if (!validation.valid) return;
+  const json = JSON.stringify(validation.config, null, 2);
+  setMapJsonEditorValue(json, { dirty: _mapJsonDirty });
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const name = String(validation.config.name || 'map-config').replace(/[^a-z0-9_-]/gi, '_');
+  link.href = url;
+  link.download = `${name}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // Event listeners for JSON editor buttons
 jsonLoadBtn?.addEventListener('click', loadCurrentConfigToEditor);
 jsonFormatBtn?.addEventListener('click', formatMapJson);
 jsonValidateBtn?.addEventListener('click', validateMapJson);
-jsonApplyBtn?.addEventListener('click', applyMapJsonChanges);
+jsonApplyBtn?.addEventListener('click', () => { void applyMapJsonChanges(); });
 jsonClearLogBtn?.addEventListener('click', clearJsonEditorLog);
+jsonUndoBtn?.addEventListener('click', () => _cmMapJsonEditor?.undo());
+jsonRedoBtn?.addEventListener('click', () => _cmMapJsonEditor?.redo());
+jsonDownloadBtn?.addEventListener('click', downloadMapJson);
+jsonImportBtn?.addEventListener('click', () => jsonImportFile?.click());
+jsonImportFile?.addEventListener('change', async () => {
+  const file = jsonImportFile.files?.[0];
+  if (!file) return;
+  try {
+    setMapJsonEditorValue(await file.text(), { dirty: true });
+    markEditorDirty();
+    if (await applyMapJsonChanges()) logJsonEditor(`Imported ${file.name}`, 'info');
+  } catch (err) {
+    logJsonEditor(`Import failed: ${err.message || err}`, 'error');
+  } finally {
+    jsonImportFile.value = '';
+  }
+});
 
 // Initialize when switching to JSON editor tab
 const originalSetPublishModalTab = setPublishModalTab;

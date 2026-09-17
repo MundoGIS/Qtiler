@@ -29,11 +29,13 @@ const DEFAULT_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.
 const AUTO_START_STANDALONE = !['1', 'true', 'yes'].includes(String(process.env.QTILER_ORIGO_AUTOSTART || process.env.QTWC_QWC2_AUTOSTART || '0').toLowerCase());
 const ENV_STANDALONE_PORT = Number(process.env.QTILER_ORIGO_PORT || process.env.QTWC_QWC2_PORT || 0);
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
-const MAX_PORTAL_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_MANUAL_THUMBNAIL_BYTES = 10 * 1024 * 1024;
+const MAX_BACKGROUND_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_LEGEND_LIBRARY_BYTES = 2 * 1024 * 1024;
 const LEGEND_SWATCH_SIZE = 24;
 const ALLOWED_LOGO_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
-const ALLOWED_PORTAL_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const ALLOWED_MANUAL_THUMBNAIL_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const ALLOWED_BACKGROUND_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const ALLOWED_LEGEND_LIBRARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.svg', '.webp']);
 // Thumbnail generation calls this server's own /wms endpoint internally; use
 // the local loopback + real listening port instead of PUBLIC_BASE_URL so it
@@ -271,10 +273,9 @@ const normalizeBackgroundSelection = ({
       isDefault: item.isDefault === true
     };
 
-    // Preserve a custom uploaded background image (must be one of our own
-    // served portal assets, never an arbitrary external URL).
+    // Preserve a custom uploaded background image from this plugin's library.
     const imageUrl = String(item.imageUrl || '').trim();
-    if (imageUrl && imageUrl.startsWith('/plugins/Qtiler2Origo/portal-assets/')) {
+    if (imageUrl && imageUrl.startsWith('/plugins/Qtiler2Origo/background-assets/')) {
       option.imageUrl = imageUrl;
     }
 
@@ -817,13 +818,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedRoot = path.join(runtimeRoot, 'published');
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
-  const portalAssetsRoot = path.join(runtimeRoot, 'portal-assets');
+  const backgroundAssetsRoot = path.join(runtimeRoot, 'background-assets');
   const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
   const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
   const draftsRoot = path.join(runtimeRoot, 'drafts');
   const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
-  const portalPagesPath = path.join(runtimeRoot, 'portal-pages.json');
   const projectsDir = resolveRepoPath('qgisprojects');
   let standaloneServer = null;
   let standalonePort = null;
@@ -845,7 +845,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   await fs.promises.mkdir(publishedRoot, { recursive: true });
   await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
   await fs.promises.mkdir(brandingRoot, { recursive: true });
-  await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
+  await fs.promises.mkdir(backgroundAssetsRoot, { recursive: true });
   await fs.promises.mkdir(legendLibraryRoot, { recursive: true });
   await fs.promises.mkdir(thumbCacheDir, { recursive: true });
   await fs.promises.mkdir(draftsRoot, { recursive: true });
@@ -902,7 +902,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
   const adminOnly = ensureAdmin(security);
   const isAuthActive = () => (typeof security?.isEnabled === 'function' ? security.isEnabled() : false);
-  const portalEditorOnly = (req, res, next) => {
+  const editorOnly = (req, res, next) => {
     if (!isAuthActive()) return next();
     if (!req.user) return res.status(401).json({ error: 'auth_required' });
     const canEdit = typeof security?.canEditPortal === 'function'
@@ -1014,25 +1014,26 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   });
   const readLmvStoredProducts = () => lmvStatements.list.all().map(lmvRowToProduct).filter(Boolean);
 
-  // Public alias: rewrite `/Qtiler2Origo/maps/...` to the internal Origo mount
-  // `/plugins/Qtiler2Origo/origo/...` so the viewer can be reached at the same
-  // base path as the public maps portal. This lets a single IIS URL Rewrite
-  // rule (e.g. `^Qtiler2Origo/(.*)`) cover both the portal and the viewer.
-  // The exact path `/Qtiler2Origo/maps` (without trailing slash) keeps serving
-  // the portal HTML registered further below.
+  // Public alias: rewrite `/Qtiler2Origo/maps/...` to the installed viewer.
+  // Keeping this stable preserves existing published map links and IIS rules.
   const mapsAlias = '/Qtiler2Origo/maps';
   const origoMount = `/plugins/${pluginSlug}/origo`;
-  app.use((req, _res, next) => {
+  app.use((req, res, next) => {
     const url = req.url || '';
-    // /Qtiler2Origo/maps?qtiler_profile=...  → viewer
-    if (url === mapsAlias || url.startsWith(`${mapsAlias}?`)) {
-      const qs = url.indexOf('?') >= 0 ? url.slice(url.indexOf('?')) : '';
-      // Only redirect to the viewer when a profile is requested; otherwise
-      // fall through so the portal handler can serve maps.html.
-      if (qs.includes('qtiler_profile=')) {
+    const queryIndex = url.indexOf('?');
+    const pathname = queryIndex >= 0 ? url.slice(0, queryIndex) : url;
+    const qs = queryIndex >= 0 ? url.slice(queryIndex) : '';
+    if (pathname === mapsAlias) {
+      return res.redirect(308, `${mapsAlias}/${qs}`);
+    }
+    if (pathname === `${mapsAlias}/`) {
+      if (new URLSearchParams(qs.slice(1)).has('qtiler_profile')) {
         req.url = `${origoMount}/${qs}`;
+        return next();
       }
-    } else if (url.startsWith(`${mapsAlias}/`)) {
+      return res.sendFile(path.resolve(baseDir, 'admin-ui', 'gallery.html'));
+    }
+    if (url.startsWith(`${mapsAlias}/`)) {
       req.url = `${origoMount}${url.slice(mapsAlias.length)}`;
     }
     next();
@@ -1049,13 +1050,23 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
   });
 
-  const portalImageUpload = multer({
+  const manualThumbnailUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: MAX_PORTAL_IMAGE_BYTES },
+    limits: { fileSize: MAX_MANUAL_THUMBNAIL_BYTES },
     fileFilter: (_req, file, cb) => {
       const ext = path.extname(String(file?.originalname || '')).toLowerCase();
-      if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) {
-        return cb(new Error('invalid_portal_image_extension'));
+      if (!ALLOWED_MANUAL_THUMBNAIL_EXTENSIONS.has(ext)) return cb(new Error('invalid_thumbnail_extension'));
+      cb(null, true);
+    }
+  });
+
+  const backgroundImageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_BACKGROUND_IMAGE_BYTES },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(String(file?.originalname || '')).toLowerCase();
+      if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
+        return cb(new Error('invalid_background_image_extension'));
       }
       cb(null, true);
     }
@@ -1549,230 +1560,6 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     } catch { /* empty dir */ }
     return profiles;
   };
-
-  const slugifyPortalToken = (value) => String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  const defaultPortalGdprSettings = () => ({
-    enabled: false,
-    companyName: 'Qtiler',
-    privacyUrl: '',
-    cookiePolicyUrl: '',
-    contactUrl: '',
-    bannerTitle: 'Privacy and cookies',
-    bannerText: 'This portal uses essential storage for language and consent settings. Embedded maps and external media are only loaded after consent.',
-    acceptLabel: 'Accept all',
-    rejectLabel: 'Only necessary',
-    manageLabel: 'Manage settings'
-  });
-
-  const defaultPortalPagesState = () => ({
-    homePageSlug: '',
-    gdpr: defaultPortalGdprSettings(),
-    site: { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
-    pages: []
-  });
-
-  const normalizePortalGdprSettings = (value) => {
-    const source = value && typeof value === 'object' ? value : {};
-    const defaults = defaultPortalGdprSettings();
-    return {
-      enabled: source.enabled === true,
-      companyName: String(source.companyName || defaults.companyName).trim() || defaults.companyName,
-      privacyUrl: String(source.privacyUrl || '').trim(),
-      cookiePolicyUrl: String(source.cookiePolicyUrl || '').trim(),
-      contactUrl: String(source.contactUrl || '').trim(),
-      bannerTitle: String(source.bannerTitle || defaults.bannerTitle).trim() || defaults.bannerTitle,
-      bannerText: String(source.bannerText || defaults.bannerText).trim() || defaults.bannerText,
-      acceptLabel: String(source.acceptLabel || defaults.acceptLabel).trim() || defaults.acceptLabel,
-      rejectLabel: String(source.rejectLabel || defaults.rejectLabel).trim() || defaults.rejectLabel,
-      manageLabel: String(source.manageLabel || defaults.manageLabel).trim() || defaults.manageLabel
-    };
-  };
-
-  const normalizePortalAudience = (value, { allowInherit = false } = {}) => {
-    const source = value && typeof value === 'object' ? value : {};
-    let access = String(source.access || source.mode || '').trim().toLowerCase();
-    if (allowInherit && access === 'inherit') access = 'inherit';
-    else if (access === 'authenticated') access = 'authenticated';
-    else if (access === 'restricted') access = 'restricted';
-    else access = 'public';
-    return {
-      access,
-      users: toArray(source.users),
-      roles: toArray(source.roles)
-    };
-  };
-
-  const normalizePortalCardItems = (value) => {
-    if (!Array.isArray(value)) return [];
-    return value.map((item, index) => {
-      const source = item && typeof item === 'object' ? item : {};
-      const title = String(source.title || '').trim();
-      const text = String(source.text || source.body || '').trim();
-      const url = String(source.url || '').trim();
-      const label = String(source.label || source.ctaLabel || '').trim();
-      const icon = String(source.icon || '').trim().toLowerCase();
-      const meta = String(source.meta || source.date || '').trim();
-      const imageUrl = String(source.imageUrl || source.image || '').trim();
-      if (!title && !text && !url && !label && !meta && !imageUrl) return null;
-      return {
-        id: slugifyPortalToken(source.id || `${title || 'item'}-${index + 1}`) || `item_${index + 1}`,
-        title,
-        text,
-        url,
-        label,
-        icon,
-        meta,
-        imageUrl
-      };
-    }).filter(Boolean);
-  };
-
-  const normalizePortalBlock = (value, index = 0) => {
-    const source = value && typeof value === 'object' ? value : {};
-    const type = String(source.type || 'text').trim().toLowerCase();
-    const blockType = ['hero', 'text', 'maps', 'cards', 'social'].includes(type) ? type : 'text';
-    const id = slugifyPortalToken(source.id || `${blockType}-${index + 1}`) || `${blockType}_${index + 1}`;
-    const profileKeys = Array.isArray(source.profileKeys)
-      ? source.profileKeys.map((item) => String(item || '').trim()).filter(Boolean)
-      : String(source.profileKeys || '').split(',').map((item) => item.trim()).filter(Boolean);
-    return {
-      id,
-      type: blockType,
-      title: String(source.title || '').trim(),
-      eyebrow: String(source.eyebrow || '').trim(),
-      subtitle: String(source.subtitle || '').trim(),
-      body: String(source.body || source.html || '').trim(),
-      backgroundUrl: String(source.backgroundUrl || '').trim(),
-      imageUrl: String(source.imageUrl || '').trim(),
-      ctaLabel: String(source.ctaLabel || '').trim(),
-      ctaUrl: String(source.ctaUrl || '').trim(),
-      intro: String(source.intro || '').trim(),
-      layout: String(source.layout || '').trim().toLowerCase() === 'featured' ? 'featured' : 'grid',
-      displayMode: ['thumbnail', 'embed', 'open'].includes(String(source.displayMode || '').trim().toLowerCase())
-        ? String(source.displayMode || '').trim().toLowerCase()
-        : 'thumbnail',
-      profileKeys,
-      items: normalizePortalCardItems(source.items),
-      visibility: normalizePortalAudience(source.visibility, { allowInherit: true })
-    };
-  };
-
-  const readAuthCatalog = () => {
-    if (!isAuthActive()) {
-      return { users: [], roles: [] };
-    }
-    try {
-      const db = getAuthDb(dataRoot);
-      const rows = db.prepare('SELECT username, role FROM users WHERE status = ? ORDER BY username COLLATE NOCASE').all('active');
-      const users = rows.map((row) => String(row?.username || '').trim()).filter(Boolean);
-      const roles = Array.from(new Set(rows.map((row) => String(row?.role || '').trim()).filter(Boolean)));
-      return { users, roles };
-    } catch (err) {
-      console.warn('[Qtiler2Origo] auth catalog unavailable:', err?.message || err);
-      return { users: [], roles: [] };
-    }
-  };
-
-  const normalizePortalPage = (value, index = 0) => {
-    const source = value && typeof value === 'object' ? value : {};
-    const title = String(source.title || '').trim() || `Page ${index + 1}`;
-    const slug = slugifyPortalToken(source.slug || source.id || title);
-    if (!slug) return null;
-    const rawHeaderHeight = Number(source.headerHeight);
-    return {
-      id: slugifyPortalToken(source.id || slug) || slug,
-      slug,
-      title,
-      navLabel: String(source.navLabel || title).trim() || title,
-      summary: String(source.summary || '').trim(),
-      showInNav: source.showInNav !== false,
-      showHeader: source.showHeader !== false,
-      headerHeight: Number.isFinite(rawHeaderHeight) ? Math.max(0, Math.min(320, Math.round(rawHeaderHeight))) : 120,
-      headerLogoUrl: String(source.headerLogoUrl || '').trim(),
-      visibility: normalizePortalAudience(source.visibility),
-      blocks: (Array.isArray(source.blocks) ? source.blocks : []).map((block, blockIndex) => normalizePortalBlock(block, blockIndex)).filter(Boolean)
-    };
-  };
-
-  const normalizePortalPagesState = (value) => {
-    const source = value && typeof value === 'object' ? value : {};
-    const pages = (Array.isArray(source.pages) ? source.pages : []).map((page, index) => normalizePortalPage(page, index)).filter(Boolean);
-    const seenSlugs = new Set();
-    const dedupedPages = [];
-    for (const page of pages) {
-      if (seenSlugs.has(page.slug)) continue;
-      seenSlugs.add(page.slug);
-      dedupedPages.push(page);
-    }
-    const homePageSlug = slugifyPortalToken(source.homePageSlug || '');
-    return {
-      homePageSlug: dedupedPages.some((page) => page.slug === homePageSlug) ? homePageSlug : (dedupedPages[0]?.slug || ''),
-      gdpr: normalizePortalGdprSettings(source.gdpr),
-      site: (source.site && typeof source.site === 'object') ? {
-        title: String(source.site.title || '').trim(),
-        subtitle: String(source.site.subtitle || '').trim(),
-        headerLogoUrl: String(source.site.headerLogoUrl || '').trim(),
-        galleryTitle: String(source.site.galleryTitle || '').trim(),
-        gallerySubtitle: String(source.site.gallerySubtitle || '').trim(),
-        galleryHeaderLogoUrl: String(source.site.galleryHeaderLogoUrl || '').trim(),
-        headerHeight: String(source.site.headerHeight || '').trim(),
-        headerFont: String(source.site.headerFont || '').trim(),
-        headerColor1: String(source.site.headerColor1 || '').trim(),
-        headerColor2: String(source.site.headerColor2 || '').trim(),
-        headerTextColor: String(source.site.headerTextColor || '').trim(),
-        headerBackgroundUrl: String(source.site.headerBackgroundUrl || '').trim(),
-        footerText: String(source.site.footerText || '').trim(),
-        footerLinkLabel: String(source.site.footerLinkLabel || '').trim(),
-        footerLink: String(source.site.footerLink || '').trim(),
-        footerBackgroundColor: String(source.site.footerBackgroundColor || '').trim(),
-        footerTextColor: String(source.site.footerTextColor || '').trim(),
-        footerLinkColor: String(source.site.footerLinkColor || '').trim()
-      } : { title: '', subtitle: '', headerLogoUrl: '', galleryTitle: '', gallerySubtitle: '', galleryHeaderLogoUrl: '', headerHeight: '', headerFont: '', headerColor1: '', headerColor2: '', headerTextColor: '', headerBackgroundUrl: '', footerText: '', footerLinkLabel: '', footerLink: '', footerBackgroundColor: '', footerTextColor: '', footerLinkColor: '' },
-      pages: dedupedPages
-    };
-  };
-
-  const readPortalPagesState = async () => {
-    try {
-      const raw = await fs.promises.readFile(portalPagesPath, 'utf8');
-      return normalizePortalPagesState(JSON.parse(raw || '{}'));
-    } catch {
-      return defaultPortalPagesState();
-    }
-  };
-
-  const writePortalPagesState = async (value) => {
-    const normalized = normalizePortalPagesState(value);
-    await fs.promises.mkdir(runtimeRoot, { recursive: true });
-    await fs.promises.writeFile(portalPagesPath, JSON.stringify(normalized, null, 2), 'utf8');
-    return normalized;
-  };
-
-  const userMatchesPortalAudience = (audience, user) => {
-    if (!isAuthActive()) return true;
-    const scope = normalizePortalAudience(audience);
-    if (user?.role === 'admin') return true;
-    if (scope.access === 'public') return true;
-    if (scope.access === 'authenticated') return !!user;
-    if (!user) return false;
-    const userId = String(user?.id || user?.username || '').trim();
-    const userRole = String(user?.role || '').trim();
-    return scope.users.includes(userId) || scope.roles.includes(userRole);
-  };
-
-  const filterPortalBlocksByAudience = (blocks, user) => (Array.isArray(blocks) ? blocks : [])
-    .filter((block) => {
-      const scope = normalizePortalAudience(block?.visibility, { allowInherit: true });
-      if (scope.access === 'inherit') return true;
-      return userMatchesPortalAudience(scope, user);
-    });
-
-  const buildPortalPageUrl = (slug) => `/Qtiler2Origo/portal/${encodeURIComponent(String(slug || '').trim())}`;
 
   /**
    * Filter profiles based on QtilerAuth permissions
@@ -5914,11 +5701,10 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/status`, portalEditorOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/status`, editorOnly, async (_req, res) => {
     const state = await readState();
     const installed = await hasQwc2Install();
     const branding = await getBrandingStatus();
-    const authCatalog = readAuthCatalog();
     // Lantmäteriet runs in DEMO/MOCK mode when no API key is configured;
     // surface that to the admin UI so the Search control isn't enabled
     // blindly against fake data.
@@ -5937,18 +5723,17 @@ ${mapIcon}
       lastError: state.lastError,
       lantmateriDemo,
       branding,
-      authCatalog,
       origoUrl: installed ? `/plugins/${pluginSlug}/origo` : null,
       standalone: { running: false, port: null, url: null }
     });
   });
 
-  app.get(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/branding/logo`, editorOnly, async (_req, res) => {
     const branding = await getBrandingStatus();
     res.json(branding);
   });
 
-  app.post(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/branding/logo`, editorOnly, (req, res) => {
     logoUpload.single('logo')(req, res, async (err) => {
       if (err) {
         const msg = String(err?.message || err || 'logo_upload_failed');
@@ -6000,63 +5785,62 @@ ${mapIcon}
     });
   });
 
-  app.use(`/plugins/${pluginSlug}/portal-assets`, express.static(portalAssetsRoot, {
+  app.use(`/plugins/${pluginSlug}/background-assets`, express.static(backgroundAssetsRoot, {
     fallthrough: false,
     immutable: true,
     maxAge: '30d'
   }));
 
-  app.post(`/plugins/${pluginSlug}/api/portal-assets/image`, portalEditorOnly, (req, res) => {
-    portalImageUpload.single('image')(req, res, async (err) => {
+  app.post(`/plugins/${pluginSlug}/api/background-assets/image`, editorOnly, (req, res) => {
+    backgroundImageUpload.single('image')(req, res, async (err) => {
       if (err) {
-        const msg = String(err?.message || err || 'portal_image_upload_failed');
+        const msg = String(err?.message || err || 'background_image_upload_failed');
         if (msg.includes('File too large') || err?.code === 'LIMIT_FILE_SIZE') {
-          return res.status(413).json({ error: 'portal_image_too_large', details: `max_bytes_${MAX_PORTAL_IMAGE_BYTES}` });
+          return res.status(413).json({ error: 'background_image_too_large', details: `max_bytes_${MAX_BACKGROUND_IMAGE_BYTES}` });
         }
-        if (msg.includes('invalid_portal_image_extension')) {
-          return res.status(400).json({ error: 'invalid_portal_image_extension' });
+        if (msg.includes('invalid_background_image_extension')) {
+          return res.status(400).json({ error: 'invalid_background_image_extension' });
         }
-        return res.status(400).json({ error: 'portal_image_upload_failed', details: msg });
+        return res.status(400).json({ error: 'background_image_upload_failed', details: msg });
       }
 
       try {
         const uploaded = req.file;
         if (!uploaded || !uploaded.buffer || !uploaded.originalname) {
-          return res.status(400).json({ error: 'portal_image_required' });
+          return res.status(400).json({ error: 'background_image_required' });
         }
 
         const ext = path.extname(String(uploaded.originalname || '')).toLowerCase();
-        if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) {
-          return res.status(400).json({ error: 'invalid_portal_image_extension' });
+        if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) {
+          return res.status(400).json({ error: 'invalid_background_image_extension' });
         }
 
         const stem = sanitizeFileToken(path.basename(String(uploaded.originalname || 'image'), ext)).slice(0, 80) || 'image';
         const fileName = `${Date.now()}-${stem}${ext}`;
-        const targetPath = path.join(portalAssetsRoot, fileName);
-        await fs.promises.mkdir(portalAssetsRoot, { recursive: true });
+        const targetPath = path.join(backgroundAssetsRoot, fileName);
+        await fs.promises.mkdir(backgroundAssetsRoot, { recursive: true });
         await fs.promises.writeFile(targetPath, uploaded.buffer);
-        const url = `/plugins/${pluginSlug}/portal-assets/${encodeURIComponent(fileName)}`;
+        const url = `/plugins/${pluginSlug}/background-assets/${encodeURIComponent(fileName)}`;
         return res.status(201).json({ status: 'uploaded', url });
       } catch (uploadErr) {
-        return res.status(500).json({ error: 'portal_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
+        return res.status(500).json({ error: 'background_image_upload_failed', details: String(uploadErr?.message || uploadErr) });
       }
     });
   });
 
-  // List available portal assets (images)
-  app.get(`/plugins/${pluginSlug}/api/portal-assets`, portalEditorOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/background-assets`, editorOnly, async (_req, res) => {
     try {
-      const files = await fs.promises.readdir(portalAssetsRoot, { withFileTypes: true });
+      const files = await fs.promises.readdir(backgroundAssetsRoot, { withFileTypes: true });
       const items = [];
       for (const f of files) {
         if (!f.isFile()) continue;
         const ext = path.extname(f.name).toLowerCase();
-        if (!ALLOWED_PORTAL_IMAGE_EXTENSIONS.has(ext)) continue;
+        if (!ALLOWED_BACKGROUND_IMAGE_EXTENSIONS.has(ext)) continue;
         try {
-          const stat = await fs.promises.stat(path.join(portalAssetsRoot, f.name));
+          const stat = await fs.promises.stat(path.join(backgroundAssetsRoot, f.name));
           items.push({
             fileName: f.name,
-            url: `/plugins/${pluginSlug}/portal-assets/${encodeURIComponent(f.name)}`,
+            url: `/plugins/${pluginSlug}/background-assets/${encodeURIComponent(f.name)}`,
             size: stat.size,
             mtime: stat.mtime.toISOString()
           });
@@ -6066,11 +5850,11 @@ ${mapIcon}
       items.sort((a, b) => (b.mtime || '').localeCompare(a.mtime || ''));
       res.json({ items });
     } catch (err) {
-      res.status(500).json({ error: 'portal_assets_list_failed', details: String(err?.message || err) });
+      res.status(500).json({ error: 'background_assets_list_failed', details: String(err?.message || err) });
     }
   });
 
-  app.delete(`/plugins/${pluginSlug}/api/branding/logo`, portalEditorOnly, async (_req, res) => {
+  app.delete(`/plugins/${pluginSlug}/api/branding/logo`, editorOnly, async (_req, res) => {
     try {
       const state = await readState();
       if (state.logoFile) {
@@ -6624,7 +6408,7 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/publish/list`, portalEditorOnly, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/publish/list`, editorOnly, async (req, res) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
       const items = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
@@ -6696,12 +6480,11 @@ ${mapIcon}
 
   // Public maps catalog: returns only profiles whose underlying project the
   // current user can access (anonymous users only see public projects).
-  // Also reports auth status so the maps portal can render a login UI.
+  // Also reports auth status for consumers such as QtilerStories.
   app.get(`/plugins/${pluginSlug}/api/public-maps`, async (req, res) => {
     try {
       const baseUrl = getRequestBaseUrl(req);
       const all = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
-      const state = await readPortalPagesState();
       const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
       let items = all;
       if (authActive) {
@@ -6717,8 +6500,6 @@ ${mapIcon}
         authActive,
         user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
         logoUrl,
-        gdpr: state.gdpr,
-        site: state.site || {},
         items
       });
     } catch (err) {
@@ -7188,200 +6969,6 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/portal-pages`, portalEditorOnly, async (_req, res) => {
-    try {
-      const state = await readPortalPagesState();
-      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.json(state);
-    } catch (err) {
-      console.error('XERR portal-pages get', err);
-      res.status(500).json({ error: 'portal_pages_read_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.post(`/plugins/${pluginSlug}/api/portal-pages`, portalEditorOnly, express.json({ limit: '50mb' }), async (req, res) => {
-    try {
-      const saved = await writePortalPagesState(req.body || {});
-      res.json({ status: 'saved', ...saved });
-    } catch (err) {
-      console.error('XERR portal-pages save', err);
-      res.status(500).json({ error: 'portal_pages_save_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.post(`/plugins/${pluginSlug}/api/portal-backup/export`, portalEditorOnly, express.json({ limit: '10mb' }), async (req, res) => {
-    try {
-      const state = await readPortalPagesState();
-      const requestedPageIds = new Set((Array.isArray(req.body?.pageIds) ? req.body.pageIds : []).map((v) => String(v || '').trim()).filter(Boolean));
-      const requestedPageSlugs = new Set((Array.isArray(req.body?.pageSlugs) ? req.body.pageSlugs : []).map((v) => slugifyPortalToken(v)).filter(Boolean));
-      const requestedMapKeys = new Set((Array.isArray(req.body?.mapKeys) ? req.body.mapKeys : []).map((v) => sanitizeFileToken(v)).filter(Boolean));
-
-      const pages = state.pages.filter((page) => {
-        if (!requestedPageIds.size && !requestedPageSlugs.size) return true;
-        return requestedPageIds.has(String(page.id || '')) || requestedPageSlugs.has(String(page.slug || ''));
-      });
-      const homePageSlug = pages.some((page) => page.slug === state.homePageSlug)
-        ? state.homePageSlug
-        : (pages[0]?.slug || '');
-
-      const allProfiles = await readAllPublishedProfiles();
-      const maps = allProfiles
-        .filter((profile) => !requestedMapKeys.size || requestedMapKeys.has(sanitizeFileToken(profile.profileKey || profile.name || profile.projectId)))
-        .map((profile) => {
-          const profileKey = sanitizeFileToken(profile.profileKey || profile.name || profile.projectId);
-          const { profileKey: _profileKey, ...config } = profile;
-          return { profileKey, config };
-        })
-        .filter((entry) => entry.profileKey && entry.config?.projectId);
-
-      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.json({
-        schema: 'qtiler2origo.portal-backup.v1',
-        plugin: pluginSlug,
-        exportedAt: nowIso(),
-        portal: {
-          homePageSlug,
-          gdpr: state.gdpr || defaultPortalGdprSettings(),
-          site: state.site || {},
-          pages
-        },
-        maps
-      });
-    } catch (err) {
-      console.error('XERR portal-backup export', err);
-      res.status(500).json({ error: 'portal_backup_export_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.post(`/plugins/${pluginSlug}/api/portal-backup/import`, portalEditorOnly, express.json({ limit: '100mb' }), async (req, res) => {
-    try {
-      const backup = req.body?.backup && typeof req.body.backup === 'object' ? req.body.backup : req.body;
-      if (!backup || backup.schema !== 'qtiler2origo.portal-backup.v1') {
-        return res.status(400).json({ error: 'invalid_portal_backup' });
-      }
-      const replacePortal = req.body?.replacePortal !== false;
-      const replaceMaps = req.body?.replaceMaps !== false;
-      const result = { portal: null, maps: [] };
-      const baseUrl = getRequestBaseUrl(req).replace(/\/+$/,'');
-
-      if (backup.portal && typeof backup.portal === 'object') {
-        const importedPortal = normalizePortalPagesState(backup.portal);
-        if (replacePortal) {
-          result.portal = await writePortalPagesState(importedPortal);
-        } else {
-          const current = await readPortalPagesState();
-          const mergedBySlug = new Map(current.pages.map((page) => [page.slug, page]));
-          for (const page of importedPortal.pages) mergedBySlug.set(page.slug, page);
-          result.portal = await writePortalPagesState({
-            ...current,
-            gdpr: importedPortal.gdpr || current.gdpr,
-            site: { ...(current.site || {}), ...(importedPortal.site || {}) },
-            homePageSlug: importedPortal.homePageSlug || current.homePageSlug,
-            pages: Array.from(mergedBySlug.values())
-          });
-        }
-      }
-
-      const maps = Array.isArray(backup.maps) ? backup.maps : [];
-      await fs.promises.mkdir(publishedRoot, { recursive: true });
-      for (const entry of maps) {
-        const profile = entry?.config && typeof entry.config === 'object' ? entry.config : null;
-        const profileKey = sanitizeFileToken(entry?.profileKey || profile?.name || profile?.projectId);
-        if (!profileKey || !profile?.projectId) continue;
-        const targetPath = path.join(publishedRoot, `${profileKey}.json`);
-        if (!replaceMaps) {
-          try {
-            await fs.promises.access(targetPath, fs.constants.F_OK);
-            result.maps.push({ profileKey, status: 'skipped_exists' });
-            continue;
-          } catch { /* missing: import below */ }
-        }
-        const payload = { ...profile, importedAt: nowIso(), plugin: pluginSlug };
-        await fs.promises.writeFile(targetPath, JSON.stringify(payload, null, 2), 'utf8');
-        result.maps.push({ profileKey, status: 'imported' });
-        void syncRuntimeFilesForProfile(payload, baseUrl).catch((syncErr) => {
-          console.warn('[Qtiler2Origo] portal backup import sync warning:', syncErr?.message || syncErr);
-        });
-        void regeneratePublishedThumbnail({
-          profileKey,
-          profile: payload,
-          baseUrl,
-          cookieHeader: req.headers.cookie,
-          apiKey: getRequestApiKey(req),
-          authorization: req.get?.('authorization') || ''
-        }).catch(() => null);
-      }
-
-      res.json({ status: 'imported', ...result });
-    } catch (err) {
-      console.error('XERR portal-backup import', err);
-      res.status(500).json({ error: 'portal_backup_import_failed', details: String(err?.message || err) });
-    }
-  });
-
-  app.get(`/plugins/${pluginSlug}/api/portal-content`, async (req, res) => {
-    try {
-      const state = await readPortalPagesState();
-      const authActive = typeof security?.isEnabled === 'function' ? security.isEnabled() : false;
-      const baseUrl = getRequestBaseUrl(req);
-      const allMaps = await collectPublishedProfiles(baseUrl, { apiKey: getRequestApiKey(req) });
-      const items = authActive
-        ? (() => {
-            const snapshot = readAccessSnapshot(dataRoot);
-            return allMaps.filter((item) => userCanAccessProject(snapshot, req.user || null, item.projectId));
-          })()
-        : allMaps;
-      const mode = String(req.query?.mode || '').trim();
-      const slug = slugifyPortalToken(req.query?.slug || '');
-      const visiblePages = state.pages.filter((page) => userMatchesPortalAudience(page.visibility, req.user || null));
-      let currentPage = null;
-
-      if (mode !== 'maps') {
-        if (slug) currentPage = visiblePages.find((page) => page.slug === slug) || null;
-        if (!currentPage && !slug && state.homePageSlug) {
-          currentPage = visiblePages.find((page) => page.slug === state.homePageSlug) || null;
-        }
-        if (!currentPage && !slug) currentPage = visiblePages[0] || null;
-        if (slug && !currentPage) {
-          return res.status(404).json({ error: 'portal_page_not_found' });
-        }
-      }
-
-      let logoUrl = null;
-      try { logoUrl = await getLogoPublicUrl(); } catch { logoUrl = null; }
-      if (!logoUrl) logoUrl = '/css/images/Qtiler.png';
-      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.json({
-        authActive,
-        user: req.user ? { id: req.user.id, username: req.user.username || req.user.id, role: req.user.role || null } : null,
-        logoUrl,
-        items,
-        gdpr: state.gdpr,
-        site: state.site || { title: '', subtitle: '', footerLink: '', footerText: '' },
-        portal: {
-          homePageSlug: state.homePageSlug,
-          pages: visiblePages.map((page) => ({
-            id: page.id,
-            slug: page.slug,
-            title: page.title,
-            navLabel: page.navLabel,
-            summary: page.summary,
-            showInNav: page.showInNav,
-            url: buildPortalPageUrl(page.slug)
-          })),
-          currentPage: currentPage ? {
-            ...currentPage,
-            url: buildPortalPageUrl(currentPage.slug),
-            blocks: filterPortalBlocksByAudience(currentPage.blocks, req.user || null)
-          } : null
-        }
-      });
-    } catch (err) {
-      console.error('XERR portal-content', err);
-      res.status(500).json({ error: 'portal_content_failed', details: String(err?.message || err) });
-    }
-  });
-
   app.delete(`/plugins/${pluginSlug}/api/publish/:profileName`, adminOnly, async (req, res) => {
     try {
       const profileName = String(req.params?.profileName || '').trim();
@@ -7474,7 +7061,7 @@ ${mapIcon}
     index: false
   }));
 
-  app.get(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, async (_req, res) => {
     try {
       const items = await listLegendLibraryItems();
       res.json({ items });
@@ -7486,7 +7073,7 @@ ${mapIcon}
   // Report which published profiles/layers reference a given legend icon, so
   // the admin UI can warn before deleting an icon that is in use anywhere
   // (not just the currently open draft).
-  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, portalEditorOnly, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/legend-library/:id/usage`, editorOnly, async (req, res) => {
     try {
       const id = String(req.params?.id || '').trim();
       if (!id) return res.status(400).json({ error: 'id_required' });
@@ -7517,7 +7104,7 @@ ${mapIcon}
 
   // Drafts: save/restore in-progress publish editor state server-side so it
   // survives browser restarts and works across machines.
-  app.get(`/plugins/${pluginSlug}/api/drafts`, portalEditorOnly, async (_req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/drafts`, editorOnly, async (_req, res) => {
     try {
       const entries = await fs.promises.readdir(draftsRoot).catch(() => []);
       const drafts = [];
@@ -7541,7 +7128,7 @@ ${mapIcon}
     }
   });
 
-  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+  app.get(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
     try {
       const id = sanitizeFileToken(String(req.params?.id || ''));
       if (!id) return res.status(400).json({ error: 'id_required' });
@@ -7554,7 +7141,7 @@ ${mapIcon}
     }
   });
 
-  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, express.json({ limit: '10mb' }), async (req, res) => {
+  app.put(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, express.json({ limit: '10mb' }), async (req, res) => {
     try {
       const id = sanitizeFileToken(String(req.params?.id || ''));
       if (!id) return res.status(400).json({ error: 'id_required' });
@@ -7568,7 +7155,7 @@ ${mapIcon}
     }
   });
 
-  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, portalEditorOnly, async (req, res) => {
+  app.delete(`/plugins/${pluginSlug}/api/drafts/:id`, editorOnly, async (req, res) => {
     try {
       const id = sanitizeFileToken(String(req.params?.id || ''));
       if (!id) return res.status(400).json({ error: 'id_required' });
@@ -7579,7 +7166,7 @@ ${mapIcon}
     }
   });
 
-  app.post(`/plugins/${pluginSlug}/api/legend-library`, portalEditorOnly, (req, res) => {
+  app.post(`/plugins/${pluginSlug}/api/legend-library`, editorOnly, (req, res) => {
     legendLibraryUpload.single('image')(req, res, async (err) => {
       if (err) {
         const msg = String(err?.message || err || 'legend_library_upload_failed');
@@ -7629,7 +7216,7 @@ ${mapIcon}
     });
   });
 
-  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, portalEditorOnly, async (req, res) => {
+  app.delete(`/plugins/${pluginSlug}/api/legend-library/:id`, editorOnly, async (req, res) => {
     try {
       const id = sanitizeFileToken(req.params?.id || '');
       if (!id) return res.status(400).json({ error: 'legend_library_id_required' });
@@ -7751,6 +7338,33 @@ ${mapIcon}
       console.error('[published-thumbnail-regenerate]', err);
       res.status(500).json({ error: 'published_thumbnail_regenerate_failed', details: String(err?.message || err) });
     }
+  });
+
+  app.post(`/plugins/${pluginSlug}/api/publish/thumbnail/:profileKey/upload`, adminOnly, (req, res) => {
+    manualThumbnailUpload.single('image')(req, res, async (err) => {
+      if (err) {
+        if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'thumbnail_too_large', details: `max_bytes_${MAX_MANUAL_THUMBNAIL_BYTES}` });
+        if (String(err?.message || '').includes('invalid_thumbnail_extension')) return res.status(400).json({ error: 'invalid_thumbnail_extension' });
+        return res.status(400).json({ error: 'thumbnail_upload_failed', details: String(err?.message || err) });
+      }
+      try {
+        const profileKey = sanitizeFileToken(req.params?.profileKey || '');
+        if (!profileKey) return res.status(400).json({ error: 'profile_key_required' });
+        const profile = await readPublishedProfile(profileKey);
+        if (!profile?.projectId) return res.status(404).json({ error: 'published_profile_not_found' });
+        if (!req.file?.buffer) return res.status(400).json({ error: 'thumbnail_image_required' });
+        await fs.promises.mkdir(publishedThumbsRoot, { recursive: true });
+        const targetPath = publishedThumbnailPath(profileKey);
+        const tempPath = `${targetPath}.${Date.now()}.tmp`;
+        await sharp(req.file.buffer).rotate().resize(1200, 675, { fit: 'cover', position: 'centre' }).jpeg({ quality: 88, mozjpeg: true }).toFile(tempPath);
+        await fs.promises.rm(targetPath, { force: true }).catch(() => {});
+        await fs.promises.rename(tempPath, targetPath);
+        const thumbnail = await readPublishedThumbnailMeta(profileKey);
+        res.status(201).json({ status: 'uploaded', profileKey, thumbnailUrl: thumbnail?.url || '' });
+      } catch (uploadErr) {
+        res.status(500).json({ error: 'thumbnail_upload_failed', details: String(uploadErr?.message || uploadErr) });
+      }
+    });
   });
 
   app.get(`/plugins/${pluginSlug}/api/publish/:projectId/launch-url`, adminOnly, async (req, res) => {
@@ -8060,12 +7674,6 @@ ${mapIcon}
 
   // Serve GeoTIFF terrain files for the QWC2 3D viewer (map3d.dtm.url).
   // Files are read from the project's folder inside qgisprojects/.
-
-  // ── Origo Maps Portal ──
-    app.get('/Qtiler2Origo/maps', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
-    app.get('/Qtiler2Origo/portal/:slug', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
-    app.get('/Qtiler2Origo/portal', async (req, res) => { res.sendFile(path.resolve(process.cwd(), 'plugins', 'Qtiler2Origo', 'admin-ui', 'maps.html')); });
-
 
   app.get('/Qtiler2Origo/terrain/:projectId/:filename', async (req, res) => {
     try {

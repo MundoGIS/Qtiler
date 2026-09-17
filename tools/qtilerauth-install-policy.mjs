@@ -169,8 +169,13 @@ const disableQtilerAuth = () => {
 
 if (mode === 'update') {
   if (entitlementValid) {
-    const expected = plugins.enabled.includes('QtilerAuth') ? '1' : '0';
-    console.log(`Update mode: existing QtilerAuth entitlement is still valid (${entitlementStatus}). Enabled state was preserved.`);
+    // A previous startup/license check may have removed QtilerAuth from
+    // plugins.json even though the entitlement is still valid. An update is
+    // the right place to repair that stale state; a valid entitlement must
+    // not leave the authentication plugin disabled.
+    enableQtilerAuth();
+    const expected = '1';
+    console.log(`Update mode: existing QtilerAuth entitlement is still valid (${entitlementStatus}). QtilerAuth was enabled.`);
     console.log(`QTILERAUTH_EXPECTED=${expected}`);
     console.log(`QTILERAUTH_INSTALL_STATUS=update_${entitlementStatus}`);
   } else {

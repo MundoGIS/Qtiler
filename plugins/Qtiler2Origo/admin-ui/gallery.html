@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Origo maps</title>
+  <style>
+    :root { --ink:#172033; --muted:#5b6678; --line:#dce3ec; --surface:#fff; --bg:#edf3f7; --brand:#005f73; --accent:#ee9b00; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--ink); background:linear-gradient(155deg,#eaf3f4 0,#f7f9fb 42%,#edf1f7 100%); font-family:"Segoe UI",sans-serif; }
+    .topbar { min-height:88px; padding:18px clamp(20px,5vw,72px); display:flex; align-items:center; gap:18px; color:#fff; background:#073b4c; border-bottom:5px solid var(--accent); }
+    .logo { width:54px; height:54px; object-fit:contain; border-radius:6px; padding:5px; background:#fff; }
+    .brand { min-width:0; }
+    .brand small { display:block; margin-bottom:3px; color:#b9d8dd; font-size:.72rem; font-weight:700; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(1.5rem,3vw,2.25rem); letter-spacing:0; }
+    .top-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
+    .top-actions a { color:#fff; text-decoration:none; border:1px solid rgba(255,255,255,.45); border-radius:6px; padding:8px 12px; font-weight:650; }
+    main { width:min(1240px,calc(100% - 32px)); margin:0 auto; padding:30px 0 54px; }
+    .tools { display:flex; align-items:end; gap:16px; justify-content:space-between; margin-bottom:24px; }
+    .intro h2 { margin:0 0 5px; font-size:1.2rem; }
+    .intro p { margin:0; color:var(--muted); }
+    .search { width:min(360px,100%); }
+    .search label { display:block; margin-bottom:5px; color:var(--muted); font-size:.76rem; font-weight:700; }
+    .search input { width:100%; border:1px solid #bac6d4; border-radius:6px; padding:10px 12px; background:#fff; color:var(--ink); font:inherit; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:18px; }
+    .card { display:flex; min-height:100%; flex-direction:column; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 10px 26px rgba(23,32,51,.08); }
+    .media { position:relative; aspect-ratio:16/9; overflow:hidden; background:#dfe9ee; }
+    .media img { width:100%; height:100%; display:block; object-fit:cover; }
+    .placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#476675; background:repeating-linear-gradient(135deg,#dce9ed 0,#dce9ed 12px,#e7f0f2 12px,#e7f0f2 24px); font-weight:700; }
+    .content { display:flex; flex:1; flex-direction:column; padding:17px; }
+    .content h3 { margin:0 0 7px; font-size:1.05rem; }
+    .content p { margin:0 0 18px; color:var(--muted); line-height:1.5; }
+    .meta { margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .meta span { color:#6c7788; font-size:.75rem; }
+    .open { display:inline-flex; align-items:center; gap:7px; border-radius:6px; padding:9px 12px; color:#fff; background:var(--brand); text-decoration:none; font-weight:700; }
+    .empty { padding:42px 24px; border:1px dashed #aebdca; border-radius:8px; text-align:center; color:var(--muted); background:rgba(255,255,255,.7); }
+    .error { color:#9b2226; }
+    @media (max-width:700px) { .topbar { align-items:flex-start; } .top-actions { display:none; } .tools { align-items:stretch; flex-direction:column; } }
+  </style>
+</head>
+<body data-plugin="Qtiler2Origo" data-viewer="Origo">
+  <header class="topbar">
+    <img id="logo" class="logo" alt="" />
+    <div class="brand"><small>Qtiler map gallery</small><h1>Origo maps</h1></div>
+    <div class="top-actions"><a id="authLink" href="/login">Sign in</a></div>
+  </header>
+  <main>
+    <div class="tools">
+      <div class="intro"><h2 id="count">Published maps</h2><p>Select a map to open it in Origo.</p></div>
+      <div class="search"><label for="filter">Search maps</label><input id="filter" type="search" placeholder="Title or description" autocomplete="off" /></div>
+    </div>
+    <div id="gallery" class="grid" aria-live="polite"><div class="empty">Loading maps...</div></div>
+  </main>
+  <script>
+    const plugin = document.body.dataset.plugin;
+    const viewer = document.body.dataset.viewer;
+    const gallery = document.getElementById('gallery');
+    const filter = document.getElementById('filter');
+    const count = document.getElementById('count');
+    let maps = [];
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    const launchUrl = (item) => {
+      try { const url = new URL(item.launchUrl || '', location.origin); url.protocol = location.protocol; url.host = location.host; return url.toString(); }
+      catch { return `/Qtiler2Origo/maps/?qtiler_profile=${encodeURIComponent(item.profileKey || '')}`; }
+    };
+    function render() {
+      const query = filter.value.trim().toLowerCase();
+      const visible = maps.filter((item) => !query || `${item.name || ''} ${item.description || ''}`.toLowerCase().includes(query));
+      count.textContent = `${visible.length} published map${visible.length === 1 ? '' : 's'}`;
+      gallery.innerHTML = visible.length ? visible.map((item) => `
+        <article class="card">
+          <div class="media">${item.thumbnailUrl ? `<img src="${escapeHtml(item.thumbnailUrl)}" alt="" loading="lazy" />` : `<div class="placeholder">${escapeHtml(viewer)}</div>`}</div>
+          <div class="content"><h3>${escapeHtml(item.name || item.profileKey)}</h3><p>${escapeHtml(item.description || 'Interactive published map')}</p>
+          <div class="meta"><span>${item.generatedAt ? escapeHtml(new Date(item.generatedAt).toLocaleDateString()) : ''}</span><a class="open" href="${escapeHtml(launchUrl(item))}">Open map <span aria-hidden="true">→</span></a></div></div>
+        </article>`).join('') : `<div class="empty">${query ? 'No maps match your search.' : 'No published maps are available.'}</div>`;
+    }
+    filter.addEventListener('input', render);
+    fetch(`/plugins/${plugin}/api/public-maps`, { credentials:'same-origin' }).then(async (response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json(); maps = Array.isArray(data.items) ? data.items : [];
+      const logo = document.getElementById('logo'); logo.src = data.logoUrl || '/css/images/Qtiler.png';
+      if (data.user) { const auth = document.getElementById('authLink'); auth.textContent = `Admin · ${data.user.username || data.user.id || 'user'}`; auth.href = '/admin'; }
+      render();
+    }).catch((error) => { gallery.innerHTML = `<div class="empty error">Could not load maps: ${escapeHtml(error.message)}</div>`; });
+  </script>
+</body>
+</html>
