@@ -85,6 +85,8 @@ set "QTILER_SERVICE_NAME_DEFAULT=QTiler"
 set "QTILER_VERSION=unknown"
 set "QTILER_PREVIOUS_VERSION="
 set "QGIS_VALIDATION_ATTEMPTS=0"
+set "QTILER_UPDATE_SERVICE_STOPPED=0"
+set "QTILER_SERVICE_DEFINITION_REPLACED=0"
 
 echo ================================================================
 echo                    Qtiler Installer by MundoGIS
@@ -353,39 +355,6 @@ if /i "%QTILER_SETUP_MODE%"=="update" (
             pause
             exit /b 1
         )
-    )
-    echo.
-    echo [Qtiler] Stopping existing service before preserving runtime state...
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action stop -ServiceName "%QTILER_SERVICE_NAME%"
-    if errorlevel 1 (
-        echo ERROR: Could not stop existing Qtiler Windows service before update.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not stop the existing Qtiler Windows service before the update.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'The update was stopped before runtime data was copied. Check Windows Services, then run the installer again as administrator.', 'Qtiler Installer - Update Service Stop Failed', 'OK', 'Error')" >nul
-        pause
-        exit /b 1
-    )
-    for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"`) do set "QTILER_BACKUP_STAMP=%%S"
-    echo.
-    if /i not "%QTILER_PREVIOUS_ROOT%"=="%QTILER_ROOT%" (
-        echo.
-        echo [Qtiler] Copying runtime state from existing installation...
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_PREVIOUS_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%" -DestinationRoot "%QTILER_ROOT%" -ReplacedBackupRoot "%QTILER_ROOT%\upgrade-backups\r-%QTILER_BACKUP_STAMP%"
-        if errorlevel 1 (
-            echo ERROR: Could not copy runtime state from the existing installation.
-            powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not copy runtime data from the existing Qtiler installation.' + [Environment]::NewLine + [Environment]::NewLine + 'Source:' + [Environment]::NewLine + '%QTILER_PREVIOUS_ROOT%' + [Environment]::NewLine + [Environment]::NewLine + 'Backup target:' + [Environment]::NewLine + '%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%' + [Environment]::NewLine + [Environment]::NewLine + 'Check disk space, file permissions, antivirus restrictions and the installer log.', 'Qtiler Installer - Update Backup Failed', 'OK', 'Error')" >nul
-            pause
-            exit /b 1
-        )
-        echo.
-    ) else (
-        echo [Qtiler] Update mode selected in the existing installation folder. Backing up runtime data before continuing...
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%"
-        if errorlevel 1 (
-            echo ERROR: Could not create in-place update backup.
-            powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not create the in-place update backup.' + [Environment]::NewLine + [Environment]::NewLine + 'Backup target:' + [Environment]::NewLine + '%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%' + [Environment]::NewLine + [Environment]::NewLine + 'Check disk space, file permissions, antivirus restrictions and the installer log.', 'Qtiler Installer - Update Backup Failed', 'OK', 'Error')" >nul
-            pause
-            exit /b 1
-        )
-        echo.
     )
 )
 
@@ -667,6 +636,33 @@ set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins"
 if exist "%QGIS_ROOT%\apps\qt5\plugins" set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins;%QGIS_ROOT%\apps\qt5\plugins"
 if exist "%QGIS_ROOT%\apps\qt6\plugins" set "QT_PLUGINS_DIR=%QGIS_PREFIX_DIR%\qtplugins;%QGIS_ROOT%\apps\qt6\plugins"
 
+REM Stop the old service only after every interactive prerequisite has passed.
+REM This keeps a cancelled or invalid update from taking the live site offline.
+if /i "%QTILER_SETUP_MODE%"=="update" (
+    echo [Qtiler] Stopping existing service before preserving runtime state...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action stop -ServiceName "%QTILER_SERVICE_NAME%"
+    if errorlevel 1 (
+        echo ERROR: Could not stop existing Qtiler Windows service before update.
+        pause
+        exit /b 1
+    )
+    set "QTILER_UPDATE_SERVICE_STOPPED=1"
+    for /f "usebackq delims=" %%S in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"`) do set "QTILER_BACKUP_STAMP=%%S"
+    if /i not "%QTILER_PREVIOUS_ROOT%"=="%QTILER_ROOT%" (
+        echo [Qtiler] Copying runtime state from existing installation...
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_PREVIOUS_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%" -DestinationRoot "%QTILER_ROOT%" -ReplacedBackupRoot "%QTILER_ROOT%\upgrade-backups\r-%QTILER_BACKUP_STAMP%"
+    ) else (
+        echo [Qtiler] Backing up runtime data before the in-place update...
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" -SourceRoot "%QTILER_ROOT%" -BackupRoot "%QTILER_ROOT%\upgrade-backups\b-%QTILER_BACKUP_STAMP%"
+    )
+    if errorlevel 1 (
+        echo ERROR: Could not preserve runtime state for the update.
+        call :recover_previous_update_service
+        pause
+        exit /b 1
+    )
+)
+
 REM ----------------------------------------------------------------------
 REM  Step 2: Update .env so Qtiler service can locate QGIS at runtime
 REM          Preserves existing keys (tuning, secrets, etc.). A timestamped
@@ -693,6 +689,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 if errorlevel 1 (
     echo ERROR: failed to update .env.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: failed to update .env.
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -734,6 +731,7 @@ if errorlevel 1 (
     echo ERROR: npm ci failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: npm ci failed with exit code %errorlevel%.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm ci failed while installing the locked Qtiler dependencies.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%' + [Environment]::NewLine + [Environment]::NewLine + 'Also verify that package-lock.json is present, internet access works, and antivirus is not blocking npm.', 'Qtiler Installer - Dependency Install Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -755,6 +753,7 @@ if errorlevel 1 (
     echo ERROR: Could not apply QtilerAuth licensing policy.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: could not apply QtilerAuth licensing policy.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth licensing policy could not be applied.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer stopped to avoid issuing or renewing a trial incorrectly.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - Licensing Policy Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -762,6 +761,7 @@ if not defined QTILERAUTH_INSTALL_STATUS (
     echo ERROR: QtilerAuth licensing policy did not return a status.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: QtilerAuth licensing policy did not return a status.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth licensing policy did not return a status.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer stopped to avoid enabling QtilerAuth in an unsafe state.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - Licensing Policy Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -779,6 +779,7 @@ if errorlevel 1 (
     echo ERROR: Could not stop existing Qtiler Windows service: %QTILER_SERVICE_NAME%
     >>"%QTILER_INSTALL_LOG%" echo ERROR: could not stop existing Qtiler Windows service %QTILER_SERVICE_NAME%.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not stop the existing Qtiler Windows service.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Close applications using Qtiler, check Windows Services, then run the installer again.', 'Qtiler Installer - Service Stop Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -793,6 +794,7 @@ if %errorlevel% equ 0 (
         echo ERROR: Could not remove existing Qtiler Windows service: %QTILER_SERVICE_NAME%
         >>"%QTILER_INSTALL_LOG%" echo ERROR: node service\uninstall-service.js failed.
         powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not remove the existing Qtiler Windows service definition.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and run the installer again as administrator.', 'Qtiler Installer - Service Removal Failed', 'OK', 'Error')" >nul
+        call :recover_previous_update_service
         pause
         exit /b 1
     )
@@ -801,6 +803,7 @@ if %errorlevel% equ 0 (
         echo ERROR: Existing Qtiler Windows service did not uninstall cleanly: %QTILER_SERVICE_NAME%
         >>"%QTILER_INSTALL_LOG%" echo ERROR: existing Qtiler Windows service did not uninstall within timeout.
         powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The existing Qtiler Windows service did not uninstall within the timeout.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services, wait a moment, then run the installer again as administrator.', 'Qtiler Installer - Service Removal Timeout', 'OK', 'Error')" >nul
+        call :recover_previous_update_service
         pause
         exit /b 1
     )
@@ -817,9 +820,11 @@ if errorlevel 1 (
     echo ERROR: Windows service installation failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Windows service installation failed.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Windows service installation failed.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Run the installer as administrator and check that antivirus or Windows policy is not blocking service creation.', 'Qtiler Installer - Service Install Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
+set "QTILER_SERVICE_DEFINITION_REPLACED=1"
 >>"%QTILER_INSTALL_LOG%" echo Windows service installation command completed.
 echo.
 
@@ -834,6 +839,7 @@ if errorlevel 1 (
     echo ERROR: Could not start Qtiler Windows service: %QTILER_SERVICE_NAME%
     >>"%QTILER_INSTALL_LOG%" echo ERROR: could not start Qtiler Windows service %QTILER_SERVICE_NAME%.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not start the Qtiler Windows service.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and the Qtiler logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Start Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -882,6 +888,7 @@ if errorlevel 1 (
     echo Check logs in %QTILER_ROOT%\logs and Windows Services for %QTILER_SERVICE_NAME% startup details.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service started but HTTP/QtilerAuth readiness failed. QtilerAuth expected=%QTILERAUTH_EXPECTED%.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service started, but Qtiler did not become ready in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log and application logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Readiness Failed', 'OK', 'Error')" >nul
+    call :recover_previous_update_service
     pause
     exit /b 1
 )
@@ -896,6 +903,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
         echo ERROR: Could not restart Qtiler Windows service after first QtilerAuth readiness: %QTILER_SERVICE_NAME%
         >>"%QTILER_INSTALL_LOG%" echo ERROR: could not restart Qtiler Windows service after first QtilerAuth readiness.
         powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth became ready, but the Windows service could not be restarted.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Restart the service once from Windows Services before the first login.', 'Qtiler Installer - Service Restart Failed', 'OK', 'Error')" >nul
+        call :recover_previous_update_service
         pause
         exit /b 1
     )
@@ -938,6 +946,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
         echo ERROR: Qtiler service restarted but did not become ready again in time.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service restarted but HTTP/QtilerAuth readiness failed.
         powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service was restarted, but Qtiler did not become ready again in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Restart Readiness Failed', 'OK', 'Error')" >nul
+        call :recover_previous_update_service
         pause
         exit /b 1
     )
@@ -988,7 +997,7 @@ echo    %QTILER_ROOT%\.env
 echo  Restart the %QTILER_SERVICE_NAME% service after editing .env.
 echo.
 echo  QtilerAuth policy:
-echo    Eligible new installs enable the first 3-month trial.
+echo    Eligible new installs enable the first 1-month trial.
 echo    Updates preserve existing license/trial state and never renew a trial.
 echo    If the preserved QtilerAuth license or trial is expired, QtilerAuth stays disabled.
 echo    Bundled Qtiler plugins are updated from this package; custom plugins are preserved.
@@ -998,6 +1007,48 @@ echo ================================================================
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Install completed successfully.
 endlocal
+exit /b 0
+
+:recover_previous_update_service
+if /i not "%QTILER_SETUP_MODE%"=="update" exit /b 0
+if not "%QTILER_UPDATE_SERVICE_STOPPED%"=="1" exit /b 0
+echo [Qtiler] Update failed. Attempting to restore the previous service...
+if not "%QTILER_SERVICE_DEFINITION_REPLACED%"=="1" (
+    >>"%QTILER_INSTALL_LOG%" echo Update recovery: attempting to start the existing service definition.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action start -ServiceName "%QTILER_SERVICE_NAME%" >>"%QTILER_INSTALL_LOG%" 2>&1
+    if not errorlevel 1 (
+        echo [Qtiler] Previous service restarted successfully.
+        >>"%QTILER_INSTALL_LOG%" echo Update recovery succeeded by starting the existing service definition.
+        set "QTILER_UPDATE_SERVICE_STOPPED=0"
+        exit /b 0
+    )
+)
+if not exist "%QTILER_PREVIOUS_ROOT%\service\install-service.js" (
+    echo WARNING: Previous service could not be restored automatically.
+    >>"%QTILER_INSTALL_LOG%" echo WARNING: previous install-service.js was not found; automatic update recovery failed.
+    exit /b 0
+)
+echo [Qtiler] Restoring the Windows service definition from %QTILER_PREVIOUS_ROOT%...
+>>"%QTILER_INSTALL_LOG%" echo Update recovery: reinstalling service from %QTILER_PREVIOUS_ROOT%.
+pushd "%QTILER_PREVIOUS_ROOT%"
+node service\uninstall-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
+node service\install-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
+set "QTILER_RECOVERY_INSTALL_ERROR=%errorlevel%"
+popd
+if not "%QTILER_RECOVERY_INSTALL_ERROR%"=="0" (
+    echo WARNING: Previous service definition could not be reinstalled automatically.
+    >>"%QTILER_INSTALL_LOG%" echo WARNING: previous service reinstallation failed with exit code %QTILER_RECOVERY_INSTALL_ERROR%.
+    exit /b 0
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action start -ServiceName "%QTILER_SERVICE_NAME%" >>"%QTILER_INSTALL_LOG%" 2>&1
+if errorlevel 1 (
+    echo WARNING: Previous service was reinstalled but could not be started automatically.
+    >>"%QTILER_INSTALL_LOG%" echo WARNING: restored previous service could not be started.
+) else (
+    echo [Qtiler] Previous service restored and restarted successfully.
+    >>"%QTILER_INSTALL_LOG%" echo Update recovery restored and started the previous service.
+    set "QTILER_UPDATE_SERVICE_STOPPED=0"
+)
 exit /b 0
 
 :read_gui_setting

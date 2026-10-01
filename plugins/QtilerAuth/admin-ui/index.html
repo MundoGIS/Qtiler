@@ -9,7 +9,7 @@
   <meta charset="utf-8">
   <title>QtilerAuth Administration</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/plugins/auth-admin/assets/style.css">
+  <link rel="stylesheet" href="/plugins/auth-admin/assets/style.css?v=0.3.3">
 </head>
 <body>
   <header>
@@ -130,6 +130,7 @@
       <button type="button" class="tab-button active" data-tab="users">Users</button>
       <button type="button" class="tab-button" data-tab="projects">Project access</button>
       <button type="button" class="tab-button" data-tab="layers">Layer permissions</button>
+      <button type="button" class="tab-button" data-tab="databases">Databases</button>
       <button type="button" class="tab-button" data-tab="plugins">Plugin maps</button>
       <button type="button" class="tab-button" data-tab="support">Support</button>
     </nav>
@@ -262,6 +263,86 @@
       <div class="section-body">
         <p class="help">Control WFS-T editing and search exposure per vector layer. WFS-T requires QtilerAuth to be active.</p>
         <div id="layer-permissions-list"></div>
+      </div>
+    </section>
+
+    <!-- Pestaña de Bases de Datos -->
+    <section id="databases-section" class="card tab-panel" data-tab-panel="databases">
+      <div class="section-head" data-collapse="databases-body">
+        <h2>Database gateway connections</h2>
+        <div class="section-head-actions">
+          <button id="refresh-databases" type="button">Refresh</button>
+          <button class="collapse-toggle" type="button" aria-label="Toggle section">&#9660;</button>
+        </div>
+      </div>
+      <div class="section-body" id="databases-body">
+        <div class="form-panel" id="db-form-panel">
+          <div class="form-panel-header" data-collapse="db-form-inner">
+            <h3 id="db-form-title">Add new connection</h3>
+            <button class="collapse-toggle" type="button" aria-label="Toggle form">&#9660;</button>
+          </div>
+          <form id="db-connection-form" autocomplete="off">
+          <div class="form-collapsible" id="db-form-inner">
+            <input type="hidden" id="db-id">
+            <div class="form-field">
+              <label for="db-name">Connection name</label>
+              <input type="text" id="db-name" placeholder="e.g. PostGIS_Production" required>
+            </div>
+            <div class="form-field">
+              <label for="db-engine">Engine</label>
+              <select id="db-engine">
+                <option value="postgres">PostgreSQL / PostGIS</option>
+                <option value="mssql">Microsoft SQL Server</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="db-host">Host / Server</label>
+              <input type="text" id="db-host" placeholder="localhost or 127.0.0.1" required>
+            </div>
+            <div class="form-field">
+              <label for="db-port">Port</label>
+              <input type="number" id="db-port" value="5432" required>
+            </div>
+            <div class="form-field">
+              <label for="db-dbname">Database name</label>
+              <input type="text" id="db-dbname" placeholder="rabbalshede_geodata" required>
+            </div>
+            <div class="form-field">
+              <label for="db-username">Gateway service account</label>
+              <input type="text" id="db-username" placeholder="postgres" required>
+            </div>
+            <div class="form-field form-field-wide">
+              <label for="db-password">Password</label>
+              <input type="password" id="db-password" placeholder="Stored encrypted; leave blank to keep">
+            </div>
+            <div class="form-field form-field-wide">
+              <label class="inline-check" for="db-isdefault">
+                <input type="checkbox" id="db-isdefault"> Use as default connection for Qtiler
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" id="db-submit-btn">Save connection</button>
+              <button type="button" id="db-reset-btn" class="secondary-button">Cancel</button>
+            </div>
+          </div>
+          </form>
+        </div>
+        <div class="table-panel">
+          <table id="databases-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Engine</th>
+                <th>Server</th>
+                <th>Database</th>
+                <th>User</th>
+                <th>Default</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -411,7 +492,7 @@
         'hiw.acl.3': 'Proyectos privados: solo los usuarios listados (y los administradores) pueden acceder. Se aplica en cada llamada OGC y tile.',
         'hiw.acl.4': 'Las URLs de servicio copiadas pueden incluir api_key para QGIS Desktop, pero el parámetro se elimina de las respuestas GetCapabilities cacheadas para evitar fugas.',
         'hiw.transport.title': '7. Endurecimiento de transporte y HTTP',
-        'hiw.transport.1': 'Cabeceras HTTP estrictas vía Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
+        'hiw.transport.1': 'Cabeceras HTTP strictly vía Helmet: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cross-Origin-Resource-Policy.',
         'hiw.transport.2': 'Lista blanca CORS configurable con AUTH_CORS_ALLOWLIST; mismo origen por defecto.',
         'hiw.transport.3': 'Cache-Control: no-store en toda respuesta que pueda llevar api_key en el cuerpo.',
         'hiw.transport.4': 'Diseñado para correr detrás de IIS / Apache / Nginx como proxy inverso con terminación TLS.',
@@ -683,6 +764,6 @@
       });
     })();
   </script>
-  <script type="module" src="/plugins/auth-admin/assets/app.js"></script>
+  <script type="module" src="/plugins/auth-admin/assets/app.js?v=0.3.3"></script>
 </body>
 </html>

@@ -19,7 +19,7 @@ import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machin
 // the keypair, regenerate with `node license-server/generate_keys.js`, copy
 // the new public_key.pem contents in here, and re-issue licenses signed by
 // the matching new private key.
-const DEVELOPER_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+export const DEVELOPER_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvgSPBNK0LnqSofV2fKtQ
 LLmsolLd7hego3opGEHrG5k/p1JP1K5Ug42wvonGDTnJMSRnacaUaW7b8A30EA/M
 dInGqkCHS4mb9wUjPaub3iGCxS0WU84D61+SNsuy9/N9pp2qnc9wITr1ZOXaaokj
@@ -29,6 +29,33 @@ Lm0uVlU2kbbXNfn7tkNxf42sKkyRaLJ8QCHp2a/CXC4ItBgo7zdTuZX3uBaathnm
 kwIDAQAB
 -----END PUBLIC KEY-----
 `;
+
+export const verifyRsaLicenseKey = (key, publicKey = DEVELOPER_PUBLIC_KEY) => {
+  try {
+    const parts = String(key || '').split('.');
+    if (parts.length !== 2 || !publicKey) return null;
+    const [payloadB64, signature] = parts;
+    const verifier = crypto.createVerify('sha256');
+    verifier.update(payloadB64);
+    verifier.end();
+    if (!verifier.verify(publicKey, Buffer.from(signature, 'base64url'))) return null;
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
+const verifyQtilerAuthPackage = async (pluginDir) => {
+  for (const dependency of ['mssql', 'pg', 'tslib', 'wellknown']) {
+    const packagePath = path.join(pluginDir, 'node_modules', dependency, 'package.json');
+    try {
+      await fs.promises.access(packagePath, fs.constants.R_OK);
+    } catch {
+      throw new Error(`The QtilerAuth archive is incomplete: bundled dependency "${dependency}" is missing. Rebuild the standalone QtilerAuth package.`);
+    }
+  }
+};
 
 export const registerPluginRoutes = ({
   app,
@@ -53,7 +80,7 @@ export const registerPluginRoutes = ({
     'plugin-trials.json'
   );
   // LICENSE_SECRET is used for legacy trial signatures and trial-license
-  // activation timestamps. Built-in 90-day trial records are now signed from
+  // activation timestamps. Built-in 30-day trial records are now signed from
   // the machine fingerprint so they survive .env regeneration on reinstall.
   // It is NEVER required to verify commercial license keys — those are
   // verified with the embedded RSA public key below.
@@ -114,7 +141,11 @@ export const registerPluginRoutes = ({
   const saveLicenseStore = (store) => {
     try {
       fs.mkdirSync(path.dirname(licenseStorePath), { recursive: true });
-      fs.writeFileSync(licenseStorePath, JSON.stringify(store, null, 2), 'utf8');
+      // Atomic write: a torn read from another worker looks like a missing
+      // licence and would otherwise deactivate the plugin.
+      const tmpPath = `${licenseStorePath}.${process.pid}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), 'utf8');
+      fs.renameSync(tmpPath, licenseStorePath);
     } catch (err) {
       console.warn('[licenses] Failed to save license store', err?.message || err);
     }
@@ -136,16 +167,6 @@ export const registerPluginRoutes = ({
     return fp;
   };
 
-  const base64urlToBase64 = (s) => {
-    // convert base64url to base64
-    let out = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
-    const pad = out.length % 4;
-    if (pad === 2) out += '==';
-    else if (pad === 3) out += '=';
-    else if (pad !== 0) out += '===';
-    return out;
-  };
-
   const verifyLicenseKey = (key) => {
     try {
       const parts = String(key || '').split('.');
@@ -154,22 +175,8 @@ export const registerPluginRoutes = ({
       const signature = parts[1];
 
       // Try public-key (RSA) verification first if public key available
-      if (licensePublicKey) {
-        try {
-          const sigB64 = base64urlToBase64(signature);
-          const verifier = crypto.createVerify('sha256');
-          verifier.update(payloadB64);
-          verifier.end();
-          const ok = verifier.verify(licensePublicKey, sigB64, 'base64');
-          if (ok) {
-            const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
-            const payload = JSON.parse(payloadJson);
-            return payload && typeof payload === 'object' ? payload : null;
-          }
-        } catch (err) {
-          // fallthrough to HMAC fallback
-        }
-      }
+      const rsaPayload = verifyRsaLicenseKey(key, licensePublicKey);
+      if (rsaPayload) return rsaPayload;
 
       // Fallback: HMAC with LICENSE_SECRET. SECURITY: only enabled when the
       // operator explicitly opts in via LICENSE_ALLOW_HMAC_LEGACY=1, because
@@ -253,7 +260,9 @@ export const registerPluginRoutes = ({
   const writeMachineTrialStore = (store) => {
     try {
       fs.mkdirSync(path.dirname(machineTrialStorePath), { recursive: true });
-      fs.writeFileSync(machineTrialStorePath, JSON.stringify(store, null, 2), 'utf8');
+      const tmpPath = `${machineTrialStorePath}.${process.pid}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), 'utf8');
+      fs.renameSync(tmpPath, machineTrialStorePath);
     } catch (err) {
       console.warn('[licenses] Failed to save machine trial store', err?.message || err);
     }
@@ -324,7 +333,7 @@ export const registerPluginRoutes = ({
 
     if (!entry.trial) {
       const startedAt = new Date().toISOString();
-      const trialEnds = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const trialEnds = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const sig = signTrial(pluginName, store.instanceId, startedAt, trialEnds);
       entry.trial = { startedAt, expiresAt: trialEnds, sig };
       saveLicenseStore(store);
@@ -506,7 +515,7 @@ export const registerPluginRoutes = ({
         // the plugin .zip. Disabling is enough to gate feature access; the
         // operator can re-activate a valid license without reinstalling.
         try {
-          await pluginManager.disablePlugin(pluginName);
+          await pluginManager.deactivatePlugin(pluginName);
         } catch (err) {
           console.warn(`[licenses] Failed to disable expired plugin ${pluginName}`, err?.message || err);
         }
@@ -554,7 +563,6 @@ export const registerPluginRoutes = ({
       setTimeout(() => {
         // Restart once the response is flushed to avoid client-side ERR_CONNECTION_RESET.
         requestClusterRestart();
-        setTimeout(() => process.exit(0), 150);
       }, Math.max(0, Number(delayMs) || 0));
     };
 
@@ -584,13 +592,14 @@ export const registerPluginRoutes = ({
       const enabled = pluginManager.listEnabled();
 
       for (const name of enabled) {
-        if (!installedSet.has(name)) {
-          try {
-            await pluginManager.disablePlugin(name);
-            console.warn(`[Qtiler] Disabled missing plugin '${name}' (directory not found).`);
-          } catch (disableErr) {
-            console.warn(`[Qtiler] Failed to disable missing plugin '${name}':`, disableErr);
-          }
+        if (installedSet.has(name)) continue;
+        // Re-check on disk: a transient readdir failure must not wipe plugins.json.
+        if (fs.existsSync(path.join(pluginsDir, name))) continue;
+        try {
+          await pluginManager.disablePlugin(name);
+          console.warn(`[Qtiler] Disabled missing plugin '${name}' (directory not found).`);
+        } catch (disableErr) {
+          console.warn(`[Qtiler] Failed to disable missing plugin '${name}':`, disableErr);
         }
       }
 
@@ -866,17 +875,6 @@ export const registerPluginRoutes = ({
       }
     }
 
-    // Remove license entry for the plugin
-    try {
-      const store = loadLicenseStore();
-      if (store && store.plugins && Object.prototype.hasOwnProperty.call(store.plugins, pluginName)) {
-        delete store.plugins[pluginName];
-        saveLicenseStore(store);
-      }
-    } catch (e) {
-      console.warn('[licenses] Failed to cleanup license entry', e?.message || e);
-    }
-
     res.json({
       status: "uninstalled",
       plugin: {
@@ -1079,23 +1077,55 @@ export const registerPluginRoutes = ({
         }
 
         const destination = path.join(pluginsDir, pluginName);
+        const operationId = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        const stagedDestination = path.join(pluginsDir, `.${pluginName}.install-${operationId}`);
+        const previousDestination = path.join(pluginsDir, `.${pluginName}.previous-${operationId}`);
 
-        // If plugin is already enabled or installed, disable and remove old files before replacing
         const wasEnabled = pluginManager.listEnabled().includes(pluginName);
-        if (wasEnabled) {
-          try {
-            await pluginManager.disablePlugin(pluginName);
-          } catch (disableErr) {
-            throw Object.assign(disableErr, { statusCode: 500, code: "PLUGIN_DISABLE_FAILED" });
-          }
-        }
-        await removeRecursive(destination);
-        await copyRecursive(pluginRoot, destination);
-
+        const hadPreviousFiles = fs.existsSync(destination);
+        let replacementStarted = false;
         try {
-          await pluginManager.enablePlugin(pluginName);
+          // Copy and validate first so a malformed/incomplete archive never
+          // destroys the currently installed plugin.
+          await removeRecursive(stagedDestination);
+          await copyRecursive(pluginRoot, stagedDestination);
+          if (pluginName === 'QtilerAuth') {
+            await verifyQtilerAuthPackage(stagedDestination);
+          }
+
+          if (wasEnabled) {
+            await pluginManager.disablePlugin(pluginName);
+          }
+          if (hadPreviousFiles) {
+            await fs.promises.rename(destination, previousDestination);
+          }
+          replacementStarted = true;
+          await fs.promises.rename(stagedDestination, destination);
+
+          if (pluginName === 'QtilerAuth') {
+            await pluginManager.updateEnabledList((enabledSet) => {
+              enabledSet.add(pluginName);
+              return enabledSet;
+            });
+          } else {
+            await pluginManager.enablePlugin(pluginName);
+          }
+          await removeRecursive(previousDestination);
         } catch (loadErr) {
-          await removeRecursive(destination).catch(() => { });
+          await removeRecursive(stagedDestination).catch(() => { });
+          if (replacementStarted) {
+            await pluginManager.unloadPlugin(pluginName).catch(() => { });
+            await removeRecursive(destination).catch(() => { });
+            if (hadPreviousFiles && fs.existsSync(previousDestination)) {
+              await fs.promises.rename(previousDestination, destination).catch(() => { });
+            }
+            await pluginManager.updateEnabledList((enabledSet) => {
+              if (wasEnabled) enabledSet.add(pluginName);
+              else enabledSet.delete(pluginName);
+              return enabledSet;
+            }).catch(() => { });
+          }
+          loadErr.restartRequired = replacementStarted;
           throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
         }
 
@@ -1117,6 +1147,7 @@ export const registerPluginRoutes = ({
         const statusCode = uploadErr.statusCode && Number.isInteger(uploadErr.statusCode) ? uploadErr.statusCode : 500;
         const code = uploadErr.code || "PLUGIN_UPLOAD_FAILED";
         const details = uploadErr.details || uploadErr.message || String(uploadErr);
+        if (uploadErr.restartRequired) restartAfterResponse(res);
         return res.status(statusCode).json({ error: code, details });
       } finally {
         if (file?.path) {

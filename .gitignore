@@ -62,6 +62,8 @@ data/Qtiler2qwc/
 data/Qtiler2Origo/
 data/Qtiler2Hajk/
 data/QtilerAuth/
+data/Qtiler-3D-eye/
+data/external-services.json
 data/searchable-layers/
 data/project-access.json.bak
 data/thumbs/
@@ -110,6 +112,8 @@ temp_zip_*/
 # Backup and copy files
 *.bak
 * copy.*
+plugins/QtilerAuth/**/*_.js
+plugins/QtilerAuth/**/*_.html
 
 # Log files
 node_err.txt

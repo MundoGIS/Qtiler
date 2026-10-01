@@ -1,0 +1,17 @@
+[general]
+name=Qtiler Connector
+qgisMinimumVersion=3.22
+description=Secure Qtiler gateway for WMS, WFS, WMTS, stored QGIS projects, and database layers.
+version=1.3.4
+author=MundoGIS
+email=support@mundogis.se
+license=GPL-2.0-or-later
+about=Use Qtiler resources from QGIS through HTTPS and an API key. Database servers remain private; users do not require a VPN or database password.
+tracker=https://github.com/MundoGIS/Qtiler
+repository=https://github.com/MundoGIS/Qtiler
+tags=qtiler,https,wms,wfs,wmts,postgis,sqlserver,security
+homepage=https://mundogis.se
+category=Plugins
+experimental=False
+deprecated=False
+hasProcessingProvider=no

@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qtiler 3D Eye Admin</title>
+  <link rel="stylesheet" href="/plugins/Qtiler-3D-eye/admin-ui/style.css?v=20260617-tabs-license-i18n">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Qtiler 3D Eye</p>
+      <h1>Cesium platform for Qtiler</h1>
+      <p>Publish production 3D maps with Qtiler projects, Cesium runtime management, terrain, 3D Tiles, models and public galleries.</p>
+    </div>
+    <div class="header-actions">
+      <button id="refreshBtn" class="button">Refresh</button>
+      <a class="button ghost" href="/plugins/Qtiler-3D-eye/view/" target="_blank" rel="noreferrer">Open viewer</a>
+    </div>
+  </header>
+
+  <nav class="tab-bar" aria-label="Qtiler 3D Eye admin sections">
+    <button type="button" class="tab-btn tab-btn--active" data-tab="maps">Maps <span id="tabMapsBadge" class="tab-badge">0</span></button>
+    <button type="button" class="tab-btn" data-tab="cesium">Cesium</button>
+    <button type="button" class="tab-btn" data-tab="assets">Models &amp; Terrain</button>
+    <button type="button" class="tab-btn" data-tab="settings">Settings</button>
+    <button type="button" class="tab-btn" data-tab="galleries">Galleries</button>
+  </nav>
+
+  <main class="layout">
+    <datalist id="svgIconOptions"></datalist>
+    <div class="tab-panel tab-panel--active" data-panel="maps">
+    <section class="panel scene-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Published maps</h2>
+          <p>3D scene configurations available to users with access to the main project.</p>
+        </div>
+        <button id="newSceneBtn" class="button primary">New map</button>
+      </div>
+      <div id="cesiumRequiredNotice" class="info-box info-box--warn" hidden>
+        Install the Cesium runtime before creating or publishing 3D maps.
+      </div>
+      <div id="sceneList" class="scene-list"></div>
+    </section>
+
+    <section class="panel qgis3d-panel">
+      <div class="panel-head">
+        <div>
+          <h2>QGIS 3D layer tiles</h2>
+          <p>Generate or regenerate Cesium 3D Tiles caches for heavy QGIS 3D/WFS building layers.</p>
+        </div>
+      </div>
+      <div id="qgis3dTilesPanel" class="qgis3d-build-list"></div>
+    </section>
+    </div>
+
+    <div class="tab-panel" data-panel="cesium">
+    <section class="panel cesium-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Cesium runtime</h2>
+          <p>Install CesiumJS from official GitHub releases and serve it locally from Qtiler.</p>
+        </div>
+        <span id="cesiumBadge" class="badge badge--muted">Checking...</span>
+      </div>
+      <div id="cesiumInfo" class="info-box info-box--muted">Loading Cesium status...</div>
+      <div class="grid two">
+        <label>
+          <span>GitHub repository</span>
+          <input id="cesiumRepo" type="text" value="CesiumGS/cesium">
+        </label>
+        <label>
+          <span>Release version</span>
+          <div class="inline-control">
+            <select id="cesiumVersion"></select>
+            <button id="refreshCesiumReleasesBtn" class="button" type="button">Refresh</button>
+          </div>
+          <label class="check-line compact-check"><input id="includeCesiumPrerelease" type="checkbox"><span>Include pre-releases</span></label>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="installCesiumBtn" class="button primary" type="button">Install Cesium</button>
+        <button id="uninstallCesiumBtn" class="button danger" type="button" disabled>Uninstall Cesium</button>
+        <a id="openCesiumRuntimeBtn" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer">Open runtime</a>
+      </div>
+    </section>
+    </div>
+
+    <div class="tab-panel" data-panel="assets">
+    <section class="panel terrain-panel">
+      <div class="panel-head">
+        <div>
+          <h2>DEM terrain</h2>
+          <p>Build reusable Cesium terrain from Qtiler/QGIS DEM layers.</p>
+        </div>
+      </div>
+      <div class="grid two">
+        <label>
+          <span>Terrain name</span>
+          <input id="terrainName" type="text" maxlength="120" placeholder="Clean Munkedal terrain">
+        </label>
+        <label>
+          <span>Terrain source project</span>
+          <select id="terrainProjectSelect"></select>
+        </label>
+        <label>
+          <span>DEM layer</span>
+          <select id="demSelect"></select>
+        </label>
+        <label>
+          <span>Water threshold (m)</span>
+          <input id="waterThreshold" type="number" step="0.1" value="0.5">
+        </label>
+        <label>
+          <span>Fill radius (px)</span>
+          <input id="maxSearchDist" type="number" step="1" min="1" value="100">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="buildTerrainBtn" class="button primary">Build terrain</button>
+        <span id="terrainStatus" class="status"></span>
+      </div>
+      <div id="terrainLibrary" class="terrain-library"></div>
+    </section>
+
+    <section class="panel asset-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Reusable 3D assets</h2>
+          <p>Upload GLTF/GLB/CZML/KML/GeoJSON, 3D Tiles ZIPs or terrain ZIPs for use in maps.</p>
+        </div>
+      </div>
+      <form id="assetUploadForm" class="asset-upload">
+        <label>
+          <span>Type</span>
+          <select id="assetTypeSelect">
+            <option value="model">Model / 3D vector</option>
+            <option value="3dtiles">3D Tiles ZIP</option>
+            <option value="terrain">Terrain ZIP</option>
+          </select>
+        </label>
+        <label>
+          <span>Files</span>
+          <input id="assetFilesInput" type="file" multiple>
+        </label>
+        <button class="button primary" type="submit">Upload assets</button>
+      </form>
+      <div id="assetUploadStatus" class="status"></div>
+      <div id="assetList" class="asset-list"></div>
+    </section>
+    </div>
+
+    <div class="tab-panel" data-panel="settings">
+    <section class="panel settings-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Viewer settings</h2>
+          <p>Configure global Cesium token, logo and viewer/gallery copy. Scene-specific tokens still override the global token.</p>
+        </div>
+      </div>
+      <form id="settingsForm" class="settings-form">
+        <div class="grid two">
+          <label><span>Cesium Ion token</span><input id="globalIonToken" type="text" autocomplete="off" placeholder="Optional token for Ion assets or basemaps"></label>
+          <label><span>Logo URL</span><input id="globalLogoUrl" type="text" placeholder="/plugins/Qtiler-3D-eye/uploads/logo.png"></label>
+          <label><span>Viewer heading</span><input id="globalHeaderTitle" type="text" maxlength="120" placeholder="Qtiler 3D Eye"></label>
+          <label><span>Viewer subtitle</span><input id="globalHeaderSubtitle" type="text" maxlength="180" placeholder="Optional short text shown in the viewer"></label>
+          <label><span>Gallery title</span><input id="globalGalleryTitle" type="text" maxlength="120" placeholder="3D Maps Gallery"></label>
+        </div>
+        <div class="actions">
+          <button class="button primary" type="submit">Save settings</button>
+          <span id="settingsStatus" class="status"></span>
+        </div>
+      </form>
+    </section>
+    </div>
+
+    <div class="tab-panel" data-panel="galleries">
+    <section class="panel gallery-panel">
+      <div class="panel-head">
+        <div>
+          <h2>3D maps gallery</h2>
+          <p>Visual entry points for published maps, matching the gallery/catalog workflow in the other Qtiler plugins.</p>
+        </div>
+        <a class="button ghost" href="/plugins/Qtiler-3D-eye/catalog" target="_blank" rel="noreferrer">Open public gallery</a>
+      </div>
+      <div id="mapGallery" class="map-gallery"></div>
+    </section>
+    </div>
+  </main>
+
+  <div id="sceneModal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <form id="sceneForm" class="modal-card" novalidate>
+      <header class="modal-head">
+        <div>
+          <h2 id="sceneModalTitle">New 3D map</h2>
+          <p>The map editor follows the Qtiler2Origo structure: project, layers, backgrounds, terrain and Cesium tools.</p>
+        </div>
+        <div class="modal-head-actions">
+          <button type="button" class="button ghost" id="toggleSceneFullscreen">Full screen</button>
+          <button type="button" class="icon-button" data-close-modal aria-label="Close">x</button>
+        </div>
+      </header>
+
+      <nav class="modal-tab-bar" aria-label="Map editor sections">
+        <button type="button" class="modal-tab-btn modal-tab-btn--active" data-modal-tab="map">Map</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="layers">Layers</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="backgrounds">Backgrounds</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="terrain">Terrain</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="tools">Tools</button>
+        <button type="button" class="modal-tab-btn" data-modal-tab="assets">Assets</button>
+      </nav>
+
+      <section class="modal-body">
+        <div class="modal-tab-panel modal-tab-panel--active" data-modal-panel="map">
+        <fieldset>
+          <legend>1. Map</legend>
+          <div class="grid two">
+            <label>
+              <span>Name</span>
+              <input id="sceneTitle" type="text" maxlength="120" required>
+            </label>
+            <section class="project-picker-card" aria-labelledby="mainProjectLabel">
+              <label>
+                <span id="mainProjectLabel">Main project</span>
+                <select id="mainProjectSelect" required></select>
+              </label>
+              <div id="mainProjectOverview" class="project-overview"></div>
+              <button class="button ghost" type="button" id="openMainLayersTab">Edit project layers</button>
+            </section>
+          </div>
+          <label>
+            <span>Description</span>
+            <textarea id="sceneDescription" rows="2" maxlength="500"></textarea>
+          </label>
+          <label>
+            <span>Optional Cesium Ion token</span>
+            <input id="ionToken" type="text" autocomplete="off" placeholder="Use only if this map needs a dedicated token">
+          </label>
+          <label class="check-line" id="projectView3dWrap" hidden>
+            <input id="includeProjectView3d" type="checkbox">
+            <span>Include 3D layers detected in the main project</span>
+          </label>
+          <div id="projectView3dSummary" class="mini-summary" hidden></div>
+        </fieldset>
+        </div>
+
+        <div class="modal-tab-panel" data-modal-panel="layers">
+        <fieldset>
+          <legend>Main project layers</legend>
+          <div class="layer-workspace-head">
+            <div>
+              <p class="help">Choose the layers included in the map. Vector layers can be served as WFS and styled for Cesium.</p>
+              <div id="mainLayersProjectName" class="layer-workspace-project">No project selected</div>
+            </div>
+            <div id="mainLayersStats" class="layer-stats"></div>
+          </div>
+          <div class="layer-toolbar">
+            <label class="layer-search">
+              <span>Filter layers</span>
+              <input id="mainLayerFilter" type="search" placeholder="Search by name, type or service">
+            </label>
+            <div class="layer-toolbar-actions">
+              <button class="button ghost" type="button" id="selectAllMainLayers">Select all</button>
+              <button class="button ghost" type="button" id="clearMainLayers">Clear</button>
+            </div>
+          </div>
+          <div id="mainLayersList" class="layer-config-list"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>External project layers</legend>
+          <p class="help">Add operational layers from other Qtiler projects as WMS or WFS.</p>
+          <div id="externalProjectsList" class="check-grid"></div>
+          <div id="externalLayersList" class="layer-config-list compact"></div>
+        </fieldset>
+        </div>
+
+        <div class="modal-tab-panel" data-modal-panel="backgrounds">
+        <fieldset>
+          <legend>Backgrounds</legend>
+          <p class="help">Add Qtiler projects as backgrounds and choose the default visible layer.</p>
+          <div id="backgroundProjectsList" class="check-grid"></div>
+          <div id="backgroundLayersList" class="layer-config-list compact"></div>
+        </fieldset>
+        </div>
+
+        <div class="modal-tab-panel" data-modal-panel="terrain">
+        <fieldset>
+          <legend>Terrain</legend>
+          <p class="help">Add projects or uploaded terrain assets that provide DEM/Cesium terrain.</p>
+          <div id="terrainProjectsList" class="check-grid"></div>
+        </fieldset>
+        </div>
+
+        <div class="modal-tab-panel" data-modal-panel="tools">
+        <fieldset>
+          <legend>Cesium tools</legend>
+          <p class="help">Select the viewer tools available to users.</p>
+          <div id="modulesList" class="module-grid"></div>
+        </fieldset>
+        </div>
+
+        <div class="modal-tab-panel" data-modal-panel="assets">
+        <fieldset>
+          <legend>3D assets</legend>
+          <p class="help">Select uploaded models, 3D Tiles or terrain assets for this map.</p>
+          <div id="sceneAssetsList" class="check-grid"></div>
+        </fieldset>
+        </div>
+      </section>
+
+      <footer class="modal-actions">
+        <input id="sceneId" type="hidden">
+        <button type="button" class="button" data-close-modal>Cancel</button>
+        <button type="submit" class="button primary">Save map</button>
+      </footer>
+    </form>
+  </div>
+
+  <div id="svgPickerModal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-svg-picker></div>
+    <section class="modal-card svg-picker-card">
+      <header class="modal-head">
+        <div>
+          <h2>Elegir símbolo SVG</h2>
+          <p>Selecciona un SVG de QGIS/Qtiler para la capa de puntos.</p>
+        </div>
+        <button type="button" class="icon-button" data-close-svg-picker aria-label="Cerrar">x</button>
+      </header>
+      <div class="modal-body">
+        <label>
+          <span>Buscar símbolo</span>
+          <input id="svgPickerSearch" type="search" placeholder="árbol, casa, marker, symbol...">
+        </label>
+        <div id="svgPickerGrid" class="svg-picker-grid"></div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" class="button" data-close-svg-picker>Cerrar</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="gltfPickerModal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-gltf-picker></div>
+    <section class="modal-card gltf-picker-card">
+      <header class="modal-head">
+        <div>
+          <h2>Biblioteca GLTF</h2>
+          <p>Modelos reutilizables para capas WFS de puntos.</p>
+        </div>
+        <button type="button" class="icon-button" data-close-gltf-picker aria-label="Cerrar">x</button>
+      </header>
+      <div class="modal-body gltf-picker-body">
+        <div class="gltf-picker-tools">
+          <form id="gltfPickerUploadForm" class="gltf-tool-card">
+            <label>
+              <span>Subir GLTF/GLB</span>
+              <input id="gltfPickerFiles" type="file" accept=".gltf,.glb" multiple>
+            </label>
+            <button class="button primary" type="submit">Subir y usar</button>
+          </form>
+          <form id="gltfLinkForm" class="gltf-tool-card">
+            <label>
+              <span>Nombre</span>
+              <input id="gltfLinkName" type="text" placeholder="Ej. Farola 3D">
+            </label>
+            <label>
+              <span>Link GLTF/GLB</span>
+              <input id="gltfLinkUrl" type="url" placeholder="https://.../modelo.glb">
+            </label>
+            <button class="button primary" type="submit">Añadir link y usar</button>
+          </form>
+        </div>
+        <label>
+          <span>Buscar modelo</span>
+          <input id="gltfPickerSearch" type="search" placeholder="nombre, url, glb...">
+        </label>
+        <div id="gltfPickerStatus" class="status"></div>
+        <div id="gltfPickerGrid" class="gltf-picker-grid"></div>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" class="button" data-close-gltf-picker>Cerrar</button>
+      </footer>
+    </section>
+  </div>
+
+  <script src="/plugins/Qtiler-3D-eye/admin-ui/app.js?v=20260617-cesium-required"></script>
+</body>
+</html>

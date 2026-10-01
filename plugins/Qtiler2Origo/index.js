@@ -197,6 +197,40 @@ const safeLayerNameForWfs = (value) => {
   return String(value).normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 };
 
+const decodeXmlText = (value) => String(value || '')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&');
+
+// cache/<project>/index.json only lists cached layers, but WMS/WFS layers are
+// rendered live from the QGIS project and never get a cache entry.
+const readQgisProjectLayerNames = (projectFile) => {
+  const result = { layers: new Set(), themes: new Set() };
+  try {
+    if (!projectFile || !fs.existsSync(projectFile)) return result;
+    let xml = '';
+    if (/\.qgz$/i.test(projectFile)) {
+      const zip = new AdmZip(projectFile);
+      const entry = zip.getEntries().find((item) => /\.qgs$/i.test(item.entryName));
+      if (entry) xml = entry.getData().toString('utf8');
+    } else if (/\.qgs$/i.test(projectFile)) {
+      xml = fs.readFileSync(projectFile, 'utf8');
+    }
+    if (!xml) return result;
+    for (const match of xml.matchAll(/<layername>([\s\S]*?)<\/layername>/gi)) {
+      const value = decodeXmlText(match[1]).trim();
+      if (value) result.layers.add(value);
+    }
+    for (const match of xml.matchAll(/<visibility-preset\b[^>]*name="([^"]*)"/gi)) {
+      const value = decodeXmlText(match[1]).trim();
+      if (value) result.themes.add(value);
+    }
+  } catch { /* fall back to cache-index validation */ }
+  return result;
+};
+
 const xmlAttr = (text, attrName) => {
   const re = new RegExp(`${attrName}="([^"]*)"`, 'i');
   const match = String(text || '').match(re);
@@ -1664,6 +1698,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return null;
   };
 
+  const readExternalServiceSources = async () => {
+    try {
+      const state = JSON.parse(await fs.promises.readFile(resolveRepoPath('data', 'external-services.json'), 'utf8'));
+      return Array.isArray(state?.sources) ? state.sources : [];
+    } catch { return []; }
+  };
+
   const validatePublishLayerReferences = async ({
     projectId,
     layerEntries,
@@ -1720,6 +1761,31 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         return candidates.some((candidate) => sameLayerToken(candidate, name) || (theme && sameLayerToken(candidate, themeName)));
       }) || null;
     };
+    const liveNamesByProject = new Map();
+    const getLiveProjectNames = async (projectIdValue) => {
+      const pid = normalizeProjectId(projectIdValue || '');
+      if (!pid) return { layers: new Set(), themes: new Set() };
+      if (!liveNamesByProject.has(pid)) {
+        let projectFile = normalizeComparable((await getCacheIndex(pid))?.project);
+        if (!projectFile) {
+          const known = await listProjectsFromDisk(projectsDir).catch(() => []);
+          projectFile = normalizeComparable(known.find((item) => normalizeProjectId(item?.id) === pid)?.file);
+        }
+        liveNamesByProject.set(pid, readQgisProjectLayerNames(projectFile));
+      }
+      return liveNamesByProject.get(pid);
+    };
+    const hasLiveProjectLayer = async (pid, layerName, theme) => {
+      const name = normalizeComparable(layerName);
+      if (!name) return false;
+      const bare = name.startsWith('theme:') ? name.slice('theme:'.length) : name;
+      const live = await getLiveProjectNames(pid);
+      const pool = theme ? live.themes : live.layers;
+      for (const candidate of pool) {
+        if (sameLayerToken(candidate, name) || sameLayerToken(candidate, bare)) return true;
+      }
+      return false;
+    };
     const collectFieldNames = (layer) => {
       const fields = new Set();
       const add = (value) => {
@@ -1773,6 +1839,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       if (!cachedLayers.length) return null;
       const cachedLayer = findLayer(cachedLayers, name, { theme });
       if (!cachedLayer) {
+        // Tiled backgrounds still need a cache entry; live WMS/WFS layers do not.
+        if (!requireTileGrid && await hasLiveProjectLayer(pid, name, theme)) return null;
         addIssue(theme ? 'theme_not_found' : 'layer_not_found', `${role} layer "${name}" was not found in project "${pid}".`, { projectId: pid, layerName: name });
         return null;
       }
@@ -1793,6 +1861,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
     const mainProjectId = normalizeProjectId(projectId || '');
     await checkProjectIndex(mainProjectId, 'Main map');
+    const externalSources = await readExternalServiceSources();
     const layerRuleFor = (entry) => {
       const name = normalizeComparable(entry?.name);
       const pid = normalizeProjectId(entry?.sourceProjectId || mainProjectId) || mainProjectId;
@@ -1801,6 +1870,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
 
     for (const entry of Array.isArray(layerEntries) ? layerEntries : []) {
+      if (entry?.kind === 'external') {
+        const sourceId = normalizeComparable(entry?.sourceId);
+        const externalSource = externalSources.find((source) => source?.id === sourceId && source?.enabled !== false);
+        if (!sourceId || !externalSource) addIssue('external_source_not_found', `External source "${sourceId || 'unknown'}" is not registered or enabled.`, { sourceId });
+        continue;
+      }
       const name = normalizeComparable(entry?.name);
       const themeName = normalizeComparable(entry?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : ''));
       const isTheme = entry?.isTheme === true || !!themeName;
@@ -4233,6 +4308,47 @@ ${mapIcon}
       }));
     } catch (_) {}
     for (const layer of mainLayers) {
+      if (layer?.kind === 'external') {
+        const sourceId = String(layer.sourceId || '').trim();
+        const externalType = String(layer.externalType || '').trim().toLowerCase();
+        const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const proxyBase = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}`;
+        if (externalType === 'wms') {
+          source[sourceKey] = { url: `${proxyBase}/proxy`, projection: layer.projection || projCode };
+          layers.push({
+            name: `external_${sourceId}`,
+            id: String(layer.layer || layer.name || '').trim(),
+            title: String(layer.title || layer.name || sourceId),
+            group: String(layer.group || 'root'),
+            source: sourceKey,
+            type: 'WMS',
+            renderMode: 'image',
+            format: 'image/png',
+            transparent: true,
+            queryable: true,
+            visible: layer.visible !== false,
+            attribution: layer.attribution || undefined
+          });
+        } else {
+          const tileUrl = externalType === 'wmts'
+            ? `${proxyBase}/proxy?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${encodeURIComponent(String(layer.layer || layer.name || ''))}&STYLE=default&TILEMATRIXSET=${encodeURIComponent(String(layer.matrixSet || ''))}&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/png`
+            : `${proxyBase}/tiles/{z}/{x}/{y}`;
+          source[sourceKey] = { type: 'XYZ', url: tileUrl, projection: layer.projection || 'EPSG:3857' };
+          layers.push({
+            name: `external_${sourceId}`,
+            title: String(layer.title || layer.name || sourceId),
+            group: String(layer.group || 'root'),
+            source: sourceKey,
+            type: 'XYZ',
+            queryable: false,
+            visible: layer.visible !== false,
+            minZoom: Number.isFinite(Number(layer.minZoom)) ? Number(layer.minZoom) : 0,
+            maxZoom: Number.isFinite(Number(layer.maxZoom)) ? Number(layer.maxZoom) : 22,
+            attribution: layer.attribution || undefined
+          });
+        }
+        continue;
+      }
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
       const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
       const cachedLayers = await getCachedLayersForProject(srcProjId);
@@ -4757,7 +4873,12 @@ ${mapIcon}
             title: String(entry.title || name).trim() || name,
             sourceProjectId: normalizeProjectId(entry.sourceProjectId || projectId) || projectId,
             visible: entry.visible !== false,
-            group: String(entry.group || 'root').trim() || 'root'
+            group: String(entry.group || 'root').trim() || 'root',
+            ...(entry.kind === 'external' ? {
+              kind: 'external', sourceId: String(entry.sourceId || '').trim(), externalType: String(entry.externalType || '').trim().toLowerCase(),
+              projection: String(entry.projection || 'EPSG:3857').trim(), attribution: String(entry.attribution || '').trim(),
+              layer: String(entry.layer || '').trim(), matrixSet: String(entry.matrixSet || '').trim(), minZoom: Number(entry.minZoom), maxZoom: Number(entry.maxZoom)
+            } : {})
           };
         }
         return null;
@@ -5024,6 +5145,23 @@ ${mapIcon}
       const sourceProjectId = normalizeProjectId(layerSpec.sourceProjectId || projectId) || projectId;
       const layerName = String(layerSpec.name || '').trim();
       const displayTitle = String(layerSpec.title || layerName).trim() || layerName;
+      if (layerSpec.kind === 'external') {
+        const sourceId = String(layerSpec.sourceId || '').trim();
+        const externalType = String(layerSpec.externalType || '').trim().toLowerCase();
+        const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const proxyBase = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}`;
+        if (externalType === 'wms') {
+          sourceMap[sourceKey] = { url: `${proxyBase}/proxy`, projection: layerSpec.projection || projCode };
+          layersArr.push({ name: `external_${sourceId}`, id: String(layerSpec.layer || layerName), title: displayTitle, group: String(layerSpec.group || 'root').trim() || 'root', source: sourceKey, type: 'WMS', renderMode: 'image', format: 'image/png', transparent: true, queryable: true, visible: layerSpec.visible !== false });
+        } else {
+          const tileUrl = externalType === 'wmts'
+            ? `${proxyBase}/proxy?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${encodeURIComponent(String(layerSpec.layer || layerName))}&STYLE=default&TILEMATRIXSET=${encodeURIComponent(String(layerSpec.matrixSet || ''))}&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/png`
+            : `${proxyBase}/tiles/{z}/{x}/{y}`;
+          sourceMap[sourceKey] = { url: tileUrl, type: 'XYZ', projection: layerSpec.projection || 'EPSG:3857' };
+          layersArr.push({ name: `external_${sourceId}`, title: displayTitle, group: String(layerSpec.group || 'root').trim() || 'root', source: sourceKey, type: 'XYZ', queryable: false, visible: layerSpec.visible !== false, minZoom: Number(layerSpec.minZoom) || 0, maxZoom: Number(layerSpec.maxZoom) || 22 });
+        }
+        continue;
+      }
       const layerRuleKey = `${sourceProjectId}::${layerName}`;
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
@@ -6078,8 +6216,10 @@ ${mapIcon}
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
           if (l && typeof l === 'object' && l.name) {
-            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
-            incomingVisibility[`${srcPid}::${String(l.name)}`] = !!l.visible;
+            const key = l.kind === 'external'
+              ? `external::${String(l.sourceId || '').trim()}`
+              : `${normalizeProjectId(l.sourceProjectId || projectId) || projectId}::${String(l.name)}`;
+            incomingVisibility[key] = !!l.visible;
           }
         }
       }
@@ -6088,8 +6228,10 @@ ${mapIcon}
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
           if (l && typeof l === 'object' && l.name && l.group) {
-            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
-            incomingGroupByName[`${srcPid}::${String(l.name)}`] = String(l.group);
+            const key = l.kind === 'external'
+              ? `external::${String(l.sourceId || '').trim()}`
+              : `${normalizeProjectId(l.sourceProjectId || projectId) || projectId}::${String(l.name)}`;
+            incomingGroupByName[key] = String(l.group);
           }
         }
       }
@@ -6126,6 +6268,7 @@ ${mapIcon}
         const projects = await listProjectsFromDisk(projectsDir).catch(() => []);
         const byProject = new Map();
         for (const entry of layerEntries) {
+          if (entry?.kind === 'external') continue;
           const pid = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
           if (!byProject.has(pid)) byProject.set(pid, []);
           byProject.get(pid).push(String(entry?.name || '').trim());
@@ -6151,6 +6294,7 @@ ${mapIcon}
       }
       const projectLayerFlagsByProject = new Map();
       for (const entry of layerEntries) {
+        if (entry?.kind === 'external') continue;
         const sourceProjectId = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
         if (!projectLayerFlagsByProject.has(sourceProjectId)) {
           projectLayerFlagsByProject.set(sourceProjectId, await readProjectLayerFlags(sourceProjectId));
@@ -6158,6 +6302,26 @@ ${mapIcon}
       }
       const layers = layerEntries.map((sourceLayer) => {
         const name = String(sourceLayer?.name || '').trim();
+        if (sourceLayer?.kind === 'external') {
+          const sourceId = String(sourceLayer?.sourceId || '').trim();
+          const key = `external::${sourceId}`;
+          return {
+            kind: 'external',
+            sourceId,
+            externalType: String(sourceLayer?.externalType || '').trim().toLowerCase(),
+            name,
+            title: String(sourceLayer?.title || name || sourceId).trim() || sourceId,
+            role: 'main',
+            visible: incomingVisibility[key] !== false,
+            group: incomingGroupByName[key] || String(sourceLayer?.group || 'root'),
+            projection: String(sourceLayer?.projection || 'EPSG:3857').trim() || 'EPSG:3857',
+            attribution: String(sourceLayer?.attribution || '').trim(),
+            layer: String(sourceLayer?.layer || '').trim(),
+            matrixSet: String(sourceLayer?.matrixSet || '').trim(),
+            minZoom: Number.isFinite(Number(sourceLayer?.minZoom)) ? Number(sourceLayer.minZoom) : 0,
+            maxZoom: Number.isFinite(Number(sourceLayer?.maxZoom)) ? Number(sourceLayer.maxZoom) : 22
+          };
+        }
         const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
         const authFlags = resolveLayerFlagEntry(projectLayerFlagsByProject.get(sourceProjectId), name);
         const themeName = String(sourceLayer?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : '')).trim();

@@ -2735,6 +2735,23 @@ function getLayerDisplayTitle(layer) {
   return String(rule.title || rule.displayTitle || layer?.title || layer?.name || '').trim();
 }
 
+function externalLayerFields(layer, projectId) {
+  if (layer?.kind === 'external') {
+    return {
+      kind: 'external',
+      sourceId: String(layer.sourceId || '').trim(),
+      externalType: String(layer.externalType || '').trim().toLowerCase(),
+      projection: String(layer.projection || 'EPSG:3857').trim(),
+      attribution: String(layer.attribution || '').trim(),
+      layer: String(layer.layer || '').trim(),
+      matrixSet: String(layer.matrixSet || '').trim(),
+      minZoom: Number(layer.minZoom),
+      maxZoom: Number(layer.maxZoom)
+    };
+  }
+  return { sourceProjectId: String(layer?.sourceProjectId || projectId).trim() || projectId };
+}
+
 function makeLayerKey(projectId, layerName) {
   const pid = String(projectId || '').trim();
   const name = String(layerName || '').trim();
@@ -4436,7 +4453,10 @@ function ensureExtraSections() {
       <legend class="modal-step__legend">${escapeHtml(t('Qtiler2Origo.extra_layers_legend'))}</legend>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
         <p class="help" style="margin:0">${escapeHtml(t('Qtiler2Origo.extra_layers_help'))}</p>
-        <button type="button" id="Qtiler2OrigoOpenExternalLayers" class="button is-small">+ ${escapeHtml(t('Qtiler2Origo.extra_layers_add'))}</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="Qtiler2OrigoOpenExternalService" class="button is-small">+ XYZ / WMS / WMTS</button>
+          <button type="button" id="Qtiler2OrigoOpenExternalLayers" class="button is-small">+ ${escapeHtml(t('Qtiler2Origo.extra_layers_add'))}</button>
+        </div>
       </div>
       <div id="Qtiler2OrigoExtraLayersList"></div>`;
     layersSlot.appendChild(extraLayersSection);
@@ -4538,6 +4558,123 @@ async function addExternalLayers(projectId, selectedItems) {
   }
 }
 
+function addExternalServiceLayer(source) {
+  const sourceId = String(source?.id || '').trim();
+  const type = String(source?.type || '').trim().toLowerCase();
+  if (!sourceId || !['xyz', 'wms', 'wmts'].includes(type)) return;
+  const key = `external::${sourceId}`;
+  const layer = {
+    key,
+    kind: 'external',
+    sourceId,
+    externalType: type,
+    name: String(source.layer || sourceId).trim() || sourceId,
+    title: String(source.title || source.layer || sourceId).trim() || sourceId,
+    projection: String(source.projection || 'EPSG:3857').trim() || 'EPSG:3857',
+    attribution: String(source.attribution || '').trim(),
+    layer: String(source.layer || '').trim(),
+    matrixSet: String(source.matrixSet || '').trim(),
+    minZoom: Number.isFinite(Number(source.minZoom)) ? Number(source.minZoom) : 0,
+    maxZoom: Number.isFinite(Number(source.maxZoom)) ? Number(source.maxZoom) : 22
+  };
+  const existing = publishState.extraLayers.findIndex((item) => getLayerKey(item) === key);
+  if (existing >= 0) publishState.extraLayers[existing] = layer;
+  else publishState.extraLayers.push(layer);
+  if (typeof publishState.initialVisibility[key] === 'undefined') publishState.initialVisibility[key] = true;
+  publishState.mainRules[key] = { ...(publishState.mainRules[key] || {}), searchable: false, editable: false, serveAsWfs: false };
+  ensureLayerOrderKeys(getAllPublishLayers().map((item) => getLayerKey(item)));
+}
+
+function ensureExternalServiceModal() {
+  let modal = document.getElementById('Qtiler2OrigoExternalServiceModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'Qtiler2OrigoExternalServiceModal';
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-background" data-close-external-service-modal></div>
+    <div class="modal-card" style="width:min(760px, calc(100vw - 32px))">
+      <header class="modal-card-head"><p class="modal-card-title">External map service</p><button type="button" class="delete" aria-label="close" data-close-external-service-modal></button></header>
+      <section class="modal-card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label class="field"><span class="label">ID</span><input id="Qtiler2OrigoExternalServiceId" class="input" placeholder="Filled automatically"></label>
+          <label class="field"><span class="label">Type</span><select id="Qtiler2OrigoExternalServiceType" class="input"><option value="auto">Auto detect</option><option value="xyz">XYZ</option><option value="wms">WMS</option><option value="wmts">WMTS</option></select></label>
+          <label class="field" style="grid-column:1/-1"><span class="label">Title</span><input id="Qtiler2OrigoExternalServiceTitle" class="input" placeholder="Filled automatically"></label>
+          <label class="field" style="grid-column:1/-1"><span class="label">Service or tile URL</span><div style="display:flex;gap:8px"><input id="Qtiler2OrigoExternalServiceUrl" class="input" style="flex:1" placeholder="XYZ template or WMS/WMTS service URL"><button type="button" class="button" id="Qtiler2OrigoExternalServiceDiscover">Read service</button></div></label>
+          <label class="field" id="Qtiler2OrigoExternalServiceLayerWrap"><span class="label">Available layer</span><select id="Qtiler2OrigoExternalServiceLayerSelect" class="input"><option value="">Enter a service URL</option></select><input id="Qtiler2OrigoExternalServiceLayer" class="input" style="display:none;margin-top:6px" placeholder="Layer name"></label>
+          <label class="field" id="Qtiler2OrigoExternalServiceMatrixSetWrap"><span class="label">Matrix set</span><select id="Qtiler2OrigoExternalServiceMatrixSetSelect" class="input"><option value="">Choose a layer first</option></select><input id="Qtiler2OrigoExternalServiceMatrixSet" class="input" style="display:none;margin-top:6px" placeholder="Matrix set identifier"></label>
+          <label class="field"><span class="label">Projection</span><input id="Qtiler2OrigoExternalServiceProjection" class="input" value="EPSG:3857"></label>
+          <label class="field"><span class="label">Attribution</span><input id="Qtiler2OrigoExternalServiceAttribution" class="input"></label>
+          <label class="field"><span class="label">Minimum zoom</span><input id="Qtiler2OrigoExternalServiceMinZoom" class="input" type="number" min="0" value="0"></label>
+          <label class="field"><span class="label">Maximum zoom</span><input id="Qtiler2OrigoExternalServiceMaxZoom" class="input" type="number" min="0" value="22"></label>
+          <label class="field"><span class="label">Protected query parameters (JSON)</span><textarea id="Qtiler2OrigoExternalServiceQuery" class="textarea" rows="3" placeholder='{"api_key":"secret"}'></textarea></label>
+          <label class="field"><span class="label">Protected headers (JSON)</span><textarea id="Qtiler2OrigoExternalServiceHeaders" class="textarea" rows="3" placeholder='{"Authorization":"Bearer secret"}'></textarea></label>
+        </div>
+        <p id="Qtiler2OrigoExternalServiceDiscoveryStatus" class="help has-text-grey" style="display:none"></p>
+        <p id="Qtiler2OrigoExternalServiceError" class="help has-text-danger" style="display:none"></p>
+      </section>
+      <footer class="modal-card-foot" style="justify-content:space-between"><button type="button" class="button" data-close-external-service-modal>Cancel</button><button type="button" class="button is-primary" id="Qtiler2OrigoExternalServiceSave">Save and add layer</button></footer>
+    </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function bindExternalServiceEvents() {
+  const openButton = document.getElementById('Qtiler2OrigoOpenExternalService');
+  const modal = ensureExternalServiceModal();
+  const externalAssistant = window.QtilerExternalServiceAssistant?.bind({ prefix: 'Qtiler2OrigoExternalService', api });
+  if (openButton && !openButton.dataset.bound) {
+    openButton.dataset.bound = '1';
+    openButton.addEventListener('click', () => { modal.classList.add('is-active'); externalAssistant?.refresh(); });
+  }
+  if (modal.dataset.bound) return;
+  modal.dataset.bound = '1';
+  modal.addEventListener('click', (event) => {
+    if (event.target instanceof HTMLElement && event.target.hasAttribute('data-close-external-service-modal')) modal.classList.remove('is-active');
+  });
+  document.getElementById('Qtiler2OrigoExternalServiceSave')?.addEventListener('click', async () => {
+    const errorHost = document.getElementById('Qtiler2OrigoExternalServiceError');
+    try {
+      const parseMap = (id) => {
+        const raw = String(document.getElementById(id)?.value || '').trim();
+        if (!raw) return {};
+        const value = JSON.parse(raw);
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Credentials must be JSON objects.');
+        return value;
+      };
+      const sourceId = String(document.getElementById('Qtiler2OrigoExternalServiceId')?.value || '').trim();
+      if (!sourceId) throw new Error('Source ID is required.');
+      const body = {
+        id: sourceId,
+        type: externalAssistant?.type() || String(document.getElementById('Qtiler2OrigoExternalServiceType')?.value || 'xyz'),
+        title: String(document.getElementById('Qtiler2OrigoExternalServiceTitle')?.value || '').trim(),
+        url: String(document.getElementById('Qtiler2OrigoExternalServiceUrl')?.value || '').trim(),
+        layer: externalAssistant?.layer() || String(document.getElementById('Qtiler2OrigoExternalServiceLayer')?.value || '').trim(),
+        matrixSet: externalAssistant?.matrixSet() || String(document.getElementById('Qtiler2OrigoExternalServiceMatrixSet')?.value || '').trim(),
+        projection: String(document.getElementById('Qtiler2OrigoExternalServiceProjection')?.value || 'EPSG:3857').trim(),
+        attribution: String(document.getElementById('Qtiler2OrigoExternalServiceAttribution')?.value || '').trim(),
+        minZoom: Number(document.getElementById('Qtiler2OrigoExternalServiceMinZoom')?.value || 0),
+        maxZoom: Number(document.getElementById('Qtiler2OrigoExternalServiceMaxZoom')?.value || 22),
+        query: parseMap('Qtiler2OrigoExternalServiceQuery'),
+        headers: parseMap('Qtiler2OrigoExternalServiceHeaders')
+      };
+      if (body.type !== 'xyz' && !body.layer) throw new Error('Choose a layer from the service.');
+      if (body.type === 'wmts' && !body.matrixSet) throw new Error('Choose a matrix set.');
+      const result = await api(`/api/external-services/${encodeURIComponent(sourceId)}`, { method: 'PUT', body });
+      addExternalServiceLayer({ ...body, ...(result?.source || {}) });
+      const checked = new Set(getCheckedLayerNames(projectLayersList));
+      checked.add(`external::${String(result?.source?.id || sourceId).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '-')}`);
+      renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+      setCheckedLayerNames(projectLayersList, Array.from(checked));
+      refreshExtraSections();
+      modal.classList.remove('is-active');
+      if (errorHost) errorHost.style.display = 'none';
+    } catch (error) {
+      if (errorHost) { errorHost.textContent = String(error?.message || error); errorHost.style.display = ''; }
+    }
+  });
+}
+
 function renderExternalLayersSummary() {
   const host = document.getElementById('Qtiler2OrigoExtraLayersList');
   if (!host) return;
@@ -4549,14 +4686,15 @@ function renderExternalLayersSummary() {
   host.innerHTML = rows.map((layer) => {
     const key = getLayerKey(layer);
     const rule = publishState.mainRules[key] || {};
-    const preview = layerStylePreviewHtml(layer, rule, rule.serveAsWfs ? 'WFS' : 'WMS');
+    const modeLabel = layer.kind === 'external' ? String(layer.externalType || '').toUpperCase() : (rule.serveAsWfs ? 'WFS' : 'WMS');
+    const preview = layer.kind === 'external' ? '' : layerStylePreviewHtml(layer, rule, modeLabel);
     return `<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
       ${preview}
       <div>
         <strong>${escapeHtml(layer.name)}</strong>
-        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.sourceProjectId || '')}</div>
+        <div class="help" style="margin:2px 0 0">${escapeHtml(layer.kind === 'external' ? layer.sourceId : (layer.sourceProjectId || ''))}</div>
       </div>
-      <span class="tag is-light">${rule.serveAsWfs ? 'WFS' : 'WMS'}</span>
+      <span class="tag is-light">${escapeHtml(modeLabel)}</span>
       <button type="button" class="button is-small is-danger is-light" data-remove-extra-layer="${escapeHtml(key)}">${escapeHtml(t('Qtiler2Origo.extra_layers_remove'))}</button>
     </div>`;
   }).join('');
@@ -4634,6 +4772,7 @@ async function renderExternalLayerModalList(projectId) {
 }
 
 function bindExternalLayerPickerEvents() {
+  bindExternalServiceEvents();
   const openBtn = document.getElementById('Qtiler2OrigoOpenExternalLayers');
   if (openBtn && !openBtn.dataset.bound) {
     openBtn.dataset.bound = '1';
@@ -4978,12 +5117,36 @@ async function loadProjectLayers(projectId, target = 'main') {
     const retainedVisibility = Object.fromEntries(Array.from(retainedExtraKeys)
       .map((key) => [key, publishState.initialVisibility?.[key] !== false]));
     const previousOrder = Array.isArray(publishState.layerOrder) ? publishState.layerOrder.slice() : [];
+    // Reloading the same main project must keep the styles, titles and
+    // visibility the admin already configured for its layers.
+    const sameMainProject = (publishState.mainLayers || [])
+      .some((layer) => String(layer?.sourceProjectId || '').trim() === projectId);
+    const previousRules = sameMainProject ? { ...(publishState.mainRules || {}) } : {};
+    const previousVisibility = sameMainProject ? { ...(publishState.initialVisibility || {}) } : {};
+    const previousTitles = sameMainProject ? { ...(publishState.layerTitles || {}) } : {};
     publishState.mainLayers = normalized;
     publishState.extraLayers = retainedExtraLayers;
-    publishState.mainRules = { ...(await loadLayerRules(projectId)), ...retainedRules };
+    const discoveredRules = await loadLayerRules(projectId);
+    const mergedRules = { ...discoveredRules };
+    normalized.forEach((layer) => {
+      const key = getLayerKey(layer);
+      if (!key || !previousRules[key]) return;
+      mergedRules[key] = { ...(discoveredRules[key] || {}), ...previousRules[key] };
+    });
+    publishState.mainRules = { ...mergedRules, ...retainedRules };
     publishState.initialVisibility = {
-      ...Object.fromEntries(normalized.map((layer) => [getLayerKey(layer), true])),
+      ...Object.fromEntries(normalized.map((layer) => {
+        const key = getLayerKey(layer);
+        return [key, previousVisibility[key] !== false];
+      })),
       ...retainedVisibility
+    };
+    publishState.layerTitles = {
+      ...(publishState.layerTitles || {}),
+      ...Object.fromEntries(normalized
+        .map((layer) => getLayerKey(layer))
+        .filter((key) => key && previousTitles[key])
+        .map((key) => [key, previousTitles[key]]))
     };
     publishState.layerOrder = previousOrder;
     ensureLayerOrderKeys(getAllPublishLayers().map((layer) => getLayerKey(layer)));
@@ -5259,9 +5422,11 @@ async function preparePublishModal(editProfileId = null) {
       const savedLayerRows = Array.isArray(profile.layers) ? profile.layers : [];
       const savedMain = savedLayerRows.filter((layer) => String(layer?.role || 'main') !== 'background');
       const savedExternal = savedMain.filter((layer) => {
+        if (layer?.kind === 'external') return false;
         const srcPid = String(layer?.sourceProjectId || '').trim();
         return srcPid && srcPid !== mainProjectId;
       });
+      for (const layer of savedMain.filter((item) => item?.kind === 'external')) addExternalServiceLayer(layer);
       for (const layer of savedExternal) {
         const srcPid = String(layer?.sourceProjectId || '').trim();
         const layerName = String(layer?.name || '').trim();
@@ -6130,7 +6295,7 @@ function buildPublishApiBody() {
       title,
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
-      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      ...externalLayerFields(layer, projectId),
       visible: publishState.initialVisibility[key] !== false,
       group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
       attributes: Array.isArray(rule.attributes) ? normalizeAttributesList(rule.attributes) : []
@@ -6287,7 +6452,7 @@ publishNowBtn?.addEventListener('click', async () => {
       title,
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
-      sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+      ...externalLayerFields(layer, projectId),
       visible: publishState.initialVisibility[key] !== false,
       group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
       attributes: Array.isArray(rule.attributes) ? normalizeAttributesList(rule.attributes) : []
@@ -6644,7 +6809,7 @@ function buildMapPreviewPayload() {
     title: getLayerDisplayTitle(layer) || layer.name,
     isTheme: layer.isTheme === true,
     themeName: layer.themeName || null,
-    sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+    ...externalLayerFields(layer, projectId),
     visible: publishState.initialVisibility[getLayerKey(layer)] !== false,
     group: String(publishState.layerGroups?.[getLayerKey(layer)] || 'root').trim() || 'root'
   }));
@@ -9428,7 +9593,7 @@ function generateMapConfigJson() {
       return {
         name: layer.name,
         title: getLayerDisplayTitle(layer) || layer.name,
-        sourceProjectId: String(layer.sourceProjectId || projectId).trim() || projectId,
+        ...externalLayerFields(layer, projectId),
         visible: publishState.initialVisibility[key] !== false,
         group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
         searchable: rules.searchable || false,
@@ -9614,6 +9779,10 @@ async function applyMapJsonChanges({ automatic = false } = {}) {
     const configuredLayers = config.layers.filter((layer) => layer && typeof layer === 'object' && String(layer.name || '').trim());
     const externalByProject = new Map();
     for (const layer of configuredLayers) {
+      if (layer.kind === 'external') {
+        addExternalServiceLayer(layer);
+        continue;
+      }
       const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
       if (sourceProjectId === mainProjectId) continue;
       if (!externalByProject.has(sourceProjectId)) externalByProject.set(sourceProjectId, []);
@@ -9633,7 +9802,7 @@ async function applyMapJsonChanges({ automatic = false } = {}) {
     const includedKeys = [];
     for (const layer of configuredLayers) {
       const sourceProjectId = String(layer.sourceProjectId || mainProjectId).trim() || mainProjectId;
-      const key = makeLayerKey(sourceProjectId, String(layer.name || '').trim());
+      const key = layer.kind === 'external' ? `external::${String(layer.sourceId || '').trim()}` : makeLayerKey(sourceProjectId, String(layer.name || '').trim());
       if (!key) continue;
       const explicitRule = config.layerRules?.[key] || config.layerRules?.[layer.name] || {};
       const nextRule = { ...(discoveredRules[key] || {}), ...explicitRule };

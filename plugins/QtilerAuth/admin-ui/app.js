@@ -12,6 +12,7 @@ const state = {
   pluginMaps: [],
   layersByProject: {},
   layerAttributesByProject: {},
+  databases: [],
   // userId -> plaintext API key revealed only once (regenerate/create response)
   recentlyIssuedKeys: new Map()
 };
@@ -39,6 +40,8 @@ const escapeHtml = (value) => String(value ?? '')
 
 const messagesEl = document.getElementById('messages');
 const usersTableBody = document.querySelector('#users-table tbody');
+const dbTableBody = document.querySelector('#databases-table tbody');
+const dbForm = document.getElementById('db-connection-form');
 
 const userForm = document.getElementById('user-form');
 const userFormTitle = document.getElementById('user-form-title');
@@ -59,7 +62,17 @@ const goDashboardButton = document.getElementById('go-dashboard');
 const PORTAL_PERMISSIONS = [
   { id: 'Qtiler2qwc', label: 'QWC admin', permission: 'portal:edit:Qtiler2qwc' },
   { id: 'Qtiler2Origo', label: 'Origo admin', permission: 'portal:edit:Qtiler2Origo' },
-  { id: 'Qtiler2Hajk', label: 'Hajk admin', permission: 'portal:edit:Qtiler2Hajk' }
+  { id: 'Qtiler2Hajk', label: 'Hajk admin', permission: 'portal:edit:Qtiler2Hajk' },
+  { id: 'databaseGateway', label: 'Database gateway', permission: 'database:read' }
+];
+
+const getManagedPermissions = () => [
+  ...PORTAL_PERMISSIONS,
+  ...state.databases.map((connection) => ({
+    id: `database:${connection.id}`,
+    label: `Database: ${connection.name}`,
+    permission: `database:read:${connection.id}`
+  }))
 ];
 
 const isAdminUser = (user) => user?.role === 'admin';
@@ -739,13 +752,17 @@ function renderPluginAccess() {
     const adminCell = document.createElement('td');
     const adminOptions = document.createElement('div');
     adminOptions.className = 'plugin-access-options';
-    PORTAL_PERMISSIONS.forEach((portal) => {
+    const managedPermissions = getManagedPermissions();
+    managedPermissions.forEach((portal) => {
       const label = document.createElement('label');
       label.className = 'permission-chip';
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.dataset.permission = portal.permission;
-      input.checked = isAdmin || permissions.has('portal:edit') || permissions.has(portal.permission);
+      const isDatabasePermission = portal.permission.startsWith('database:read');
+      input.checked = isAdmin
+        || permissions.has(portal.permission)
+        || (!isDatabasePermission && permissions.has('portal:edit'));
       input.disabled = isAdmin;
       label.append(input, document.createTextNode(portal.label));
       adminOptions.appendChild(label);
@@ -804,7 +821,7 @@ function renderPluginAccess() {
     saveBtn.addEventListener('click', async () => {
       const nextPermissions = new Set(Array.isArray(user.permissions) ? user.permissions : []);
       nextPermissions.delete('portal:edit');
-      PORTAL_PERMISSIONS.forEach((portal) => nextPermissions.delete(portal.permission));
+      managedPermissions.forEach((portal) => nextPermissions.delete(portal.permission));
       row.querySelectorAll('input[data-permission]').forEach((input) => {
         if (input.checked) nextPermissions.add(input.dataset.permission);
       });
@@ -1301,6 +1318,127 @@ function renderProjects() {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Gestión Multibase de Datos (PostGIS / SQL Server)                 */
+/* ------------------------------------------------------------------ */
+async function loadDatabases() {
+  try {
+    const payload = await api('/auth-admin/databases');
+    state.databases = Array.isArray(payload?.connections) ? payload.connections : [];
+    renderDatabases();
+    renderPluginAccess();
+  } catch (err) {
+    showMessage('error', parseError(err, 'Failed to load database connections.'));
+  }
+}
+
+function renderDatabases() {
+  if (!dbTableBody) return;
+  dbTableBody.innerHTML = '';
+
+  if (!state.databases.length) {
+    dbTableBody.innerHTML = '<tr><td colspan="7">No database connections configured.</td></tr>';
+    return;
+  }
+
+  state.databases.forEach((conn) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><strong>${escapeHtml(conn.name)}</strong></td>
+      <td><span class="tag role-authenticated">${escapeHtml(String(conn.engine || '').toUpperCase())}</span></td>
+      <td>${escapeHtml(conn.host)}:${conn.port}</td>
+      <td>${escapeHtml(conn.database_name)}</td>
+      <td>${escapeHtml(conn.username)}</td>
+      <td>${conn.is_default ? '<span class="tag status-active">Default</span>' : '—'}</td>
+      <td class="actions">
+        <button type="button" class="btn-edit-db">Edit</button>
+        <button type="button" class="btn-delete-db" style="background: var(--danger);">Delete</button>
+      </td>
+    `;
+
+    row.querySelector('.btn-edit-db').addEventListener('click', () => {
+      const idInput = document.getElementById('db-id');
+      const nameInput = document.getElementById('db-name');
+      const engineInput = document.getElementById('db-engine');
+      const hostInput = document.getElementById('db-host');
+      const portInput = document.getElementById('db-port');
+      const dbnameInput = document.getElementById('db-dbname');
+      const usernameInput = document.getElementById('db-username');
+      const passwordInput = document.getElementById('db-password');
+      const isdefaultInput = document.getElementById('db-isdefault');
+      const titleEl = document.getElementById('db-form-title');
+
+      if (idInput) idInput.value = conn.id;
+      if (nameInput) nameInput.value = conn.name;
+      if (engineInput) engineInput.value = conn.engine;
+      if (hostInput) hostInput.value = conn.host;
+      if (portInput) portInput.value = conn.port;
+      if (dbnameInput) dbnameInput.value = conn.database_name;
+      if (usernameInput) usernameInput.value = conn.username;
+      if (passwordInput) passwordInput.value = '********';
+      if (isdefaultInput) isdefaultInput.checked = !!conn.is_default;
+      if (titleEl) titleEl.textContent = `Edit ${conn.name}`;
+    });
+
+    row.querySelector('.btn-delete-db').addEventListener('click', async () => {
+      if (!confirm(`Delete connection "${conn.name}"?`)) return;
+      try {
+        await api(`/auth-admin/databases/${conn.id}`, { method: 'DELETE' });
+        showMessage('success', `Connection "${conn.name}" removed.`);
+        await loadDatabases();
+      } catch (err) {
+        showMessage('error', parseError(err, 'Failed to remove database connection.'));
+      }
+    });
+
+    dbTableBody.appendChild(row);
+  });
+}
+
+if (dbForm) {
+  dbForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const idVal = document.getElementById('db-id')?.value || '';
+    const nameVal = document.getElementById('db-name')?.value || '';
+    const engineVal = document.getElementById('db-engine')?.value || '';
+    const hostVal = document.getElementById('db-host')?.value || '';
+    const portVal = document.getElementById('db-port')?.value || '';
+    const dbNameVal = document.getElementById('db-dbname')?.value || '';
+    const usernameVal = document.getElementById('db-username')?.value || '';
+    const passwordVal = document.getElementById('db-password')?.value || '';
+    const isDefaultVal = document.getElementById('db-isdefault')?.checked || false;
+
+    const payload = {
+      id: idVal,
+      name: nameVal,
+      engine: engineVal,
+      host: hostVal,
+      port: portVal,
+      databaseName: dbNameVal,
+      username: usernameVal,
+      password: passwordVal,
+      isDefault: isDefaultVal
+    };
+
+    try {
+      await api('/auth-admin/databases', { method: 'POST', body: payload });
+      showMessage('success', 'Database connection saved successfully.');
+      dbForm.reset();
+      if (document.getElementById('db-id')) document.getElementById('db-id').value = '';
+      if (document.getElementById('db-form-title')) document.getElementById('db-form-title').textContent = 'Add new connection';
+      await loadDatabases();
+    } catch (err) {
+      showMessage('error', parseError(err, 'Unable to save database connection.'));
+    }
+  });
+
+  document.getElementById('db-reset-btn')?.addEventListener('click', () => {
+    dbForm.reset();
+    if (document.getElementById('db-id')) document.getElementById('db-id').value = '';
+    if (document.getElementById('db-form-title')) document.getElementById('db-form-title').textContent = 'Add new connection';
+  });
+}
+
 async function loadUsers(showFeedback = false) {
   try {
     const payload = await api('/auth-admin/users');
@@ -1406,6 +1544,7 @@ document.getElementById('refresh-users').addEventListener('click', () => loadUse
 document.getElementById('refresh-projects').addEventListener('click', () => loadProjects(true));
 document.getElementById('refresh-layer-permissions')?.addEventListener('click', () => loadProjects(true));
 document.getElementById('refresh-plugin-access')?.addEventListener('click', () => loadUsers(true));
+document.getElementById('refresh-databases')?.addEventListener('click', () => loadDatabases());
 
 resetUserForm();
 
@@ -1420,6 +1559,7 @@ async function bootstrap() {
   }
   await loadUsers(false);
   await loadProjects(false);
+  await loadDatabases();
   await checkDefaultPassword({ justInstalled: justInstalledFlag });
 }
 

@@ -82,13 +82,13 @@ external SaaS providers.
 
 ### Try before you buy
 
-QtilerAuth ships with a **three-months full-feature trial**. During trial it works
+QtilerAuth ships with a **one-month full-feature trial**. During trial it works
 exactly like the licensed product so you can validate users, ACLs, brute-force
 protection, captcha and API-key flows in your own environment. After expiry the
 plugin auto-disables and the base Qtiler server keeps running.
 
 Trial time is counted from the first activation on the machine. Updates and
-reinstalls on the same Windows server do not renew the three-month trial; Qtiler
+reinstalls on the same Windows server do not renew the one-month trial; Qtiler
 persists the trial start/expiry in both runtime data and machine-level trial
 state so the remaining days continue from the original activation.
 
@@ -323,7 +323,7 @@ Preserved state includes:
 - Top-level runtime databases such as `auth.db` and `symbology-style.db` when present
 - Custom/non-bundled plugin folders from `plugins/` when they do not already exist in the new checkout
 
-If updating from a fresh GitHub checkout in a new folder, the installer copies the preserved state from the current service root into the new folder before reinstalling the service. Existing QtilerAuth licenses remain valid on the same machine because the license state and machine fingerprint data are preserved. Trial licenses keep their original start and expiry dates; update mode never grants a fresh three-month trial.
+If updating from a fresh GitHub checkout in a new folder, the installer copies the preserved state from the current service root into the new folder before reinstalling the service. Existing QtilerAuth licenses remain valid on the same machine because the license state and machine fingerprint data are preserved. Trial licenses keep their original start and expiry dates; update mode never grants a fresh one-month trial.
 
 ### Repository layout
 ```

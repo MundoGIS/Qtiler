@@ -26,6 +26,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerWmsRoutes } from "./routes/wms.js";
 import { registerWfsRoutes } from "./routes/wfs.js";
 import { registerOrigoRoutes } from "./routes/origo.js";
+import { registerExternalServiceRoutes } from "./routes/externalServices.js";
 import { getRequestBaseUrl } from "./lib/requestBaseUrl.js";
 
 import crypto from "crypto";
@@ -5497,6 +5498,12 @@ registerOrigoRoutes({
   findProjectById
 });
 
+registerExternalServiceRoutes({
+  app,
+  dataDir,
+  requireAdmin
+});
+
 const persistProjectAccessSnapshot = (snapshot) => {
   if (!snapshot || typeof snapshot !== "object") return;
   // Write to SQLite (primary storage)
@@ -10017,22 +10024,71 @@ if (cluster.isPrimary || cluster.isMaster) {
   const configuredWorkers = parseInt(process.env.WORKER_COUNT || "0", 10) || 0;
   const numCPUs = (configuredWorkers > 0) ? configuredWorkers : cpuCount;
   const totalMem = os.totalmem();
+  const plannedWorkerExits = new Set();
+  const startingReplacementWorkers = new Set();
+  let workerRestartQueue = Promise.resolve();
   console.log(`[Qtiler] starting master: cpuCount=${cpuCount}, configuredWorkers=${configuredWorkers}, forking=${numCPUs}`);
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
   }
 
+  const forkReadyWorker = () => new Promise((resolve, reject) => {
+    const replacement = cluster.fork();
+    startingReplacementWorkers.add(replacement.id);
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`replacement worker ${replacement.process.pid} did not start listening within 60 seconds`));
+    }, 60000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      replacement.removeListener('listening', onListening);
+      replacement.removeListener('exit', onExit);
+    };
+    const onListening = () => {
+      startingReplacementWorkers.delete(replacement.id);
+      cleanup();
+      resolve(replacement);
+    };
+    const onExit = (code, signal) => {
+      cleanup();
+      reject(new Error(`replacement worker exited before listening (${signal || code})`));
+    };
+    replacement.once('listening', onListening);
+    replacement.once('exit', onExit);
+  });
+
+  const stopWorker = (worker) => new Promise((resolve) => {
+    if (!worker || worker.isDead()) return resolve();
+    plannedWorkerExits.add(worker.id);
+    const timeout = setTimeout(resolve, 10000);
+    worker.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    try {
+      worker.process.kill();
+    } catch {
+      clearTimeout(timeout);
+      resolve();
+    }
+  });
+
+  const restartAllWorkersRolling = async () => {
+    const workersToReplace = Object.values(cluster.workers).filter(Boolean);
+    console.log(`[Qtiler] Rolling restart of ${workersToReplace.length} workers`);
+    for (const worker of workersToReplace) {
+      await forkReadyWorker();
+      await stopWorker(worker);
+    }
+    console.log('[Qtiler] Rolling worker restart complete');
+  };
+
   // Listen for worker requests to restart the cluster (e.g., after plugin install/uninstall)
   cluster.on('message', (worker, msg) => {
     if (msg && msg.cmd === 'restartAllWorkers') {
-      console.log('[Qtiler] Restarting all workers due to plugin change request');
-      for (const id in cluster.workers) {
-        try {
-          cluster.workers[id].process.kill();
-        } catch (err) {
-          console.warn('[Qtiler] Failed to kill worker', id, err?.message || err);
-        }
-      }
+      workerRestartQueue = workerRestartQueue
+        .then(restartAllWorkersRolling)
+        .catch((err) => console.warn('[Qtiler] Rolling worker restart failed', err?.message || err));
       return;
     }
 
@@ -10059,6 +10115,12 @@ if (cluster.isPrimary || cluster.isMaster) {
   }, 10000);
 
   cluster.on("exit", (worker, code, signal) => {
+    if (plannedWorkerExits.delete(worker.id)) {
+      return;
+    }
+    if (startingReplacementWorkers.delete(worker.id)) {
+      return;
+    }
     console.log(`[Qtiler] Worker ${worker.process.pid} died (${signal || code}), restarting...`);
     try { cluster.fork(); } catch (e) { console.warn('[Qtiler] failed to fork worker', e); }
   });

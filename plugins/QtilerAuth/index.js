@@ -9,6 +9,8 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import pg from 'pg';
+import wellknown from 'wellknown';
 import { getAuthDb, closeAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 
 const ROLE_ADMIN = 'admin';
@@ -16,8 +18,31 @@ const ROLE_AUTH = 'authenticated';
 const VALID_ROLES = new Set([ROLE_ADMIN, ROLE_AUTH]);
 const COOKIE_NAME = 'qtiler_token';
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 3600;
-const DEFAULT_ADMIN_PASSWORD = process.env.QTILER_DEFAULT_ADMIN_PASSWORD || 'MundoGIS-2026';
+const DEFAULT_ADMIN_PASSWORD = String(process.env.QTILER_DEFAULT_ADMIN_PASSWORD || '').trim();
 const LEGACY_DEFAULT_ADMIN_PASSWORDS = ['adminnuevo321', 'adminnuevo123', 'adminnuevo', 'admin2026'];
+const DATABASE_CREDENTIALS_KEY = (() => {
+  const raw = String(process.env.QTILER_DATABASE_CREDENTIALS_KEY || '').trim();
+  if (!raw) return null;
+  const key = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, 'hex') : Buffer.from(raw, 'base64');
+  return key.length === 32 ? key : null;
+})();
+
+const encryptDatabasePasswordWithKey = (password, key) => {
+  if (!key) throw new Error('Database credential encryption key is unavailable.');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(String(password), 'utf8'), cipher.final()]);
+  return `v1:${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${encrypted.toString('base64')}`;
+};
+
+const decryptDatabasePasswordWithKey = (value, key) => {
+  if (!key) throw new Error('Database credential encryption key is unavailable.');
+  const parts = String(value || '').split(':');
+  if (parts.length !== 4 || parts[0] !== 'v1') throw new Error('This database credential must be saved again with credential encryption enabled.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(parts[1], 'base64'));
+  decipher.setAuthTag(Buffer.from(parts[2], 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(parts[3], 'base64')), decipher.final()]).toString('utf8');
+};
 
 /* ------------------------------------------------------------------ */
 /*  Brute-force protection / captcha configuration                     */
@@ -293,12 +318,97 @@ const rowToUser = (row) => {
   };
 };
 
+/* ------------------------------------------------------------------ */
+/*  Gestor de Connection Pool para PostgreSQL / PostGIS               */
+/* ------------------------------------------------------------------ */
+let currentPgPool = null;
+let currentPgConfigHash = null;
+
+const getPgPool = (config) => {
+  const configHash = `${config.host}:${config.port}:${config.database_name}:${config.username}:${config.password}`;
+  if (currentPgPool && currentPgConfigHash === configHash) {
+    return currentPgPool;
+  }
+  if (currentPgPool) {
+    currentPgPool.end().catch(() => {});
+  }
+  currentPgPool = new pg.Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database_name,
+    user: config.username,
+    password: config.password,
+    max: 15,
+    idleTimeoutMillis: 30000
+  });
+  currentPgConfigHash = configHash;
+  return currentPgPool;
+};
+
+const validatePostgisConnection = async (config) => {
+  const client = new pg.Client({
+    host: config.host,
+    port: config.port,
+    database: config.database_name,
+    user: config.username,
+    password: config.password,
+    connectionTimeoutMillis: 5000
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+  } finally {
+    await client.end().catch(() => {});
+  }
+};
+
+const validateSqlServerConnection = async (config) => {
+  const { default: mssql } = await import('mssql');
+  const pool = new mssql.ConnectionPool({
+    server: config.host,
+    port: config.port,
+    database: config.database_name,
+    user: config.username,
+    password: config.password,
+    options: { encrypt: true, trustServerCertificate: false },
+    connectionTimeout: 5000
+  });
+  try {
+    await pool.connect();
+    await pool.request().query('SELECT 1 AS qtiler_connection_test');
+  } finally {
+    await pool.close().catch(() => {});
+  }
+};
+
 export const register = async ({ app, security, dataDir, baseDir }) => {
+  if (!DEFAULT_ADMIN_PASSWORD) {
+    throw new Error('QTILER_DEFAULT_ADMIN_PASSWORD is required before QtilerAuth can start.');
+  }
   /* ---------------------------------------------------------------- */
   /*  Database initialization                                          */
   /* ---------------------------------------------------------------- */
   const dataRoot = path.resolve(dataDir, '..');
   const db = getAuthDb(dataRoot);
+
+  /* ---------------------------------------------------------------- */
+  /*  Tabla para Multibase de Datos (PostGIS / SQL Server)            */
+  /* ---------------------------------------------------------------- */
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS database_connections (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      engine TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL,
+      database_name TEXT NOT NULL,
+      username TEXT NOT NULL,
+      password_encrypted TEXT,
+      is_default INTEGER DEFAULT 0,
+      created_at TEXT,
+      updated_at TEXT
+    );
+  `);
 
   /* ---------------------------------------------------------------- */
   /*  Auto-migrate from JSON files (one-time, on first startup)        */
@@ -456,7 +566,92 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     upsertUserSessionsRevokedAt: db.prepare(`
       INSERT INTO config (key, value) VALUES (@key, @value)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `)
+    `),
+    getAllDbs: db.prepare('SELECT id, name, engine, host, port, database_name, username, is_default, created_at FROM database_connections ORDER BY created_at DESC'),
+    getDbById: db.prepare('SELECT * FROM database_connections WHERE id = ?'),
+    getDefaultDb: db.prepare('SELECT * FROM database_connections WHERE is_default = 1 LIMIT 1'),
+    insertDb: db.prepare(`
+      INSERT INTO database_connections (id, name, engine, host, port, database_name, username, password_encrypted, is_default, created_at, updated_at)
+      VALUES (@id, @name, @engine, @host, @port, @database_name, @username, @password_encrypted, @is_default, @created_at, @updated_at)
+    `),
+    updateDb: db.prepare(`
+      UPDATE database_connections
+      SET name = @name, engine = @engine, host = @host, port = @port, database_name = @database_name,
+          username = @username, password_encrypted = @password_encrypted, is_default = @is_default, updated_at = @updated_at
+      WHERE id = @id
+    `),
+    deleteDb: db.prepare('DELETE FROM database_connections WHERE id = ?'),
+    clearDefaultDb: db.prepare('UPDATE database_connections SET is_default = 0')
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Función de Impersonación para PostgreSQL (`SET LOCAL ROLE`)        */
+  /* ------------------------------------------------------------------ */
+  const executePostgisQueryAsUser = async (username, queryCallback, selectedConnection = null) => {
+    const activeDbConfig = selectedConnection || stmts.getDefaultDb.get() || stmts.getAllDbs.all()[0];
+    if (!activeDbConfig) {
+      throw new Error('No hay ninguna conexión de base de datos configurada en QtilerAuth.');
+    }
+    if (activeDbConfig.engine !== 'postgres') {
+      throw new Error('The selected database connection is not PostgreSQL/PostGIS.');
+    }
+    const pool = getPgPool({ ...activeDbConfig, password: decryptDatabasePassword(activeDbConfig.password_encrypted) });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const safeRole = String(username).replace(/"/g, '""');
+      await client.query(`SET LOCAL ROLE "${safeRole}"`);
+      const result = await queryCallback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  };
+
+  const executeSqlServerQueryAsUser = async (username, queryCallback, selectedConnection = null) => {
+    const activeDbConfig = selectedConnection || stmts.getDefaultDb.get() || stmts.getAllDbs.all()[0];
+    if (!activeDbConfig) throw new Error('No database connection is configured in QtilerAuth.');
+    if (activeDbConfig.engine !== 'mssql') throw new Error('The selected database connection is not Microsoft SQL Server.');
+    const { default: mssql } = await import('mssql');
+    const pool = new mssql.ConnectionPool({
+      server: activeDbConfig.host,
+      port: activeDbConfig.port,
+      database: activeDbConfig.database_name,
+      user: activeDbConfig.username,
+      password: decryptDatabasePassword(activeDbConfig.password_encrypted),
+      options: { encrypt: true, trustServerCertificate: false },
+      connectionTimeout: 5000,
+      requestTimeout: 30000
+    });
+    let transaction = null;
+    try {
+      await pool.connect();
+      transaction = new mssql.Transaction(pool);
+      await transaction.begin();
+      const request = new mssql.Request(transaction);
+      request.input('qtiler_username', mssql.NVarChar(255), username);
+      await request.query("EXEC sys.sp_set_session_context @key=N'qtiler_username', @value=@qtiler_username;");
+      const result = await queryCallback(transaction, mssql);
+      await transaction.commit();
+      return result;
+    } catch (err) {
+      await transaction?.rollback().catch(() => {});
+      throw err;
+    } finally {
+      await pool.close().catch(() => {});
+    }
+  };
+
+  const executeDatabaseQueryAsUser = async (username, postgresCallback, sqlServerCallback, selectedConnection = null) => {
+    const connection = selectedConnection || stmts.getDefaultDb.get() || stmts.getAllDbs.all()[0];
+    if (!connection) throw new Error('No database connection is configured in QtilerAuth.');
+    if (connection.engine === 'postgres') return executePostgisQueryAsUser(username, postgresCallback, connection);
+    if (connection.engine === 'mssql') return executeSqlServerQueryAsUser(username, sqlServerCallback, connection);
+    throw new Error('Unsupported database engine.');
   };
 
   /* ---------------------------------------------------------------- */
@@ -501,9 +696,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       locked,
       retryAfterSeconds: locked ? LOGIN_LOCKOUT_SECONDS : 0,
       captchaProvider: CAPTCHA_ENABLED ? CAPTCHA_PROVIDER : null,
-      // For PoW the "site key" slot carries the difficulty so the client knows
-      // how hard it should hash before submitting; for external providers it's
-      // the public site-key from their dashboard.
       captchaSiteKey: CAPTCHA_ENABLED
         ? (CAPTCHA_PROVIDER === 'pow' ? String(POW_DIFFICULTY) : CAPTCHA_SITE_KEY)
         : null
@@ -540,12 +732,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     if (!apiKey) return null;
     const needle = String(apiKey || '').trim();
     if (!needle) return null;
-    // Preferred path: SHA-256 hash lookup.
     let row = stmts.getUserByApiKeyHash.get(hashApiKey(needle));
-    // Fallback: legacy plaintext column (pre-migration / pre-rotation).
     if (!row) row = stmts.getUserByApiKey.get(needle);
     if (!row) return null;
-    // Throttled last-used update (at most once per minute per key).
     try {
       const last = row.api_key_last_used_at ? Date.parse(row.api_key_last_used_at) : 0;
       if (!last || (Date.now() - last) >= API_KEY_LAST_USED_THROTTLE_MS) {
@@ -627,10 +816,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   };
 
   const ensureSecret = () => {
-    // Cluster workers start in parallel on first install. INSERT OR REPLACE
-    // would let the last writer overwrite jwtSecret while earlier workers
-    // keep the old value in memory — login then loops until a service restart.
     stmts.insertConfigIgnore.run('jwtSecret', crypto.randomBytes(32).toString('hex'));
+    if (!DATABASE_CREDENTIALS_KEY) {
+      stmts.insertConfigIgnore.run('databaseCredentialsKey', crypto.randomBytes(32).toString('hex'));
+    }
     const cfg = readConfigMap();
     const currentTtl = Number(cfg.tokenTtlSeconds);
     if (!Number.isFinite(currentTtl) || currentTtl <= 0) {
@@ -643,6 +832,18 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       stmts.insertConfigIgnore.run('refreshTtlSeconds', '1209600');
     }
   };
+
+  const getDatabaseCredentialsKey = () => {
+    if (DATABASE_CREDENTIALS_KEY) return DATABASE_CREDENTIALS_KEY;
+    const stored = readConfigMap().databaseCredentialsKey;
+    if (!/^[0-9a-f]{64}$/i.test(String(stored || ''))) {
+      throw new Error('Database credential encryption key is unavailable.');
+    }
+    return Buffer.from(stored, 'hex');
+  };
+
+  const encryptDatabasePassword = (password) => encryptDatabasePasswordWithKey(password, getDatabaseCredentialsKey());
+  const decryptDatabasePassword = (value) => decryptDatabasePasswordWithKey(value, getDatabaseCredentialsKey());
 
   const readConfig = () => {
     const cfg = readConfigMap();
@@ -698,6 +899,25 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return editUsers.includes(user.id)
       || editRoles.includes(user.role)
       || userHasPermission(user, `project:edit:${projectId}`);
+  };
+
+  const canReadDatabase = (user, connection) => {
+    if (!user || !connection) return false;
+    if (user.role === ROLE_ADMIN) return true;
+    if (normalizeUsername(user.username) === normalizeUsername(connection.username)) return true;
+    return userHasPermission(user, 'database:read')
+      || userHasPermission(user, `database:read:${connection.id}`);
+  };
+
+  const canAccessProject = (user, projectId) => {
+    if (!projectId) return false;
+    if (user?.role === ROLE_ADMIN) return true;
+    const entry = getProjectAccess(projectId);
+    if (entry?.public) return true;
+    if (!user) return false;
+    return ensureArrayOfStrings(user.projects).includes(projectId)
+      || ensureArrayOfStrings(entry?.allowedUsers).includes(user.id)
+      || ensureArrayOfStrings(entry?.allowedRoles).includes(user.role);
   };
 
   const canEditPortal = (user, portalId = 'Qtiler2Origo') => {
@@ -906,8 +1126,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       });
       console.warn(`QtilerAuth: generated API key for user '${u.username}' (shown once): ${newKey}`);
     } else if (u.apiKey && !u.apiKeyHash) {
-      // Migration: legacy plaintext key — backfill hash + prefix but keep plaintext
-      // so that existing customers can still copy/rotate from the admin UI.
       updateUserFields(u.id, {
         apiKeyHash: hashApiKey(u.apiKey),
         apiKeyPrefix: apiKeyPrefixOf(u.apiKey)
@@ -959,14 +1177,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   /* ---------------------------------------------------------------- */
   const { jwtSecret, tokenTtlSeconds } = readConfig();
 
-  // Revocation: each token carries a random `jti`. We store revoked jtis with
-  // their original `exp` so the row can be pruned once the natural expiry
-  // passes. We also support a per-user `revokedBefore` cutoff so an admin
-  // can invalidate every active session for a user with a single config write
-  // instead of inserting one row per active token.
   const REVOKED_BEFORE_KEY_PREFIX = 'user_sessions_revoked_before:';
   let _lastRevokedPrune = 0;
-  const _userRevokedBefore = new Map(); // userId -> epoch seconds
+  const _userRevokedBefore = new Map();
 
   const loadUserRevokedBefore = (userId) => {
     if (!userId) return 0;
@@ -1010,19 +1223,16 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
 
   const isTokenRevoked = (decoded) => {
     if (!decoded || typeof decoded !== 'object') return false;
-    // Per-user cutoff: any token issued before this timestamp is invalid.
     if (decoded.sub && decoded.iat) {
       const cutoff = loadUserRevokedBefore(decoded.sub);
       if (cutoff && Number(decoded.iat) < cutoff) return true;
     }
-    // Specific jti revoked (logout).
     if (decoded.jti) {
       try {
         const row = stmts.isRevokedJti.get(String(decoded.jti));
         if (row) return true;
       } catch {}
     }
-    // Opportunistic prune (at most once per hour).
     const now = Math.floor(Date.now() / 1000);
     if (now - _lastRevokedPrune > 3600) {
       _lastRevokedPrune = now;
@@ -1063,7 +1273,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
           const user = findUserById(decoded.sub);
           req.user = user ? pickUserPayload(user) : null;
 
-          // Sliding idle timeout for browser cookie sessions.
           const isLogoutRequest = req.path === '/auth/logout' || req.originalUrl === '/auth/logout';
           if (req.user && !bearer && !isLogoutRequest) {
             try {
@@ -1090,7 +1299,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
           req.user = null;
           return next();
         }
-        // Per-key rate limit (in-memory sliding minute window). Off by default.
         if (API_RATE_LIMIT_PER_MINUTE > 0) {
           const keyHash = user.apiKeyHash || hashApiKey(apiKey);
           if (!checkApiKeyRateLimit(keyHash)) {
@@ -1104,6 +1312,22 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
 
       const basicCreds = parseBasicAuth(req);
       if (basicCreds) {
+        if (/^qk_[0-9a-f]{48}$/i.test(String(basicCreds.username || ''))) {
+          const user = findUserByApiKey(basicCreds.username);
+          if (!user || user.status === 'disabled') {
+            req.user = null;
+            return next();
+          }
+          if (API_RATE_LIMIT_PER_MINUTE > 0) {
+            const keyHash = user.apiKeyHash || hashApiKey(basicCreds.username);
+            if (!checkApiKeyRateLimit(keyHash)) {
+              res.set('Retry-After', '60');
+              return res.status(429).json({ error: 'api_key_rate_limited' });
+            }
+          }
+          req.user = pickUserPayload(user);
+          return next();
+        }
         const user = findUserByUsername(basicCreds.username);
         if (!user || user.status === 'disabled') {
           req.user = null;
@@ -1182,8 +1406,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return next();
   });
 
-  // Public preflight: lets the login form know whether to render a captcha
-  // for this username/IP, without leaking whether the user exists.
   router.post('/login-status', (req, res) => {
     const ip = getClientIp(req);
     const username = req.body?.username;
@@ -1197,8 +1419,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     });
   });
 
-  // Issues a fresh PoW challenge. Stateless — the signature carries everything
-  // we need to verify the answer. Only meaningful when AUTH_CAPTCHA_PROVIDER=pow.
   router.get('/captcha-challenge', (req, res) => {
     if (CAPTCHA_PROVIDER !== 'pow') {
       return res.status(404).json({ error: 'pow_not_enabled' });
@@ -1210,7 +1430,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     const ip = getClientIp(req);
     const userAgent = req.get('user-agent') || '';
     const { username, password, captchaToken } = req.body || {};
-    // Honeypot: any bot blindly filling all fields trips this. Real form has no such field.
     const honeypot = req.body?.email_confirm || req.body?.website || '';
 
     const finish = (httpStatus, payload, audit) => {
@@ -1227,7 +1446,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     };
 
     if (honeypot) {
-      // Pretend a normal failure; do not tell the bot what it tripped.
       return finish(401, { error: 'invalid_credentials' }, { reason: 'honeypot' });
     }
 
@@ -1295,8 +1513,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   });
 
   router.post('/logout', (req, res) => {
-    // Best-effort revocation of the current session's jti so the cookie/Bearer
-    // cannot be reused even if the client kept a copy.
     try {
       const bearer = getAuthHeaderToken(req);
       const token = bearer || req.cookies?.[COOKIE_NAME];
@@ -1320,7 +1536,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     if (!req.user) {
       return res.status(401).json({ error: 'auth_required' });
     }
-    // Return the user's own apiKey so the frontend can build authenticated URLs
     const fullUser = req.user.id ? findUserById(req.user.id) : null;
     return res.json({ user: fullUser ? pickSelfPayload(fullUser) : req.user });
   });
@@ -1389,9 +1604,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       username: cleanUsername,
       passwordHash,
       role: targetRole,
-      // Compatibility mode (default): keep plaintext key so admins can copy it
-      // later without rotating. Set AUTH_STORE_PLAINTEXT_API_KEYS=0 to keep
-      // hash-only storage (more secure, but copy is one-time only).
       apiKey: STORE_PLAINTEXT_API_KEYS ? newApiKey : null,
       apiKeyHash: hashApiKey(newApiKey),
       apiKeyPrefix: apiKeyPrefixOf(newApiKey),
@@ -1435,10 +1647,6 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     });
   });
 
-  // Revoke every active session (cookie/Bearer JWT) for the target user.
-  // Implemented as a per-user cutoff (`iat < now` becomes invalid) so we don't
-  // need to enumerate active jtis. Existing API keys keep working until the
-  // admin rotates them via /users/:id/api-key above.
   adminRouter.post('/users/:id/revoke-sessions', (req, res) => {
     const { id } = req.params;
     const user = findUserById(id);
@@ -1535,8 +1743,441 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     res.json({ projectId, layers });
   });
 
+  // --- Endpoints CRUD de Conexiones de Base de Datos (Multibase) ---
+  adminRouter.get('/databases', (_req, res) => {
+    res.json({ connections: stmts.getAllDbs.all() });
+  });
+
+  adminRouter.post('/databases', (req, res) => {
+    const { id, name, engine, host, port, databaseName, username, password, isDefault } = req.body || {};
+    if (!name || !engine || !host || !databaseName || !username) {
+      return res.status(400).json({ error: 'missing_fields' });
+    }
+    const normalizedEngine = String(engine).toLowerCase();
+    if (!['postgres', 'mssql'].includes(normalizedEngine)) {
+      return res.status(400).json({ error: 'unsupported_database_engine', details: 'Only PostgreSQL/PostGIS and Microsoft SQL Server are supported.' });
+    }
+
+    const dbId = id || crypto.randomUUID();
+    const existing = stmts.getDbById.get(dbId);
+
+    let finalPassword = password;
+    if ((!password || password === '********') && existing) {
+      try {
+        finalPassword = decryptDatabasePassword(existing.password_encrypted);
+      } catch (err) {
+        return res.status(400).json({ error: 'credential_migration_required', details: err.message });
+      }
+    }
+    if (!finalPassword) {
+      return res.status(400).json({ error: 'password_required' });
+    }
+
+    const parsedPort = Number(port) || (normalizedEngine === 'mssql' ? 1433 : 5432);
+    if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+      return res.status(400).json({ error: 'invalid_port' });
+    }
+
+    const payload = {
+      id: dbId,
+      name: name.trim(),
+      engine: normalizedEngine,
+      host: host.trim(),
+      port: parsedPort,
+      database_name: databaseName.trim(),
+      username: username.trim(),
+      password_encrypted: encryptDatabasePassword(finalPassword),
+      is_default: isDefault ? 1 : 0,
+      created_at: existing ? existing.created_at : nowIso(),
+      updated_at: nowIso()
+    };
+
+    const connectionForValidation = { ...payload, password: finalPassword };
+    const validateConnection = normalizedEngine === 'mssql' ? validateSqlServerConnection : validatePostgisConnection;
+    validateConnection(connectionForValidation)
+      .then(() => {
+        const saveConnection = db.transaction(() => {
+          if (isDefault) stmts.clearDefaultDb.run();
+          if (existing) stmts.updateDb.run(payload);
+          else stmts.insertDb.run(payload);
+        });
+        saveConnection();
+        res.json({ ok: true, id: dbId });
+      })
+      .catch((err) => {
+        res.status(400).json({ error: 'postgis_connection_failed', details: err?.message || 'Could not connect to PostgreSQL.' });
+      });
+  });
+
+  adminRouter.delete('/databases/:id', (req, res) => {
+    stmts.deleteDb.run(req.params.id);
+    res.json({ ok: true });
+  });
+
   // Avoid collisions with Qtiler core admin UI under /admin.
   app.use('/auth-admin', adminRouter);
+
+  /* ------------------------------------------------------------------ */
+  /*  Rutas para QGIS Desktop con Impersonación de PostGIS              */
+  /* ------------------------------------------------------------------ */
+  const qgisRouter = express.Router();
+  qgisRouter.use(security.attachUser);
+
+  const sendGatewayError = (res, err) => {
+    const requestId = crypto.randomUUID();
+    console.warn(`[QtilerAuth] Database gateway request failed (${requestId}):`, err?.message || err);
+    return res.status(500).json({ error: 'database_gateway_error', requestId });
+  };
+
+  const requireQgisUser = (req, res) => {
+    if (req.user) return true;
+    res.status(401).json({ error: 'auth_required' });
+    return false;
+  };
+
+  const getAuthorizedDatabaseConnections = (user) => stmts.getAllDbs.all().filter((connection) => canReadDatabase(user, connection));
+
+  qgisRouter.get('/connections', (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'auth_required' });
+    const connections = getAuthorizedDatabaseConnections(req.user).map((connection) => ({
+      id: connection.id,
+      name: connection.name,
+      engine: connection.engine,
+      isDefault: !!connection.is_default
+    }));
+    res.json({ connections });
+  });
+
+  qgisRouter.use((req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'auth_required' });
+    const connections = getAuthorizedDatabaseConnections(req.user);
+    if (!connections.length) return res.status(403).json({ error: 'database_access_forbidden' });
+    const requestedId = String(req.query?.connectionId || req.get('x-qtiler-database-id') || '').trim();
+    const connection = requestedId
+      ? connections.find((entry) => entry.id === requestedId)
+      : (connections.find((entry) => entry.is_default) || connections[0]);
+    if (!connection) return res.status(403).json({ error: 'database_access_forbidden' });
+    req.databaseConnection = stmts.getDbById.get(connection.id);
+    if (!req.databaseConnection) return res.status(404).json({ error: 'database_not_configured' });
+    return next();
+  });
+
+  const isSafePostgisIdentifier = (value) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(value || ''));
+  const normalizeStoredProjectName = (value) => {
+    const name = String(value || '').trim();
+    if (!name || name.length > 255 || /[\x00-\x1f\x7f]/.test(name)) return null;
+    return name;
+  };
+
+  qgisRouter.get('/schemas', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+    try {
+      const schemas = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const result = await client.query(`
+          SELECT schema_name
+          FROM information_schema.schemata
+          WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+            AND has_schema_privilege(current_user, schema_name, 'USAGE')
+          ORDER BY schema_name
+        `);
+        return result.rows.map((row) => row.schema_name);
+      }, async (transaction, mssql) => {
+        const result = await new mssql.Request(transaction).query(`
+          SELECT DISTINCT s.name AS schema_name
+          FROM sys.schemas AS s
+          JOIN sys.tables AS t ON t.schema_id = s.schema_id
+          JOIN sys.columns AS c ON c.object_id = t.object_id
+          JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id
+          WHERE ty.name IN ('geometry', 'geography')
+            AND s.name NOT IN ('sys', 'INFORMATION_SCHEMA')
+          ORDER BY s.name
+        `);
+        return result.recordset.map((row) => row.schema_name);
+      }, req.databaseConnection);
+      res.json({ schemas });
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  qgisRouter.get('/schemas/:schema/layers', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+    const schema = String(req.params.schema || '');
+    if (!isSafePostgisIdentifier(schema)) return res.status(400).json({ error: 'invalid_schema' });
+    try {
+      const layers = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const result = await client.query(`
+          SELECT f_table_name AS table_name, f_geometry_column AS geometry_column,
+                 type AS geometry_type, srid
+          FROM public.geometry_columns
+          WHERE f_table_schema = $1
+            AND has_table_privilege(format('%I.%I', f_table_schema, f_table_name), 'SELECT')
+          ORDER BY f_table_name, f_geometry_column
+        `, [schema]);
+        return result.rows;
+      }, async (transaction, mssql) => {
+        const request = new mssql.Request(transaction);
+        request.input('schema', mssql.NVarChar(128), schema);
+        const result = await request.query(`
+          SELECT t.name AS table_name, c.name AS geometry_column, ty.name AS geometry_type, NULL AS srid
+          FROM sys.tables AS t
+          JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+          JOIN sys.columns AS c ON c.object_id = t.object_id
+          JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id
+          WHERE s.name = @schema AND ty.name IN ('geometry', 'geography')
+          ORDER BY t.name, c.name
+        `);
+        return result.recordset;
+      }, req.databaseConnection);
+      res.json({ schema, layers });
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  qgisRouter.get('/gateway/schemas/:schema/layers/:table/features', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+    const schema = String(req.params.schema || '');
+    const table = String(req.params.table || '');
+    if (!isSafePostgisIdentifier(schema) || !isSafePostgisIdentifier(table)) {
+      return res.status(400).json({ error: 'invalid_layer' });
+    }
+    const requestedLimit = Number.parseInt(String(req.query?.limit || ''), 10);
+    const requestedOffset = Number.parseInt(String(req.query?.offset || ''), 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 10000)) : 2000;
+    const offset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
+    try {
+      const featureCollection = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const metadata = await client.query(`
+          SELECT f_geometry_column AS geometry_column, srid
+          FROM public.geometry_columns
+          WHERE f_table_schema = $1 AND f_table_name = $2
+            AND has_table_privilege(format('%I.%I', f_table_schema, f_table_name), 'SELECT')
+          LIMIT 1
+        `, [schema, table]);
+        const geometryColumn = metadata.rows[0]?.geometry_column;
+        const sourceSrid = Number(metadata.rows[0]?.srid) || 4326;
+        if (!geometryColumn || !isSafePostgisIdentifier(geometryColumn)) {
+          throw new Error('Spatial layer not found or not authorized.');
+        }
+        const result = await client.query(`
+          SELECT ST_AsGeoJSON(t."${geometryColumn}")::json AS geometry,
+                 to_jsonb(t) - '${geometryColumn}' AS properties
+          FROM "${schema}"."${table}" AS t
+          WHERE t."${geometryColumn}" IS NOT NULL
+          LIMIT $1 OFFSET $2
+        `, [limit, offset]);
+        return {
+          type: 'FeatureCollection',
+          crs: { type: 'name', properties: { name: `EPSG:${sourceSrid}` } },
+          sourceCrs: `EPSG:${sourceSrid}`,
+          features: result.rows.map((row) => ({ type: 'Feature', geometry: row.geometry, properties: row.properties || {} })),
+          numberReturned: result.rows.length,
+          limit,
+          offset,
+          nextOffset: result.rows.length === limit ? offset + result.rows.length : null
+        };
+      }, async (transaction, mssql) => {
+        const metadataRequest = new mssql.Request(transaction);
+        metadataRequest.input('schema', mssql.NVarChar(128), schema);
+        metadataRequest.input('table', mssql.NVarChar(128), table);
+        const metadata = await metadataRequest.query(`
+          SELECT c.name AS geometry_column
+          FROM sys.tables AS t
+          JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+          JOIN sys.columns AS c ON c.object_id = t.object_id
+          JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id
+          WHERE s.name = @schema AND t.name = @table AND ty.name IN ('geometry', 'geography')
+        `);
+        const geometryColumn = metadata.recordset[0]?.geometry_column;
+        if (!geometryColumn || !isSafePostgisIdentifier(geometryColumn)) throw new Error('Spatial layer not found or not authorized.');
+        const columnsRequest = new mssql.Request(transaction);
+        columnsRequest.input('schema', mssql.NVarChar(128), schema);
+        columnsRequest.input('table', mssql.NVarChar(128), table);
+        columnsRequest.input('geometry', mssql.NVarChar(128), geometryColumn);
+        const columns = await columnsRequest.query(`
+          SELECT c.name
+          FROM sys.columns AS c
+          JOIN sys.tables AS t ON t.object_id = c.object_id
+          JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+          WHERE s.name = @schema AND t.name = @table AND c.name <> @geometry
+          ORDER BY c.column_id
+        `);
+        const propertyColumns = columns.recordset
+          .map((column) => column.name)
+          .filter(isSafePostgisIdentifier)
+          .map((column) => `[${column.replace(/]/g, ']]')}]`)
+          .join(', ');
+        const featureRequest = new mssql.Request(transaction);
+        featureRequest.input('limit', mssql.Int, limit);
+        featureRequest.input('offset', mssql.Int, offset);
+        const selectProperties = propertyColumns ? `, ${propertyColumns}` : '';
+        const result = await featureRequest.query(`
+          SELECT [${geometryColumn.replace(/]/g, ']]')}].STAsText() AS __qtiler_wkt,
+                 [${geometryColumn.replace(/]/g, ']]')}].STSrid AS __qtiler_srid${selectProperties}
+          FROM [${schema.replace(/]/g, ']]')}].[${table.replace(/]/g, ']]')}]
+          WHERE [${geometryColumn.replace(/]/g, ']]')}] IS NOT NULL
+          ORDER BY (SELECT NULL)
+          OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+        `);
+        const sourceSrid = Number(result.recordset[0]?.__qtiler_srid) || 4326;
+        return {
+          type: 'FeatureCollection',
+          crs: { type: 'name', properties: { name: `EPSG:${sourceSrid}` } },
+          sourceCrs: `EPSG:${sourceSrid}`,
+          features: result.recordset.map((row) => {
+            const wkt = row.__qtiler_wkt;
+            delete row.__qtiler_wkt;
+            delete row.__qtiler_srid;
+            return { type: 'Feature', geometry: wellknown.parse(wkt), properties: row };
+          }),
+          numberReturned: result.recordset.length,
+          limit,
+          offset,
+          nextOffset: result.recordset.length === limit ? offset + result.recordset.length : null
+        };
+      }, req.databaseConnection);
+      res.set('Cache-Control', 'no-store');
+      res.json(featureCollection);
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  // 1. Obtener la lista de proyectos autorizados desde PostGIS usando Impersonación
+  qgisRouter.get('/projects', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+
+    try {
+      const projects = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const result = await client.query('SELECT name, metadata FROM public.qgis_projects');
+        return result.rows;
+      }, async (transaction, mssql) => {
+        const result = await new mssql.Request(transaction).query('SELECT name, metadata FROM dbo.qgis_projects ORDER BY name');
+        return result.recordset;
+      }, req.databaseConnection);
+
+      const allowedProjects = projects.filter((project) => canAccessProject(req.user, project.name));
+
+      res.json({ projects: allowedProjects, username: req.user.username });
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  // 2. Descargar un proyecto .qgz desde PostGIS usando Impersonación
+  qgisRouter.get('/projects/:name', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+
+    const projectName = normalizeStoredProjectName(req.params.name);
+    if (!projectName) return res.status(400).json({ error: 'invalid_project_name' });
+    if (!canAccessProject(req.user, projectName)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+    try {
+      const projectRow = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const result = await client.query('SELECT content FROM public.qgis_projects WHERE name = $1', [projectName]);
+        return result.rows[0];
+      }, async (transaction, mssql) => {
+        const request = new mssql.Request(transaction);
+        request.input('name', mssql.NVarChar(255), projectName);
+        const result = await request.query('SELECT content FROM dbo.qgis_projects WHERE name = @name');
+        return result.recordset[0];
+      }, req.databaseConnection);
+
+      if (!projectRow || !projectRow.content) {
+        return res.status(404).json({ error: 'project_not_found' });
+      }
+
+      const downloadName = `${String(projectName).replace(/[^A-Za-z0-9_.-]/g, '_')}.qgz`;
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
+      res.send(projectRow.content);
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  // 3. Guardar o actualizar un proyecto .qgz en PostGIS usando Impersonación
+  qgisRouter.post('/projects/save', express.raw({ type: 'application/octet-stream', limit: '50mb' }), async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+
+    const projectName = normalizeStoredProjectName(req.headers['x-qgis-project-name']);
+    if (!projectName) return res.status(400).json({ error: 'invalid_project_name' });
+
+    if (!canEditProject(req.user, projectName)) {
+      return res.status(403).json({ error: 'forbidden_project_edit' });
+    }
+
+    try {
+      const contentBuffer = req.body;
+      const metadata = JSON.stringify({
+        last_modified_by: req.user.username,
+        updated_at: new Date().toISOString()
+      });
+
+      await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const query = `
+          INSERT INTO public.qgis_projects (name, metadata, content)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (name) DO UPDATE
+          SET content = EXCLUDED.content, metadata = EXCLUDED.metadata, updated_at = NOW();
+        `;
+        await client.query(query, [projectName, metadata, contentBuffer]);
+      }, async (transaction, mssql) => {
+        const request = new mssql.Request(transaction);
+        request.input('name', mssql.NVarChar(255), projectName);
+        request.input('metadata', mssql.NVarChar(mssql.MAX), metadata);
+        request.input('content', mssql.VarBinary(mssql.MAX), contentBuffer);
+        await request.query(`
+          MERGE dbo.qgis_projects AS target
+          USING (SELECT @name AS name, @metadata AS metadata, @content AS content) AS source
+          ON target.name = source.name
+          WHEN MATCHED THEN UPDATE SET content = source.content, metadata = source.metadata, updated_at = SYSUTCDATETIME()
+          WHEN NOT MATCHED THEN INSERT (name, metadata, content) VALUES (source.name, source.metadata, source.content);
+        `);
+      }, req.databaseConnection);
+
+      res.json({ ok: true, message: `Proyecto ${projectName} guardado en PostGIS bajo el rol ${req.user.username}` });
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  qgisRouter.get('/layers', async (req, res) => {
+    if (!requireQgisUser(req, res)) return;
+
+    try {
+      const layers = await executeDatabaseQueryAsUser(req.user.username, async (client) => {
+        const result = await client.query(`
+          SELECT f_table_schema AS schema, f_table_name AS table, f_geometry_column AS geometry_column,
+                 type AS geometry_type, srid
+          FROM public.geometry_columns
+          WHERE f_table_schema NOT IN ('pg_catalog', 'information_schema')
+            AND has_table_privilege(format('%I.%I', f_table_schema, f_table_name), 'SELECT')
+          ORDER BY f_table_schema, f_table_name, f_geometry_column
+        `);
+        return result.rows;
+      }, async (transaction, mssql) => {
+        const result = await new mssql.Request(transaction).query(`
+          SELECT s.name AS schema, t.name AS [table], c.name AS geometry_column,
+                 ty.name AS geometry_type, NULL AS srid
+          FROM sys.tables AS t
+          JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+          JOIN sys.columns AS c ON c.object_id = t.object_id
+          JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id
+          WHERE ty.name IN ('geometry', 'geography')
+          ORDER BY s.name, t.name, c.name
+        `);
+        return result.recordset;
+      }, req.databaseConnection);
+      res.json({ layers });
+    } catch (err) {
+      sendGatewayError(res, err);
+    }
+  });
+
+  app.use('/api/qgis', qgisRouter);
 
   const pluginSlug = (path.basename(baseDir || '') || 'QtilerAuth').replace(/[^a-z0-9-_]/gi, '') || 'QtilerAuth';
   app.get(`/plugins/${pluginSlug}/admin`, (_req, res) => res.redirect('/plugins/auth-admin'));
@@ -1544,6 +2185,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   return {
     roles: [ROLE_ADMIN, ROLE_AUTH],
     dispose: () => {
+      if (currentPgPool) {
+        currentPgPool.end().catch(() => {});
+      }
       resetSecurity();
       closeAuthDb();
     }

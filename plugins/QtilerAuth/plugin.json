@@ -1,6 +1,6 @@
 {
   "name": "QtilerAuth",
-  "version": "0.2.0",
+  "version": "0.3.4",
   "displayName": "Authentication & Access Control",
   "description": "Adds user management, JWT auth, and project-level permissions. Uses SQLite for ACID-safe storage.",
   "docs": {
@@ -82,6 +82,9 @@
   "licenseFile": "LICENSE_QtilerAuth.txt",
   "supportContact": "support@mundogis.se",
   "npmDependencies": {
-    "better-sqlite3": "^11.0.0"
+    "mssql": "^11.0.1",
+    "pg": "^8.16.3",
+    "tslib": "^2.8.1",
+    "wellknown": "^0.5.0"
   }
 }

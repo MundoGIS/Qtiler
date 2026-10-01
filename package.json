@@ -17,10 +17,12 @@
     "build:qrigo": "node tools/package-qrigo-plugin.mjs",
     "build:qtiler2qwc": "node tools/package-Qtiler2qwc-plugin.mjs",
     "build:qtiler2origo": "node tools/package-Qtiler2Origo-plugin.mjs",
+    "build:qtiler2hajk": "node tools/package-Qtiler2Hajk-plugin.mjs",
     "build:qtiler3deye": "node tools/package-Qtiler-3D-eye-plugin.mjs",
+    "build:qtiler-connector": "node tools/package-qtiler-connector.mjs",
     "build:qtilerstories": "node tools/package-QtilerStories-plugin.mjs",
     "sync:plugins": "node tools/sync-plugin-staging.mjs",
-    "build:plugins": "npm run build:qtilerauth && npm run build:qrigo && npm run build:qtiler2qwc && npm run build:qtiler2origo && npm run build:vectortiles && npm run build:qtilerstories",
+    "build:plugins": "node tools/build-plugins.mjs",
     "terrainforge": "node plugins/QuantizedMesh/terrainforge/cli.mjs",
     "terrainforge:dry": "node plugins/QuantizedMesh/terrainforge/cli.mjs --dry-run",
     "generate:license:ui": "node tools/generate-license-ui.mjs",
@@ -38,7 +40,7 @@
   },
   "homepage": "https://github.com/MundoGIS/Qtiler/blob/master/README.md",
   "dependencies": {
-    "adm-zip": "0.5.16",
+    "adm-zip": "^0.6.1",
     "archiver": "7.0.1",
     "bcryptjs": "2.4.3",
     "better-sqlite3": "12.8.0",
@@ -47,17 +49,25 @@
     "dotenv": "17.2.3",
     "ejs": "3.1.10",
     "express": "5.1.0",
+    "fast-xml-parser": "^5.11.2",
     "helmet": "8.1.0",
     "jsonwebtoken": "9.0.2",
+    "mssql": "11.0.1",
     "multer": "1.4.5-lts.2",
     "node-windows": "1.0.0-beta.8",
     "ol": "10.8.0",
     "ol-mapbox-style": "13.4.0",
+    "pg": "^8.16.3",
     "proj4": "2.20.8",
-    "sharp": "0.34.5",
-    "yauzl": "3.2.0"
+    "sharp": "^0.35.5",
+    "tslib": "^2.8.1",
+    "wellknown": "0.5.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "nodemon": "3.1.10"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.8.0": true
   }
 }

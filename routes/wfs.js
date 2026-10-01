@@ -1022,6 +1022,21 @@ export const registerWfsRoutes = ({
     return out;
   };
 
+  const decodeXmlEntities = (value) => String(value || '').replace(
+    /&(?:#(\d+)|#x([0-9a-f]+)|(amp|lt|gt|quot|apos));/gi,
+    (entity, decimal, hexadecimal, named) => {
+      if (decimal || hexadecimal) {
+        const codePoint = Number.parseInt(decimal || hexadecimal, decimal ? 10 : 16);
+        try {
+          return Number.isInteger(codePoint) ? String.fromCodePoint(codePoint) : entity;
+        } catch {
+          return entity;
+        }
+      }
+      return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[String(named).toLowerCase()] || entity;
+    }
+  );
+
   // Minimal recursive-descent XML element parser - just enough to walk the
   // predictable ogc:Filter trees that OpenLayers' WFS format writer produces
   // (Filter > And/Or > PropertyIsLike > PropertyName/Literal). Avoids adding
@@ -1049,7 +1064,7 @@ export const registerWfsRoutes = ({
     while ((am = attrRe.exec(attrsStr))) {
       const name = am[1] || am[3];
       const value = am[2] !== undefined ? am[2] : am[4];
-      attrs[name] = value;
+      attrs[name] = decodeXmlEntities(value);
     }
     if (selfClosing) return { tagName: localName, attrs, children: [], text: '', endIndex: j };
     const children = [];
@@ -1080,7 +1095,7 @@ export const registerWfsRoutes = ({
         pos += chunk.length || 1;
       }
     }
-    return { tagName: localName, attrs, children, text: textParts.join('').trim(), endIndex: pos };
+    return { tagName: localName, attrs, children, text: decodeXmlEntities(textParts.join('').trim()), endIndex: pos };
   };
 
   const findFirstElementByLocalName = (xml, localName) => {

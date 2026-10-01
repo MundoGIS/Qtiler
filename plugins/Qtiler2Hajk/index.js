@@ -192,6 +192,40 @@ const safeLayerNameForWfs = (value) => {
   return String(value).normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 };
 
+const decodeXmlText = (value) => String(value || '')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&');
+
+// cache/<project>/index.json only lists cached layers, but WMS/WFS layers are
+// rendered live from the QGIS project and never get a cache entry.
+const readQgisProjectLayerNames = (projectFile) => {
+  const result = { layers: new Set(), themes: new Set() };
+  try {
+    if (!projectFile || !fs.existsSync(projectFile)) return result;
+    let xml = '';
+    if (/\.qgz$/i.test(projectFile)) {
+      const zip = new AdmZip(projectFile);
+      const entry = zip.getEntries().find((item) => /\.qgs$/i.test(item.entryName));
+      if (entry) xml = entry.getData().toString('utf8');
+    } else if (/\.qgs$/i.test(projectFile)) {
+      xml = fs.readFileSync(projectFile, 'utf8');
+    }
+    if (!xml) return result;
+    for (const match of xml.matchAll(/<layername>([\s\S]*?)<\/layername>/gi)) {
+      const value = decodeXmlText(match[1]).trim();
+      if (value) result.layers.add(value);
+    }
+    for (const match of xml.matchAll(/<visibility-preset\b[^>]*name="([^"]*)"/gi)) {
+      const value = decodeXmlText(match[1]).trim();
+      if (value) result.themes.add(value);
+    }
+  } catch { /* fall back to cache-index validation */ }
+  return result;
+};
+
 const xmlAttr = (text, attrName) => {
   const re = new RegExp(`${attrName}="([^"]*)"`, 'i');
   const match = String(text || '').match(re);
@@ -916,12 +950,16 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const qtilerRulesLegacyReplacement = 'const U=this.config.qtilerStyleRules||[];function Q($){if(!Array.isArray(U)||!U.length)return null;const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):void 0,te=String(Q==null?"":Q),oe=String(Z.value==null?"":Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:null}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
     const qtilerRulesOldNormalizerReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){$=String($==null?"":$).trim();for(let G=0;G<2;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));return $}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=$&&$.get?$.get(Z.property):$&&$.getProperties?$.getProperties()[Z.property]:void 0,te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}});return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[G.symbolXOffset||"",G.symbolYOffset||""]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
     const qtilerRulesReplacement = 'const U=this.config.qtilerStyleRules||[];function z($){if($&&typeof $=="object")try{$=JSON.stringify($)}catch{}$=String($==null?"":$).trim();for(let G=0;G<3;G++)(($.startsWith("\\\"")&&$.endsWith("\\\""))||($.startsWith("\'")&&$.endsWith("\'")))&&($=$.slice(1,-1).replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'"));($.startsWith("\\\\\\\"")&&$.endsWith("\\\\\\\""))&&($=$.slice(2,-2));return $.replace(/\\\\\"/g,"\\\"").replace(/\\\\\'/g,"\'")}function W($,G){if(!$||!G)return;let Z=$.get?$.get(G):void 0;if(Z!==void 0&&Z!==null)return Z;const Q=$.getProperties?$.getProperties():{};if(Object.prototype.hasOwnProperty.call(Q,G))return Q[G];const te=String(G).toLowerCase(),oe=Object.keys(Q).find(Ee=>String(Ee).toLowerCase()===te);return oe?Q[oe]:void 0}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=W($,Z.property),te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}})||U[0];return G&&G.icon?[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number.isFinite(Number(G.anchorX))?Number(G.anchorX):.5,Number.isFinite(Number(G.anchorY))?Number(G.anchorY):.5]})})]:[]}function B(){var $=(H,V)=>H.map(oe=>V*oe),G=s,Z=o,Q=[12,7],te=[2,7];';
+    const qtilerPatternRulesMarker = 'qtilerPatternV1';
+    const qtilerRulesFunctionPattern = /function Q\(\$\)\{if\(!Array\.isArray\(U\)\|\|!U\.length\)return(?:null|\[\]);[\s\S]*?\}function B\(\)\{/;
+    const installedPatternRulesFunctionPattern = /function P\(\$\)\{\/\*qtilerPatternV1\*\/[\s\S]*?\}function B\(\)\{var/;
+    const qtilerPatternRulesReplacement = `function P($){/*qtilerPatternV1*/const G=$&&$.hasFill?($.fillColor||"rgba(0,0,0,0)"):"rgba(0,0,0,0)";if(!$||!$.pattern)return G;const Z=Math.max(4,Math.round(Number($.spacing)||10)),Q=document.createElement("canvas");Q.width=Z,Q.height=Z;const te=Q.getContext("2d");if(!te)return G;te.clearRect(0,0,Z,Z),$.transparentBackground||(te.fillStyle=G,te.fillRect(0,0,Z,Z)),te.strokeStyle=$.strokeColor||"#2563eb",te.fillStyle=$.strokeColor||"#2563eb",te.lineWidth=Math.max(.6,Number($.strokeWidth)||1);const oe=Math.max(.8,Number($.size)||2.5);if($.pattern==="dots")te.beginPath(),te.arc(Z/2,Z/2,oe,0,Math.PI*2),te.fill();else{const Ee=H=>{te.save(),te.translate(Z/2,Z/2),te.rotate(H*Math.PI/180),te.beginPath(),te.moveTo(0,-Z*1.5),te.lineTo(0,Z*1.5),te.stroke(),te.restore()},Ie=Number($.angle)||($.pattern==="backslash"?135:$.pattern==="horizontal"?0:$.pattern==="vertical"?90:45);$.pattern==="cross"?(Ee(Ie),Ee((Ie+90)%180)):Ee($.pattern==="backslash"?180-Ie:$.pattern==="horizontal"?90:$.pattern==="vertical"?0:Ie)}return te.createPattern(Q,"repeat")||G}function Q($){if(!Array.isArray(U)||!U.length)return[];const G=U.find(Z=>{if(!Z||!Z.property)return!0;const Q=W($,Z.property),te=z(Q),oe=z(Z.value),Ee=String(Z.operator||"==").toUpperCase();switch(Ee){case"!=":return te!==oe;case"LIKE":return te.toLowerCase().includes(oe.replace(/%/g,"").toLowerCase());case">":return Number(te)>Number(oe);case">=":return Number(te)>=Number(oe);case"<":return Number(te)<Number(oe);case"<=":return Number(te)<=Number(oe);default:return te===oe}})||U.find(Z=>!Z.property)||U[0];if(G&&G.icon)return[new ur({image:new vl({src:G.icon,scale:(Number(G.pointSize)||4)/8,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number.isFinite(Number(G.anchorX))?Number(G.anchorX):.5,Number.isFinite(Number(G.anchorY))?Number(G.anchorY):.5]})})];return G&&(G.hasFill||G.hasStroke||G.pattern)?[new ur({fill:new ar({color:P(G)}),stroke:new vi({color:G.hasStroke?(G.strokeColor||"#2563eb"):"rgba(0,0,0,0)",width:Number.isFinite(Number(G.strokeWidth))?Number(G.strokeWidth):1,lineDash:Array.isArray(G.lineDash)&&G.lineDash.length?G.lineDash:void 0})})]:[]}function B(){`;
     const simpleIconAnchor = 'function Y(){return new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
     const simpleIconReplacement = 'function Y(){return Number.isFinite(Number(a))&&Number.isFinite(Number(l))&&Math.abs(Number(a))<=1&&Math.abs(Number(l))<=1?new vl({src:n,scale:D,anchorXUnits:"fraction",anchorYUnits:"fraction",anchor:[Number(a),Number(l)]}):new vl({src:n,scale:D,anchorXUnits:"pixels",anchorYUnits:"pixels",anchor:[a,l]})}';
     const qtilerRulesReturnAnchor = 'return[new ur(X())]}}class';
     const qtilerRulesReturnReplacement = 'return U.length?Q:[new ur(X())]}}class';
     const editRefreshPattern = /refreshLayer\(e\)\{.*?\}parseWFSTresponse\(e\)\{/;
-    const editRefreshReplacement = 'refreshLayer(e){const t=[],n=i=>{if(!i)return;const s=i.getLayers;if(typeof s=="function"){s().getArray().forEach(n);return}t.push(i)},o=i=>{const s=i&&i.getSource?i.getSource():null;if(!s)return;typeof s.refresh=="function"?s.refresh():s.changed(),typeof s.updateParams=="function"&&s.updateParams({time:Date.now()})};this.map.getLayers().getArray().forEach(n);const i=t.find(s=>{const a=s&&s.getSource?s.getSource():null;if(!a||typeof a.getParams!="function")return!1;const l=a.getParams()||{},n=Array.isArray(l.LAYERS)?l.LAYERS[0]:l.LAYERS;if(typeof n!="string")return!1;const r=String(e||"").split(":").pop(),u=n.split(":").pop();return e===n||r===u});if(i)o(i);else {const r=String(e||"").split(":").pop(),u=t.find(s=>{if(!s||typeof s.get!=="function")return!1;return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)});if(u)o(u);else for(const s of t){const a=s&&s.getSource?s.getSource():null,l=a&&typeof a.getUrl=="function"?a.getUrl():"";a&&(typeof a.refresh=="function"||typeof a.changed=="function")&&String(l||"").match(/(?:^|[?&/])wfs(?:[?&/]|$)/i)&&o(s)}}this.map.updateSize()}parseWFSTresponse(e){';
+    const editRefreshReplacement = 'refreshLayer(e){/*qtilerRefreshV2*/const t=[],n=i=>{if(!i)return;const s=i.getLayers;if(typeof s=="function"){s().getArray().forEach(n);return}t.push(i)},o=i=>{const s=i&&i.getSource?i.getSource():null;if(!s)return;try{typeof i.getVisible=="function"&&typeof i.setVisible=="function"&&!i.getVisible()&&i.setVisible(!0)}catch{}try{typeof s.getFeatures=="function"&&typeof s.clear=="function"&&s.clear(!0)}catch{}try{typeof s.refresh=="function"?s.refresh():typeof s.changed=="function"&&s.changed()}catch{}try{typeof s.updateParams=="function"&&s.updateParams({time:Date.now()})}catch{}try{typeof i.changed=="function"&&i.changed()}catch{}};this.map.getLayers().getArray().forEach(n);const i=t.find(s=>{const a=s&&s.getSource?s.getSource():null;if(!a||typeof a.getParams!="function")return!1;const l=a.getParams()||{},n=Array.isArray(l.LAYERS)?l.LAYERS[0]:l.LAYERS;if(typeof n!="string")return!1;const r=String(e||"").split(":").pop(),u=n.split(":").pop();return e===n||r===u});if(i)o(i);else {const r=String(e||"").split(":").pop(),u=t.find(s=>{if(!s||typeof s.get!=="function")return!1;return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)});if(u)o(u);else for(const s of t){const a=s&&s.getSource?s.getSource():null,l=a&&typeof a.getUrl=="function"?a.getUrl():"";a&&(typeof a.refresh=="function"||typeof a.changed=="function")&&String(l||"").match(/(?:^|[?&/])wfs(?:[?&/]|$)/i)&&o(s)}}this.map.updateSize()}parseWFSTresponse(e){';
     for (const filePath of candidates) {
       let raw;
       try {
@@ -931,7 +969,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
       let next = raw;
       if (/\b(?:EditModel|CollectorModel)-[^/\\]+\.js$/i.test(filePath)) {
-        if (next.includes('const t=[],n=i=>')) {
+        if (next.includes('qtilerRefreshV2')) {
           already++;
         } else if (editRefreshPattern.test(next)) {
           next = next.replace(editRefreshPattern, editRefreshReplacement);
@@ -968,6 +1006,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         const oldNormalizerCount = next.split(qtilerRulesOldNormalizerReplacement).length - 1;
         next = next.split(qtilerRulesOldNormalizerReplacement).join(qtilerRulesReplacement);
         patched += oldNormalizerCount;
+      }
+      if (next.includes(qtilerPatternRulesMarker) && installedPatternRulesFunctionPattern.test(next)) {
+        next = next.replace(installedPatternRulesFunctionPattern, () => `${qtilerPatternRulesReplacement}var`);
+        patched++;
+      } else if (qtilerRulesFunctionPattern.test(next)) {
+        next = next.replace(qtilerRulesFunctionPattern, () => qtilerPatternRulesReplacement);
+        patched++;
       }
       if (!next.includes('function z($)')) {
         const legacyRulesCount = next.split(qtilerRulesLegacyReplacement).length - 1;
@@ -1819,6 +1864,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     return null;
   };
 
+  const readExternalServiceSources = async () => {
+    try {
+      const state = JSON.parse(await fs.promises.readFile(resolveRepoPath('data', 'external-services.json'), 'utf8'));
+      return Array.isArray(state?.sources) ? state.sources : [];
+    } catch { return []; }
+  };
+
   const validatePublishLayerReferences = async ({
     projectId,
     layerEntries,
@@ -1875,6 +1927,31 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         return candidates.some((candidate) => sameLayerToken(candidate, name) || (theme && sameLayerToken(candidate, themeName)));
       }) || null;
     };
+    const liveNamesByProject = new Map();
+    const getLiveProjectNames = async (projectIdValue) => {
+      const pid = normalizeProjectId(projectIdValue || '');
+      if (!pid) return { layers: new Set(), themes: new Set() };
+      if (!liveNamesByProject.has(pid)) {
+        let projectFile = normalizeComparable((await getCacheIndex(pid))?.project);
+        if (!projectFile) {
+          const known = await listProjectsFromDisk(projectsDir).catch(() => []);
+          projectFile = normalizeComparable(known.find((item) => normalizeProjectId(item?.id) === pid)?.file);
+        }
+        liveNamesByProject.set(pid, readQgisProjectLayerNames(projectFile));
+      }
+      return liveNamesByProject.get(pid);
+    };
+    const hasLiveProjectLayer = async (pid, layerName, theme) => {
+      const name = normalizeComparable(layerName);
+      if (!name) return false;
+      const bare = name.startsWith('theme:') ? name.slice('theme:'.length) : name;
+      const live = await getLiveProjectNames(pid);
+      const pool = theme ? live.themes : live.layers;
+      for (const candidate of pool) {
+        if (sameLayerToken(candidate, name) || sameLayerToken(candidate, bare)) return true;
+      }
+      return false;
+    };
     const collectFieldNames = (layer) => {
       const fields = new Set();
       const add = (value) => {
@@ -1928,6 +2005,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       if (!cachedLayers.length) return null;
       const cachedLayer = findLayer(cachedLayers, name, { theme });
       if (!cachedLayer) {
+        // Tiled backgrounds still need a cache entry; live WMS/WFS layers do not.
+        if (!requireTileGrid && await hasLiveProjectLayer(pid, name, theme)) return null;
         addIssue(theme ? 'theme_not_found' : 'layer_not_found', `${role} layer "${name}" was not found in project "${pid}".`, { projectId: pid, layerName: name });
         return null;
       }
@@ -1948,6 +2027,7 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
 
     const mainProjectId = normalizeProjectId(projectId || '');
     await checkProjectIndex(mainProjectId, 'Main map');
+    const externalSources = await readExternalServiceSources();
     const layerRuleFor = (entry) => {
       const name = normalizeComparable(entry?.name);
       const pid = normalizeProjectId(entry?.sourceProjectId || mainProjectId) || mainProjectId;
@@ -1956,6 +2036,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     };
 
     for (const entry of Array.isArray(layerEntries) ? layerEntries : []) {
+      if (entry?.kind === 'external') {
+        const sourceId = normalizeComparable(entry?.sourceId);
+        const externalSource = externalSources.find((source) => source?.id === sourceId && source?.enabled !== false);
+        if (!sourceId || !externalSource) addIssue('external_source_not_found', `External source "${sourceId || 'unknown'}" is not registered or enabled.`, { sourceId });
+        continue;
+      }
       const name = normalizeComparable(entry?.name);
       const themeName = normalizeComparable(entry?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : ''));
       const isTheme = entry?.isTheme === true || !!themeName;
@@ -4318,19 +4404,42 @@ ${mapIcon}
     const entries = getHajkLegendStyleEntries(styleDef, {});
     return entries
       .map((entry) => {
-        if (!entry?.icon || typeof entry.icon !== 'object' || !entry.icon.src) return null;
         const filter = parseQtilerRuleFilter(entry.filter);
-        const fromScale = Number(entry.icon.scale) > 0 ? hajkMapPointSizeFromIconScale(entry.icon.scale) : null;
-        const explicitPointSize = Number(entry.pointSize);
-        const pointSize = fromScale ?? (Number.isFinite(explicitPointSize) ? explicitPointSize : DEFAULT_POINT_ICON_SIZE);
+        if (entry?.icon && typeof entry.icon === 'object' && entry.icon.src) {
+          const fromScale = Number(entry.icon.scale) > 0 ? hajkMapPointSizeFromIconScale(entry.icon.scale) : null;
+          const explicitPointSize = Number(entry.pointSize);
+          const pointSize = fromScale ?? (Number.isFinite(explicitPointSize) ? explicitPointSize : DEFAULT_POINT_ICON_SIZE);
+          return {
+            ...(filter || {}),
+            icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
+            pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
+            anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
+            anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5
+          };
+        }
+        if (!entry || (!entry.fill && !entry.stroke)) return null;
+        const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object'
+          ? entry.qtilerPatternStyle
+          : null;
+        const rawPattern = String(patternMeta?.fillPattern || '').trim().toLowerCase();
+        const normalizedPattern = rawPattern === 'diagonal' ? 'slash' : rawPattern;
+        const defaultAngle = normalizedPattern === 'backslash' ? 135
+          : normalizedPattern === 'horizontal' ? 0
+            : normalizedPattern === 'vertical' ? 90
+              : 45;
         return {
           ...(filter || {}),
-          icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
-          pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
-          anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
-          anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5,
-          symbolXOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolXOffset || ''),
-          symbolYOffset: Array.isArray(entry.icon.anchor) ? '' : (entry.icon.symbolYOffset || '')
+          hasFill: !!entry.fill,
+          fillColor: String(entry.fill?.color || 'rgba(0,0,0,0)'),
+          hasStroke: !!entry.stroke,
+          strokeColor: String(entry.stroke?.color || 'rgba(0,0,0,0)'),
+          strokeWidth: Number.isFinite(Number(entry.stroke?.width)) ? Number(entry.stroke.width) : 1,
+          lineDash: Array.isArray(entry.stroke?.lineDash) ? entry.stroke.lineDash.map(Number).filter(Number.isFinite) : [],
+          pattern: patternMeta ? normalizedPattern : null,
+          angle: Number.isFinite(Number(patternMeta?.fillPatternAngle)) ? Number(patternMeta.fillPatternAngle) : defaultAngle,
+          spacing: Number.isFinite(Number(patternMeta?.fillPatternSpacing)) ? Number(patternMeta.fillPatternSpacing) : 10,
+          size: Number.isFinite(Number(patternMeta?.fillPatternSize)) ? Number(patternMeta.fillPatternSize) : 2.5,
+          transparentBackground: patternMeta?.fillPatternTransparent === true
         };
       })
       .filter(Boolean);
@@ -4641,7 +4750,7 @@ ${mapIcon}
       return { defs: '', body: `<circle cx="${width / 2}" cy="${height / 2}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>` };
     }
     if (entry.fill || geometryType.includes('polygon')) {
-      const fill = svgAttr(entry.fill?.color || fallbackFill);
+      const fill = svgAttr(entry.fill?.color || 'rgba(0,0,0,0)');
       const stroke = svgAttr(entry.stroke?.color || fallbackStroke);
       const strokeWidth = Math.max(0, Number(entry.stroke?.width) || 1);
       const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object' ? entry.qtilerPatternStyle : null;
@@ -4800,6 +4909,41 @@ ${mapIcon}
     const mainLayers = (profile.layers || []).filter((l) => String(l?.role || 'main') !== 'background');
     const wfsSourceKeys = new Set();
     for (const layer of mainLayers) {
+      if (layer?.kind === 'external') {
+        const sourceId = String(layer.sourceId || '').trim();
+        const externalType = String(layer.externalType || '').trim().toLowerCase();
+        const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const proxyUrl = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`;
+        source[sourceKey] = externalType === 'wms'
+          ? { url: proxyUrl, projection: layer.projection || projCode }
+          : { url: proxyUrl, type: 'XYZ', projection: layer.projection || 'EPSG:3857' };
+        const minZoom = Number.isFinite(Number(layer.minZoom)) ? Number(layer.minZoom) : 0;
+        const maxZoom = Number.isFinite(Number(layer.maxZoom)) ? Number(layer.maxZoom) : 22;
+        const resolutions = Array.from({ length: maxZoom + 1 }, (_item, zoomLevel) => 156543.03392804097 / (2 ** zoomLevel));
+        layers.push({
+          kind: 'external',
+          externalType,
+          name: `external_${sourceId}`,
+          id: String(layer.layer || layer.name || sourceId).trim(),
+          title: String(layer.title || layer.name || sourceId),
+          group: String(layer.group || 'root'),
+          source: sourceKey,
+          type: externalType === 'wms' ? 'WMS' : 'XYZ',
+          queryable: externalType === 'wms',
+          visible: layer.visible !== false,
+          minZoom,
+          maxZoom,
+          attribution: layer.attribution || '',
+          tileGrid: externalType === 'wms' ? undefined : {
+            origin: [-20037508.342789244, 20037508.342789244],
+            resolutions,
+            matrixIds: resolutions.map((_resolution, zoomLevel) => String(zoomLevel)),
+            matrixSet: String(layer.matrixSet || 'EPSG:3857')
+          },
+          extent: externalType === 'wms' ? undefined : [-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244]
+        });
+        continue;
+      }
       const srcProjId = normalizeProjectId(layer?.sourceProjectId || projectId) || projectId;
       const displayTitle = String(layer?.title || layer?.name || '').trim() || String(layer?.name || '').trim();
       const cachedLayers = await getCachedLayersForProject(srcProjId);
@@ -5461,7 +5605,9 @@ ${mapIcon}
                });
                layerLegendIcon = l.thumbnail || layerLegendIcon;
        } else {
-           const automaticWmsLegendUrl = makeWmsLegendUrl(baseUrl, l.id || l.name, layerProjectId);
+           const automaticWmsLegendUrl = l.kind === 'external'
+             ? `${lSource.url}?SERVICE=WMS&REQUEST=GetLegendGraphic&VERSION=1.3.0&FORMAT=image/png&LAYER=${encodeURIComponent(l.id || l.name)}`
+             : makeWmsLegendUrl(baseUrl, l.id || l.name, layerProjectId);
            const manualWmsLegendUrl = toAbsoluteHajkIconSrc(l.wmsLegendUrl || l.wmsLegendIcon || l.legendIcon || '', baseUrl);
            const wmsLegendUrl = String(l.wmsLegendMode || '').toLowerCase() === 'manual' && manualWmsLegendUrl
              ? manualWmsLegendUrl
@@ -5951,9 +6097,15 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           if (!name) return null;
           return {
             name,
+            title: String(entry.title || name).trim() || name,
             sourceProjectId: normalizeProjectId(entry.sourceProjectId || projectId) || projectId,
             visible: entry.visible !== false,
-            group: String(entry.group || 'root').trim() || 'root'
+            group: String(entry.group || 'root').trim() || 'root',
+            ...(entry.kind === 'external' ? {
+              kind: 'external', sourceId: String(entry.sourceId || '').trim(), externalType: String(entry.externalType || '').trim().toLowerCase(),
+              projection: String(entry.projection || 'EPSG:3857').trim(), attribution: String(entry.attribution || '').trim(),
+              layer: String(entry.layer || '').trim(), matrixSet: String(entry.matrixSet || '').trim(), minZoom: Number(entry.minZoom), maxZoom: Number(entry.maxZoom)
+            } : {})
           };
         }
         return null;
@@ -6028,6 +6180,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         : (namedRule && typeof namedRule === 'object' ? namedRule : {});
       return {
         ...rule,
+        ...(spec.kind === 'external' ? spec : {}),
         name: layerName,
         sourceProjectId,
         title: String(spec.title || layerName).trim() || layerName,
@@ -6278,6 +6431,24 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const sourceProjectId = normalizeProjectId(layerSpec.sourceProjectId || projectId) || projectId;
       const layerName = String(layerSpec.name || '').trim();
       const displayTitle = String(layerSpec.title || layerName).trim() || layerName;
+      if (layerSpec.kind === 'external') {
+        const sourceId = String(layerSpec.sourceId || '').trim();
+        const externalType = String(layerSpec.externalType || '').trim().toLowerCase();
+        const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        sourceMap[sourceKey] = externalType === 'wms'
+          ? { url: `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`, projection: layerSpec.projection || projCode }
+          : { url: `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`, type: 'XYZ', projection: layerSpec.projection || 'EPSG:3857' };
+        const maxZoom = Number.isFinite(Number(layerSpec.maxZoom)) ? Number(layerSpec.maxZoom) : 22;
+        const resolutions = Array.from({ length: maxZoom + 1 }, (_item, zoomLevel) => 156543.03392804097 / (2 ** zoomLevel));
+        layersArr.push({
+          kind: 'external', externalType, name: `external_${sourceId}`, id: String(layerSpec.layer || layerName || sourceId), title: displayTitle,
+          group: String(layerSpec.group || 'root').trim() || 'root', source: sourceKey, type: externalType === 'wms' ? 'WMS' : 'XYZ',
+          queryable: externalType === 'wms', visible: layerSpec.visible !== false, minZoom: Number(layerSpec.minZoom) || 0, maxZoom,
+          tileGrid: externalType === 'wms' ? undefined : { origin: [-20037508.342789244, 20037508.342789244], resolutions, matrixIds: resolutions.map((_resolution, zoomLevel) => String(zoomLevel)), matrixSet: String(layerSpec.matrixSet || 'EPSG:3857') },
+          extent: externalType === 'wms' ? undefined : [-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244]
+        });
+        continue;
+      }
       const layerRuleKey = `${sourceProjectId}::${layerName}`;
       const rule = previewLayerRules[layerRuleKey] && typeof previewLayerRules[layerRuleKey] === 'object'
         ? previewLayerRules[layerRuleKey]
@@ -7357,8 +7528,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
           if (l && typeof l === 'object' && l.name) {
-            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
-            incomingVisibility[`${srcPid}::${String(l.name)}`] = !!l.visible;
+            const key = l.kind === 'external' ? `external::${String(l.sourceId || '').trim()}` : `${normalizeProjectId(l.sourceProjectId || projectId) || projectId}::${String(l.name)}`;
+            incomingVisibility[key] = !!l.visible;
           }
         }
       }
@@ -7367,8 +7538,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       if (Array.isArray(inputLayers)) {
         for (const l of inputLayers) {
           if (l && typeof l === 'object' && l.name && l.group) {
-            const srcPid = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
-            incomingGroupByName[`${srcPid}::${String(l.name)}`] = String(l.group);
+            const key = l.kind === 'external' ? `external::${String(l.sourceId || '').trim()}` : `${normalizeProjectId(l.sourceProjectId || projectId) || projectId}::${String(l.name)}`;
+            incomingGroupByName[key] = String(l.group);
           }
         }
       }
@@ -7405,6 +7576,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const projects = await listProjectsFromDisk(projectsDir).catch(() => []);
         const byProject = new Map();
         for (const entry of layerEntries) {
+          if (entry?.kind === 'external') continue;
           const pid = normalizeProjectId(entry?.sourceProjectId || projectId) || projectId;
           if (!byProject.has(pid)) byProject.set(pid, []);
           byProject.get(pid).push(String(entry?.name || '').trim());
@@ -7437,6 +7609,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       // meaning Search silently never had any layers to work with.
       const involvedProjectIds = Array.from(new Set(
         layerEntries
+          .filter((layer) => layer?.kind !== 'external')
           .map((l) => normalizeProjectId(l?.sourceProjectId || projectId) || projectId)
           .concat([projectId])
       ));
@@ -7458,6 +7631,18 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       };
       const layers = layerEntries.map((sourceLayer) => {
         const name = String(sourceLayer?.name || '').trim();
+        if (sourceLayer?.kind === 'external') {
+          const sourceId = String(sourceLayer?.sourceId || '').trim();
+          const key = `external::${sourceId}`;
+          return {
+            kind: 'external', sourceId, externalType: String(sourceLayer?.externalType || '').trim().toLowerCase(), name,
+            title: String(sourceLayer?.title || name || sourceId).trim() || sourceId, role: 'main', visible: incomingVisibility[key] !== false,
+            group: incomingGroupByName[key] || String(sourceLayer?.group || 'root'), projection: String(sourceLayer?.projection || 'EPSG:3857').trim() || 'EPSG:3857',
+            attribution: String(sourceLayer?.attribution || '').trim(), layer: String(sourceLayer?.layer || '').trim(), matrixSet: String(sourceLayer?.matrixSet || '').trim(),
+            minZoom: Number.isFinite(Number(sourceLayer?.minZoom)) ? Number(sourceLayer.minZoom) : 0,
+            maxZoom: Number.isFinite(Number(sourceLayer?.maxZoom)) ? Number(sourceLayer.maxZoom) : 22
+          };
+        }
         const sourceProjectId = normalizeProjectId(sourceLayer?.sourceProjectId || projectId) || projectId;
         const themeName = String(sourceLayer?.themeName || (name.startsWith('theme:') ? name.slice('theme:'.length) : '')).trim();
         const isTheme = sourceLayer?.isTheme === true || !!themeName;

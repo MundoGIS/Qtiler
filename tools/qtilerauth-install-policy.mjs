@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { getMachineFingerprint } from '../lib/machineFingerprint.js';
 import { getPluginTrial, upsertPluginTrial } from '../lib/authDb.js';
+import { DEVELOPER_PUBLIC_KEY, verifyRsaLicenseKey } from '../routes/plugins.js';
 
 const root = path.resolve(process.argv[2] || process.cwd());
 const mode = String(process.argv[3] || 'new').toLowerCase() === 'update' ? 'update' : 'new';
@@ -42,10 +43,42 @@ const trialSecret = crypto.createHash('sha256')
   .update(`qtiler-plugin-trial|${machineFingerprint}`)
   .digest('hex');
 
+const readEnvValue = (name) => {
+  try {
+    const envFile = path.join(root, '.env');
+    if (!fs.existsSync(envFile)) return '';
+    for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (match && match[1] === name) return match[2];
+    }
+  } catch {
+    // Missing or unreadable legacy secret simply disables legacy validation.
+  }
+  return '';
+};
+
+const licenseSecret = process.env.LICENSE_SECRET || readEnvValue('LICENSE_SECRET');
+
 const signTrial = (pluginName, instanceId, startedAt, expiresAt) => crypto
   .createHmac('sha256', trialSecret)
   .update(`${pluginName}|${instanceId}|${startedAt}|${expiresAt}`)
   .digest('hex');
+
+const signTrialWithSecret = (secret, pluginName, instanceId, startedAt, expiresAt) => {
+  if (!secret) return null;
+  return crypto
+    .createHmac('sha256', secret)
+    .update(`${pluginName}|${instanceId}|${startedAt}|${expiresAt}`)
+    .digest('hex');
+};
+
+const verifyTrial = (pluginName, instanceId, trial) => {
+  if (!trial?.startedAt || !trial?.expiresAt || !trial?.sig) return false;
+  const modern = signTrial(pluginName, instanceId, trial.startedAt, trial.expiresAt);
+  if (modern === trial.sig) return true;
+  const legacy = signTrialWithSecret(licenseSecret, pluginName, instanceId, trial.startedAt, trial.expiresAt);
+  return !!legacy && legacy === trial.sig;
+};
 
 const ensureNewInstallTrial = (store, pluginName) => {
   if (!store.plugins || typeof store.plugins !== 'object') store.plugins = {};
@@ -73,7 +106,7 @@ const ensureNewInstallTrial = (store, pluginName) => {
   const created = !current && !historical;
   const trial = current || historical || (() => {
     const startedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
     return { startedAt, expiresAt, sig: signTrial(pluginName, store.instanceId, startedAt, expiresAt) };
   })();
 
@@ -98,21 +131,41 @@ const ensureNewInstallTrial = (store, pluginName) => {
   return { trial, created };
 };
 
-const decodeLicensePayload = (licenseKey) => {
-  const key = String(licenseKey || '').trim();
-  if (!key) return null;
+const resolveLicensePublicKey = () => {
   try {
-    let payload = key.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-    while (payload.length % 4 !== 0) payload += '=';
-    return JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+    if (process.env.LICENSE_PUBLIC_KEY) return process.env.LICENSE_PUBLIC_KEY;
+    const keyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(root, 'tools', 'licenses', 'public_key.pem');
+    if (fs.existsSync(keyPath)) {
+      const candidate = fs.readFileSync(keyPath, 'utf8');
+      crypto.createPublicKey(candidate);
+      return candidate;
+    }
   } catch {
-    return null;
+    // Use the embedded production key when an override is missing or invalid.
   }
+  return DEVELOPER_PUBLIC_KEY;
 };
+
+const licensePublicKey = resolveLicensePublicKey();
 
 const isFutureDate = (value) => {
   const ms = Date.parse(String(value || ''));
   return Number.isFinite(ms) && ms > Date.now();
+};
+
+const isStarted = (value) => {
+  if (!value) return true;
+  const ms = Date.parse(String(value));
+  return Number.isFinite(ms) && ms <= Date.now();
+};
+
+const isLicenseBoundToMachine = (payload, licenseStore) => {
+  if (!payload || payload.trial) return true;
+  if (payload.machineFingerprint) {
+    return String(payload.machineFingerprint).toLowerCase() === machineFingerprint;
+  }
+  const instanceId = String(payload.instanceId || '');
+  return !!instanceId && (instanceId === licenseStore?.instanceId || instanceId === licenseStore?.legacyInstanceId);
 };
 
 const plugins = readJson(pluginsFile, { enabled: [] });
@@ -126,8 +179,11 @@ const store = readJson(licensesFile, null);
 const entry = store?.plugins?.QtilerAuth;
 if (entry) {
   if (entry.licenseKey) {
-    const payload = decodeLicensePayload(entry.licenseKey);
-    if (payload?.plugin === 'QtilerAuth' && isFutureDate(payload.expiresAt)) {
+    const payload = verifyRsaLicenseKey(entry.licenseKey, licensePublicKey);
+    if (payload?.plugin === 'QtilerAuth'
+      && isFutureDate(payload.expiresAt)
+      && isStarted(payload.startsAt)
+      && isLicenseBoundToMachine(payload, store)) {
       entitlementValid = true;
       entitlementStatus = 'license_active';
     } else {
@@ -135,7 +191,8 @@ if (entry) {
     }
   }
   if (!entitlementValid && entry.trial?.expiresAt) {
-    if (isFutureDate(entry.trial.expiresAt)) {
+    if (verifyTrial('QtilerAuth', store.instanceId || machineFingerprint, entry.trial)
+      && isFutureDate(entry.trial.expiresAt)) {
       entitlementValid = true;
       entitlementStatus = 'trial_active';
     } else if (entitlementStatus === 'none') {
@@ -148,7 +205,8 @@ if (!entitlementValid) {
   const machineStore = readJson(machineTrialFile, null);
   const machineTrial = machineStore?.plugins?.QtilerAuth;
   if (machineTrial?.expiresAt) {
-    if (isFutureDate(machineTrial.expiresAt)) {
+    if (verifyTrial('QtilerAuth', store?.instanceId || machineFingerprint, machineTrial)
+      && isFutureDate(machineTrial.expiresAt)) {
       entitlementValid = true;
       entitlementStatus = 'machine_trial_active';
     } else if (entitlementStatus === 'none') {
@@ -208,7 +266,7 @@ if (mode === 'update') {
   const status = entitlementValid ? `new_${entitlementStatus}` : 'new_trial_enabled';
   console.log(entitlementValid
     ? `New install: active QtilerAuth entitlement found (${entitlementStatus}). QtilerAuth was enabled.`
-    : 'New install: QtilerAuth was enabled so the first 90-day trial can be created.');
+    : 'New install: QtilerAuth was enabled so the first 30-day trial can be created.');
   console.log('QTILERAUTH_EXPECTED=1');
   console.log(`QTILERAUTH_INSTALL_STATUS=${status}`);
 }
