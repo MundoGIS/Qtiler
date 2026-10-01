@@ -1,0 +1,15 @@
+{
+  "instanceId": "d57ef32b5747637add5ddd263a12541ad769af45bb3dc5931f4f9945ddfcb1cc",
+  "plugins": {
+    "QtilerAuth": {
+      "trial": {
+        "startedAt": "2026-08-27T13:26:00.778Z",
+        "expiresAt": "2026-11-25T13:26:00.778Z",
+        "sig": "7281dc5fda7cbcae330703d804622b2361c523c4b0d1b12b98f27d294a46060c"
+      },
+      "licenseKey": "eyJwbHVnaW4iOiJRdGlsZXJBdXRoIiwidHJpYWwiOnRydWUsImlzc3VlZEF0IjoiMjAyNi0wNS0yNlQxMzoyNDozNyswMjowMCIsInRyaWFsRHVyYXRpb25NaW51dGVzIjoxMjk2MDAsInN0YXJ0c0F0IjoiMjAyNi0wNS0yNlQxMzoyMzowMCswMjowMCIsImV4cGlyZXNBdCI6IjIwMjYtMTEtMjZUMTM6MjM6MDArMDE6MDAiLCJjb21wYW55IjoiSG9tZSIsIm1ldGEiOnsib3JkZXJJZCI6bnVsbCwiY3VzdG9tZXJSZWYiOm51bGwsImNvbW1lcmNpYWxNb2RlbCI6bnVsbCwibm90ZXMiOiJBYmVscyBQQyJ9fQ.mf7QkvIJ6A4sgxmksRDc1Bnh4NJvvzxfadfKqsPrQPdS0IwuDp32KD9ZwIwZ-aTXSG_K8tXx2yqH9k1BIbomYs9SlDwqUFh6S8GR6ku4VsxDwVoUSYkBiTCGX4h19X3hvNZUBFB4e01PX2f38WRgy5P07QF3REMVNWV4TvW4VbJZmMZUlO6kDjT_mSCQ_GNH2WVLhoJA6dsqiQLCLchX1HxoIXFhGlMnCnVjE7xEOVUfdsuXyRnsDWyNUXcUGrXua8QfUZWaBs9qJ0Jg-8dtsAUFH1VOCf8Kahej3xvBx701C5nVuzXa5HwcBHyS9Zv1wy0Q0e6xDG0Yu6GNk2c-Cw"
+    }
+  },
+  "securityWarnings": [],
+  "legacyInstanceId": "d57ef32b5747637add5ddd263a12541ad769af45bb3dc5931f4f9945ddfcb1cc"
+}

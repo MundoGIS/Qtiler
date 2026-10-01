@@ -21,6 +21,7 @@ cache/vector-tiles/demoproject/*
 !cache/vector-tiles/demoproject/tiles.mbtiles
 
 temp/
+runtime/
 
 # Temporary files
 temp_uploads/

@@ -254,7 +254,7 @@ Notes:
 ## System Requirements
 - Windows 10/11 or Windows Server 2019+ (64-bit).
 - [OSGeo4W](https://trac.osgeo.org/osgeo4w/) or a standalone QGIS install (supplies Python + QGIS libraries).
-- Node.js 18 or newer.
+- Node.js 22 through 24 (Node.js 24 LTS recommended). On Windows, the installer downloads a private portable Node.js 24 runtime when the system Node.js is missing or unsupported; it does not replace the system installation.
 - Git (recommended) to clone the repository.
 
 ## QGIS compatibility notice

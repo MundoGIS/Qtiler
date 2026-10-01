@@ -87,6 +87,10 @@ set "QTILER_PREVIOUS_VERSION="
 set "QGIS_VALIDATION_ATTEMPTS=0"
 set "QTILER_UPDATE_SERVICE_STOPPED=0"
 set "QTILER_SERVICE_DEFINITION_REPLACED=0"
+set "QTILER_NODE_EXE="
+set "QTILER_NPM_CLI="
+set "QTILER_NODE_VERSION="
+set "QTILER_NPM_VERSION="
 
 echo ================================================================
 echo                    Qtiler Installer by MundoGIS
@@ -123,15 +127,6 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-where msiexec.exe >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Windows Installer ^(msiexec.exe^) was not found in PATH.
-    echo Qtiler may need Windows Installer to install Node.js automatically. Repair Windows Installer, then run install.bat again.
-    >>"%QTILER_INSTALL_LOG%" echo ERROR: msiexec.exe not found in PATH.
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Windows Installer (msiexec.exe) was not found in PATH.' + [Environment]::NewLine + [Environment]::NewLine + 'Qtiler may need Windows Installer to install Node.js automatically. Repair Windows Installer, then run install.bat again.', 'Qtiler Installer - Windows Requirement Missing', 'OK', 'Error')" >nul
-    pause
-    exit /b 1
-)
 if not exist "%QTILER_ROOT%\package.json" goto missing_installer_files
 if not exist "%QTILER_ROOT%\server.js" goto missing_installer_files
 if not exist "%QTILER_ROOT%\service\install-service.js" goto missing_installer_files
@@ -142,6 +137,7 @@ if not exist "%QTILER_ROOT%\tools\resolve-qgis-installation.ps1" goto missing_in
 if not exist "%QTILER_ROOT%\tools\detect-qtiler-service-root.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtiler-runtime-state.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\qtiler-service.ps1" goto missing_installer_files
+if not exist "%QTILER_ROOT%\tools\ensure-portable-node.ps1" goto missing_installer_files
 if not exist "%QTILER_ROOT%\tools\mesh_build.py" echo WARNING: tools\mesh_build.py was not found. QuantizedMesh builds will not work until it is restored.
 if not exist "%QTILER_ROOT%\tools\mesh_dem_to_terrain_runner.mjs" echo WARNING: tools\mesh_dem_to_terrain_runner.mjs was not found. QuantizedMesh builds will not work until it is restored.
 for /f "usebackq delims=" %%V in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Join-Path $env:QTILER_ROOT 'package.json'; try { $v = ((Get-Content -Raw -LiteralPath $pkg) | ConvertFrom-Json).version; if ($v) { $v } } catch { }"`) do set "QTILER_VERSION=%%V"
@@ -149,10 +145,9 @@ if not defined QTILER_VERSION set "QTILER_VERSION=unknown"
 echo   Administrator privileges: OK
 echo   PowerShell: OK
 echo   Windows Service Control: OK
-echo   Windows Installer: OK
 echo   Required Qtiler files: OK
 echo   Qtiler package version: %QTILER_VERSION%
-echo   Node.js: checked before QGIS setup and installed automatically if missing
+echo   Node.js: system Node 22-24 is used when available; otherwise private Node 24 is downloaded
 echo   QGIS Desktop: you will be asked for a QGIS 3.x folder after setup mode is selected
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Preflight OK.
@@ -679,7 +674,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$adminPassword = '%QTILER_ADMIN_PASSWORD%';" ^
     "if ('%QTILER_ADMIN_PASSWORD_PRESERVE%' -eq '1' -and $existingEnv.ContainsKey('QTILER_DEFAULT_ADMIN_PASSWORD')) { $adminPassword = [string]$existingEnv['QTILER_DEFAULT_ADMIN_PASSWORD'] };" ^
     "if ([string]::IsNullOrWhiteSpace($adminPassword)) { Write-Host 'ERROR: QTILER_DEFAULT_ADMIN_PASSWORD is required.'; exit 1 };" ^
-  "$nodeExe = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $nodeExe) { $nodeExe = 'C:\Program Files\nodejs\node.exe' };" ^
+    "$nodeExe = '%QTILER_NODE_EXE%';" ^
                                                                 "$q = [char]34; $updates = [ordered]@{ PORT = '%QTILER_PORT%'; QTILER_SERVICE_NAME = '%QTILER_SERVICE_NAME%'; QTILER_INSTALL_MODE = '%QTILER_INSTALL_MODE%'; PUBLIC_BASE_URL = '%QTILER_PUBLIC_URL%'; QTILER_BEHIND_IIS = '%QTILER_BEHIND_IIS%'; QTILER_PUBLIC_HTTPS = '%QTILER_HTTPS%'; QTILER_TRUST_PROXY = '%QTILER_TRUST_PROXY_VALUE%'; QTILER_ENABLE_HSTS = '%QTILER_ENABLE_HSTS_VALUE%'; QTILER_CORS_ALLOWED_ORIGINS = '%QTILER_CORS_ALLOWED_ORIGINS_VALUE%'; QTILER_CORS_ALLOW_CREDENTIALS = '%QTILER_CORS_ALLOW_CREDENTIALS_VALUE%'; QTILER_DEFAULT_ADMIN_PASSWORD = $adminPassword; PYTHON_EXE = '%QGIS_PYTHON_EXE%'; OSGEO4W_BIN = '%QGIS_ROOT%\bin'; QGIS_PREFIX = '%QGIS_PREFIX_DIR%'; QT_PLUGIN_PATH = '%QT_PLUGINS_DIR%'; PYTHONPATH = '%QGIS_PREFIX_DIR%\python'; QTILER_HOME = $qtilerRoot; NODE_EXE = $nodeExe; QUANTIZED_MESH_BUILD_CMD = ($q + '%QGIS_PYTHON_EXE%' + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_build.py') + $q); QUANTIZED_MESH_ENGINE_CMD = ($q + $nodeExe + $q + ' ' + $q + (Join-Path $qtilerRoot 'tools\mesh_dem_to_terrain_runner.mjs') + $q); QUANTIZED_MESH_ENGINE_MODULE = (Join-Path $qtilerRoot 'ThirdParty\mesh-dem-to-terrain\dist\index.js') };" ^
   "if (Test-Path $envFile) { $ts = Get-Date -Format 'yyyyMMdd_HHmmss'; Copy-Item $envFile ($envFile + '.bak.' + $ts) -Force; $lines = Get-Content -LiteralPath $envFile } elseif (Test-Path (Join-Path $qtilerRoot '.env.example')) { $lines = Get-Content -LiteralPath (Join-Path $qtilerRoot '.env.example') } else { $lines = @('# Qtiler environment configuration - generated by install.bat') };" ^
   "$out = New-Object System.Collections.Generic.List[string]; $seen = @{};" ^
@@ -725,8 +720,8 @@ REM ----------------------------------------------------------------------
 REM  Step 4: Install Qtiler npm dependencies
 REM ----------------------------------------------------------------------
 echo [Qtiler] Installing Node.js dependencies ^(npm ci^)...
->>"%QTILER_INSTALL_LOG%" echo Step 4: running npm.cmd ci --omit=dev --no-audit --no-fund.
-call npm.cmd ci --omit=dev --no-audit --no-fund
+>>"%QTILER_INSTALL_LOG%" echo Step 4: running private npm CLI ci --omit=dev --no-audit --no-fund.
+"%QTILER_NODE_EXE%" "%QTILER_NPM_CLI%" ci --omit=dev --no-audit --no-fund
 if errorlevel 1 (
     echo ERROR: npm ci failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: npm ci failed with exit code %errorlevel%.
@@ -745,18 +740,20 @@ call :write_progress "Preparing QtilerAuth" 69 "Creating or preserving the Qtile
 echo [Qtiler] Applying QtilerAuth licensing policy...
 >>"%QTILER_INSTALL_LOG%" echo Step 4b: applying QtilerAuth licensing policy.
 if not exist data mkdir data >nul 2>&1
-for /f "usebackq tokens=1,* delims==" %%A in (`node tools\qtilerauth-install-policy.mjs "%QTILER_ROOT%" "%QTILER_SETUP_MODE%"`) do (
-    if /i "%%A"=="QTILERAUTH_EXPECTED" set "QTILERAUTH_EXPECTED=%%B"
-    if /i "%%A"=="QTILERAUTH_INSTALL_STATUS" set "QTILERAUTH_INSTALL_STATUS=%%B"
-)
+set "QTILERAUTH_POLICY_RESULT=%QTILER_ROOT%\temp\qtilerauth-policy-result.txt"
+"%QTILER_NODE_EXE%" tools\qtilerauth-install-policy.mjs "%QTILER_ROOT%" "%QTILER_SETUP_MODE%" >"%QTILERAUTH_POLICY_RESULT%"
 if errorlevel 1 (
     echo ERROR: Could not apply QtilerAuth licensing policy.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: could not apply QtilerAuth licensing policy.
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth licensing policy could not be applied.' + [Environment]::NewLine + [Environment]::NewLine + 'The installer stopped to avoid issuing or renewing a trial incorrectly.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log:' + [Environment]::NewLine + '%QTILER_INSTALL_LOG%', 'Qtiler Installer - Licensing Policy Failed', 'OK', 'Error')" >nul
     call :recover_previous_update_service
     pause
     exit /b 1
 )
+for /f "usebackq tokens=1,* delims==" %%A in ("%QTILERAUTH_POLICY_RESULT%") do (
+    if /i "%%A"=="QTILERAUTH_EXPECTED" set "QTILERAUTH_EXPECTED=%%B"
+    if /i "%%A"=="QTILERAUTH_INSTALL_STATUS" set "QTILERAUTH_INSTALL_STATUS=%%B"
+)
+del /q "%QTILERAUTH_POLICY_RESULT%" >nul 2>&1
 if not defined QTILERAUTH_INSTALL_STATUS (
     echo ERROR: QtilerAuth licensing policy did not return a status.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: QtilerAuth licensing policy did not return a status.
@@ -789,10 +786,10 @@ echo [Qtiler] Removing existing Windows service definition if present...
 >>"%QTILER_INSTALL_LOG%" echo Step 5: removing existing Qtiler Windows service definition if present. Requested service name: %QTILER_SERVICE_NAME%.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-service.ps1" -Action exists -ServiceName "%QTILER_SERVICE_NAME%"
 if %errorlevel% equ 0 (
-    node service\uninstall-service.js
+    "%QTILER_NODE_EXE%" service\uninstall-service.js
     if errorlevel 1 (
         echo ERROR: Could not remove existing Qtiler Windows service: %QTILER_SERVICE_NAME%
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: node service\uninstall-service.js failed.
+        >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler Node.js service\uninstall-service.js failed.
         powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Could not remove the existing Qtiler Windows service definition.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and run the installer again as administrator.', 'Qtiler Installer - Service Removal Failed', 'OK', 'Error')" >nul
         call :recover_previous_update_service
         pause
@@ -815,7 +812,7 @@ echo.
 
 echo [Qtiler] Installing Qtiler as a Windows service...
 >>"%QTILER_INSTALL_LOG%" echo Step 5: installing Qtiler Windows service as %QTILER_SERVICE_NAME%.
-node service\install-service.js
+"%QTILER_NODE_EXE%" service\install-service.js
 if errorlevel 1 (
     echo ERROR: Windows service installation failed.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Windows service installation failed.
@@ -1031,8 +1028,8 @@ if not exist "%QTILER_PREVIOUS_ROOT%\service\install-service.js" (
 echo [Qtiler] Restoring the Windows service definition from %QTILER_PREVIOUS_ROOT%...
 >>"%QTILER_INSTALL_LOG%" echo Update recovery: reinstalling service from %QTILER_PREVIOUS_ROOT%.
 pushd "%QTILER_PREVIOUS_ROOT%"
-node service\uninstall-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
-node service\install-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
+"%QTILER_NODE_EXE%" service\uninstall-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
+"%QTILER_NODE_EXE%" service\install-service.js >>"%QTILER_INSTALL_LOG%" 2>&1
 set "QTILER_RECOVERY_INSTALL_ERROR=%errorlevel%"
 popd
 if not "%QTILER_RECOVERY_INSTALL_ERROR%"=="0" (
@@ -1068,6 +1065,10 @@ if /i "%QTILER_GUI_KEY%"=="QTILER_PORT" set "QTILER_PORT=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QTILER_PUBLIC_URL" set "QTILER_PUBLIC_URL=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QTILER_ADMIN_PASSWORD" set "QTILER_ADMIN_PASSWORD=%QTILER_GUI_VALUE%"
 if /i "%QTILER_GUI_KEY%"=="QTILER_LICENSE_ACCEPTED" set "QTILER_LICENSE_ACCEPTED=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_NODE_EXE" set "QTILER_NODE_EXE=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_NPM_CLI" set "QTILER_NPM_CLI=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_NODE_VERSION" set "QTILER_NODE_VERSION=%QTILER_GUI_VALUE%"
+if /i "%QTILER_GUI_KEY%"=="QTILER_NPM_VERSION" set "QTILER_NPM_VERSION=%QTILER_GUI_VALUE%"
 exit /b 0
 
 :write_progress
@@ -1091,78 +1092,30 @@ exit /b 0
 
 :ensure_node
 REM ----------------------------------------------------------------------
-REM  Ensure Node.js (latest LTS) is installed
+REM  Select Node.js 22-24, or install private portable Node.js 24
 REM ----------------------------------------------------------------------
->>"%QTILER_INSTALL_LOG%" echo Checking Node.js and npm.
-where node >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=*" %%v in ('node -v') do set "NODE_VER=%%v"
-    echo Node.js detected: !NODE_VER!
-    set "NODE_MAJOR=!NODE_VER:v=!"
-    for /f "tokens=1 delims=." %%M in ("!NODE_MAJOR!") do set "NODE_MAJOR=%%M"
-    set "NODE_MAJOR_INVALID="
-    for /f "delims=0123456789" %%M in ("!NODE_MAJOR!") do set "NODE_MAJOR_INVALID=%%M"
-    if "!NODE_MAJOR!"=="" set "NODE_MAJOR_INVALID=empty"
-    if defined NODE_MAJOR_INVALID (
-        echo ERROR: Could not parse Node.js version: !NODE_VER!
-        echo Please install the latest Node.js LTS from https://nodejs.org and run install.bat again.
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: Could not parse Node.js version: !NODE_VER!
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler could not read the installed Node.js version: !NODE_VER!' + [Environment]::NewLine + [Environment]::NewLine + 'Install or repair the latest Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Error', 'OK', 'Error')" >nul
-        exit /b 1
-    )
-    if !NODE_MAJOR! LSS 20 (
-        echo ERROR: Qtiler requires Node.js 20 LTS or newer. Detected: !NODE_VER!
-        echo Please install the latest Node.js LTS from https://nodejs.org and run install.bat again.
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js version too old: !NODE_VER!
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler requires Node.js 20 LTS or newer.' + [Environment]::NewLine + [Environment]::NewLine + 'Detected version: !NODE_VER!' + [Environment]::NewLine + [Environment]::NewLine + 'Install the latest Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Too Old', 'OK', 'Error')" >nul
-        exit /b 1
-    )
-) else (
-    echo Node.js not found. Downloading the latest LTS installer...
-    >>"%QTILER_INSTALL_LOG%" echo Node.js not found. Downloading latest LTS installer.
-    set "NODE_MSI=%TEMP%\nodejs_lts_x64.msi"
-    if exist "!NODE_MSI!" del /q "!NODE_MSI!" >nul 2>&1
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; try { $lts = (Invoke-RestMethod 'https://nodejs.org/dist/index.json') | Where-Object { $_.lts } | Select-Object -First 1; $url = 'https://nodejs.org/dist/' + $lts.version + '/node-' + $lts.version + '-x64.msi'; Write-Host ('Downloading ' + $url); Invoke-WebRequest -Uri $url -OutFile '%TEMP%\nodejs_lts_x64.msi' -UseBasicParsing } catch { Write-Host ('ERROR: ' + $_.Exception.Message); exit 1 }"
-    if not exist "!NODE_MSI!" (
-        echo ERROR: Failed to download Node.js installer. Please install Node.js LTS manually from https://nodejs.org and re-run this installer.
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: failed to download Node.js installer.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Qtiler could not download the Node.js LTS installer.' + [Environment]::NewLine + [Environment]::NewLine + 'Check the internet connection or proxy settings, install Node.js LTS manually from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Download Failed', 'OK', 'Error')" >nul
-        exit /b 1
-    )
-    echo Installing Node.js silently. This may take a few minutes...
-    >>"%QTILER_INSTALL_LOG%" echo Installing Node.js silently from !NODE_MSI!.
-    msiexec /i "!NODE_MSI!" /qn /norestart
-    if errorlevel 1 (
-        echo ERROR: Node.js installation failed ^(msiexec exit code %errorlevel%^).
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js msiexec failed with exit code %errorlevel%.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Node.js installation failed.' + [Environment]::NewLine + [Environment]::NewLine + 'Windows Installer exit code: %errorlevel%' + [Environment]::NewLine + [Environment]::NewLine + 'Install Node.js LTS manually from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - Node.js Install Failed', 'OK', 'Error')" >nul
-        exit /b 1
-    )
-    REM Refresh PATH from registry so node/npm are visible in this shell
-    for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
-    set "PATH=!SYS_PATH!;%ProgramFiles%\nodejs;%PATH%"
-    where node >nul 2>&1
-    if errorlevel 1 (
-        echo Node.js installed, but not visible in this shell.
-        echo Please close this window, open a new one, and run install.bat again.
-        >>"%QTILER_INSTALL_LOG%" echo ERROR: Node.js installed but not visible in PATH.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Node.js was installed, but it is not visible in the current PATH.' + [Environment]::NewLine + [Environment]::NewLine + 'Close this installer window, open a new elevated command prompt, and run install.bat again.', 'Qtiler Installer - Node.js PATH Not Updated', 'OK', 'Warning')" >nul
-        exit /b 1
-    )
-    for /f "tokens=*" %%v in ('node -v') do set "NODE_VER=%%v"
-    echo Node.js installed: !NODE_VER!
-)
-
-where npm.cmd >nul 2>&1
+>>"%QTILER_INSTALL_LOG%" echo Checking for a compatible Node.js runtime.
+set "QTILER_NODE_EXE="
+set "QTILER_NPM_CLI="
+set "QTILER_NODE_VERSION="
+set "QTILER_NPM_VERSION="
+echo Selecting a compatible system Node.js or private Node.js 24 runtime...
+set "QTILER_NODE_RESULT=%QTILER_ROOT%\temp\qtiler-node-runtime.txt"
+if exist "!QTILER_NODE_RESULT!" del /q "!QTILER_NODE_RESULT!" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\ensure-portable-node.ps1" -Root "%QTILER_ROOT%" -MajorVersion 24 >"!QTILER_NODE_RESULT!" 2>>"%QTILER_INSTALL_LOG%"
 if errorlevel 1 (
-    echo ERROR: npm is not available even though Node.js is installed.
-    echo Repair or reinstall Node.js LTS, then run install.bat again.
-    >>"%QTILER_INSTALL_LOG%" echo ERROR: npm not found after Node.js check.
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('npm is not available even though Node.js is installed.' + [Environment]::NewLine + [Environment]::NewLine + 'Repair or reinstall Node.js LTS from https://nodejs.org, then run install.bat again.', 'Qtiler Installer - npm Missing', 'OK', 'Error')" >nul
+    echo ERROR: Qtiler could not select or install a compatible Node.js runtime.
+    >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler Node.js runtime setup failed.
     exit /b 1
 )
-for /f "tokens=*" %%v in ('npm.cmd -v') do set "NPM_VER=%%v"
-echo npm detected: !NPM_VER!
->>"%QTILER_INSTALL_LOG%" echo Node.js !NODE_VER!, npm !NPM_VER!.
+for /f "usebackq tokens=1,* delims==" %%A in ("!QTILER_NODE_RESULT!") do call :read_gui_setting "%%A" "%%B"
+del /q "!QTILER_NODE_RESULT!" >nul 2>&1
+
+if not exist "!QTILER_NODE_EXE!" exit /b 1
+if not exist "!QTILER_NPM_CLI!" exit /b 1
+if not defined QTILER_NPM_VERSION exit /b 1
+echo Qtiler Node.js: !QTILER_NODE_VERSION!
+echo Qtiler npm: !QTILER_NPM_VERSION!
+>>"%QTILER_INSTALL_LOG%" echo Selected Qtiler runtime: Node.js !QTILER_NODE_VERSION! at !QTILER_NODE_EXE!, npm !QTILER_NPM_VERSION!.
 echo.
 exit /b 0

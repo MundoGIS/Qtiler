@@ -149,10 +149,16 @@ const envEntries = [];
 
 // Configure service
 const serviceName = String(process.env.QTILER_SERVICE_NAME || 'QTiler').trim() || 'QTiler';
+const configuredNodeExe = String(process.env.NODE_EXE || '').trim();
+if (configuredNodeExe && !fs.existsSync(configuredNodeExe)) {
+  console.error('[install-service] configured NODE_EXE was not found:', configuredNodeExe);
+  process.exit(1);
+}
 const svc = new Service({
   name: serviceName,
   description: 'QGIS tile cache & WMTS/XYZ generator',
   script: path.join(root, 'server.js'),
+  execPath: configuredNodeExe || process.execPath,
   workingDirectory: root,
   wait: 2,
   grow: 0.5,
