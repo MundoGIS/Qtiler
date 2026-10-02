@@ -160,3 +160,4 @@ tools/sync-plugin-staging.mjs
 tools/deploy-Qtiler-3D-eye.bat
 tools/package-Qtiler-3D-eye-plugin.mjs
 mgis-3d-planner-master
+tools\package-qtiler-connector.mjs
