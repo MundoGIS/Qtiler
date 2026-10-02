@@ -912,6 +912,38 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     for (const k of Array.from(origoIndexCache.keys())) if (k.includes(profileKey)) origoIndexCache.delete(k);
   };
 
+  const webMercatorXyzGrid = (maxZoom = 22) => ({
+    origin: [-20037508.342789244, 20037508.342789244],
+    resolutions: Array.from({ length: Math.max(0, Number(maxZoom) || 22) + 1 }, (_item, zoomLevel) => 156543.03392804097 / (2 ** zoomLevel)),
+    alignBottomLeft: false
+  });
+
+  const patchOrigoXyzProjection = async () => {
+    const candidates = [
+      path.join(installRoot, 'build', 'js', 'origo.js'),
+      path.join(installRoot, 'build', 'js', 'origo.min.js'),
+      path.join(installRoot, 'js', 'origo.js'),
+      path.join(installRoot, 'js', 'origo.min.js')
+    ];
+    for (const filePath of candidates) {
+      try {
+        const current = await fs.promises.readFile(filePath, 'utf8');
+        const original = "sourceOptions.projection = viewer.getProjectionCode() || 'EPSG:3857';";
+        const replacement = "sourceOptions.projection = sourceOptions.projection || viewer.getProjectionCode() || 'EPSG:3857';";
+        let next = current.replaceAll(original, replacement);
+        next = next.replace(
+          /\b([A-Za-z_$][\w$]*)\.projection=([A-Za-z_$][\w$]*)\.getProjectionCode\(\)\|\|"EPSG:3857"/g,
+          '$1.projection=$1.projection||$2.getProjectionCode()||"EPSG:3857"'
+        );
+        if (next !== current) await fs.promises.writeFile(filePath, next, 'utf8');
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+  };
+
+  await patchOrigoXyzProjection();
+
   const rewriteLoopbackBaseUrls = (input, baseUrl = '') => {
     const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/+$/u, '');
     if (!normalizedBaseUrl) return input;
@@ -4344,7 +4376,9 @@ ${mapIcon}
             visible: layer.visible !== false,
             minZoom: Number.isFinite(Number(layer.minZoom)) ? Number(layer.minZoom) : 0,
             maxZoom: Number.isFinite(Number(layer.maxZoom)) ? Number(layer.maxZoom) : 22,
-            attribution: layer.attribution || undefined
+            attribution: layer.attribution || undefined,
+            tileGrid: webMercatorXyzGrid(layer.maxZoom),
+            extent: [-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244]
           });
         }
         continue;
@@ -4743,9 +4777,9 @@ ${mapIcon}
     // out across the full background. Using the small project AoI here would
     // clamp panning/zooming to that AoI which is what was happening before.
     // We keep the AoI for the initial center/zoom only.
-    const finalViewExtent = finalProjectionExtent
-      || (Array.isArray(profile.extent) && profile.extent.length === 4 ? profile.extent
-          : (Array.isArray(extent) && extent.length === 4 ? extent : null));
+    const finalViewExtent = Array.isArray(profile.extent) && profile.extent.length === 4
+      ? profile.extent
+      : (Array.isArray(extent) && extent.length === 4 ? extent : finalProjectionExtent);
 
     let finalMaxZoom = Array.isArray(finalResolutions) && finalResolutions.length
       ? finalResolutions.length - 1
@@ -5158,7 +5192,7 @@ ${mapIcon}
             ? `${proxyBase}/proxy?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${encodeURIComponent(String(layerSpec.layer || layerName))}&STYLE=default&TILEMATRIXSET=${encodeURIComponent(String(layerSpec.matrixSet || ''))}&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/png`
             : `${proxyBase}/tiles/{z}/{x}/{y}`;
           sourceMap[sourceKey] = { url: tileUrl, type: 'XYZ', projection: layerSpec.projection || 'EPSG:3857' };
-          layersArr.push({ name: `external_${sourceId}`, title: displayTitle, group: String(layerSpec.group || 'root').trim() || 'root', source: sourceKey, type: 'XYZ', queryable: false, visible: layerSpec.visible !== false, minZoom: Number(layerSpec.minZoom) || 0, maxZoom: Number(layerSpec.maxZoom) || 22 });
+          layersArr.push({ name: `external_${sourceId}`, title: displayTitle, group: String(layerSpec.group || 'root').trim() || 'root', source: sourceKey, type: 'XYZ', queryable: false, visible: layerSpec.visible !== false, minZoom: Number(layerSpec.minZoom) || 0, maxZoom: Number(layerSpec.maxZoom) || 22, tileGrid: webMercatorXyzGrid(layerSpec.maxZoom), extent: [-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244] });
         }
         continue;
       }
@@ -6047,6 +6081,7 @@ ${mapIcon}
       const extractedRoot = await locateExtractRoot(extractDir);
       await removeRecursive(installRoot);
       await copyRecursive(extractedRoot, installRoot);
+      await patchOrigoXyzProjection();
 
       await stateStore.update((draft) => ({
         ...(draft || {}),

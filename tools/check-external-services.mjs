@@ -1,16 +1,26 @@
 import assert from 'node:assert/strict';
 import { externalServiceInternals } from '../routes/externalServices.js';
 
-const { cleanId, inferSourceType, isPrivateIp, normalizeSource, publicSource, applyTemplate, buildUpstreamUrl, parseCapabilities } = externalServiceInternals;
+const { cleanId, inferSourceType, isPrivateIp, isUnsafeResolvedIp, assertSafeUrl, normalizeSource, publicSource, applyTemplate, buildUpstreamUrl, parseCapabilities } = externalServiceInternals;
 
 assert.equal(cleanId(' Terrain MHM 64/4 '), 'terrain-mhm-64-4');
 assert.equal(isPrivateIp('127.0.0.1'), true);
 assert.equal(isPrivateIp('192.168.1.20'), true);
 assert.equal(isPrivateIp('8.8.8.8'), false);
 assert.equal(isPrivateIp('::1'), true);
+assert.equal(isUnsafeResolvedIp('192.168.74.45'), false);
+assert.equal(isUnsafeResolvedIp('127.0.0.1'), false);
+assert.equal(isUnsafeResolvedIp('169.254.169.254'), true);
+assert.equal(isUnsafeResolvedIp('::ffff:127.0.0.1'), false);
 assert.equal(inferSourceType('https://tiles.example.test/{z}/{x}/{y}.png'), 'xyz');
 assert.equal(inferSourceType('https://maps.example.test/geoserver/wms'), 'wms');
 assert.equal(inferSourceType('https://maps.example.test/service?SERVICE=WMTS&REQUEST=GetCapabilities'), 'wmts');
+const localTarget = await assertSafeUrl('http://localhost:3004/terrain/demo/tiles/{z}/{x}/{y}.png');
+assert.equal(localTarget.hostname, 'localhost');
+assert.equal(localTarget.port, '3004');
+await assert.rejects(() => assertSafeUrl('http://169.254.169.254/latest/meta-data'), /private_upstream_not_allowed/);
+const splitDnsTarget = await assertSafeUrl('https://tiles.rabbalshedekraft.se/base/{z}/{x}/{y}.png');
+assert.equal(splitDnsTarget.hostname, 'tiles.rabbalshedekraft.se');
 
 const source = normalizeSource({
   id: 'terrain',
@@ -22,6 +32,15 @@ const source = normalizeSource({
 assert.equal(applyTemplate(source.url, { z: 4, x: 8, y: 9 }), 'https://tiles.example.test/4/8/9.png');
 assert.deepEqual(publicSource(source).query, { api_key: '' });
 assert.deepEqual(publicSource(source).headers, { authorization: '' });
+
+const sourceWithUrlKey = normalizeSource({
+  id: 'protected-url',
+  type: 'xyz',
+  url: 'https://tiles.example.test/{z}/{x}/{y}.png?api_key=top-secret&style=default'
+});
+assert.equal(sourceWithUrlKey.url.includes('top-secret'), false);
+assert.equal(sourceWithUrlKey.query.api_key, 'top-secret');
+assert.equal(publicSource(sourceWithUrlKey).query.api_key, '');
 
 const target = buildUpstreamUrl(source, { query: { style: 'hillshade', target: 'https://evil.test' } }, { z: 4, x: 8, y: 9 });
 assert.equal(target.origin, 'https://tiles.example.test');

@@ -14,6 +14,7 @@ import { createJsonStore } from '../lib/jsonStore.js';
 const SOURCE_TYPES = new Set(['xyz', 'wms', 'wmts']);
 const SAFE_RESPONSE_HEADERS = ['cache-control', 'content-encoding', 'content-language', 'content-type', 'etag', 'expires', 'last-modified'];
 const BLOCKED_QUERY_KEYS = new Set(['url', 'target', 'upstream', 'host']);
+const PROTECTED_QUERY_KEYS = new Set(['api_key', 'apikey', 'api-key', 'key', 'token', 'access_token', 'subscription-key']);
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 const MAX_CAPABILITIES_BYTES = 5 * 1024 * 1024;
 
@@ -121,19 +122,50 @@ const isPrivateIp = (address) => {
   return true;
 };
 
+const isUnsafeResolvedIp = (address) => {
+  const value = String(address || '').toLowerCase().split('%')[0];
+  if (net.isIPv4(value)) {
+    const parts = value.split('.').map(Number);
+    return parts[0] === 0
+      || (parts[0] === 169 && parts[1] === 254)
+      || parts[0] >= 224;
+  }
+  if (net.isIPv6(value)) {
+    if (value === '::' || /^fe[89ab]/.test(value)) return true;
+    if (value.startsWith('::ffff:')) return isUnsafeResolvedIp(value.slice('::ffff:'.length));
+    return false;
+  }
+  return true;
+};
+
 const assertSafeUrl = async (rawUrl) => {
   let parsed;
   try { parsed = new URL(rawUrl); } catch { throw new Error('invalid_upstream_url'); }
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid_upstream_protocol');
   if (parsed.username || parsed.password) throw new Error('upstream_credentials_not_allowed');
   const addresses = await dns.lookup(parsed.hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some((entry) => isPrivateIp(entry.address))) throw new Error('private_upstream_not_allowed');
+  if (!addresses.length || addresses.some((entry) => isUnsafeResolvedIp(entry.address))) throw new Error('private_upstream_not_allowed');
   return parsed;
 };
 
 const normalizeStringMap = (value) => Object.fromEntries(Object.entries(value && typeof value === 'object' ? value : {})
   .map(([key, item]) => [String(key).trim(), String(item ?? '').trim()])
   .filter(([key]) => key));
+
+const extractProtectedQuery = (rawUrl, query) => {
+  const protectedQuery = { ...(query || {}) };
+  let cleanUrl = String(rawUrl || '').trim();
+  try {
+    const parsed = new URL(cleanUrl);
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (!PROTECTED_QUERY_KEYS.has(key.toLowerCase())) continue;
+      protectedQuery[key] = parsed.searchParams.get(key) || '';
+      parsed.searchParams.delete(key);
+    }
+    cleanUrl = parsed.toString().replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+  } catch {}
+  return { url: cleanUrl, query: protectedQuery };
+};
 
 const normalizeSource = (value, previous = null) => {
   const input = value && typeof value === 'object' ? value : {};
@@ -143,11 +175,13 @@ const normalizeSource = (value, previous = null) => {
   if (!id) throw new Error('invalid_source_id');
   if (!SOURCE_TYPES.has(type)) throw new Error('invalid_source_type');
   if (!url) throw new Error('missing_source_url');
+  const explicitQuery = input.query == null && previous ? previous.query : normalizeStringMap(input.query);
+  const protectedUrl = extractProtectedQuery(url, explicitQuery);
   return {
     id,
     title: String(input.title ?? previous?.title ?? id).trim() || id,
     type,
-    url,
+    url: protectedUrl.url,
     enabled: input.enabled !== false,
     projection: String(input.projection ?? previous?.projection ?? 'EPSG:3857').trim() || 'EPSG:3857',
     attribution: String(input.attribution ?? previous?.attribution ?? '').trim(),
@@ -155,7 +189,7 @@ const normalizeSource = (value, previous = null) => {
     maxZoom: Number.isFinite(Number(input.maxZoom)) ? Number(input.maxZoom) : (previous?.maxZoom ?? 22),
     layer: String(input.layer ?? previous?.layer ?? '').trim(),
     matrixSet: String(input.matrixSet ?? previous?.matrixSet ?? '').trim(),
-    query: input.query == null && previous ? previous.query : normalizeStringMap(input.query),
+    query: protectedUrl.query,
     headers: input.headers == null && previous ? previous.headers : normalizeStringMap(input.headers)
   };
 };
@@ -178,9 +212,14 @@ const setSearchParam = (searchParams, key, value) => {
   searchParams.set(key, value);
 };
 
+const getQueryValue = (query, key) => {
+  const entry = Object.entries(query || {}).find(([queryKey]) => String(queryKey).toLowerCase() === String(key).toLowerCase());
+  return entry?.[1];
+};
+
 const buildUpstreamUrl = (source, req, templateParams = {}) => {
   const target = new URL(applyTemplate(source.url, templateParams));
-  const adaptingXyz = source.type === 'xyz' && (req.query?.TILEMATRIX != null || req.query?.tilematrix != null);
+  const adaptingXyz = source.type === 'xyz' && getQueryValue(req.query, 'tilematrix') != null;
   for (const [key, value] of Object.entries(req.query || {})) {
     const normalizedKey = String(key).toLowerCase();
     if (adaptingXyz && ['service', 'request', 'version', 'layer', 'style', 'tilematrixset', 'tilematrix', 'tilecol', 'tilerow', 'format'].includes(normalizedKey)) continue;
@@ -293,11 +332,11 @@ export const registerExternalServiceRoutes = ({ app, dataDir, requireAdmin }) =>
   app.get('/external-services/:sourceId/tiles/:z/:x/:y', proxy((req) => ({ z: req.params.z, x: req.params.x, y: req.params.y })));
   app.get('/external-services/:sourceId/wmts/:TileMatrix/:TileCol/:TileRow', proxy((req) => req.params));
   app.get('/external-services/:sourceId/proxy', proxy((req) => {
-    const TileMatrix = req.query?.TILEMATRIX ?? req.query?.tilematrix;
-    const TileCol = req.query?.TILECOL ?? req.query?.tilecol;
-    const TileRow = req.query?.TILEROW ?? req.query?.tilerow;
+    const TileMatrix = getQueryValue(req.query, 'tilematrix');
+    const TileCol = getQueryValue(req.query, 'tilecol');
+    const TileRow = getQueryValue(req.query, 'tilerow');
     return { z: TileMatrix, x: TileCol, y: TileRow, TileMatrix, TileCol, TileRow };
   }));
 };
 
-export const externalServiceInternals = { cleanId, inferSourceType, isPrivateIp, normalizeSource, publicSource, applyTemplate, buildUpstreamUrl, parseCapabilities };
+export const externalServiceInternals = { cleanId, inferSourceType, isPrivateIp, isUnsafeResolvedIp, assertSafeUrl, normalizeSource, publicSource, applyTemplate, getQueryValue, buildUpstreamUrl, parseCapabilities };

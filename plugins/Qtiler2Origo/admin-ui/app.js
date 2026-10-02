@@ -4600,15 +4600,13 @@ function ensureExternalServiceModal() {
           <label class="field"><span class="label">ID</span><input id="Qtiler2OrigoExternalServiceId" class="input" placeholder="Filled automatically"></label>
           <label class="field"><span class="label">Type</span><select id="Qtiler2OrigoExternalServiceType" class="input"><option value="auto">Auto detect</option><option value="xyz">XYZ</option><option value="wms">WMS</option><option value="wmts">WMTS</option></select></label>
           <label class="field" style="grid-column:1/-1"><span class="label">Title</span><input id="Qtiler2OrigoExternalServiceTitle" class="input" placeholder="Filled automatically"></label>
-          <label class="field" style="grid-column:1/-1"><span class="label">Service or tile URL</span><div style="display:flex;gap:8px"><input id="Qtiler2OrigoExternalServiceUrl" class="input" style="flex:1" placeholder="XYZ template or WMS/WMTS service URL"><button type="button" class="button" id="Qtiler2OrigoExternalServiceDiscover">Read service</button></div></label>
+          <label class="field" style="grid-column:1/-1"><span class="label">Service or tile URL</span><div style="display:flex;gap:8px"><input id="Qtiler2OrigoExternalServiceUrl" class="input" style="flex:1" placeholder="Complete public/local URL, optionally with API key"><button type="button" class="button" id="Qtiler2OrigoExternalServiceDiscover">Read service</button></div></label>
           <label class="field" id="Qtiler2OrigoExternalServiceLayerWrap"><span class="label">Available layer</span><select id="Qtiler2OrigoExternalServiceLayerSelect" class="input"><option value="">Enter a service URL</option></select><input id="Qtiler2OrigoExternalServiceLayer" class="input" style="display:none;margin-top:6px" placeholder="Layer name"></label>
           <label class="field" id="Qtiler2OrigoExternalServiceMatrixSetWrap"><span class="label">Matrix set</span><select id="Qtiler2OrigoExternalServiceMatrixSetSelect" class="input"><option value="">Choose a layer first</option></select><input id="Qtiler2OrigoExternalServiceMatrixSet" class="input" style="display:none;margin-top:6px" placeholder="Matrix set identifier"></label>
           <label class="field"><span class="label">Projection</span><input id="Qtiler2OrigoExternalServiceProjection" class="input" value="EPSG:3857"></label>
           <label class="field"><span class="label">Attribution</span><input id="Qtiler2OrigoExternalServiceAttribution" class="input"></label>
           <label class="field"><span class="label">Minimum zoom</span><input id="Qtiler2OrigoExternalServiceMinZoom" class="input" type="number" min="0" value="0"></label>
           <label class="field"><span class="label">Maximum zoom</span><input id="Qtiler2OrigoExternalServiceMaxZoom" class="input" type="number" min="0" value="22"></label>
-          <label class="field"><span class="label">Protected query parameters (JSON)</span><textarea id="Qtiler2OrigoExternalServiceQuery" class="textarea" rows="3" placeholder='{"api_key":"secret"}'></textarea></label>
-          <label class="field"><span class="label">Protected headers (JSON)</span><textarea id="Qtiler2OrigoExternalServiceHeaders" class="textarea" rows="3" placeholder='{"Authorization":"Bearer secret"}'></textarea></label>
         </div>
         <p id="Qtiler2OrigoExternalServiceDiscoveryStatus" class="help has-text-grey" style="display:none"></p>
         <p id="Qtiler2OrigoExternalServiceError" class="help has-text-danger" style="display:none"></p>
@@ -4635,13 +4633,6 @@ function bindExternalServiceEvents() {
   document.getElementById('Qtiler2OrigoExternalServiceSave')?.addEventListener('click', async () => {
     const errorHost = document.getElementById('Qtiler2OrigoExternalServiceError');
     try {
-      const parseMap = (id) => {
-        const raw = String(document.getElementById(id)?.value || '').trim();
-        if (!raw) return {};
-        const value = JSON.parse(raw);
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Credentials must be JSON objects.');
-        return value;
-      };
       const sourceId = String(document.getElementById('Qtiler2OrigoExternalServiceId')?.value || '').trim();
       if (!sourceId) throw new Error('Source ID is required.');
       const body = {
@@ -4654,9 +4645,7 @@ function bindExternalServiceEvents() {
         projection: String(document.getElementById('Qtiler2OrigoExternalServiceProjection')?.value || 'EPSG:3857').trim(),
         attribution: String(document.getElementById('Qtiler2OrigoExternalServiceAttribution')?.value || '').trim(),
         minZoom: Number(document.getElementById('Qtiler2OrigoExternalServiceMinZoom')?.value || 0),
-        maxZoom: Number(document.getElementById('Qtiler2OrigoExternalServiceMaxZoom')?.value || 22),
-        query: parseMap('Qtiler2OrigoExternalServiceQuery'),
-        headers: parseMap('Qtiler2OrigoExternalServiceHeaders')
+        maxZoom: Number(document.getElementById('Qtiler2OrigoExternalServiceMaxZoom')?.value || 22)
       };
       if (body.type !== 'xyz' && !body.layer) throw new Error('Choose a layer from the service.');
       if (body.type === 'wmts' && !body.matrixSet) throw new Error('Choose a matrix set.');

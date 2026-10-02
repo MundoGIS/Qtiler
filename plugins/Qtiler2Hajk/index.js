@@ -3014,6 +3014,13 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const bboxWgs84 = extent?.wgs84 || [-180, -90, 180, 90];
     const bboxNative = extent?.native || [-20037508, -20037508, 20037508, 20037508];
     const projectCrs = extent?.crs || 'EPSG:3857';
+    const capturedExtent = Array.isArray(profile.extent) && profile.extent.length === 4
+      && profile.extent.every(Number.isFinite)
+      ? profile.extent
+      : null;
+    const initialBbox = capturedExtent
+      ? { crs: profile.centerCrs || projectCrs, bounds: capturedExtent }
+      : { crs: projectCrs, bounds: bboxNative };
 
     // Read cache index for per-layer metadata (geometry types, CRS)
     const cacheIndex = await readCacheIndex(projectId);
@@ -3029,11 +3036,48 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     }
 
     const mainLayers = (profile.layers || []).filter((l) => l.role === 'main');
+    const externalLayerMap = {};
     const sublayers = mainLayers.map((layer) => {
       // Title is the human-readable layer name from the profile
       const title = String(layer.title || layer.name || '').trim();
       // Use the real layer name so WMS legend/icons resolve correctly.
       const name = String(layer.name || title || '').trim() || 'layer';
+      if (layer?.kind === 'external') {
+        const sourceId = String(layer.sourceId || '').trim();
+        const externalType = String(layer.externalType || '').trim().toLowerCase();
+        const proxyBase = `${qtilerBaseUrl}/external-services/${encodeURIComponent(sourceId)}`;
+        const externalLayer = externalType === 'wms'
+          ? {
+              id: `external_${sourceId}`,
+              title: title || sourceId,
+              type: 'wms',
+              url: `${proxyBase}/proxy`,
+              projection: layer.projection || projectCrs,
+              params: { LAYERS: String(layer.layer || name), FORMAT: 'image/png', TRANSPARENT: true }
+            }
+          : {
+              id: `external_${sourceId}`,
+              title: title || sourceId,
+              type: 'xyz',
+              url: externalType === 'xyz' ? `${proxyBase}/tiles/{z}/{x}/{y}` : `${proxyBase}/proxy`,
+              projection: layer.projection || 'EPSG:3857',
+              sourceConfig: {
+                minZoom: Number.isFinite(Number(layer.minZoom)) ? Number(layer.minZoom) : 0,
+                maxZoom: Number.isFinite(Number(layer.maxZoom)) ? Number(layer.maxZoom) : 22,
+                crossOrigin: 'anonymous'
+              }
+            };
+        const externalName = `external_${sourceId}`;
+        externalLayerMap[externalName] = externalLayer;
+        return {
+          name: externalName,
+          title: title || sourceId,
+          visibility: layer.visible !== false,
+          queryable: externalType === 'wms',
+          opacity: 255,
+          bbox: { crs: 'EPSG:4326', bounds: [-180, -85.05112878, 180, 85.05112878] }
+        };
+      }
       const cached = cachedLayers.find((c) => {
         const cand = String(c?.name || c?.layer || c?.title || '').trim();
         return cand && (cand === name || cand === title || safeLayerNameForWfs(cand) === safeLayerNameForWfs(name));
@@ -3132,9 +3176,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       version: '1.3.0',
       infoFormats: ['text/plain', 'text/html', 'text/xml', 'application/json'],
       bbox: { crs: 'EPSG:4326', bounds: bboxWgs84 },
-      initialBbox: { crs: projectCrs, bounds: bboxNative },
+      initialBbox,
       sublayers,
       expanded: true,
+      externalLayerMap,
       externalLayers: [],
       backgroundLayers: bgResult.theme,
       searchProviders,
@@ -4827,26 +4872,76 @@ ${mapIcon}
       }
     } catch { /* use defaults */ }
 
+    // Hajk 4.3 replaces the map view projection when a WMTS layer is added.
+    // Start in the visible XYZ layer's CRS so its WMTS adapter cannot reinterpret
+    // an already-transformed center in a different coordinate system.
+    const activeXyzLayer = (profile.layers || []).find((layer) => layer?.kind === 'external'
+      && String(layer.externalType || '').toLowerCase() === 'xyz'
+      && layer.visible !== false);
+    if (activeXyzLayer) {
+      projCode = String(activeXyzLayer.projection || 'EPSG:3857').trim().toUpperCase();
+      const xyzProjectionConfig = computeProjectionConfig(projCode, nativeExtent);
+      nativeExtent = xyzProjectionConfig.projectionExtent;
+      extent = xyzProjectionConfig.projectionExtent;
+      center = [
+        Math.round((extent[0] + extent[2]) / 2),
+        Math.round((extent[1] + extent[3]) / 2)
+      ];
+    }
+
     // Override with admin-captured view — but ignore values that fall outside
     // the active projection extent (happens when the profile was saved with a
     // different background CRS than the one currently in use; the stale coords
     // would otherwise push the published map to the North Pole or off-screen).
     const _inExt = (pt, ex) => Array.isArray(pt) && Array.isArray(ex)
       && pt[0] >= ex[0] && pt[0] <= ex[2] && pt[1] >= ex[1] && pt[1] <= ex[3];
-    const capturedCrs = String(profile.centerCrs || '').trim().toUpperCase();
-    const capturedCrsOk = !capturedCrs || capturedCrs === String(projCode || '').trim().toUpperCase();
-    if (Array.isArray(profile.center) && profile.center.length === 2
-      && capturedCrsOk
-      && (!Array.isArray(extent) || extent.length !== 4 || _inExt(profile.center, extent))) {
-      center = profile.center;
+    const capturedCrs = String(profile.centerCrs || projCode).trim().toUpperCase();
+    const targetCrs = String(projCode || '').trim().toUpperCase();
+    let capturedCenter = Array.isArray(profile.center) && profile.center.length === 2
+      ? profile.center.map(Number)
+      : null;
+    let capturedExtent = Array.isArray(profile.extent) && profile.extent.length === 4
+      ? profile.extent.map(Number)
+      : null;
+    if (capturedCrs && targetCrs && capturedCrs !== targetCrs) {
+      try {
+        for (const code of [capturedCrs, targetCrs]) {
+          const definition = KNOWN_PROJECTIONS[code]?.proj;
+          if (definition) proj4.defs(code, definition);
+        }
+        if (capturedCenter?.every(Number.isFinite)) {
+          capturedCenter = proj4(capturedCrs, targetCrs, capturedCenter);
+        }
+        if (capturedExtent?.every(Number.isFinite)) {
+          const corners = [
+            [capturedExtent[0], capturedExtent[1]],
+            [capturedExtent[0], capturedExtent[3]],
+            [capturedExtent[2], capturedExtent[1]],
+            [capturedExtent[2], capturedExtent[3]]
+          ].map((point) => proj4(capturedCrs, targetCrs, point));
+          capturedExtent = [
+            Math.min(...corners.map((point) => point[0])),
+            Math.min(...corners.map((point) => point[1])),
+            Math.max(...corners.map((point) => point[0])),
+            Math.max(...corners.map((point) => point[1]))
+          ];
+        }
+      } catch (error) {
+        console.warn('[Qtiler2Hajk] captured view reprojection failed:', error?.message || error);
+        capturedCenter = null;
+        capturedExtent = null;
+      }
     }
-    if (capturedCrsOk && typeof profile.zoom === 'number') zoom = profile.zoom;
-    if (Array.isArray(profile.extent) && profile.extent.length === 4
-      && capturedCrsOk
+    if (capturedCenter?.every(Number.isFinite)
+      && (!Array.isArray(extent) || extent.length !== 4 || _inExt(capturedCenter, extent))) {
+      center = capturedCenter;
+    }
+    if (capturedCenter && typeof profile.zoom === 'number') zoom = profile.zoom;
+    if (capturedExtent?.every(Number.isFinite)
       && (!Array.isArray(extent) || extent.length !== 4
-        || (_inExt([profile.extent[0], profile.extent[1]], extent)
-          && _inExt([profile.extent[2], profile.extent[3]], extent)))) {
-      extent = profile.extent;
+        || (_inExt([capturedExtent[0], capturedExtent[1]], extent)
+          && _inExt([capturedExtent[2], capturedExtent[3]], extent)))) {
+      extent = capturedExtent;
     }
 
     // Proj4 definitions for non-standard CRS
@@ -4913,7 +5008,10 @@ ${mapIcon}
         const sourceId = String(layer.sourceId || '').trim();
         const externalType = String(layer.externalType || '').trim().toLowerCase();
         const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
-        const proxyUrl = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`;
+        const proxyBase = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}`;
+        const proxyUrl = externalType === 'xyz'
+          ? `${proxyBase}/proxy`
+          : `${proxyBase}/proxy`;
         source[sourceKey] = externalType === 'wms'
           ? { url: proxyUrl, projection: layer.projection || projCode }
           : { url: proxyUrl, type: 'XYZ', projection: layer.projection || 'EPSG:3857' };
@@ -5317,9 +5415,13 @@ ${mapIcon}
     }
 
     const computed = computeProjectionConfig(projCode, nativeExtent);
+    const mapTileGrid = bgTileGrid
+      && String(bgTileGrid.crs || '').trim().toUpperCase() === String(projCode || '').trim().toUpperCase()
+      ? bgTileGrid
+      : null;
     // Use background tile grid resolutions to ensure Origo aligns properly with WMTS
-    let finalResolutions = (bgTileGrid && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0) 
-        ? bgTileGrid.resolutions 
+    let finalResolutions = (mapTileGrid && Array.isArray(mapTileGrid.resolutions) && mapTileGrid.resolutions.length > 0) 
+        ? mapTileGrid.resolutions 
         : computed.resolutions;
 
     // Compute projectionExtent aligned to the WMTS top-left + tile grid so
@@ -5327,14 +5429,14 @@ ${mapIcon}
     // the projection's nominal world extent, OL re-derives a tile origin that
     // does NOT match the WMTS origin and the backgrounds end up shifted.
     let finalProjectionExtent = computed.projectionExtent;
-    if (bgTileGrid && Array.isArray(bgTileGrid.projectionExtent) && bgTileGrid.projectionExtent.length === 4) {
+    if (mapTileGrid && Array.isArray(mapTileGrid.projectionExtent) && mapTileGrid.projectionExtent.length === 4) {
       // Preferred path: derived from matrix0.matrix_width/matrix_height — exact match for WMTS.
-      finalProjectionExtent = bgTileGrid.projectionExtent;
-    } else if (bgTileGrid && Array.isArray(bgTileGrid.topLeft) && bgTileGrid.topLeft.length === 2
-        && Array.isArray(bgTileGrid.resolutions) && bgTileGrid.resolutions.length > 0) {
-      const [originX, originY] = bgTileGrid.topLeft.map(Number);
-      const tileSize = Number(bgTileGrid.tileSize) || 256;
-      const r0 = Number(bgTileGrid.resolutions[0]);
+      finalProjectionExtent = mapTileGrid.projectionExtent;
+    } else if (mapTileGrid && Array.isArray(mapTileGrid.topLeft) && mapTileGrid.topLeft.length === 2
+        && Array.isArray(mapTileGrid.resolutions) && mapTileGrid.resolutions.length > 0) {
+      const [originX, originY] = mapTileGrid.topLeft.map(Number);
+      const tileSize = Number(mapTileGrid.tileSize) || 256;
+      const r0 = Number(mapTileGrid.resolutions[0]);
       const span = r0 * tileSize * 8192;
       finalProjectionExtent = [originX, originY - span, originX + span, originY];
     }
@@ -5373,8 +5475,8 @@ ${mapIcon}
     
     const effectiveMinZoom = profileMinZoom !== null ? Math.max(0, Math.min(profileMinZoom, effectiveMaxZoom)) : null;
 
-    if (Array.isArray(profile.extent) && profile.extent.length === 4 && capturedCrsOk) {
-      const fitExtent = profile.extent.map(Number);
+    if (capturedExtent?.every(Number.isFinite)) {
+      const fitExtent = capturedExtent;
       if (fitExtent.every(Number.isFinite) && fitExtent[2] > fitExtent[0] && fitExtent[3] > fitExtent[1]) {
         center = [Math.round((fitExtent[0] + fitExtent[2]) / 2), Math.round((fitExtent[1] + fitExtent[3]) / 2)];
         const resolutionForExtent = Math.max((fitExtent[2] - fitExtent[0]) / 1024, (fitExtent[3] - fitExtent[1]) / 768);
@@ -6435,9 +6537,10 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const sourceId = String(layerSpec.sourceId || '').trim();
         const externalType = String(layerSpec.externalType || '').trim().toLowerCase();
         const sourceKey = `external_${sourceId.replace(/[^A-Za-z0-9_]/g, '_')}`;
+        const proxyBase = `${baseUrl}/external-services/${encodeURIComponent(sourceId)}`;
         sourceMap[sourceKey] = externalType === 'wms'
-          ? { url: `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`, projection: layerSpec.projection || projCode }
-          : { url: `${baseUrl}/external-services/${encodeURIComponent(sourceId)}/proxy`, type: 'XYZ', projection: layerSpec.projection || 'EPSG:3857' };
+          ? { url: `${proxyBase}/proxy`, projection: layerSpec.projection || projCode }
+          : { url: externalType === 'xyz' ? `${proxyBase}/tiles/{z}/{x}/{y}` : `${proxyBase}/proxy`, type: 'XYZ', projection: layerSpec.projection || 'EPSG:3857' };
         const maxZoom = Number.isFinite(Number(layerSpec.maxZoom)) ? Number(layerSpec.maxZoom) : 22;
         const resolutions = Array.from({ length: maxZoom + 1 }, (_item, zoomLevel) => 156543.03392804097 / (2 ** zoomLevel));
         layersArr.push({

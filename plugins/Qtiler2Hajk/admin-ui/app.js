@@ -2805,6 +2805,15 @@ function makeLayerKey(projectId, layerName) {
   return pid === currentProjectId ? name : `${pid}::${name}`;
 }
 
+function getPersistedLayerKey(layer, fallbackProjectId) {
+  if (layer?.kind === 'external') {
+    const sourceId = String(layer.sourceId || '').trim();
+    return sourceId ? `external::${sourceId}` : '';
+  }
+  const sourceProjectId = String(layer?.sourceProjectId || fallbackProjectId || '').trim();
+  return makeLayerKey(sourceProjectId, String(layer?.name || '').trim());
+}
+
 function getAllPublishLayers() {
   return []
     .concat(Array.isArray(publishState.mainLayers) ? publishState.mainLayers : [])
@@ -4291,7 +4300,6 @@ function addExternalServiceLayer(source) {
   if (index >= 0) publishState.extraLayers[index] = layer; else publishState.extraLayers.push(layer);
   if (typeof publishState.initialVisibility[key] === 'undefined') publishState.initialVisibility[key] = true;
   publishState.mainRules[key] = { ...(publishState.mainRules[key] || {}), searchable: false, editable: false, serveAsWfs: false };
-  ensureLayerOrderKeys(getAllPublishLayers().map((item) => getLayerKey(item)));
 }
 
 function ensureExternalServiceModal() {
@@ -4300,11 +4308,10 @@ function ensureExternalServiceModal() {
   modal = document.createElement('div'); modal.id = 'Qtiler2HajkExternalServiceModal'; modal.className = 'modal';
   modal.innerHTML = `<div class="modal-background" data-close-external-service-modal></div><div class="modal-card" style="width:min(760px,calc(100vw - 32px))"><header class="modal-card-head"><p class="modal-card-title">External map service</p><button type="button" class="delete" data-close-external-service-modal></button></header><section class="modal-card-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
     <label class="field"><span class="label">ID</span><input id="Qtiler2HajkExternalServiceId" class="input" placeholder="Filled automatically"></label><label class="field"><span class="label">Type</span><select id="Qtiler2HajkExternalServiceType" class="input"><option value="auto">Auto detect</option><option value="xyz">XYZ</option><option value="wms">WMS</option><option value="wmts">WMTS</option></select></label>
-    <label class="field" style="grid-column:1/-1"><span class="label">Title</span><input id="Qtiler2HajkExternalServiceTitle" class="input" placeholder="Filled automatically"></label><label class="field" style="grid-column:1/-1"><span class="label">Service or tile URL</span><div style="display:flex;gap:8px"><input id="Qtiler2HajkExternalServiceUrl" class="input" style="flex:1" placeholder="XYZ template or WMS/WMTS service URL"><button type="button" class="button" id="Qtiler2HajkExternalServiceDiscover">Read service</button></div></label>
+    <label class="field" style="grid-column:1/-1"><span class="label">Title</span><input id="Qtiler2HajkExternalServiceTitle" class="input" placeholder="Filled automatically"></label><label class="field" style="grid-column:1/-1"><span class="label">Service or tile URL</span><div style="display:flex;gap:8px"><input id="Qtiler2HajkExternalServiceUrl" class="input" style="flex:1" placeholder="Complete public/local URL, optionally with API key"><button type="button" class="button" id="Qtiler2HajkExternalServiceDiscover">Read service</button></div></label>
     <label class="field" id="Qtiler2HajkExternalServiceLayerWrap"><span class="label">Available layer</span><select id="Qtiler2HajkExternalServiceLayerSelect" class="input"><option value="">Enter a service URL</option></select><input id="Qtiler2HajkExternalServiceLayer" class="input" style="display:none;margin-top:6px" placeholder="Layer name"></label><label class="field" id="Qtiler2HajkExternalServiceMatrixSetWrap"><span class="label">Matrix set</span><select id="Qtiler2HajkExternalServiceMatrixSetSelect" class="input"><option value="">Choose a layer first</option></select><input id="Qtiler2HajkExternalServiceMatrixSet" class="input" style="display:none;margin-top:6px" placeholder="Matrix set identifier"></label>
     <label class="field"><span class="label">Projection</span><input id="Qtiler2HajkExternalServiceProjection" class="input" value="EPSG:3857"></label><label class="field"><span class="label">Attribution</span><input id="Qtiler2HajkExternalServiceAttribution" class="input"></label>
-    <label class="field"><span class="label">Minimum zoom</span><input id="Qtiler2HajkExternalServiceMinZoom" class="input" type="number" min="0" value="0"></label><label class="field"><span class="label">Maximum zoom</span><input id="Qtiler2HajkExternalServiceMaxZoom" class="input" type="number" min="0" value="22"></label>
-    <label class="field"><span class="label">Protected query parameters (JSON)</span><textarea id="Qtiler2HajkExternalServiceQuery" class="textarea" rows="3" placeholder='{"api_key":"secret"}'></textarea></label><label class="field"><span class="label">Protected headers (JSON)</span><textarea id="Qtiler2HajkExternalServiceHeaders" class="textarea" rows="3" placeholder='{"Authorization":"Bearer secret"}'></textarea></label></div><p id="Qtiler2HajkExternalServiceDiscoveryStatus" class="help has-text-grey" style="display:none"></p><p id="Qtiler2HajkExternalServiceError" class="help has-text-danger" style="display:none"></p></section><footer class="modal-card-foot" style="justify-content:space-between"><button type="button" class="button" data-close-external-service-modal>Cancel</button><button type="button" class="button is-primary" id="Qtiler2HajkExternalServiceSave">Save and add layer</button></footer></div>`;
+    <label class="field"><span class="label">Minimum zoom</span><input id="Qtiler2HajkExternalServiceMinZoom" class="input" type="number" min="0" value="0"></label><label class="field"><span class="label">Maximum zoom</span><input id="Qtiler2HajkExternalServiceMaxZoom" class="input" type="number" min="0" value="22"></label></div><p id="Qtiler2HajkExternalServiceDiscoveryStatus" class="help has-text-grey" style="display:none"></p><p id="Qtiler2HajkExternalServiceError" class="help has-text-danger" style="display:none"></p></section><footer class="modal-card-foot" style="justify-content:space-between"><button type="button" class="button" data-close-external-service-modal>Cancel</button><button type="button" class="button is-primary" id="Qtiler2HajkExternalServiceSave">Save and add layer</button></footer></div>`;
   document.body.appendChild(modal); return modal;
 }
 
@@ -4318,9 +4325,8 @@ function bindExternalServiceEvents() {
     const errorHost = document.getElementById('Qtiler2HajkExternalServiceError');
     try {
       const value = (suffix) => String(document.getElementById(`Qtiler2HajkExternalService${suffix}`)?.value || '').trim();
-      const parseMap = (suffix) => { const raw = value(suffix); if (!raw) return {}; const parsed = JSON.parse(raw); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Credentials must be JSON objects.'); return parsed; };
       const sourceId = value('Id'); if (!sourceId) throw new Error('Source ID is required.');
-      const body = { id: sourceId, type: externalAssistant?.type() || value('Type') || 'xyz', title: value('Title'), url: value('Url'), layer: externalAssistant?.layer() || value('Layer'), matrixSet: externalAssistant?.matrixSet() || value('MatrixSet'), projection: value('Projection') || 'EPSG:3857', attribution: value('Attribution'), minZoom: Number(value('MinZoom') || 0), maxZoom: Number(value('MaxZoom') || 22), query: parseMap('Query'), headers: parseMap('Headers') };
+      const body = { id: sourceId, type: externalAssistant?.type() || value('Type') || 'xyz', title: value('Title'), url: value('Url'), layer: externalAssistant?.layer() || value('Layer'), matrixSet: externalAssistant?.matrixSet() || value('MatrixSet'), projection: value('Projection') || 'EPSG:3857', attribution: value('Attribution'), minZoom: Number(value('MinZoom') || 0), maxZoom: Number(value('MaxZoom') || 22) };
       if (body.type !== 'xyz' && !body.layer) throw new Error('Choose a layer from the service.');
       if (body.type === 'wmts' && !body.matrixSet) throw new Error('Choose a matrix set.');
       const result = await api(`/api/external-services/${encodeURIComponent(sourceId)}`, { method: 'PUT', body }); addExternalServiceLayer({ ...body, ...(result?.source || {}) });
@@ -5074,7 +5080,7 @@ async function preparePublishModal(editProfileId = null) {
         }
       }
       savedMain.forEach((layer) => {
-        const key = makeLayerKey(String(layer?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(layer?.name || '').trim());
+        const key = getPersistedLayerKey(layer, mainProjectId);
         if (!key) return;
         const savedTitle = String(layer?.title || '').trim();
         const rawName = String(layer?.name || '').trim();
@@ -5140,11 +5146,11 @@ async function preparePublishModal(editProfileId = null) {
       }
 
       const includedSet = new Set(savedMain
-        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim()))
+        .map((layer) => getPersistedLayerKey(layer, mainProjectId))
         .filter(Boolean));
       const visibleSet = new Set(savedMain
         .filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible))
-        .map((l) => makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l.name || '').trim())));
+        .map((layer) => getPersistedLayerKey(layer, mainProjectId)));
 
       publishState.initialVisibility = {};
       includedSet.forEach((key) => {
@@ -5195,7 +5201,7 @@ async function preparePublishModal(editProfileId = null) {
         : [];
       publishState.layerGroups = {};
       savedMain.forEach((l) => {
-        const key = makeLayerKey(String(l?.sourceProjectId || mainProjectId).trim() || mainProjectId, String(l?.name || '').trim());
+        const key = getPersistedLayerKey(l, mainProjectId);
         if (key) publishState.layerGroups[key] = String(l?.group || 'root').trim() || 'root';
       });
       // Restore Origo controls: update textarea and checkboxes

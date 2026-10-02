@@ -33,14 +33,6 @@
     }
   }
 
-  function parseMap(element) {
-    const raw = String(element?.value || '').trim();
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Credentials must be JSON objects.');
-    return parsed;
-  }
-
   function bind(options) {
     const prefix = String(options?.prefix || '');
     const api = options?.api;
@@ -48,7 +40,7 @@
     const fields = {
       id: get('Id'), type: get('Type'), title: get('Title'), url: get('Url'), projection: get('Projection'),
       layer: get('Layer'), layerSelect: get('LayerSelect'), layerWrap: get('LayerWrap'), matrix: get('MatrixSet'),
-      matrixSelect: get('MatrixSetSelect'), matrixWrap: get('MatrixSetWrap'), query: get('Query'), headers: get('Headers'),
+      matrixSelect: get('MatrixSetSelect'), matrixWrap: get('MatrixSetWrap'),
       discover: get('Discover'), status: get('DiscoveryStatus')
     };
     if (!fields.url || typeof api !== 'function') return null;
@@ -134,7 +126,7 @@
       try {
         const result = await api('/api/external-services/discover', {
           method: 'POST',
-          body: { type, url, query: parseMap(fields.query), headers: parseMap(fields.headers) }
+          body: { type, url }
         });
         if (sequence !== requestSequence) return;
         if (result?.title) setSuggested('title', result.title);
