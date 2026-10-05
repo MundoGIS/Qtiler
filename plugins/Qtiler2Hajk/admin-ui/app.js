@@ -1919,7 +1919,7 @@ const HAJK_TOOL_DEFS = [
 function syncControlsFromCheckboxes() {
   if (!controlsJsonInput) return;
   publishState.controlsOptions = publishState.controlsOptions || {};
-  const selected = HAJK_TOOL_DEFS
+  const selected = getOrderedHajkToolDefs()
     .filter((def) => document.getElementById(def.id)?.checked)
     .map((def) => {
       // Per-control overrides from the inline configurator take precedence.
@@ -1935,9 +1935,40 @@ function syncControlsFromCheckboxes() {
   try { schedulePreviewRefresh(); } catch {}
 }
 
+function getOrderedHajkToolDefs() {
+  const grid = document.querySelector('.Qtiler2Hajk-controls-grid');
+  if (!grid) return HAJK_TOOL_DEFS.slice();
+  const byId = new Map(HAJK_TOOL_DEFS.map((def) => [def.id, def]));
+  const ordered = Array.from(grid.querySelectorAll('input[type="checkbox"][id]'))
+    .map((input) => byId.get(input.id))
+    .filter(Boolean);
+  const used = new Set(ordered.map((def) => def.id));
+  return ordered.concat(HAJK_TOOL_DEFS.filter((def) => !used.has(def.id)));
+}
+
+function applyHajkToolOrder(controlsArray) {
+  const grid = document.querySelector('.Qtiler2Hajk-controls-grid');
+  if (!grid || !Array.isArray(controlsArray)) return;
+  const names = controlsArray
+    .map((entry) => String(typeof entry === 'string' ? entry : entry?.name || '').trim())
+    .filter(Boolean);
+  names.forEach((name) => {
+    const def = HAJK_TOOL_DEFS.find((item) => item.name === name);
+    const label = def ? document.getElementById(def.id)?.closest('.Qtiler2Hajk-control-item') : null;
+    const item = label?.closest('.Qtiler2Hajk-control-row') || label;
+    if (item) grid.appendChild(item);
+  });
+  HAJK_TOOL_DEFS.forEach((def) => {
+    const label = document.getElementById(def.id)?.closest('.Qtiler2Hajk-control-item');
+    const item = label?.closest('.Qtiler2Hajk-control-row') || label;
+    if (item && !names.includes(def.name)) grid.appendChild(item);
+  });
+}
+
 /** Set checkboxes from a saved Hajk tools array. */
 function syncCheckboxesFromControls(controlsArray) {
   if (!Array.isArray(controlsArray)) return;
+  applyHajkToolOrder(controlsArray);
   publishState.controlsOptions = publishState.controlsOptions || {};
   const activeNames = new Set();
   controlsArray.forEach((c) => {
@@ -2815,9 +2846,23 @@ function getPersistedLayerKey(layer, fallbackProjectId) {
 }
 
 function getAllPublishLayers() {
-  return []
+  const layers = []
     .concat(Array.isArray(publishState.mainLayers) ? publishState.mainLayers : [])
     .concat(Array.isArray(publishState.extraLayers) ? publishState.extraLayers : []);
+  const order = new Map((publishState.layerOrder || []).map((key, index) => [String(key), index]));
+  return layers
+    .map((layer, index) => ({ layer, index }))
+    .sort((a, b) => (order.get(getLayerKey(a.layer)) ?? Number.MAX_SAFE_INTEGER) - (order.get(getLayerKey(b.layer)) ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
+    .map((entry) => entry.layer);
+}
+
+function movePublishLayer(layerKey, direction) {
+  const keys = getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean);
+  const index = keys.indexOf(layerKey);
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= keys.length) return;
+  [keys[index], keys[nextIndex]] = [keys[nextIndex], keys[index]];
+  publishState.layerOrder = keys;
 }
 
 function getSelectedPublishLayers() {
@@ -3526,6 +3571,8 @@ const publishState = {
   groups: [],            // [{ name, title, parent, expanded }]
   layerGroups: {},       // { layerName: 'groupName' }
   layerTitles: {},       // { layerKey: 'visible layer title' }
+  layerInfo: {},         // { layerKey: 'text shown in Hajk layer details' }
+  layerOrder: [],        // ordered stable layer keys
   controls: {},          // { search: { hintText, minLength, limit, ... } }
   searchSources: [],     // [{ projectId, layers: [layerName,...] }]
   searchSourceCatalog: {}, // { projectId: [{ name, ... }] } — cached searchable layers per project
@@ -3867,6 +3914,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
     const tagText = tags.length ? `<span class="Qtiler2Hajk-tags">${tags.map((tg) => `<span>${escapeHtml(tg)}</span>`).join('')}</span>` : '';
     const isInitiallyVisible = publishState.initialVisibility[layerKey] !== false;
     const layerTitle = String(publishState.layerTitles?.[layerKey] || '').trim();
+    const layerInfo = String(publishState.layerInfo?.[layerKey] || '');
     const defaultTitle = String(layer.title || layer.name || '').trim() || layer.name;
 
     // Unified legend preview: always rendered large so the user sees the
@@ -3936,13 +3984,28 @@ function renderLayerChecklist(container, layers, rules = {}) {
         </label>
       `
       : '';
+    const infoControl = isMainLayerList
+      ? `
+        <label class="field Qtiler2Hajk-layer-row__infofield" style="margin:0;min-width:220px;flex:1">
+          <span class="label" style="font-size:11px;margin-bottom:2px">Info</span>
+          <textarea class="textarea is-small" rows="2" data-layer-info="${escapeHtml(layerKey)}" placeholder="Text shown in Hajk layer details">${escapeHtml(layerInfo)}</textarea>
+        </label>
+      `
+      : '';
+    const orderControls = isMainLayerList
+      ? `<div class="Qtiler2Hajk-layer-row__order" aria-label="Layer order">
+          <button type="button" class="button is-small is-light" data-layer-move="-1" data-layer-key="${escapeHtml(layerKey)}" title="Move layer up">↑</button>
+          <button type="button" class="button is-small is-light" data-layer-move="1" data-layer-key="${escapeHtml(layerKey)}" title="Move layer down">↓</button>
+        </div>`
+      : '';
     const actionCells = isMainLayerList
       ? `
         <div class="Qtiler2Hajk-layer-row__preview">${preview}</div>
         <div class="Qtiler2Hajk-layer-row__actions">
           <div class="Qtiler2Hajk-layer-row__toggles">${includeControl}${visibleControl}</div>
-          <div class="Qtiler2Hajk-layer-row__title">${titleControl}</div>
+          <div class="Qtiler2Hajk-layer-row__title">${titleControl}${infoControl}</div>
           <div class="Qtiler2Hajk-layer-row__mode">${modeControls}${wmsLegendControls}</div>
+          ${orderControls}
         </div>
       `
       : modeControls;
@@ -3979,7 +4042,7 @@ function syncProjectLayerOptionState() {
       button.disabled = !included;
       button.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
-    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title]').forEach((el) => {
+    row.querySelectorAll('button[data-wms-legend-pick], button[data-wms-legend-clear], select[data-wms-legend-mode], input[data-wms-legend-url], input[data-layer-title], textarea[data-layer-info]').forEach((el) => {
       el.disabled = !included;
       el.setAttribute('aria-disabled', included ? 'false' : 'true');
     });
@@ -4756,6 +4819,8 @@ async function loadProjectLayers(projectId, target = 'main') {
       .map((key) => [key, publishState.initialVisibility?.[key] !== false]));
     const retainedTitles = Object.fromEntries(Object.entries(publishState.layerTitles || {})
       .filter(([key]) => retainedExtraKeys.has(key)));
+    const retainedInfo = Object.fromEntries(Object.entries(publishState.layerInfo || {})
+      .filter(([key]) => retainedExtraKeys.has(key)));
     // Reloading the same main project must keep the styles, titles and
     // visibility the admin already configured for its layers.
     const sameMainProject = (publishState.mainLayers || [])
@@ -4763,6 +4828,8 @@ async function loadProjectLayers(projectId, target = 'main') {
     const previousRules = sameMainProject ? { ...(publishState.mainRules || {}) } : {};
     const previousVisibility = sameMainProject ? { ...(publishState.initialVisibility || {}) } : {};
     const previousTitles = sameMainProject ? { ...(publishState.layerTitles || {}) } : {};
+    const previousInfo = sameMainProject ? { ...(publishState.layerInfo || {}) } : {};
+    const previousOrder = Array.isArray(publishState.layerOrder) ? publishState.layerOrder.slice() : [];
     publishState.mainLayers = normalized;
     publishState.extraLayers = retainedExtraLayers;
     const discoveredRules = await loadLayerRules(projectId);
@@ -4787,6 +4854,17 @@ async function loadProjectLayers(projectId, target = 'main') {
         .map((key) => [key, previousTitles[key]])),
       ...retainedTitles
     };
+    publishState.layerInfo = {
+      ...Object.fromEntries(normalized
+        .map((layer) => getLayerKey(layer))
+        .filter((key) => key && previousInfo[key])
+        .map((key) => [key, previousInfo[key]])),
+      ...retainedInfo
+    };
+    const availableKeys = getAllPublishLayers().map((layer) => getLayerKey(layer)).filter(Boolean);
+    publishState.layerOrder = previousOrder
+      .filter((key) => availableKeys.includes(key))
+      .concat(availableKeys.filter((key) => !previousOrder.includes(key)));
     renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
     // Default visibility = on, but DO NOT force-check the per-row WFS toggle —
     // that would override the saved profile's per-layer `serveAsWfs` flag and
@@ -5018,6 +5096,8 @@ function closePublishModal({ force = false } = {}) {
   publishState.groups = [];
   publishState.layerGroups = {};
   publishState.layerTitles = {};
+  publishState.layerInfo = {};
+  publishState.layerOrder = [];
   publishState.initialVisibility = {};
   publishState.controls = {};
   publishState.extraLayers = [];
@@ -5036,6 +5116,8 @@ async function preparePublishModal(editProfileId = null) {
   setMapJsonLiveStatus('Ready');
   publishState.editingProfileId = editProfileId;
   publishState.layerTitles = {};
+  publishState.layerInfo = {};
+  publishState.layerOrder = [];
   await loadProjectsForPublish();
 
   if (editProfileId) {
@@ -5085,6 +5167,7 @@ async function preparePublishModal(editProfileId = null) {
         const savedTitle = String(layer?.title || '').trim();
         const rawName = String(layer?.name || '').trim();
         publishState.layerTitles[key] = savedTitle && savedTitle !== rawName ? savedTitle : '';
+        publishState.layerInfo[key] = String(layer?.infoText || '');
         publishState.mainRules[key] = {
           ...(publishState.mainRules[key] || {}),
           serveAsWfs: layer?.serveAsWfs === true,
@@ -5148,6 +5231,9 @@ async function preparePublishModal(editProfileId = null) {
       const includedSet = new Set(savedMain
         .map((layer) => getPersistedLayerKey(layer, mainProjectId))
         .filter(Boolean));
+      publishState.layerOrder = savedMain
+        .map((layer) => getPersistedLayerKey(layer, mainProjectId))
+        .filter(Boolean);
       const visibleSet = new Set(savedMain
         .filter((l) => (typeof l.visible === 'undefined' ? true : !!l.visible))
         .map((layer) => getPersistedLayerKey(layer, mainProjectId)));
@@ -5594,6 +5680,13 @@ projectLayersList?.addEventListener('change', (event) => {
 
 projectLayersList?.addEventListener('input', (event) => {
   const target = event.target;
+  if (target instanceof HTMLTextAreaElement && target.hasAttribute('data-layer-info')) {
+    const layerKey = String(target.getAttribute('data-layer-info') || '').trim();
+    if (!layerKey) return;
+    publishState.layerInfo[layerKey] = target.value;
+    renderPublishConfigSummary();
+    return;
+  }
   if (!(target instanceof HTMLInputElement)) return;
   if (target.hasAttribute('data-layer-title')) {
     const layerKey = String(target.getAttribute('data-layer-title') || '').trim();
@@ -5623,6 +5716,18 @@ selectNoneProjectLayersBtn?.addEventListener('click', () => {
 projectLayersList?.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const moveButton = target.closest('button[data-layer-move][data-layer-key]');
+  if (moveButton) {
+    const layerKey = String(moveButton.getAttribute('data-layer-key') || '').trim();
+    const direction = Number(moveButton.getAttribute('data-layer-move'));
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    movePublishLayer(layerKey, direction);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    renderLayerAssignments();
+    schedulePreviewRefresh();
+    return;
+  }
   // Segmented WMS/WFS mode switch
   const modeBtn = target.closest('button[data-layer-mode]');
   if (modeBtn) {
@@ -5850,6 +5955,7 @@ function buildPublishApiBody() {
     return {
       name: layer.name,
       title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      infoText: String(publishState.layerInfo[key] || '').trim(),
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
       ...externalLayerFields(layer, projectId),
@@ -6007,6 +6113,7 @@ publishNowBtn?.addEventListener('click', async () => {
     return {
       name: layer.name,
       title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+      infoText: String(publishState.layerInfo[key] || '').trim(),
       isTheme: layer.isTheme === true,
       themeName: layer.themeName || null,
       ...externalLayerFields(layer, projectId),
@@ -6307,6 +6414,7 @@ function buildMapPreviewPayload() {
   const previewLayerSpecs = selectedLayers.map((layer) => ({
     name: layer.name,
     title: String(publishState.layerTitles[getLayerKey(layer)] || '').trim() || layer.title || layer.name,
+    infoText: String(publishState.layerInfo[getLayerKey(layer)] || '').trim(),
     isTheme: layer.isTheme === true,
     themeName: layer.themeName || null,
     ...externalLayerFields(layer, projectId),
@@ -6758,6 +6866,29 @@ document.getElementById('btn-load-advanced-controls')?.addEventListener('click',
 /* ── Origo control checkboxes → auto-update controls JSON textarea ── */
 HAJK_TOOL_DEFS.forEach((def) => {
   document.getElementById(def.id)?.addEventListener('change', syncControlsFromCheckboxes);
+});
+
+document.querySelectorAll('.Qtiler2Hajk-control-item').forEach((item) => {
+  const input = item.querySelector('input[type="checkbox"][id]');
+  if (!input || !HAJK_TOOL_DEFS.some((def) => def.id === input.id)) return;
+  const controls = document.createElement('span');
+  controls.className = 'Qtiler2Hajk-control-order';
+  controls.innerHTML = '<button type="button" class="button is-small is-light" data-tool-move="-1" title="Move tool up">↑</button><button type="button" class="button is-small is-light" data-tool-move="1" title="Move tool down">↓</button>';
+  item.appendChild(controls);
+});
+
+document.querySelector('.Qtiler2Hajk-controls-grid')?.addEventListener('click', (event) => {
+  const button = event.target instanceof Element ? event.target.closest('button[data-tool-move]') : null;
+  if (!button) return;
+  event.preventDefault();
+  const label = button.closest('.Qtiler2Hajk-control-item');
+  const item = label?.closest('.Qtiler2Hajk-control-row') || label;
+  const direction = Number(button.getAttribute('data-tool-move'));
+  const sibling = direction < 0 ? item?.previousElementSibling : item?.nextElementSibling;
+  if (!item || !sibling) return;
+  if (direction < 0) item.parentElement.insertBefore(item, sibling);
+  else item.parentElement.insertBefore(sibling, item);
+  syncControlsFromCheckboxes();
 });
 
 [publishName, publishDescription, zoomInput, centerInput, extentInput, minZoomInput, maxZoomInput, controlsJsonInput, extraJsonInput]
@@ -8098,13 +8229,14 @@ function openLegendLibraryPicker(targetCallback) {
         if (url && typeof cb === 'function') cb(url);
       }
     });
+    enableManagedModal(modal);
   }
   modal._pickCb = targetCallback;
   modal._state.filter = '';
   const searchInput = modal.querySelector('.Qtiler2Hajk-legend-picker__search');
   if (searchInput) searchInput.value = '';
   modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === modal._state.tab));
-  modal.classList.add('is-active');
+  openManagedModal(modal, null);
   loadLegendLibrary().then(() => modal._renderGrid());
 }
 
@@ -8508,7 +8640,7 @@ function updateRuleField(idx, key, value) {
   if (key.startsWith('icon.')) {
     const sub = key.slice(5);
     if (sub === 'pick') {
-      openSvgPicker((url) => {
+      openLegendLibraryPicker((url) => {
         r.point.icon.src = url;
         renderRulesPanel();
       });
@@ -9111,6 +9243,7 @@ function generateMapConfigJson() {
       return {
         name: layer.name,
         title: String(publishState.layerTitles[key] || '').trim() || layer.title || layer.name,
+        infoText: String(publishState.layerInfo[key] || '').trim(),
         ...externalLayerFields(layer, projectId),
         visible: publishState.initialVisibility[key] !== false,
         group: String(publishState.layerGroups[key] || 'root').trim() || 'root',
@@ -9323,6 +9456,8 @@ async function applyMapJsonChanges({ automatic = false } = {}) {
     publishState.initialVisibility = {};
     publishState.layerGroups = {};
     publishState.layerTitles = {};
+    publishState.layerInfo = {};
+    publishState.layerOrder = [];
     publishState.mainRules = {};
     const includedKeys = [];
     for (const layer of configuredLayers) {
@@ -9339,8 +9474,10 @@ async function applyMapJsonChanges({ automatic = false } = {}) {
       publishState.layerGroups[key] = String(layer.group || 'root').trim() || 'root';
       const importedTitle = String(layer.title || '').trim();
       publishState.layerTitles[key] = importedTitle && importedTitle !== String(layer.name || '').trim() ? importedTitle : '';
+      publishState.layerInfo[key] = String(layer.infoText || '');
       includedKeys.push(key);
     }
+    publishState.layerOrder = includedKeys.slice();
 
     if (extentInput) extentInput.value = Array.isArray(config.extent) ? JSON.stringify(config.extent) : '';
     if (centerInput) {

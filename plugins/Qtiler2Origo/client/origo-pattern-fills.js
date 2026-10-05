@@ -181,6 +181,25 @@
     return out;
   }
 
+  function extractPointStyleRulesFromStyleDef(styleDef) {
+    if (!Array.isArray(styleDef)) return [];
+    const out = [];
+    styleDef.forEach(function (ruleArr, index) {
+      const entries = Array.isArray(ruleArr) ? ruleArr : [ruleArr];
+      const geomEntry = entries.find(function (entry) {
+        return entry && typeof entry === 'object' && (entry.icon || entry.circle) && !entry.text;
+      });
+      if (!geomEntry) return;
+      out.push({
+        index: index,
+        filter: String(geomEntry.filter || '').trim(),
+        icon: geomEntry.icon && typeof geomEntry.icon === 'object' ? geomEntry.icon : null,
+        circle: geomEntry.circle && typeof geomEntry.circle === 'object' ? geomEntry.circle : null
+      });
+    });
+    return out;
+  }
+
   function evaluateFilterExpression(filter, feature) {
     const expr = String(filter || '').trim();
     if (!expr) return true;
@@ -217,6 +236,63 @@
   function getStyleArray(styleLike, feature, resolution) {
     if (typeof styleLike === 'function') return styleLike(feature, resolution);
     return styleLike;
+  }
+
+  function createPointStyle(rule, origo) {
+    if (!rule || !origo) return null;
+    const Style = origo.ol.style.Style;
+    const Fill = origo.ol.style.Fill;
+    const Stroke = origo.ol.style.Stroke;
+    if (rule.icon && rule.icon.src && origo.ol.style.Icon) {
+      const options = {
+        src: String(rule.icon.src),
+        scale: Number.isFinite(Number(rule.icon.scale)) ? Number(rule.icon.scale) : 1,
+        opacity: Number.isFinite(Number(rule.icon.opacity)) ? Number(rule.icon.opacity) : 1,
+        anchor: Array.isArray(rule.icon.anchor) ? rule.icon.anchor.map(Number) : [0.5, 0.5],
+        anchorXUnits: 'fraction',
+        anchorYUnits: 'fraction',
+        crossOrigin: 'anonymous'
+      };
+      if (rule.icon.color) options.color = rule.icon.color;
+      return new Style({ image: new origo.ol.style.Icon(options) });
+    }
+    if (rule.circle && origo.ol.style.Circle) {
+      return new Style({
+        image: new origo.ol.style.Circle({
+          radius: Number.isFinite(Number(rule.circle.radius)) ? Number(rule.circle.radius) : 6,
+          fill: new Fill({ color: rule.circle.fill?.color || 'rgba(0,0,0,0)' }),
+          stroke: new Stroke({
+            color: rule.circle.stroke?.color || 'rgba(0,0,0,0)',
+            width: Number(rule.circle.stroke?.width) || 1
+          })
+        })
+      });
+    }
+    return null;
+  }
+
+  function buildPointWrappingStyleFunction(styleName, originalStyle, pointRules, origo) {
+    if (!origo || !Array.isArray(pointRules) || !pointRules.length) return null;
+    const cacheKey = styleName + '::point-wrapper::' + JSON.stringify(pointRules);
+    if (styleCache.has(cacheKey)) return styleCache.get(cacheKey);
+    const fn = function pointWrappingStyle(feature, resolution) {
+      const sourceStyles = getStyleArray(originalStyle, feature, resolution);
+      const styleArray = Array.isArray(sourceStyles) ? sourceStyles : (sourceStyles ? [sourceStyles] : []);
+      const selected = pointRules.find(function (entry) {
+        return entry.filter && evaluateFilterExpression(entry.filter, feature);
+      }) || pointRules.find(function (entry) {
+        return !entry.filter;
+      }) || null;
+      const geometryStyle = createPointStyle(selected, origo);
+      if (!geometryStyle) return sourceStyles;
+      const textStyles = styleArray.filter(function (style) {
+        return style && typeof style.getText === 'function' && style.getText();
+      });
+      const result = [geometryStyle].concat(textStyles);
+      return Array.isArray(sourceStyles) ? result : result[0];
+    };
+    styleCache.set(cacheKey, fn);
+    return fn;
   }
 
   function selectPatternRule(patternRules, feature, geomStyle) {
@@ -294,7 +370,10 @@
     const hasEmbeddedPatterns = !!(styleDefs && Object.keys(styleDefs).some(function (styleName) {
       return extractPatternRulesFromStyleDef(styleDefs[styleName]).length > 0;
     }));
-    if (!hasLegacyPatterns && !hasEmbeddedPatterns) return;
+    const hasEmbeddedPointStyles = !!(styleDefs && Object.keys(styleDefs).some(function (styleName) {
+      return extractPointStyleRulesFromStyleDef(styleDefs[styleName]).length > 0;
+    }));
+    if (!hasLegacyPatterns && !hasEmbeddedPatterns && !hasEmbeddedPointStyles) return;
 
     const viewer = origoApp && typeof origoApp.api === 'function' ? origoApp.api() : null;
     const map = viewer && typeof viewer.getMap === 'function' ? viewer.getMap() : null;
@@ -307,10 +386,13 @@
       const styleName = String(layer.get('styleName') || '').trim();
       if (!styleName) return;
       const embeddedRules = styleDefs ? extractPatternRulesFromStyleDef(styleDefs[styleName]) : [];
+      const pointRules = styleDefs ? extractPointStyleRulesFromStyleDef(styleDefs[styleName]) : [];
       const legacyMeta = patternStyles && patternStyles[styleName] && !Array.isArray(patternStyles[styleName])
         ? patternStyles[styleName]
         : null;
-      const styleFn = embeddedRules.length
+      const styleFn = pointRules.length
+        ? buildPointWrappingStyleFunction(styleName, layer.getStyle(), pointRules, origo)
+        : embeddedRules.length
         ? buildPatternWrappingStyleFunction(styleName, layer.getStyle(), embeddedRules, origo)
         : (legacyMeta ? buildPatternStyleFunction(styleName, legacyMeta) : null);
       if (!styleFn) return;

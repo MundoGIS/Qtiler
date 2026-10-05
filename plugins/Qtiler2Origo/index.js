@@ -22,6 +22,7 @@ import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { createJsonStore } from '../../lib/jsonStore.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
+import { findSharedLegendLibraryUsage, initializeSharedLegendLibrary } from '../../lib/sharedLegendLibrary.js';
 
 const DEFAULT_REPO = process.env.QTILER_ORIGO_REPO || process.env.QTWC_QWC2_REPO || 'origo-map/origo';
 const DEFAULT_VERSION = process.env.QTILER_ORIGO_VERSION || process.env.QTWC_QWC2_VERSION || 'v2.10.0';
@@ -853,8 +854,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
   const backgroundAssetsRoot = path.join(runtimeRoot, 'background-assets');
-  const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
-  const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
+  const sharedLegendLibrary = await initializeSharedLegendLibrary(dataRoot, [
+    path.join(dataRoot, 'Qtiler2Hajk', 'hajk', 'legend-library'),
+    path.join(dataRoot, 'Qtiler2Origo', 'origo', 'legend-library')
+  ]);
+  const legendLibraryRoot = sharedLegendLibrary.root;
+  const legendLibraryIndexPath = sharedLegendLibrary.indexPath;
   const draftsRoot = path.join(runtimeRoot, 'drafts');
   const thumbCacheDir = path.join(dataRoot, 'thumbs');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
@@ -7279,22 +7284,7 @@ ${mapIcon}
       const items = await listLegendLibraryItems();
       const item = items.find((it) => String(it.id) === id);
       if (!item) return res.status(404).json({ error: 'not_found' });
-      const stripStamp = (url) => String(url || '').split('?')[0];
-      const itemUrlBase = stripStamp(item.url);
-      const profiles = await readAllPublishedProfiles();
-      const usage = [];
-      for (const profile of profiles) {
-        const layers = [];
-        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
-          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
-          if (ref && ref === itemUrlBase) {
-            layers.push(String(layer?.title || layer?.name || '').trim());
-          }
-        }
-        if (layers.length) {
-          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
-        }
-      }
+      const usage = await findSharedLegendLibraryUsage(dataRoot, item.fileName);
       res.json({ id, name: item.name, usage });
     } catch (err) {
       res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });

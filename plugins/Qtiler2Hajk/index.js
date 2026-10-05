@@ -22,6 +22,7 @@ import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { createJsonStore } from '../../lib/jsonStore.js';
 import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
+import { findSharedLegendLibraryUsage, initializeSharedLegendLibrary } from '../../lib/sharedLegendLibrary.js';
 
 const DEFAULT_REPO = process.env.QTILER_HAJK_REPO || 'hajkmap/hajk';
 const DEFAULT_VERSION = process.env.QTILER_HAJK_VERSION || 'v4.3.0';
@@ -847,8 +848,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   const publishedRoot = path.join(runtimeRoot, 'published');
   const publishedThumbsRoot = path.join(publishedRoot, 'thumbs');
   const brandingRoot = path.join(runtimeRoot, 'branding');
-  const legendLibraryRoot = path.join(runtimeRoot, 'legend-library');
-  const legendLibraryIndexPath = path.join(legendLibraryRoot, 'index.json');
+  const sharedLegendLibrary = await initializeSharedLegendLibrary(dataRoot, [
+    path.join(dataRoot, 'Qtiler2Hajk', 'hajk', 'legend-library'),
+    path.join(dataRoot, 'Qtiler2Origo', 'origo', 'legend-library')
+  ]);
+  const legendLibraryRoot = sharedLegendLibrary.root;
+  const legendLibraryIndexPath = sharedLegendLibrary.indexPath;
   const draftsRoot = path.join(runtimeRoot, 'drafts');
   const projectsCatalogPath = path.join(runtimeRoot, 'projects-catalog.json');
   const projectsDir = resolveRepoPath('qgisprojects');
@@ -4673,7 +4678,7 @@ ${mapIcon}
     return raw;
   };
 
-  const resolveLocalSvgIconPath = (src) => {
+  const resolveLocalLegendIconPath = (src) => {
     let pathname = String(src || '').trim();
     if (!pathname) return null;
     try {
@@ -4700,6 +4705,19 @@ ${mapIcon}
         const rel = pathname.slice(prefix.length).replace(/\.\.+/g, '');
         return path.join(dataRoot, 'Qtiler-symbology', rel);
       }
+    }
+    const uploadedPrefixes = [
+      '/plugins/Qtiler2Hajk/legend-library/',
+      '/plugins/Qtiler2Origo/legend-library/'
+    ];
+    for (const prefix of uploadedPrefixes) {
+      if (!pathname.startsWith(prefix)) continue;
+      let fileName = pathname.slice(prefix.length);
+      try { fileName = decodeURIComponent(fileName); } catch { return null; }
+      fileName = sanitizeFileToken(fileName);
+      return fileName && ALLOWED_LEGEND_LIBRARY_EXTENSIONS.has(path.extname(fileName).toLowerCase())
+        ? path.join(legendLibraryRoot, fileName)
+        : null;
     }
     return null;
   };
@@ -4728,9 +4746,37 @@ ${mapIcon}
     return svg;
   };
 
+  const remoteLegendSvgCache = new Map();
+  const preloadRemoteLegendSvgIcons = async (entries) => {
+    const urls = [...new Set((Array.isArray(entries) ? entries : [])
+      .map((entry) => String(entry?.icon?.src || '').trim())
+      .filter((src) => /^https:\/\//i.test(src) && /\.svg(?:\?|#|$)/i.test(src)))];
+    await Promise.all(urls.map(async (src) => {
+      const cached = remoteLegendSvgCache.get(src);
+      if (cached && cached.expiresAt > Date.now()) return;
+      let content = '';
+      try {
+        const response = await fetch(src, {
+          headers: { accept: 'image/svg+xml,image/*;q=0.8' },
+          signal: AbortSignal.timeout(4000)
+        });
+        const declaredSize = Number(response.headers.get('content-length'));
+        if (!response.ok || (Number.isFinite(declaredSize) && declaredSize > 512 * 1024)) {
+          throw new Error(`remote_svg_http_${response.status}`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length > 512 * 1024) throw new Error('remote_svg_too_large');
+        const raw = buffer.toString('utf8');
+        content = /<svg\b/i.test(raw) ? raw : '';
+      } catch (err) {
+        console.warn('[Qtiler2Hajk] Could not inline remote legend SVG:', src, err?.message || err);
+      }
+      remoteLegendSvgCache.set(src, { content, expiresAt: Date.now() + 10 * 60 * 1000 });
+    }));
+  };
+
   const inlineSvgIconForLegend = (src, color, x, y, size) => {
-    const filePath = resolveLocalSvgIconPath(src);
-    if (!filePath) return '';
+    const filePath = resolveLocalLegendIconPath(src);
     let effectiveColor = color;
     if (!effectiveColor) {
       try {
@@ -4739,12 +4785,27 @@ ${mapIcon}
         effectiveColor = '';
       }
     }
-    let content;
-    try {
-      content = fs.readFileSync(filePath, 'utf8');
-    } catch {
-      return '';
+    let content = /^https:\/\//i.test(String(src || ''))
+      ? String(remoteLegendSvgCache.get(String(src))?.content || '')
+      : '';
+    if (!content && filePath) {
+      try {
+        const extension = path.extname(filePath).toLowerCase();
+        if (extension !== '.svg') {
+          const mime = extension === '.jpg' || extension === '.jpeg'
+            ? 'image/jpeg'
+            : extension === '.webp'
+              ? 'image/webp'
+              : 'image/png';
+          const dataUri = `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+          return `<image href="${dataUri}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/>`;
+        }
+        content = fs.readFileSync(filePath, 'utf8');
+      } catch {
+        return '';
+      }
     }
+    if (!content) return '';
     const svg = prepareInlineSvgContent(content, effectiveColor);
     if (!svg) return '';
     return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs) => {
@@ -5024,6 +5085,7 @@ ${mapIcon}
           name: `external_${sourceId}`,
           id: String(layer.layer || layer.name || sourceId).trim(),
           title: String(layer.title || layer.name || sourceId),
+          infoText: String(layer.infoText || '').trim(),
           group: String(layer.group || 'root'),
           source: sourceKey,
           type: externalType === 'wms' ? 'WMS' : 'XYZ',
@@ -5130,6 +5192,7 @@ ${mapIcon}
           name: layer.name,
           sourceProjectId: srcProjId,
           title: displayTitle,
+          infoText: String(layer.infoText || '').trim(),
           group: String(layer.group || 'root'),
           source: wfsSrcKey,
           type: 'WFS',
@@ -5164,6 +5227,7 @@ ${mapIcon}
           sourceProjectId: srcProjId,
           id: layer.name,        // Origo uses `id` as LAYERS param, not `name`
           title: displayTitle,
+          infoText: String(layer.infoText || '').trim(),
           group: String(layer.group || 'root'),
           source: ensureWmsSource(srcProjId),
           type: 'WMS',
@@ -5525,6 +5589,11 @@ ${mapIcon}
        }
     });
 
+    const remoteLegendEntries = Object.values(hajkStyles || {}).flatMap((styleDef) => {
+      try { return getHajkLegendStyleEntries(styleDef, {}); } catch { return []; }
+    });
+    await preloadRemoteLegendSvgIcons(remoteLegendEntries);
+
     const wmtslayers = [];
     const wmslayers = [];
     const vectorlayers = [];
@@ -5584,6 +5653,8 @@ ${mapIcon}
            vectorlayers.push({
              id: hajkLayerId,
              caption: l.title,
+             infoTitle: l.title,
+             infoText: String(l.infoText || '').trim() || undefined,
              url: lSource.url,
              projection: projCode,
              layer: l.name,
@@ -5677,6 +5748,8 @@ ${mapIcon}
            wmslayers.push({
                id: hajkLayerId,
                caption: l.title,
+               infoTitle: l.title,
+               infoText: String(l.infoText || '').trim() || undefined,
                url: lSource.url,
                layers: [l.name],
                serverType: "osm",
@@ -5688,6 +5761,8 @@ ${mapIcon}
                wmtslayers.push({
                  id: hajkLayerId,
                  caption: l.title,
+                 infoTitle: l.title,
+                 infoText: String(l.infoText || '').trim() || undefined,
                  url: lSource.url,
                  layer: l.id || l.name,
                  style: 'default',
@@ -5702,7 +5777,7 @@ ${mapIcon}
                  visibleAtStart,
                  drawOrder,
                  layerType: isBackgroundLayer ? 'base' : undefined,
-                 legend: l.thumbnail || '',
+                 legend: l.thumbnail || undefined,
                  legendIcon: l.thumbnail || undefined
                });
                layerLegendIcon = l.thumbnail || layerLegendIcon;
@@ -5726,6 +5801,8 @@ ${mapIcon}
            wmslayers.push({
                id: hajkLayerId,
                caption: l.title,
+               infoTitle: l.title,
+               infoText: String(l.infoText || '').trim() || undefined,
                url: lSource ? lSource.url : '',
                  projection: projCode,
                  layers: [l.id || l.name],
@@ -5750,6 +5827,8 @@ ${mapIcon}
                id: layerListTargetId,
            drawOrder: drawOrder--,
                caption: l.title,
+             infoTitle: l.title,
+             infoText: String(l.infoText || '').trim() || undefined,
                visibleAtStart,
            layerType: isBackgroundLayer ? 'base' : undefined,
            legendIcon: layerLegendIcon || undefined,
@@ -5961,6 +6040,10 @@ ${mapIcon}
     }
     if (isToolEnabled('export')) pushToolIfConfigured('export', { target: 'left', exportUrl: '', scales: '250,500,1000,2500,5000,10000,25000,50000,100000' });
     if (isToolEnabled('timeslider')) tools.push({ type: 'timeslider', options: mergeToolOptions('timeslider', { visibleAtStart: false, start: '', end: '', step: '', layers: [], visibleForGroups: [] }) });
+    if (profileToolEntries.length) {
+      const toolOrder = new Map(profileToolEntries.map((entry, index) => [entry.name, index]));
+      tools.sort((a, b) => (toolOrder.get(a.type) ?? Number.MAX_SAFE_INTEGER) - (toolOrder.get(b.type) ?? Number.MAX_SAFE_INTEGER));
+    }
     let referenceProjections = [];
     try {
       const referenceConfigPath = path.join(installRoot, 'simpleMapAndLayersConfig.json');
@@ -7266,22 +7349,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const items = await listLegendLibraryItems();
       const item = items.find((it) => String(it.id) === id);
       if (!item) return res.status(404).json({ error: 'not_found' });
-      const stripStamp = (url) => String(url || '').split('?')[0];
-      const itemUrlBase = stripStamp(item.url);
-      const profiles = await readAllPublishedProfiles();
-      const usage = [];
-      for (const profile of profiles) {
-        const layers = [];
-        for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
-          const ref = stripStamp(layer?.wmsLegendUrl || layer?.wmsLegendIcon || layer?.legendIcon || '');
-          if (ref && ref === itemUrlBase) {
-            layers.push(String(layer?.title || layer?.name || '').trim());
-          }
-        }
-        if (layers.length) {
-          usage.push({ profileKey: String(profile.profileKey || profile.name || ''), name: String(profile.name || ''), layers });
-        }
-      }
+      const usage = await findSharedLegendLibraryUsage(dataRoot, item.fileName);
       res.json({ id, name: item.name, usage });
     } catch (err) {
       res.status(500).json({ error: 'legend_library_usage_failed', details: String(err?.message || err) });
@@ -7739,7 +7807,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           const key = `external::${sourceId}`;
           return {
             kind: 'external', sourceId, externalType: String(sourceLayer?.externalType || '').trim().toLowerCase(), name,
-            title: String(sourceLayer?.title || name || sourceId).trim() || sourceId, role: 'main', visible: incomingVisibility[key] !== false,
+            title: String(sourceLayer?.title || name || sourceId).trim() || sourceId, infoText: String(sourceLayer?.infoText || '').trim(), role: 'main', visible: incomingVisibility[key] !== false,
             group: incomingGroupByName[key] || String(sourceLayer?.group || 'root'), projection: String(sourceLayer?.projection || 'EPSG:3857').trim() || 'EPSG:3857',
             attribution: String(sourceLayer?.attribution || '').trim(), layer: String(sourceLayer?.layer || '').trim(), matrixSet: String(sourceLayer?.matrixSet || '').trim(),
             minZoom: Number.isFinite(Number(sourceLayer?.minZoom)) ? Number(sourceLayer.minZoom) : 0,
@@ -7768,6 +7836,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const out = {
           name,
           title: String(sourceLayer?.title || (isTheme ? themeName : name)).trim() || name,
+          infoText: String(sourceLayer?.infoText || '').trim(),
           sourceProjectId,
           role: 'main',
           visible: (typeof incomingVisibility[layerRuleKey] === 'undefined') ? true : !!incomingVisibility[layerRuleKey],

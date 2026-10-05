@@ -1050,6 +1050,10 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 }
 
 /* ── Unified legend icon picker modal ── */
+#Qtiler2OrigoLegendPicker {
+  z-index: 2300;
+}
+
 .Qtiler2Origo-legend-picker__card {
   width: min(860px, calc(100vw - 32px));
   max-height: 90vh;

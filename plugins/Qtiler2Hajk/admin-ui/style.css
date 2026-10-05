@@ -833,7 +833,7 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 
 .Qtiler2Hajk-layer-row__actions {
   display: grid;
-  grid-template-columns: minmax(180px, 0.95fr) minmax(180px, 1fr) minmax(260px, 1.2fr);
+  grid-template-columns: minmax(180px, 0.95fr) minmax(220px, 1fr) minmax(260px, 1.2fr) 66px;
   gap: 8px 10px;
   align-items: stretch;
 }
@@ -860,7 +860,25 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 
 .Qtiler2Hajk-layer-row__title {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
   align-items: stretch;
+}
+
+.Qtiler2Hajk-layer-row__infofield textarea {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.Qtiler2Hajk-layer-row__order,
+.Qtiler2Hajk-control-order {
+  display: inline-flex;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.Qtiler2Hajk-layer-row__order {
+  padding-top: 6px;
 }
 
 .Qtiler2Hajk-layer-row__mode {
@@ -1026,6 +1044,10 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
 }
 
 /* ── Unified legend icon picker modal ── */
+#Qtiler2HajkLegendPicker {
+  z-index: 2300;
+}
+
 .Qtiler2Hajk-legend-picker__card {
   width: min(860px, calc(100vw - 32px));
   max-height: 90vh;
@@ -1316,6 +1338,12 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   flex: 1 1 auto;
   min-width: 0;
   word-break: break-word;
+}
+
+.Qtiler2Hajk-control-item .Qtiler2Hajk-control-order {
+  flex: 0 0 auto;
+  margin-left: auto;
+  word-break: normal;
 }
 
 @media (max-width: 900px) {

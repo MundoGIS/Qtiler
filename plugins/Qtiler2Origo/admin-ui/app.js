@@ -8600,13 +8600,14 @@ function openLegendLibraryPicker(targetCallback) {
         if (url && typeof cb === 'function') cb(url);
       }
     });
+    enableManagedModal(modal);
   }
   modal._pickCb = targetCallback;
   modal._state.filter = '';
   const searchInput = modal.querySelector('.Qtiler2Origo-legend-picker__search');
   if (searchInput) searchInput.value = '';
   modal.querySelectorAll('[data-legend-tab]').forEach((b) => b.classList.toggle('is-link', b.getAttribute('data-legend-tab') === modal._state.tab));
-  modal.classList.add('is-active');
+  openManagedModal(modal, null);
   loadLegendLibrary().then(() => modal._renderGrid());
 }
 
@@ -8994,7 +8995,7 @@ function updateRuleField(idx, key, value) {
   if (key.startsWith('icon.')) {
     const sub = key.slice(5);
     if (sub === 'pick') {
-      openSvgPicker((url) => {
+      openLegendLibraryPicker((url) => {
         r.point.icon.src = url;
         renderRulesPanel();
       });

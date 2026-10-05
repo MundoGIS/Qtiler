@@ -131,6 +131,17 @@ Use a reverse proxy with a valid TLS certificate. Preserve the original host and
 - Delete or disable unused database connections rather than leaving dormant service accounts active.
 - The QGIS Connector package contains its own README, changelog, license, and database setup guide.
 
+## Developer Machine Authorization
+
+The issuer may create `data/qtilerauth-machine-entitlement.json` using
+`node tools/authorize-local-qtilerauth.mjs` on a development machine that holds
+the issuer's private key. The signed authorization applies only to QtilerAuth
+and the exact machine fingerprint, with no expiration. Other machines still
+require normal commercial licensing. Do not distribute the issuer's private
+key, the authorization tool, or the local entitlement with customer releases.
+Moving or changing network hardware may change the fingerprint and require
+the issuer to generate a new authorization.
+
 ## Support
 
 For licensing, deployment, and support, contact MundoGIS at support@mundogis.se.

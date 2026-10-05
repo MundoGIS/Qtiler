@@ -1600,7 +1600,7 @@ async function uninstallPlugin(name) {
   }
 
   try {
-    await api(`/plugins/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await api(`/plugins/${encodeURIComponent(name)}?keepData=1`, { method: 'DELETE' });
     showMessage('success', t('successUninstall', { plugin: name }));
     await loadPlugins();
   } catch (err) {
@@ -1634,7 +1634,7 @@ function setupUploadForm() {
       pluginUploadForm.reset();
       // Installing the auth plugin makes /plugins admin-only.
       // Send the user to login (and then they can access the admin console again).
-      window.location.href = '/login?justInstalled=1';
+      window.location.href = pluginName === 'QtilerAuth' ? '/login?justInstalled=1' : '/admin';
       return;
     } catch (err) {
       const code = err?.code;
@@ -1657,7 +1657,7 @@ function setupUploadForm() {
           const pluginName = retryPayload?.plugin?.name || retryPayload?.name || 'plugin';
           showMessage('success', t('successInstall', { plugin: pluginName }));
           pluginUploadForm.reset();
-          window.location.href = '/login?justInstalled=1';
+          window.location.href = pluginName === 'QtilerAuth' ? '/login?justInstalled=1' : '/admin';
           return;
         } catch (retryErr) {
           const retryCode = retryErr?.code;

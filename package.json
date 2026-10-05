@@ -5,6 +5,7 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
+    "prestart": "node tools/check-local-runtime.mjs",
     "start": "node server.js",
     "dev": "nodemon --watch . --exec node server.js",
     "build:qtilerauth": "node tools/package-auth-plugin.mjs",

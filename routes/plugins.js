@@ -10,6 +10,8 @@ import path from "path";
 import AdmZip from "adm-zip";
 import multer from "multer";
 import crypto from "crypto";
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
 
@@ -361,6 +363,24 @@ export const registerPluginRoutes = ({
   };
 
   const getLicenseStatus = (store, pluginName) => {
+    if (pluginName === 'QtilerAuth') {
+      try {
+        const entitlementPath = path.join(dataDir, 'qtilerauth-machine-entitlement.json');
+        if (fs.existsSync(entitlementPath)) {
+          const entitlement = JSON.parse(fs.readFileSync(entitlementPath, 'utf8'));
+          const payload = verifyRsaLicenseKey(entitlement.licenseKey, licensePublicKey);
+          if (payload?.plugin === pluginName
+              && payload.kind === 'developer-machine-entitlement'
+              && payload.perpetual === true
+              && payload.trial === false
+              && payload.machineFingerprint === getMachineFingerprint()) {
+            return { status: 'active', expiresAt: null, daysLeft: null, license: payload };
+          }
+        }
+      } catch (err) {
+        console.warn('[licenses] Local machine entitlement could not be verified:', err?.message || err);
+      }
+    }
     const entry = store.plugins[pluginName] || {};
     const now = Date.now();
     let status = 'trial';
@@ -588,20 +608,7 @@ export const registerPluginRoutes = ({
       } catch (dirErr) {
         if (dirErr.code !== "ENOENT") throw dirErr;
       }
-      const installedSet = new Set(installed);
-      const enabled = pluginManager.listEnabled();
-
-      for (const name of enabled) {
-        if (installedSet.has(name)) continue;
-        // Re-check on disk: a transient readdir failure must not wipe plugins.json.
-        if (fs.existsSync(path.join(pluginsDir, name))) continue;
-        try {
-          await pluginManager.disablePlugin(name);
-          console.warn(`[Qtiler] Disabled missing plugin '${name}' (directory not found).`);
-        } catch (disableErr) {
-          console.warn(`[Qtiler] Failed to disable missing plugin '${name}':`, disableErr);
-        }
-      }
+      installed = installed.filter((name) => !name.startsWith('.'));
 
       if (pluginManager.listEnabled().length === 0) {
         applySecurityDefaults();
@@ -789,6 +796,9 @@ export const registerPluginRoutes = ({
   */
 
   app.delete("/plugins/:name", requireAdmin, async (req, res) => {
+    let releaseOperation = null;
+    try {
+    releaseOperation = await pluginManager.acquireOperationLock();
     const raw = req.params.name;
     const pluginName = sanitizePluginName(raw);
     if (!pluginName) {
@@ -798,14 +808,6 @@ export const registerPluginRoutes = ({
     const pluginDataPath = path.join(dataDir, pluginName);
     const exists = fs.existsSync(pluginPath);
     const wasEnabled = pluginManager.listEnabled().includes(pluginName);
-    try {
-      if (wasEnabled) {
-        await pluginManager.disablePlugin(pluginName);
-      }
-    } catch (disableErr) {
-      return res.status(500).json({ error: "plugin_disable_failed", details: String(disableErr?.message || disableErr) });
-    }
-
     let removedFiles = false;
     if (exists) {
       try {
@@ -866,15 +868,11 @@ export const registerPluginRoutes = ({
       return res.status(404).json({ error: "plugin_not_found" });
     }
 
-    if (pluginManager.listEnabled().length === 0) {
-      applySecurityDefaults();
-      // Force reset of security object if it was modified by a plugin but not fully restored
-      if (typeof security.isEnabled === 'function' && security.isEnabled()) {
-         console.warn('[Qtiler] Security still enabled after uninstalling all plugins. Forcing reset.');
-         applySecurityDefaults();
-      }
-    }
-
+    await pluginManager.updateEnabledList((enabledSet) => {
+      enabledSet.delete(pluginName);
+      return enabledSet;
+    });
+    restartAfterResponse(res);
     res.json({
       status: "uninstalled",
       plugin: {
@@ -886,8 +884,11 @@ export const registerPluginRoutes = ({
       }
     });
 
-    // Restart only after the response is delivered to prevent connection reset in the browser.
-    restartAfterResponse(res);
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ error: err.code || 'plugin_remove_failed', details: err.message });
+    } finally {
+      if (releaseOperation) await releaseOperation();
+    }
   });
 
   // Runtime folders that are re-downloaded on install and must never bloat a backup.
@@ -1033,6 +1034,7 @@ export const registerPluginRoutes = ({
       }
 
       let tempDir = null;
+      let releaseOperation = null;
       try {
         tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-plugin-"));
         const extractDir = path.join(tempDir, "extract");
@@ -1062,6 +1064,7 @@ export const registerPluginRoutes = ({
         if (!pluginName) {
           throw Object.assign(new Error("plugin_name_required"), { statusCode: 400, code: "PLUGIN_NAME_REQUIRED" });
         }
+        releaseOperation = await pluginManager.acquireOperationLock();
 
         if (pricing[pluginName]) {
           const store = loadLicenseStore();
@@ -1081,7 +1084,8 @@ export const registerPluginRoutes = ({
         const stagedDestination = path.join(pluginsDir, `.${pluginName}.install-${operationId}`);
         const previousDestination = path.join(pluginsDir, `.${pluginName}.previous-${operationId}`);
 
-        const wasEnabled = pluginManager.listEnabled().includes(pluginName);
+        const persistedSnapshot = await pluginManager.store.read();
+        const wasPersisted = persistedSnapshot?.enabled?.includes(pluginName) === true;
         const hadPreviousFiles = fs.existsSync(destination);
         let replacementStarted = false;
         try {
@@ -1089,38 +1093,33 @@ export const registerPluginRoutes = ({
           // destroys the currently installed plugin.
           await removeRecursive(stagedDestination);
           await copyRecursive(pluginRoot, stagedDestination);
+          await promisify(execFile)(process.execPath, ['--check', path.join(stagedDestination, 'index.js')], { timeout: 30000 });
           if (pluginName === 'QtilerAuth') {
             await verifyQtilerAuthPackage(stagedDestination);
           }
 
-          if (wasEnabled) {
-            await pluginManager.disablePlugin(pluginName);
-          }
           if (hadPreviousFiles) {
             await fs.promises.rename(destination, previousDestination);
           }
           replacementStarted = true;
           await fs.promises.rename(stagedDestination, destination);
 
-          if (pluginName === 'QtilerAuth') {
-            await pluginManager.updateEnabledList((enabledSet) => {
-              enabledSet.add(pluginName);
-              return enabledSet;
-            });
-          } else {
-            await pluginManager.enablePlugin(pluginName);
-          }
-          await removeRecursive(previousDestination);
+          await pluginManager.updateEnabledList((enabledSet) => {
+            enabledSet.add(pluginName);
+            return enabledSet;
+          });
+          await removeRecursive(previousDestination).catch((cleanupErr) => {
+            console.warn('[plugins] Previous package cleanup failed', cleanupErr?.message || cleanupErr);
+          });
         } catch (loadErr) {
           await removeRecursive(stagedDestination).catch(() => { });
           if (replacementStarted) {
-            await pluginManager.unloadPlugin(pluginName).catch(() => { });
             await removeRecursive(destination).catch(() => { });
             if (hadPreviousFiles && fs.existsSync(previousDestination)) {
               await fs.promises.rename(previousDestination, destination).catch(() => { });
             }
             await pluginManager.updateEnabledList((enabledSet) => {
-              if (wasEnabled) enabledSet.add(pluginName);
+              if (wasPersisted) enabledSet.add(pluginName);
               else enabledSet.delete(pluginName);
               return enabledSet;
             }).catch(() => { });
@@ -1131,17 +1130,16 @@ export const registerPluginRoutes = ({
 
         // Ensure trial on first install
         try {
-          const store = loadLicenseStore();
-          ensureInstanceId(store);
           if (pricing[pluginName]) {
+            const store = loadLicenseStore();
+            ensureInstanceId(store);
             ensureTrial(store, pluginName);
           }
         } catch {}
 
         const response = { status: "enabled", plugin: { name: pluginName } };
-        res.status(201).json(response);
-        // Restart only after the response is delivered to prevent connection reset in the browser.
         restartAfterResponse(res);
+        res.status(201).json(response);
         return;
       } catch (uploadErr) {
         const statusCode = uploadErr.statusCode && Number.isInteger(uploadErr.statusCode) ? uploadErr.statusCode : 500;
@@ -1150,6 +1148,7 @@ export const registerPluginRoutes = ({
         if (uploadErr.restartRequired) restartAfterResponse(res);
         return res.status(statusCode).json({ error: code, details });
       } finally {
+        if (releaseOperation) await releaseOperation();
         if (file?.path) {
           try {
             await fs.promises.unlink(file.path);
