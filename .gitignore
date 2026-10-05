@@ -5,6 +5,16 @@ PLUGINS.md
 # Environment files
 .env
 .env.local
+.env.*
+!.env.example
+!.env.template
+/cookies*.txt
+/temp_header.txt
+*.pem
+!**/public_key.pem
+*.key
+*.pfx
+*.p12
 
 
 # Logs
@@ -50,7 +60,13 @@ data/project-access.json
 data/auth.db
 data/auth.db-wal
 data/auth.db-shm
+/auth.db
+/auth.db-*
 data/licenses.json
+data/licenses.json.*
+data/plugins.json
+data/legend-library/
+data/*entitlement*.json
 data/auth/
 data/job-pids/
 tools/licenses/
@@ -155,9 +171,15 @@ tools/package-qtwc-plugin.mjs
 tools/package-Qtiler2qwc-plugin.mjs
 tools/generate-license-ui.mjs
 tools/generate-license.mjs
+tools/authorize-local-qtilerauth.mjs
+tools/check-local-entitlement.mjs
+tools/check-local-runtime.mjs
 tools/package-Qtiler2Origo-plugin.mjs
 tools/sync-plugin-staging.mjs
 tools/deploy-Qtiler-3D-eye.bat
 tools/package-Qtiler-3D-eye-plugin.mjs
 mgis-3d-planner-master
-tools\package-qtiler-connector.mjs
+tools/package-qtiler-connector.mjs
+tools/package-QtilerStories-plugin.mjs
+data/licenses.json.36108.tmp
+data/qtilerauth-machine-entitlement.json
