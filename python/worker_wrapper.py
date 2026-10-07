@@ -3021,14 +3021,20 @@ def process_task(params):
                                     except Exception:
                                         props[fname] = None
                                 geom_wkt = None
+                                geojson_geometry = None
                                 try:
                                     if feat.hasGeometry() and feat.geometry():
                                         geom_wkt = feat.geometry().asWkt()
+                                        response_geometry = QgsGeometry(feat.geometry())
+                                        if lyr.crs().authid() != map_crs.authid():
+                                            response_geometry.transform(QgsCoordinateTransform(lyr.crs(), map_crs, proj))
+                                        geojson_geometry = json.loads(response_geometry.asJson())
                                 except Exception:
-                                    geom_wkt = None
+                                    geojson_geometry = None
                                 layer_out['features'].append({
                                     'id': int(feat.id()) if hasattr(feat, 'id') else None,
                                     'properties': props,
+                                    'geometry': geojson_geometry,
                                     'geometryWkt': geom_wkt
                                 })
                     except Exception:

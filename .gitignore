@@ -67,6 +67,7 @@ data/licenses.json
 data/licenses.json.*
 data/plugins.json
 data/legend-library/
+data/qtiler-settings/
 data/*entitlement*.json
 data/auth/
 data/job-pids/

@@ -130,6 +130,30 @@ a:focus {
   padding: 0;
 }
 
+.company-logo-img {
+  width: 160px;
+  max-width: 26vw;
+  height: 72px;
+  margin: 0 12px 0 0;
+  object-fit: contain;
+}
+
+.footer-brand,
+.portal-footer-brand,
+.footer-links a,
+.portal-footer-links a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app-header[style] .brand-logo,
+.app-header[style] .main-nav .nav-link,
+.app-header[style] .nav-user,
+.app-header[style] .nav-button,
+.app-header[style] .portal-button {
+  color: var(--qtiler-header-text);
+}
+
 .brand-logo {
   font-size: 1.9rem;
   font-weight: 700;

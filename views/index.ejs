@@ -78,15 +78,7 @@
         </div>
       </main>
 
-      <footer class="app-footer">
-        <div class="footer-inner">
-          <div class="footer-brand">© <span id="footer_year"></span> MundoGIS</div>
-          <div class="footer-links">
-            <a href="https://mundogis.se" target="_blank" rel="noopener">mundogis.se</a>
-            <a href="mailto:support@mundogis.se">support@mundogis.se</a>
-          </div>
-        </div>
-      </footer>
+      <%- include('partials/footer', { footerClass: 'app-footer', footerYearId: 'footer_year' }) %>
     </div>
 
    <script src="/js/index.js?v=<%= encodeURIComponent(assetVersion || '') %>" data-qtiler-asset-version="<%= assetVersion || '' %>"></script>

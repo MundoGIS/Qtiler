@@ -2044,4 +2044,129 @@ async function init() {
   ]);
 }
 
+async function setupServiceMetadataForm() {
+  const form = document.getElementById('service-metadata-form');
+  if (!form) return;
+  const fields = document.getElementById('service-metadata-fields');
+  const status = document.getElementById('service-metadata-status');
+  let metadata;
+  try {
+    status.textContent = 'Loading saved metadata...';
+    metadata = await api('/admin/service-metadata');
+    if (!metadata || typeof metadata !== 'object' || !metadata.serviceIdentification) throw new Error('Invalid metadata response');
+  } catch (err) {
+    status.textContent = err.status === 404
+      ? 'The running backend does not provide the metadata API. Restart Qtiler with the updated server files. Saving is disabled.'
+      : 'Could not load saved metadata. Saving is disabled.';
+    return;
+  }
+  const identification = metadata.serviceIdentification || {};
+  const provider = metadata.serviceProvider || {};
+  const values = { ...identification, ...provider, ...provider.contact, email: provider.contact?.address?.email || '', keywords: (identification.keywords || []).join(', ') };
+  for (const field of form.querySelectorAll('[name]')) field.value = values[field.name] || '';
+  fields.disabled = false;
+  status.textContent = '';
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = Object.fromEntries(new FormData(form));
+    fields.disabled = true;
+    status.textContent = 'Saving metadata...';
+    try {
+      const saved = await api('/admin/service-metadata', { method: 'PATCH', body: {
+        serviceIdentification: { title: input.title, abstract: input.abstract, fees: input.fees, accessConstraints: input.accessConstraints, keywords: input.keywords.split(',').map((item) => item.trim()).filter(Boolean) },
+        serviceProvider: { providerName: input.providerName, providerSite: input.providerSite, contact: { individualName: input.individualName, positionName: input.positionName, address: { email: input.email } } }
+      } });
+      if (!saved?.serviceIdentification) throw new Error('Server did not confirm the save');
+      status.textContent = 'Metadata saved.';
+      showMessage('success', 'Service metadata saved. Refresh the service connection in QGIS.');
+    } catch (err) {
+      status.textContent = 'Metadata was not saved. Your input has been kept.';
+      showMessage('error', parseError(err, 'Unable to save service metadata.'));
+    } finally {
+      fields.disabled = false;
+    }
+  });
+}
+
 init();
+setupServiceMetadataForm().catch(() => {});
+
+async function setupQtilerSettingsForm() {
+  const form = document.getElementById('qtiler-settings-form');
+  if (!form) return;
+  const fieldset = document.getElementById('qtiler-settings-fields');
+  const status = document.getElementById('qtiler-settings-status');
+  const fileInput = document.getElementById('qtiler-logo-file');
+  const preview = document.getElementById('qtiler-logo-preview');
+  let previewUrl = null;
+  let savedSettings;
+  const display = (settings) => {
+    savedSettings = settings;
+    for (const field of form.querySelectorAll('[name]')) field.value = settings[field.name] || (field.name === 'headerColor' ? '#1d4ed8' : '');
+    preview.src = settings.logoUrl;
+  };
+  const save = async (operation) => {
+    fieldset.disabled = true;
+    status.textContent = 'Saving...';
+    try {
+      const settings = await operation();
+      display(settings);
+      status.textContent = 'Settings saved.';
+      if (settings.headerColor) {
+        const header = document.querySelector('.app-header');
+        header.style.background = settings.headerColor;
+        header.style.color = settings.headerTextColor;
+        header.style.setProperty('--qtiler-header-text', settings.headerTextColor);
+      }
+      const logo = document.querySelector('.brand-logo-img');
+      if (logo) { logo.src = settings.logoUrl; logo.alt = settings.companyName; logo.classList.toggle('company-logo-img', !!settings.logoFile); }
+      const footerBrand = document.querySelector('.portal-footer-brand');
+      if (footerBrand) footerBrand.textContent = `\u00a9 ${new Date().getFullYear()} ${settings.footerText}`;
+      const footerLinks = document.querySelector('.portal-footer-links');
+      if (footerLinks) {
+        footerLinks.replaceChildren();
+        for (const [href, label] of [[settings.footerWebsiteUrl, settings.footerWebsiteLabel || settings.footerWebsiteUrl], [settings.footerContactEmail ? 'mailto:' + encodeURIComponent(settings.footerContactEmail) : '', settings.footerContactLabel || settings.footerContactEmail]]) {
+          if (!href) continue;
+          const link = document.createElement('a');
+          link.href = href; link.textContent = label; link.rel = 'noopener';
+          if (href.startsWith('http')) link.target = '_blank';
+          footerLinks.appendChild(link);
+        }
+      }
+    } catch (err) {
+      status.textContent = err.status === 404 ? 'Settings API unavailable. Restart Qtiler with the updated backend.' : 'Could not save settings. Previous settings remain unchanged.';
+    } finally {
+      fieldset.disabled = false;
+    }
+  };
+  try {
+    display(await api('/admin/qtiler-settings'));
+    fieldset.disabled = false;
+  } catch (err) {
+    status.textContent = err.status === 404 ? 'Settings API unavailable. Restart Qtiler with the updated backend.' : 'Could not load settings.';
+    return;
+  }
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(form));
+    await save(() => api('/admin/qtiler-settings', { method: 'PATCH', body }));
+  });
+  fileInput.addEventListener('change', () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const file = fileInput.files[0];
+    if (!file) { preview.src = savedSettings.logoUrl; return; }
+    if (file.size > 5 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { status.textContent = 'Use a PNG, JPEG or WebP image up to 5 MB.'; fileInput.value = ''; return; }
+    previewUrl = URL.createObjectURL(file);
+    preview.src = previewUrl;
+  });
+  document.getElementById('qtiler-logo-upload').addEventListener('click', async () => {
+    if (!fileInput.files[0]) { status.textContent = 'Select a logo first.'; return; }
+    const body = new FormData(); body.append('logo', fileInput.files[0]);
+    await save(() => api('/admin/qtiler-settings/logo', { method: 'POST', body }));
+    fileInput.value = '';
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+  });
+  document.getElementById('qtiler-logo-reset').addEventListener('click', () => save(() => api('/admin/qtiler-settings/logo', { method: 'DELETE' })));
+}
+
+setupQtilerSettingsForm().catch(() => {});

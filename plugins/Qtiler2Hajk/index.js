@@ -944,6 +944,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     let already = 0;
     const wmtsViewAnchor = 'updateMapViewResolutions(){var e=this.map.getView();this.map.setView(new $u({zoom:e.getZoom(),center:e.getCenter(),resolutions:this.resolutions,projection:this.projection,constrainResolution:e.getConstrainResolution()}))}';
     const wmtsViewReplacement = 'updateMapViewResolutions(){return this.map.getView()}';
+    const wmtsProtocolAnchor = 'wrapX:!1,url:e.url,crossOrigin:e.crossOrigin,axisMode:e.axisMode,layer:e.layer,matrixSet:e.matrixSet';
+    const wmtsProtocolReplacement = 'wrapX:!1,url:e.url,requestEncoding:e.requestEncoding||(/\\{(?:TileMatrix|TileCol|TileRow)\\}/.test(e.url)?"REST":"KVP"),crossOrigin:e.crossOrigin,axisMode:e.axisMode,layer:e.layer,matrixSet:e.matrixSet';
     const anchor = 'legendIcon:e.legendIcon,lineColor:e.lineColor';
     const iconAnchor = 'legendIcon:e.legendIcon,icon:e.icon,lineColor:e.lineColor';
     const legacyReplacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
@@ -975,6 +977,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         continue;
       }
       let next = raw;
+      if (next.includes(wmtsProtocolAnchor)) {
+        next = next.split(wmtsProtocolAnchor).join(wmtsProtocolReplacement);
+        patched++;
+      }
       if (next.includes(wmtsViewAnchor)) {
         next = next.split(wmtsViewAnchor).join(wmtsViewReplacement);
         patched++;
@@ -5756,6 +5762,7 @@ ${mapIcon}
                  layer: l.id || l.name,
                  style: 'default',
                  projection: lSource.projection || projCode,
+                 requestEncoding: /\{(?:TileMatrix|TileCol|TileRow)\}/.test(lSource.url || '') ? 'REST' : 'KVP',
                  origin: l.tileGrid?.origin,
                  resolutions: l.tileGrid?.resolutions,
                  matrixIds: l.tileGrid?.matrixIds,

@@ -554,7 +554,7 @@ const buildBboxNodes = ({ bboxWgs84, nativeBboxesByCrs = {}, crsList = [], wmsVe
   return xml;
 };
 
-const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [], wmsVersion = "1.3.0" }) => {
+const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = [], wmsVersion = "1.3.0", metadata = {} }) => {
   const now = new Date().toISOString();
   const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   
@@ -605,11 +605,12 @@ const buildCapabilitiesXml = ({ projectId, layers, serviceUrl, supportedCrs = []
     `${rootOpenTag}\n` +
     `<Service>` +
     `<Name>WMS</Name>` +
-    `<Title>${esc(`Qtiler WMS (${projectId})`)}</Title>` +
-    `<Abstract>${esc("WMS endpoint powered by QGIS Core (no QGIS Server)")}</Abstract>` +
-    `<KeywordList><Keyword>WMS</Keyword><Keyword>QTILER</Keyword></KeywordList>` +
+    `<Title>${esc(metadata.serviceIdentification?.title || `Qtiler WMS (${projectId})`)}</Title>` +
+    `<Abstract>${esc(metadata.serviceIdentification?.abstract || "WMS endpoint powered by QGIS Core (no QGIS Server)")}</Abstract>` +
+    `<KeywordList>${(metadata.serviceIdentification?.keywords || ['WMS', 'QTILER']).map((keyword) => `<Keyword>${esc(keyword)}</Keyword>`).join('')}</KeywordList>` +
     `<OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="${esc(serviceUrl)}"/>` +
-    `<Fees>NONE</Fees><AccessConstraints>NONE</AccessConstraints>` +
+    `<ContactInformation><ContactPersonPrimary><ContactPerson>${esc(metadata.serviceProvider?.contact?.individualName || '')}</ContactPerson><ContactOrganization>${esc(metadata.serviceProvider?.providerName || '')}</ContactOrganization></ContactPersonPrimary><ContactPosition>${esc(metadata.serviceProvider?.contact?.positionName || '')}</ContactPosition><ContactElectronicMailAddress>${esc(metadata.serviceProvider?.contact?.address?.email || '')}</ContactElectronicMailAddress></ContactInformation>` +
+    `<Fees>${esc(metadata.serviceIdentification?.fees || 'NONE')}</Fees><AccessConstraints>${esc(metadata.serviceIdentification?.accessConstraints || 'NONE')}</AccessConstraints>` +
     `</Service>` +
     `<Capability>` +
     `<Request>` +
@@ -766,9 +767,20 @@ export const registerWmsRoutes = ({
   ensureProjectAccessFromQuery,
   findProjectById,
   readProjectConfig = () => ({}),
+  getServiceMetadata = () => ({}),
   isPublicLayerExcludedForRequest = () => false
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
+  const renderWithRetry = async (params) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await tileRendererPool.renderTile(params);
+      } catch (err) {
+        if (err.code !== 'QUEUE_FULL' || attempt === 2) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
+      }
+    }
+  };
 
   // Extracted handler so we can accept POST requests (with KVP body) as well
   const handleWmsKvp = async (req, res) => {
@@ -875,7 +887,7 @@ export const registerWmsRoutes = ({
         // NOTE: do not append ?api_key=… here. The capability document is cached
         // by clients and proxies; clients must send the key via the X-API-Key
         // header instead so it never lands in shared logs/caches.
-        const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs, wmsVersion: negotiatedVersion });
+        const xml = buildCapabilitiesXml({ projectId, layers: outLayers, serviceUrl, supportedCrs, wmsVersion: negotiatedVersion, metadata: getServiceMetadata() });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type("text/xml").send(xml);
         return;
@@ -1036,7 +1048,7 @@ export const registerWmsRoutes = ({
         }
 
         try {
-          const result = await tileRendererPool.renderTile({
+          const result = await renderWithRetry({
             action: "feature_info",
             project_path: project.file,
             crs,
@@ -1063,7 +1075,15 @@ export const registerWmsRoutes = ({
           } else if (normalizedInfoFormat === 'text/xml') {
             res.type('text/xml').send(String(result.xml || featureInfoDataToXml(result.data || {})));
           } else {
-            res.type('application/json').json(result.data || {});
+            const data = result.data || {};
+            const features = Array.isArray(data.features) ? data.features : (data.layers || []).flatMap((layer) => (layer.features || []).map((feature) => ({
+              type: 'Feature',
+              id: `${layer.name}.${feature.id}`,
+              properties: feature.properties || {},
+              geometry: feature.geometry || null
+            })));
+            const responseCrs = String(typeof data.crs === 'string' ? data.crs : crs);
+            res.type('application/json').json({ ...data, type: 'FeatureCollection', features, crs: { type: 'name', properties: { name: responseCrs } } });
           }
         } catch (err) {
           res.status(renderErrStatus(err)).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
@@ -1312,7 +1332,7 @@ export const registerWmsRoutes = ({
           // We do not attempt to reuse those files automatically.
 
           await fs.promises.mkdir(path.dirname(cacheTarget.filePath), { recursive: true });
-          const result = await tileRendererPool.renderTile({
+          const result = await renderWithRetry({
             project_path: project.file,
             output_file: cacheTarget.filePath,
             bbox,
@@ -1359,7 +1379,7 @@ export const registerWmsRoutes = ({
           format
         };
 
-        const result = await tileRendererPool.renderTile(renderParams);
+        const result = await renderWithRetry(renderParams);
         if (!result || result.status !== "success") {
           const msg = result?.message || result?.error || "render_failed";
           res.status(500).type("application/xml").send(wmsExceptionXml(String(msg), { code: "NoApplicableCode" }));

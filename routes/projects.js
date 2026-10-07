@@ -80,6 +80,7 @@ export const registerProjectRoutes = ({
   extractJsonLike,
   readProjectConfig,
   buildProjectConfigPatch,
+  ensureServerProj4Def,
   updateProjectConfig,
   getProjectConfigPath,
   deleteLayerCacheInternal,
@@ -1795,6 +1796,11 @@ export const registerProjectRoutes = ({
     let patch;
     try {
       patch = buildProjectConfigPatch(req.body || {});
+      for (const code of patch.services?.publishedCrs || []) {
+        if (code !== 'CRS:84' && !(await ensureServerProj4Def(code))) {
+          return res.status(400).json({ error: 'invalid_crs', message: `Unknown or unavailable EPSG: ${code}` });
+        }
+      }
     } catch (err) {
       return res.status(400).json({ error: 'invalid_project_config', message: err.message });
     }

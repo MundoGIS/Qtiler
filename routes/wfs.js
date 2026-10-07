@@ -177,7 +177,7 @@ const normalizeSrsName = (value) => {
   return raw;
 };
 
-const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '1.1.0', defaultCount = 1000, publishedCrs = [] }) => {  const now = new Date().toISOString();
+const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '1.1.0', defaultCount = 1000, publishedCrs = [], metadata = {} }) => {  const now = new Date().toISOString();
   const ns = `http://qtiler.local/${encodeURIComponent(projectId || 'project')}`;
 
   const ver = String(version || '1.1.0').trim();
@@ -237,11 +237,12 @@ const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], versio
     ` xmlns:gml="${gmlNs}"` +
     ` xsi:schemaLocation="${escXml(schemaLoc)}">` +
     `<ows:ServiceIdentification>` +
-    `<ows:Title>${escXml(`Qtiler WFS (${projectId})`)}</ows:Title>` +
-    `<ows:Abstract>${escXml('WFS endpoint powered by QGIS Core (no QGIS Server)')}</ows:Abstract>` +
+    `<ows:Title>${escXml(metadata.serviceIdentification?.title || `Qtiler WFS (${projectId})`)}</ows:Title>` +
+    `<ows:Abstract>${escXml(metadata.serviceIdentification?.abstract || 'WFS endpoint powered by QGIS Core (no QGIS Server)')}</ows:Abstract>` +
     `<ows:ServiceType>WFS</ows:ServiceType>` +
     `<ows:ServiceTypeVersion>${escXml(is20 ? '2.0.0' : '1.1.0')}</ows:ServiceTypeVersion>` +
     `</ows:ServiceIdentification>` +
+    `<ows:ServiceProvider><ows:ProviderName>${escXml(metadata.serviceProvider?.providerName || 'MundoGIS')}</ows:ProviderName><ows:ServiceContact><ows:IndividualName>${escXml(metadata.serviceProvider?.contact?.individualName || '')}</ows:IndividualName><ows:PositionName>${escXml(metadata.serviceProvider?.contact?.positionName || '')}</ows:PositionName></ows:ServiceContact></ows:ServiceProvider>` +
     `<ows:OperationsMetadata>` +
     operationDcp('GetCapabilities') +
     operationDcp('DescribeFeatureType') +
@@ -296,6 +297,7 @@ export const registerWfsRoutes = ({
   security,
   findProjectById,
   readProjectConfig,
+  getServiceMetadata = () => ({}),
   logProjectEvent,
   isPublicLayerExcludedForRequest = () => false
 }) => {
@@ -825,7 +827,7 @@ export const registerWfsRoutes = ({
         ) || hardLimit;
         const serviceConfig = readProjectConfig(projectId, { useCache: false }) || {};
         const publishedCrs = normalizePublishedCrs(serviceConfig.services?.publishedCrs || []);
-        const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault, publishedCrs });
+        const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault, publishedCrs, metadata: getServiceMetadata() });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type('text/xml').send(xml);
       } catch (err) {

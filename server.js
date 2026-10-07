@@ -20,11 +20,14 @@ import { resolvePluginRoot, detectPluginName } from "./lib/pluginArchiveUtils.js
 import { copyRecursive, removeRecursive } from "./lib/fsRecursive.js";
 import { allowedProjectExtensions, createProjectUpload, createPluginUpload } from "./lib/uploads.js";
 import { registerUiRoutes } from "./routes/ui.js";
+import { registerQtilerSettingsRoutes } from './routes/qtilerSettings.js';
 import { registerProj4Routes } from "./routes/proj4.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerWmsRoutes } from "./routes/wms.js";
+import { registerServiceMetadataRoutes } from './routes/serviceMetadata.js';
 import { normalizePublishedCrs } from './lib/publishedCrs.js';
+import { buildReprojectedMatrixSet, renderReprojectedTile } from './lib/wmtsReprojection.js';
 import { registerWfsRoutes } from "./routes/wfs.js";
 import { registerOrigoRoutes } from "./routes/origo.js";
 import { registerExternalServiceRoutes } from "./routes/externalServices.js";
@@ -170,10 +173,20 @@ const fetchProj4FromEpsgIo = async (code) => {
 const ensureServerProj4Def = async (code) => {
   const key = normalizeEpsgKey(code);
   if (!key) return null;
-  if (proj4Presets && proj4Presets[key]) return proj4Presets[key];
+  if (proj4Presets && proj4Presets[key]) {
+    try {
+      proj4.defs(key, proj4Presets[key]);
+      new proj4.Proj(key);
+      return proj4Presets[key];
+    } catch { return null; }
+  }
   // try fetching from epsg.io
   const def = await fetchProj4FromEpsgIo(key);
   if (!def) return null;
+  try {
+    proj4.defs(key, def);
+    new proj4.Proj(key);
+  } catch { return null; }
   try {
     // persist to config/proj4-presets.json (merge)
     let existing = {};
@@ -701,6 +714,7 @@ const sendLoginPage = (req, res) => {
   renderPage(req, res, "login", { activeNav: "login" }, { status: 401 });
 };
 
+registerQtilerSettingsRoutes({ app, requireAdmin, dataDir });
 registerUiRoutes({
   app,
   security,
@@ -1412,6 +1426,7 @@ const loadTileMatrixPresetStore = () => {
 };
 
 let serviceMetadata = loadServiceMetadata();
+registerServiceMetadataRoutes({ app, requireAdmin, filePath: serviceMetadataPath, defaults: serviceMetadataDefaults, onSaved: (saved) => { serviceMetadata = saved; } });
 let tileMatrixPresetStore = loadTileMatrixPresetStore();
 
 const scheduleReload = (fn, delay = 200) => {
@@ -6201,6 +6216,7 @@ registerProjectRoutes({
   extractJsonLike,
   readProjectConfig,
   buildProjectConfigPatch,
+  ensureServerProj4Def,
   updateProjectConfig,
   getProjectConfigPath,
   deleteLayerCacheInternal,
@@ -6222,6 +6238,7 @@ registerWmsRoutes({
   ensureProjectAccessFromQuery,
   findProjectById,
   readProjectConfig,
+  getServiceMetadata: () => serviceMetadata,
   isPublicLayerExcludedForRequest
 });
 
@@ -6233,6 +6250,7 @@ registerWfsRoutes({
   security,
   findProjectById,
   readProjectConfig,
+  getServiceMetadata: () => serviceMetadata,
   logProjectEvent,
   isPublicLayerExcludedForRequest
 });
@@ -7421,6 +7439,24 @@ const buildWmtsInventory = (options = {}) => {
     } else if (layer.tileMatrixSet) {
       tileMatrixSetsMap.set(layer.tileMatrixSet.id, layer.tileMatrixSet);
     }
+    layer.additionalTileMatrixSets = [];
+    const published = readProjectConfig(layer.projectId, { useCache: false }).services?.publishedCrs || [];
+    for (const targetCrs of published) {
+      if (targetCrs === layer.tileCrs || targetCrs === 'CRS:84') continue;
+      try {
+        const diskDefinitions = JSON.parse(fs.readFileSync(proj4PresetsPath, 'utf8'));
+        const definition = diskDefinitions[targetCrs] || proj4Presets[targetCrs];
+        if (definition) proj4.defs(targetCrs, definition);
+        const projection = new proj4.Proj(targetCrs);
+        const metersPerUnit = projection.projName === 'longlat' ? 111319.49079327358 : (projection.to_meter || 1);
+        const grid = buildReprojectedMatrixSet(layer, targetCrs, (point) => proj4(layer.tileCrs, targetCrs, point), metersPerUnit);
+        if (!grid) continue;
+        layer.additionalTileMatrixSets.push(grid);
+        tileMatrixSetsMap.set(grid.id, grid);
+      } catch (err) {
+        console.warn('[WMTS] Additional CRS unavailable:', targetCrs, err.message);
+      }
+    }
     const routingKey = `${layer.projectKey}/${layer.layerKey}`;
     layerRouting.set(routingKey, {
       project: layer.projectId,
@@ -7435,7 +7471,8 @@ const buildWmtsInventory = (options = {}) => {
       zoomMin: layer.zoomMin,
       zoomMax: layer.zoomMax,
       extent: layer.extent,
-      tileCrs: layer.tileCrs
+      tileCrs: layer.tileCrs,
+      additionalTileMatrixSets: layer.additionalTileMatrixSets
     });
   }
 
@@ -7492,6 +7529,16 @@ app.get(
     const allowedStyles = new Set(layer.styles.map((s) => String(s).toLowerCase()));
     if (!allowedStyles.has(styleId)) {
       return res.status(404).send("Style not found");
+    }
+    const alternateSet = layer.additionalTileMatrixSets?.find((set) => set.id === requestedSetId);
+    if (alternateSet && extension === 'png') {
+      const project = findProjectById(layer.project);
+      if (!project?.file) return res.status(404).send('Project not found');
+      return renderReprojectedTile({
+        cacheDir: path.join(cacheDir, layer.project), projectFile: project.file, layerId: `${layer.projectKey}_${layer.layerKey}`,
+        layerName: layer.layerName, isTheme: layer.storage?.type === 'theme', matrixSet: alternateSet,
+        matrixId: tileMatrixId, row: tileRow, col: tileCol, renderer: tileRendererPool
+      }).then((file) => res.sendFile(file)).catch((err) => res.status(err.statusCode || 503).send(err.message));
     }
     if (requestedSetId !== layer.tileMatrixSetId) {
       return res.status(404).send("TileMatrixSet not available");
@@ -9746,6 +9793,9 @@ app.get("/wmts", (req, res, next) => {
           xmlParts.push("<Format>image/png</Format>");
           xmlParts.push(`<TileMatrixSetLink><TileMatrixSet>${xmlEscape(layer.tileMatrixSetId)}</TileMatrixSet>`);
           xmlParts.push("</TileMatrixSetLink>");
+          for (const set of layer.additionalTileMatrixSets || []) {
+            xmlParts.push(`<TileMatrixSetLink><TileMatrixSet>${xmlEscape(set.id)}</TileMatrixSet></TileMatrixSetLink>`);
+          }
           
           if (baseUrl) {
              const keySuffix = reqApiKey ? `?api_key=${encodeURIComponent(reqApiKey)}` : '';
@@ -9765,7 +9815,8 @@ app.get("/wmts", (req, res, next) => {
               xmlParts.push(`<ows:Identifier>${xmlEscape(matrix.identifier)}</ows:Identifier>`);
               xmlParts.push(`<ScaleDenominator>${formatNumber(matrix.scaleDenominator)}</ScaleDenominator>`);
               const tl = (matrix.topLeftCorner && matrix.topLeftCorner.length===2) ? matrix.topLeftCorner : [-WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT];
-              xmlParts.push(`<TopLeftCorner>${formatCorner(tl)}</TopLeftCorner>`);
+              const publishedCorner = set.reprojected && set.axisOrder === 'yx' ? [tl[1], tl[0]] : tl;
+              xmlParts.push(`<TopLeftCorner>${formatCorner(publishedCorner)}</TopLeftCorner>`);
               xmlParts.push(`<TileWidth>${formatNumber(matrix.tileWidth || 256)}</TileWidth>`);
               xmlParts.push(`<TileHeight>${formatNumber(matrix.tileHeight || 256)}</TileHeight>`);
               xmlParts.push(`<MatrixWidth>${formatNumber(matrix.matrixWidth)}</MatrixWidth>`);
@@ -9874,6 +9925,18 @@ app.get("/wmts", (req, res, next) => {
         let reqRow = Number(tileRow);
 
         // localizar TileMatrixSet para esta capa (puede venir embebido en layerEntry)
+        const requestedSet = String(findQ('TILEMATRIXSET') || '');
+        const alternateSet = layerEntry.additionalTileMatrixSets?.find((set) => set.id === requestedSet);
+        if (alternateSet) {
+          const project = findProjectById(projectId);
+          if (!project?.file) return res.status(404).send('Project not found');
+          return renderReprojectedTile({
+            cacheDir: path.join(cacheDir, projectId), projectFile: project.file, layerId: layerEntry.identifier,
+            layerName: targetName, isTheme, matrixSet: alternateSet, matrixId: tileMatrixId,
+            row: reqRow, col: reqCol, renderer: tileRendererPool
+          }).then((file) => { setWmtsTileCacheHeaders(res); res.sendFile(file); }).catch((err) => res.status(err.statusCode || 503).send(err.message));
+        }
+        if (requestedSet && requestedSet !== layerEntry.tileMatrixSetId) return res.status(404).send('TileMatrixSet not available');
         const tset = layerEntry.tileMatrixSet || inventory.tileMatrixSets.find(tm => String(tm.id) === String(layerEntry.tileMatrixSetId));
         if (!tset || !Array.isArray(tset.matrices)) {
           console.warn(`[WMTS-KVP] TileMatrixSet not available for layer ${layerId}`);

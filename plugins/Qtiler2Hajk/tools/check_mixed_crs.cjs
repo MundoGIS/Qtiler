@@ -53,6 +53,7 @@ async function check() {
     ] }, 'http://localhost:3009');
     assert.deepEqual(JSON.parse(JSON.stringify(mixed.mapConfig.map)), JSON.parse(JSON.stringify(before.mapConfig.map)), 'Adding mixed-CRS layers must not change CRS, extent, center or resolutions');
     assert.equal(mixed.layersConfig.wmtslayers[0].projection, 'EPSG:3857');
+    assert.equal(mixed.layersConfig.wmtslayers[0].requestEncoding, 'KVP');
     assert.deepEqual(Array.from(mixed.mapConfig.map.center), savedCenter);
     assert.equal(mixed.layersConfig.wmslayers.find((layer) => layer.caption === 'wms').projection, 'EPSG:25832');
     assert.ok(mixed.mapConfig.projections.some((entry) => entry.code === 'EPSG:25832'));
@@ -72,6 +73,28 @@ async function check() {
   const state = { map: { getView: () => view, setView: () => { throw new Error('WMTS must not replace the map view'); } } };
   const adapter = vm.runInNewContext(`({${replacement}})`);
   assert.equal(adapter.updateMapViewResolutions.call(state), view);
+  const protocolAnchor = /const wmtsProtocolAnchor = '([^']+)';/.exec(backend)[1];
+  const protocolReplacement = /const wmtsProtocolReplacement = '([^']+)';/.exec(backend)[1].replace(/\\\\/g, '\\');
+  const sourceOptions = vm.runInNewContext(`({${protocolReplacement}})`, {
+    e: { url: 'http://localhost/wmts/{TileMatrix}/{TileCol}/{TileRow}.png' }
+  });
+  assert.equal(sourceOptions.requestEncoding, 'REST');
+  const proxyOptions = vm.runInNewContext(`({${protocolReplacement}})`, {
+    e: { url: 'http://localhost/external-services/xyz/proxy' }
+  });
+  assert.equal(proxyOptions.requestEncoding, 'KVP');
+  const { default: WMTS } = await import('ol/source/WMTS.js');
+  const { default: WMTSTileGrid } = await import('ol/tilegrid/WMTS.js');
+  const tileGrid = new WMTSTileGrid({ origin: [0, 256], resolutions: [1], matrixIds: ['0'], tileSize: 256 });
+  const restSource = new WMTS({ ...sourceOptions, projection: 'EPSG:3857', tileGrid, layer: 'background', matrixSet: 'native', style: 'default' });
+  const restUrl = restSource.getTileUrlFunction()([0, 0, 0], 1, restSource.getProjection());
+  assert.equal(restUrl, 'http://localhost/wmts/0/0/0.png');
+  const proxySource = new WMTS({ ...proxyOptions, projection: 'EPSG:3857', tileGrid, layer: 'external', matrixSet: 'EPSG:3857', style: 'default' });
+  const proxyUrl = new URL(proxySource.getTileUrlFunction()([0, 0, 0], 1, proxySource.getProjection()));
+  assert.equal(proxyUrl.searchParams.get('TileMatrix'), '0');
+  assert.equal(proxyUrl.searchParams.get('TileCol'), '0');
+  assert.equal(proxyUrl.searchParams.get('TileRow'), '0');
+  assert.ok(backend.includes(protocolAnchor));
   console.log('Hajk mixed CRS behavior checks passed.');
 }
 

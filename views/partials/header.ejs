@@ -12,10 +12,10 @@
      ? headerTaglineText
      : defaultTaglineText;
 %>
-<header class="app-header<%= mode === 'portal' ? ' portal-header' : '' %>">
+<header class="app-header<%= mode === 'portal' ? ' portal-header' : '' %>"<% if (typeof qtilerSettings !== 'undefined' && qtilerSettings.headerColor) { %> style="background:<%= qtilerSettings.headerColor %>;--qtiler-header-text:<%= qtilerSettings.headerTextColor %>;color:<%= qtilerSettings.headerTextColor %>"<% } %>>
   <div class="header-inner">
     <div class="brand">
-      <img src="/css/images/MGIS-logo_azul.png" alt="MundoGIS" class="brand-logo-img" />
+      <img src="<%= typeof qtilerSettings !== 'undefined' ? qtilerSettings.logoUrl : '/css/images/MGIS-logo_azul.png' %>" alt="<%= typeof qtilerSettings !== 'undefined' ? qtilerSettings.companyName : 'MundoGIS' %>" class="brand-logo-img<%= typeof qtilerSettings !== 'undefined' && qtilerSettings.logoFile ? ' company-logo-img' : '' %>" />
       <a href="/index.html" class="brand-logo">Qtiler</a>
     </div>
     <% if (mode === 'portal') { %>

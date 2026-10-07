@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import proj4 from 'proj4';
 import { registerWmsRoutes } from '../routes/wms.js';
 import { registerWfsRoutes } from '../routes/wfs.js';
 import { normalizePublishedCrs } from '../lib/publishedCrs.js';
 
-function fixture(config = {}) {
+function fixture(config = {}, options = {}) {
   const routes = new Map();
   const calls = [];
   const app = Object.fromEntries(['get', 'post'].map((method) => [method, (url, ...handlers) => routes.set(`${method} ${url}`, handlers)]));
@@ -14,15 +15,17 @@ function fixture(config = {}) {
     app, cacheDir: 'unused', tileGridDir: 'unused',
     tileRendererPool: { renderTile: async (params) => {
       calls.push(params);
+      if (options.failFirst && calls.length === 1) throw Object.assign(new Error('queue_full'), { code: 'QUEUE_FULL' });
       if (params.action === 'wfs_list') return { status: 'success', featureTypes: [
         { rawName: 'parks', title: 'Parks', crs: 'EPSG:3006', bboxWgs84: [12, 58, 16, 60] },
         { rawName: 'private', title: 'Private', crs: 'EPSG:3006' }
       ] };
-      return { status: 'success', data: { features: [{ id: 1, properties: { name: 'Park' } }] }, text: 'Park', xml: '<Feature>Park</Feature>' };
+      return { status: 'success', data: { crs: params.crs, layers: options.empty ? [] : [{ name: 'parks', features: [{ id: 1, properties: { name: 'Park' }, geometry: { type: 'Point', coordinates: [1100, 2200] } }] }] }, text: 'Park', xml: '<Feature>Park</Feature>' };
     } },
     ensureProjectAccessFromQuery: () => (_req, _res, next) => next(),
     findProjectById: () => ({ file: 'fixture.qgz' }),
     readProjectConfig: () => config,
+    getServiceMetadata: () => options.metadata || {},
     isPublicLayerExcludedForRequest: (_req, _id, name) => name === 'private'
   });
   return {
@@ -260,4 +263,97 @@ test('Auth CRS control validates and updates only its selected project', async (
   assert.deepEqual(context.state.projectServicesByProject.other.publishedCrs, ['EPSG:3857']);
   await assert.rejects(context.savePublishedCrsForProject('main', 'invalid'));
   assert.equal(calls.length, 2);
+});
+
+test('Auth CRS control reports fake EPSG and backend save mismatches', async () => {
+  const source = fs.readFileSync('plugins/QtilerAuth/admin-ui/app.js', 'utf8');
+  const start = source.indexOf('async function savePublishedCrsForProject(');
+  const end = source.indexOf('function renderLayerPermissions(', start);
+  const context = { state: {}, api: async () => { throw new Error('not_found'); } };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+  await assert.rejects(context.savePublishedCrsForProject('main', 'EPSG:9999999'), /Unknown or unavailable EPSG/);
+  context.api = async (_url, options) => options ? { services: { publishedCrs: [] } } : { def: 'valid fixture' };
+  await assert.rejects(context.savePublishedCrsForProject('main', 'EPSG:3857'), /server did not save/);
+});
+
+test('WMS viewer click calls GetFeatureInfo and displays returned attributes safely', async () => {
+  const source = fs.readFileSync('public/js/viewer.js', 'utf8');
+  const start = source.indexOf('    if (isWmsMode && !viewerData.theme) {');
+  const end = source.indexOf('    renderInfo();', start);
+  assert.ok(start >= 0 && end > start);
+  const element = { style: {}, textContent: '', innerHTML: '' };
+  let click;
+  let requested;
+  const context = {
+    isWmsMode: true, viewerData: { layer: 'parks' }, AbortController,
+    document: { createElement: () => element },
+    ol: { Overlay: class { setPosition(value) { this.position = value; } } },
+    map: { addOverlay() {}, on: (_event, callback) => { click = callback; }, getView: () => ({ getResolution: () => 10, getProjection: () => 'EPSG:3006' }) },
+    tileSource: { getFeatureInfoUrl: (_coordinate, _resolution, _projection, params) => { assert.equal(params.QUERY_LAYERS, 'parks'); return '/wms?REQUEST=GetFeatureInfo'; } },
+    fetch: async (url) => { requested = url; return { ok: true, json: async () => ({ layers: [{ features: [{ properties: { name: '<script>unsafe</script>' } }] }] }) }; },
+    escapeHtml: (value) => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end), context);
+  await click({ coordinate: [400000, 6500000] });
+  assert.equal(requested, '/wms?REQUEST=GetFeatureInfo');
+  assert.ok(element.innerHTML.includes('&lt;script&gt;'));
+  assert.ok(!element.innerHTML.includes('<script>'));
+});
+
+test('server rejects invalid projection definitions before persisting EPSG', async () => {
+  const source = fs.readFileSync('server.js', 'utf8');
+  const start = source.indexOf('const ensureServerProj4Def =');
+  const end = source.indexOf('app.set("views"', start);
+  let writes = 0;
+  const context = {
+    console, proj4, proj4Presets: {}, proj4PresetsPath: 'unused',
+    normalizeEpsgKey: (code) => code,
+    fetchProj4FromEpsgIo: async () => '<html>Unknown projection</html>',
+    fs: { readFileSync: () => '{}', writeFileSync: () => { writes += 1; } }
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(start, end) + '\nglobalThis.ensureCrs = ensureServerProj4Def;', context);
+  assert.equal(await context.ensureCrs('EPSG:9999999'), null);
+  assert.equal(writes, 0);
+});
+
+test('GetFeatureInfo retries a transient queue_full error', async () => {
+  const { request, calls } = fixture({}, { failFirst: true });
+  const result = await request({ ...baseQuery, CRS: 'EPSG:3857', BBOX: '1000,2000,3000,4000' });
+  assert.equal(result.statusCode, 200);
+  assert.equal(calls.length, 2);
+});
+
+test('WMS capabilities use escaped editable service metadata', async () => {
+  const { request } = fixture({}, { metadata: { serviceIdentification: { title: 'Maps & <Region>', abstract: 'Description', keywords: ['Regional'] }, serviceProvider: { providerName: 'Organization' } } });
+  const result = await request({ project: 'fixture', REQUEST: 'GetCapabilities' });
+  assert.ok(result.body.includes('<Title>Maps &amp; &lt;Region&gt;</Title>'));
+  assert.ok(result.body.includes('<ContactOrganization>Organization</ContactOrganization>'));
+});
+
+test('GetFeatureInfo JSON is a valid GeoJSON FeatureCollection for plugin clients', async () => {
+  const { request } = fixture();
+  const result = await request({ ...baseQuery, CRS: 'EPSG:3857', BBOX: '1000,2000,3000,4000' });
+  assert.equal(result.body.type, 'FeatureCollection');
+  assert.equal(result.body.features[0].type, 'Feature');
+  assert.equal(result.body.features[0].id, 'parks.1');
+  assert.equal(result.body.features[0].properties.name, 'Park');
+  assert.deepEqual(result.body.features[0].geometry, { type: 'Point', coordinates: [1100, 2200] });
+  assert.equal(result.body.crs.properties.name, 'EPSG:3857');
+  assert.ok(result.body.layers, 'Qtiler viewer compatibility must remain intact');
+  const { default: GeoJSON } = await import('ol/format/GeoJSON.js');
+  const features = new GeoJSON().readFeatures(result.body);
+  assert.equal(features[0].getId(), 'parks.1');
+  assert.equal(features[0].get('name'), 'Park');
+  assert.equal(features[0].getGeometry().getType(), 'Point');
+});
+
+test('an empty GetFeatureInfo result remains readable GeoJSON', async () => {
+  const { request } = fixture({}, { empty: true });
+  const result = await request({ ...baseQuery, CRS: 'EPSG:3857', BBOX: '1000,2000,3000,4000' });
+  const { default: GeoJSON } = await import('ol/format/GeoJSON.js');
+  assert.equal(result.body.type, 'FeatureCollection');
+  assert.deepEqual(new GeoJSON().readFeatures(result.body), []);
 });

@@ -1414,6 +1414,35 @@
 
     const tileLayer = new ol.layer.Tile({ source: tileSource });
     map.addLayer(tileLayer);
+    if (isWmsMode && !viewerData.theme) {
+      const popupElement = document.createElement('div');
+      popupElement.style.cssText = 'background:#fff;color:#172033;padding:12px;border:1px solid #bac6d4;border-radius:6px;max-width:340px;max-height:260px;overflow:auto;font-size:12px;';
+      const popup = new ol.Overlay({ element: popupElement, positioning: 'bottom-center', offset: [0, -12], autoPan: { animation: { duration: 150 } } });
+      map.addOverlay(popup);
+      let pendingInfo = null;
+      map.on('singleclick', async (event) => {
+        if (pendingInfo) pendingInfo.abort();
+        const controller = new AbortController();
+        pendingInfo = controller;
+        const view = map.getView();
+        const url = tileSource.getFeatureInfoUrl(event.coordinate, view.getResolution(), view.getProjection(), { INFO_FORMAT: 'application/json', FEATURE_COUNT: 10, QUERY_LAYERS: viewerData.layer });
+        if (!url) return;
+        popupElement.textContent = 'Loading information...';
+        popup.setPosition(event.coordinate);
+        try {
+          const response = await fetch(url, { credentials: 'include', signal: controller.signal });
+          if (!response.ok) throw new Error(`GetFeatureInfo: HTTP ${response.status}`);
+          const data = await response.json();
+          const features = Array.isArray(data.features) ? data.features : (data.layers || []).flatMap((layer) => layer.features || []);
+          popupElement.innerHTML = features.length ? features.map((feature) => {
+            const properties = feature.properties || feature.attributes || {};
+            return Object.entries(properties).slice(0, 30).map(([name, value]) => `<div><strong>${escapeHtml(name)}:</strong> ${escapeHtml(value)}</div>`).join('');
+          }).join('<hr>') : 'No features found.';
+        } catch (err) {
+          if (err.name !== 'AbortError') popupElement.textContent = err.message;
+        }
+      });
+    }
     renderInfo();
 
     // BFCache handlers

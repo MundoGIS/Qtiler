@@ -336,6 +336,7 @@ async function loadSearchableCatalog() {
       return {
         projectId,
         services: projectConfig?.services || {},
+        originalCrs: layersResponse?.project?.crs || layersResponse?.crs || layersResponse?.project_crs || projectConfig?.extent?.crs || '',
         layers: projectLayers,
         searchable: layerPermissions.map((entry) => entry?.search).filter(Boolean),
         layerPermissions,
@@ -359,6 +360,7 @@ async function loadSearchableCatalog() {
   const layersByProject = {};
   const layerAttributesByProject = {};
   const projectServicesByProject = {};
+  const projectCrsByProject = {};
   results.filter(Boolean).forEach((entry) => {
     searchableByProject[entry.projectId] = entry.searchable;
     layerPermissionsByProject[entry.projectId] = entry.permissionByName || new Map();
@@ -368,12 +370,14 @@ async function loadSearchableCatalog() {
     }));
     layerAttributesByProject[entry.projectId] = entry.attributes;
     projectServicesByProject[entry.projectId] = entry.services || {};
+    projectCrsByProject[entry.projectId] = entry.originalCrs || '';
   });
   state.searchableByProject = searchableByProject;
   state.layerPermissionsByProject = layerPermissionsByProject;
   state.layersByProject = layersByProject;
   state.layerAttributesByProject = layerAttributesByProject;
   state.projectServicesByProject = projectServicesByProject;
+  state.projectCrsByProject = projectCrsByProject;
 }
 
 const getRandomInt = (max) => {
@@ -930,9 +934,19 @@ async function savePublishedCrsForProject(projectId, value) {
   const codes = Array.from(new Set(String(value || '').split(',').map((code) => code.trim().toUpperCase()).filter(Boolean)));
   if (codes.length > 32 || codes.some((code) => !/^(EPSG:[1-9][0-9]*|CRS:84)$/.test(code))) throw new Error('Invalid published CRS');
   for (const code of codes) {
-    if (code !== 'CRS:84') await api(`/api/proj4/${encodeURIComponent(code)}`);
+    if (code !== 'CRS:84') {
+      try {
+        const resolved = await api(`/api/proj4/${encodeURIComponent(code)}`);
+        if (!resolved?.def) throw new Error('No projection definition');
+      } catch {
+        throw new Error(`Unknown or unavailable EPSG: ${code}. No changes saved.`);
+      }
+    }
   }
   const saved = await api(`/projects/${encodeURIComponent(projectId)}/config`, { method: 'PATCH', body: { services: { publishedCrs: codes } } });
+  if (JSON.stringify(saved.services?.publishedCrs) !== JSON.stringify(codes)) {
+    throw new Error('The server did not save the CRS list. Restart Qtiler with the updated backend and retry.');
+  }
   state.projectServicesByProject = state.projectServicesByProject || {};
   state.projectServicesByProject[projectId] = saved.services || { publishedCrs: codes };
   return codes;
@@ -975,12 +989,16 @@ function renderLayerPermissions() {
   const crsField = document.createElement('label');
   crsField.className = 'layer-project-picker';
   const crsLabel = document.createElement('span');
-  crsLabel.textContent = 'WMS/WFS CRS';
+  crsLabel.textContent = 'Published CRS (WMS/WFS/WMTS)';
   const crsInput = document.createElement('input');
   crsInput.id = 'layer-permissions-crs';
   crsInput.type = 'text';
   crsInput.placeholder = 'EPSG:3006, EPSG:3857';
-  crsInput.value = (state.projectServicesByProject?.[selectedProject.id]?.publishedCrs || []).join(', ');
+  const selectedCodes = state.projectServicesByProject?.[selectedProject.id]?.publishedCrs || [];
+  crsInput.value = selectedCodes.length ? selectedCodes.join(', ') : (state.projectCrsByProject?.[selectedProject.id] || '');
+  const crsHelp = document.createElement('small');
+  crsHelp.className = 'help';
+  crsHelp.textContent = `Original project CRS: ${state.projectCrsByProject?.[selectedProject.id] || 'Unavailable'}. Add EPSG codes separated by commas, for example EPSG:3006, EPSG:3857. Leave empty for automatic publication.`;
   crsInput.addEventListener('change', async () => {
     const value = crsInput.value;
     try {
@@ -994,7 +1012,7 @@ function renderLayerPermissions() {
       crsInput.disabled = false;
     }
   });
-  crsField.append(crsLabel, crsInput);
+  crsField.append(crsLabel, crsInput, crsHelp);
   container.appendChild(crsField);
 
   [selectedProject].forEach((project) => {

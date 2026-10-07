@@ -2,6 +2,93 @@
   --card-gap: 24px;
 }
 
+.service-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.service-metadata-summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.service-metadata-section[open] .service-metadata-summary {
+  margin-bottom: 18px;
+}
+
+#service-metadata-fields {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+#service-metadata-fields:disabled {
+  opacity: .6;
+}
+
+.service-metadata-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.service-metadata-grid input,
+.service-metadata-grid textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.qtiler-logo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+#qtiler-settings-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+#qtiler-settings-form input[type="color"] {
+  width: 96px;
+  max-width: 100%;
+  height: 44px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.qtiler-logo-controls img {
+  width: 140px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.qtiler-logo-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qtiler-logo-controls input {
+  max-width: 100%;
+}
+
 .admin-shell {
   background: var(--bg);
 }

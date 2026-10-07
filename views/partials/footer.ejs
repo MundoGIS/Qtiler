@@ -1,13 +1,14 @@
 <%
   const footerClassName = typeof footerClass !== 'undefined' && footerClass ? footerClass : 'portal-footer';
   const yearSpanId = typeof footerYearId !== 'undefined' && footerYearId ? footerYearId : 'portal_year';
+  const branding = typeof qtilerSettings !== 'undefined' ? qtilerSettings : { footerText: 'MundoGIS', footerWebsiteUrl: 'https://mundogis.se', footerWebsiteLabel: 'Mundogis.se', footerContactEmail: 'support@mundogis.se', footerContactLabel: 'Get in contact' };
 %>
 <footer class="<%= footerClassName %>">
-  <div class="portal-footer-inner">
-    <div class="portal-footer-brand">© <span id="<%= yearSpanId %>"></span> MundoGIS</div>
-    <div class="portal-footer-links">
-      <a href="https://mundogis.se" target="_blank" rel="noopener">Mundogis.se</a>
-      <a href="mailto:support@mundogis.se">Get in contact</a>
+  <div class="<%= footerClassName === 'app-footer' ? 'footer-inner' : 'portal-footer-inner' %>">
+    <div class="<%= footerClassName === 'app-footer' ? 'footer-brand' : 'portal-footer-brand' %>">© <span id="<%= yearSpanId %>"><%= new Date().getFullYear() %></span> <%= branding.footerText %></div>
+    <div class="<%= footerClassName === 'app-footer' ? 'footer-links' : 'portal-footer-links' %>">
+      <% if (branding.footerWebsiteUrl) { %><a href="<%= branding.footerWebsiteUrl %>" target="_blank" rel="noopener"><%= branding.footerWebsiteLabel || branding.footerWebsiteUrl %></a><% } %>
+      <% if (branding.footerContactEmail) { %><a href="mailto:<%= encodeURIComponent(branding.footerContactEmail) %>"><%= branding.footerContactLabel || branding.footerContactEmail %></a><% } %>
     </div>
   </div>
 </footer>

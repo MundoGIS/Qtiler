@@ -27,6 +27,53 @@
 
       <div id="messages" class="admin-messages" aria-live="polite"></div>
 
+      <details class="admin-card service-metadata-section">
+        <summary class="service-metadata-summary">Qtiler settings</summary>
+        <p id="qtiler-settings-status" role="status" aria-live="polite"></p>
+        <form id="qtiler-settings-form" class="admin-form">
+          <fieldset id="qtiler-settings-fields" disabled>
+            <div class="service-metadata-grid">
+              <label>Company name<input name="companyName" type="text" maxlength="500"></label>
+              <label>Header color<input name="headerColor" type="color" value="#1d4ed8"></label>
+              <label>Footer information<input name="footerText" type="text" maxlength="500"></label>
+              <label>Website label<input name="footerWebsiteLabel" type="text" maxlength="500"></label>
+              <label>Website URL<input name="footerWebsiteUrl" type="url" maxlength="500"></label>
+              <label>Contact label<input name="footerContactLabel" type="text" maxlength="500"></label>
+              <label>Contact email<input name="footerContactEmail" type="email" maxlength="500"></label>
+            </div>
+            <div class="qtiler-logo-controls">
+              <img id="qtiler-logo-preview" src="/css/images/MGIS-logo_azul.png" alt="Company logo">
+              <label>Company logo<input id="qtiler-logo-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+              <button id="qtiler-logo-upload" type="button" class="button">Upload logo</button>
+              <button id="qtiler-logo-reset" type="button" class="button">Reset logo</button>
+            </div>
+            <button type="submit" class="button">Save settings</button>
+          </fieldset>
+        </form>
+      </details>
+
+      <details class="admin-card service-metadata-section">
+        <summary class="service-metadata-summary">Service metadata</summary>
+        <p id="service-metadata-status" role="status" aria-live="polite"></p>
+        <form id="service-metadata-form" class="admin-form">
+          <fieldset id="service-metadata-fields" disabled>
+          <div class="service-metadata-grid">
+            <label>Title<input name="title" type="text" maxlength="4000"></label>
+            <label>Description<textarea name="abstract" rows="3" maxlength="4000"></textarea></label>
+            <label>Keywords<input name="keywords" type="text"></label>
+            <label>Organization<input name="providerName" type="text" maxlength="4000"></label>
+            <label>Website<input name="providerSite" type="url"></label>
+            <label>Contact name<input name="individualName" type="text" maxlength="4000"></label>
+            <label>Contact position<input name="positionName" type="text" maxlength="4000"></label>
+            <label>Email<input name="email" type="email"></label>
+            <label>Fees<input name="fees" type="text" maxlength="4000"></label>
+            <label>Access constraints<input name="accessConstraints" type="text" maxlength="4000"></label>
+          </div>
+          <button type="submit" class="button">Save metadata</button>
+          </fieldset>
+        </form>
+      </details>
+
       <section class="admin-card admin-card--consoles" aria-labelledby="console-heading">
         <div class="admin-card__header">
           <div>
