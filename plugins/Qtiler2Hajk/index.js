@@ -942,6 +942,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     await walk(installRoot);
     let patched = 0;
     let already = 0;
+    const wmtsViewAnchor = 'updateMapViewResolutions(){var e=this.map.getView();this.map.setView(new $u({zoom:e.getZoom(),center:e.getCenter(),resolutions:this.resolutions,projection:this.projection,constrainResolution:e.getConstrainResolution()}))}';
+    const wmtsViewReplacement = 'updateMapViewResolutions(){return this.map.getView()}';
     const anchor = 'legendIcon:e.legendIcon,lineColor:e.lineColor';
     const iconAnchor = 'legendIcon:e.legendIcon,icon:e.icon,lineColor:e.lineColor';
     const legacyReplacement = 'legendIcon:e.legendIcon,icon:e.icon,qtilerStyleRules:e.qtilerStyleRules,lineColor:e.lineColor';
@@ -973,6 +975,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         continue;
       }
       let next = raw;
+      if (next.includes(wmtsViewAnchor)) {
+        next = next.split(wmtsViewAnchor).join(wmtsViewReplacement);
+        patched++;
+      }
       if (/\b(?:EditModel|CollectorModel)-[^/\\]+\.js$/i.test(filePath)) {
         if (next.includes('qtilerRefreshV2')) {
           already++;
@@ -4933,23 +4939,6 @@ ${mapIcon}
       }
     } catch { /* use defaults */ }
 
-    // Hajk 4.3 replaces the map view projection when a WMTS layer is added.
-    // Start in the visible XYZ layer's CRS so its WMTS adapter cannot reinterpret
-    // an already-transformed center in a different coordinate system.
-    const activeXyzLayer = (profile.layers || []).find((layer) => layer?.kind === 'external'
-      && String(layer.externalType || '').toLowerCase() === 'xyz'
-      && layer.visible !== false);
-    if (activeXyzLayer) {
-      projCode = String(activeXyzLayer.projection || 'EPSG:3857').trim().toUpperCase();
-      const xyzProjectionConfig = computeProjectionConfig(projCode, nativeExtent);
-      nativeExtent = xyzProjectionConfig.projectionExtent;
-      extent = xyzProjectionConfig.projectionExtent;
-      center = [
-        Math.round((extent[0] + extent[2]) / 2),
-        Math.round((extent[1] + extent[3]) / 2)
-      ];
-    }
-
     // Override with admin-captured view — but ignore values that fall outside
     // the active projection extent (happens when the profile was saved with a
     // different background CRS than the one currently in use; the stale coords
@@ -5804,7 +5793,7 @@ ${mapIcon}
                infoTitle: l.title,
                infoText: String(l.infoText || '').trim() || undefined,
                url: lSource ? lSource.url : '',
-                 projection: projCode,
+                 projection: lSource?.projection || projCode,
                  layers: [l.id || l.name],
                  layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: wmsInfobox, searchDisplayName: wmsDisplayFieldNames.join(','), style: '', queryable: l.queryable !== false }],
                serverType: "qgis",
@@ -6054,7 +6043,7 @@ ${mapIcon}
           : [];
       }
     } catch { referenceProjections = []; }
-    const generatedProjections = buildProj4Defs(projCode, 'EPSG:3857', 'EPSG:4326')
+    const generatedProjections = buildProj4Defs(projCode, 'EPSG:3857', 'EPSG:4326', ...Object.values(source).map((entry) => entry.projection))
       .flatMap((def) => {
         const entries = [{ code: def.code, definition: def.projection }];
         const epsgMatch = /^EPSG:(\d+)$/i.exec(def.code);
