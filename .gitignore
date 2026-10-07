@@ -47,6 +47,7 @@ temp_zip_Qtiler2qwc
 
 # Build and extras
 dist/
+upgrade-backups/
 extras/
 OLD/
 daemon/
@@ -181,5 +182,7 @@ tools/package-Qtiler-3D-eye-plugin.mjs
 mgis-3d-planner-master
 tools/package-qtiler-connector.mjs
 tools/package-QtilerStories-plugin.mjs
+tools/build-plugins.mjs
+/tools/package-*-plugin.mjs
 data/licenses.json.36108.tmp
 data/qtilerauth-machine-entitlement.json
