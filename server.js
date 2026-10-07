@@ -24,6 +24,7 @@ import { registerProj4Routes } from "./routes/proj4.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerWmsRoutes } from "./routes/wms.js";
+import { normalizePublishedCrs } from './lib/publishedCrs.js';
 import { registerWfsRoutes } from "./routes/wfs.js";
 import { registerOrigoRoutes } from "./routes/origo.js";
 import { registerExternalServiceRoutes } from "./routes/externalServices.js";
@@ -1212,6 +1213,7 @@ const defaultProjectConfig = (projectId) => ({
   cachePreferences: { mode: "xyz", tileCrs: "EPSG:3857", allowRemote: true, throttleMs: 0, updatedAt: null },
   layers: {},
   themes: {},
+  services: { publishedCrs: [] },
   recache: {
     enabled: false,
     strategy: "interval",
@@ -2566,6 +2568,9 @@ const normalizeExtentPatch = (value, { defaultCrs = null } = {}) => {
 
 const buildProjectConfigPatch = (input = {}) => {
   const patch = {};
+  if (input.services && Object.prototype.hasOwnProperty.call(input.services, 'publishedCrs')) {
+    patch.services = { publishedCrs: normalizePublishedCrs(input.services.publishedCrs) };
+  }
   if (Object.prototype.hasOwnProperty.call(input, "extent")) {
     patch.extent = normalizeExtentPatch(input.extent, { defaultCrs: null });
   }
@@ -2603,6 +2608,7 @@ const buildProjectConfigPatch = (input = {}) => {
         layerPatch.lastParams = (info.lastParams && typeof info.lastParams === "object") ? info.lastParams : null;
       }
       if (typeof info.autoRecache === "boolean") layerPatch.autoRecache = info.autoRecache;
+      if (typeof info.wmsQueryable === 'boolean') layerPatch.wmsQueryable = info.wmsQueryable;
       if (Object.prototype.hasOwnProperty.call(info, "lastRequestedAt")) layerPatch.lastRequestedAt = info.lastRequestedAt || null;
       if (info.lastResult) layerPatch.lastResult = info.lastResult;
       if (info.lastMessage) layerPatch.lastMessage = info.lastMessage;
@@ -6215,6 +6221,7 @@ registerWmsRoutes({
   tileRendererPool,
   ensureProjectAccessFromQuery,
   findProjectById,
+  readProjectConfig,
   isPublicLayerExcludedForRequest
 });
 

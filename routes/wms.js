@@ -11,6 +11,7 @@ import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 import express from "express";
 import proj4 from "proj4";
 import sharp from "sharp";
+import { normalizePublishedCrs } from '../lib/publishedCrs.js';
 
 // Register proj4 presets from config if available so server-side reprojection works
 try {
@@ -687,7 +688,7 @@ const readProjectIndexLayers = ({ cacheDir, projectId }) => {
         if (projectCrsForExtent && Array.isArray(e.project_extent) && e.project_extent.length === 4) {
           nativeBboxesByCrs[projectCrsForExtent] = e.project_extent;
         }
-        return { name, title, crs: supported, bbox, nativeBboxesByCrs, queryable: false };
+        return { name, title, crs: supported, bbox, nativeBboxesByCrs, queryable: e.type === 'vector' || !!e.geometry_type };
       })
       .filter(Boolean);
     const projectCrs = Array.from(new Set([
@@ -764,6 +765,7 @@ export const registerWmsRoutes = ({
   tileRendererPool,
   ensureProjectAccessFromQuery,
   findProjectById,
+  readProjectConfig = () => ({}),
   isPublicLayerExcludedForRequest = () => false
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
@@ -808,13 +810,42 @@ export const registerWmsRoutes = ({
       }
 
       const requestUpper = request.toUpperCase();
+      const serviceConfig = readProjectConfig(projectId, { useCache: false }) || {};
+      const publishedCrs = normalizePublishedCrs(serviceConfig.services?.publishedCrs || []);
+      if (publishedCrs.length && ['GETMAP', 'GETFEATUREINFO'].includes(requestUpper)) {
+        const requestedCrs = normalizeCrs(getQueryCI(req, 'CRS') || getQueryCI(req, 'SRS')) || 'EPSG:3857';
+        if (!publishedCrs.includes(requestedCrs) && requestedCrs !== 'CRS:84') {
+          return res.status(400).type('application/xml').send(wmsExceptionXml(`CRS ${requestedCrs} is not published for this project`, { code: 'InvalidCRS' }));
+        }
+      }
       if (requestUpper === "GETCAPABILITIES") {
-        const layers = readProjectIndexLayers({ cacheDir, projectId })
+        const indexedLayers = readProjectIndexLayers({ cacheDir, projectId });
+        const byName = new Map(indexedLayers.map((layer) => [layer.name, layer]));
+        try {
+          const live = await tileRendererPool.renderTile({ action: 'wfs_list', project_path: project.file });
+          if (live?.status === 'success') {
+            for (const vector of live.featureTypes || []) {
+              const name = String(vector.rawName || vector.title || vector.name || '').trim();
+              if (!name) continue;
+              const cached = byName.get(name);
+              byName.set(name, {
+                ...cached, name, title: vector.title || cached?.title || name,
+                crs: Array.from(new Set([...(cached?.crs || []), normalizeCrs(vector.crs)].filter(Boolean))),
+                bbox: vector.bboxWgs84 || cached?.bbox || null,
+                nativeBboxesByCrs: cached?.nativeBboxesByCrs || {},
+                queryable: serviceConfig.layers?.[name]?.wmsQueryable !== false
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[WMS] Live queryable layer discovery failed:', err?.message || err);
+        }
+        const layers = Array.from(byName.values())
           .filter((layer) => !isPublicLayerExcludedForRequest(req, projectId, layer?.name, [layer?.themeName, layer?.title]));
-        const supportedCrs = readSupportedCrsFromTileGrids({ tileGridDir });
+        const supportedCrs = publishedCrs.length ? publishedCrs : readSupportedCrsFromTileGrids({ tileGridDir });
         const mergedLayers = layers.map((layer) => {
           const localCrs = Array.isArray(layer.crs) ? layer.crs : [];
-          return { ...layer, crs: Array.from(new Set([...supportedCrs, ...localCrs])) };
+          return { ...layer, crs: publishedCrs.length ? supportedCrs : Array.from(new Set([...supportedCrs, ...localCrs])) };
         });
 
         // Optional: return capabilities for a single layer only.
@@ -968,6 +999,9 @@ export const registerWmsRoutes = ({
           res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
+        if (queryLayers.some((layerName) => serviceConfig.layers?.[layerName]?.wmsQueryable === false)) {
+          return res.status(400).type('application/xml').send(wmsExceptionXml('Layer is not queryable', { code: 'LayerNotQueryable' }));
+        }
 
         const infoFormatRaw = String(getQueryCI(req, "INFO_FORMAT") || "application/json").trim().toLowerCase();
         const infoFormat = infoFormatRaw.split(';')[0].trim();
@@ -997,8 +1031,8 @@ export const registerWmsRoutes = ({
         }
 
         let bbox = bboxRaw;
-        if (String(version).trim() === "1.3.0" && String(crs).toUpperCase() === "EPSG:4326") {
-          bbox = [bboxRaw[1], bboxRaw[0], bboxRaw[3], bboxRaw[2]];
+        if (String(version).trim() === "1.3.0") {
+          bbox = toQgisXyBboxFromWms13(bboxRaw, crs, width, height);
         }
 
         try {

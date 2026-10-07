@@ -8,6 +8,7 @@ import os from 'os';
 import path from 'path';
 import multer from 'multer';
 import { getRequestBaseUrl } from '../lib/requestBaseUrl.js';
+import { normalizePublishedCrs } from '../lib/publishedCrs.js';
 
 const redactSecrets = (value) => {
   const input = value == null ? '' : String(value);
@@ -176,7 +177,7 @@ const normalizeSrsName = (value) => {
   return raw;
 };
 
-const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '1.1.0', defaultCount = 1000 }) => {  const now = new Date().toISOString();
+const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], version = '1.1.0', defaultCount = 1000, publishedCrs = [] }) => {  const now = new Date().toISOString();
   const ns = `http://qtiler.local/${encodeURIComponent(projectId || 'project')}`;
 
   const ver = String(version || '1.1.0').trim();
@@ -197,12 +198,16 @@ const buildCapabilitiesXml = ({ projectId, serviceUrl, featureTypes = [], versio
   const ftNodes = featureTypes.map((ft) => {
     const name = escXml(ft.name);
     const title = escXml(ft.title || ft.name);
-    const crs = escXml(ft.crs || 'EPSG:4326');
+    const defaultCrs = publishedCrs.length ? publishedCrs[0] : (ft.crs || 'EPSG:4326');
+    const defaultTag = is20 ? 'DefaultCRS' : 'DefaultSRS';
+    const otherTag = is20 ? 'OtherCRS' : 'OtherSRS';
+    const otherCrs = publishedCrs.filter((code) => code !== defaultCrs).map((code) => `<${otherTag}>${escXml(code)}</${otherTag}>`).join('');
+    const crs = escXml(defaultCrs);
     const bbox = Array.isArray(ft.bboxWgs84) && ft.bboxWgs84.length === 4 ? ft.bboxWgs84.map((n) => Number(n)) : null;
     const bboxNode = bbox && bbox.every(Number.isFinite)
       ? `<ows:WGS84BoundingBox><ows:LowerCorner>${bbox[0]} ${bbox[1]}</ows:LowerCorner><ows:UpperCorner>${bbox[2]} ${bbox[3]}</ows:UpperCorner></ows:WGS84BoundingBox>`
       : '';
-    return `<FeatureType><Name>${name}</Name><Title>${title}</Title><DefaultSRS>${crs}</DefaultSRS>${bboxNode}</FeatureType>`;
+    return `<FeatureType><Name>${name}</Name><Title>${title}</Title><${defaultTag}>${crs}</${defaultTag}>${otherCrs}${bboxNode}</FeatureType>`;
   }).join('');
 
   const wfsNs = is20 ? 'http://www.opengis.net/wfs/2.0' : 'http://www.opengis.net/wfs';
@@ -818,7 +823,9 @@ export const registerWfsRoutes = ({
           process.env.WFS_CAPABILITIES_COUNT_DEFAULT || '10000',
           10
         ) || hardLimit;
-        const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault });
+        const serviceConfig = readProjectConfig(projectId, { useCache: false }) || {};
+        const publishedCrs = normalizePublishedCrs(serviceConfig.services?.publishedCrs || []);
+        const xml = buildCapabilitiesXml({ projectId, serviceUrl, featureTypes, version, defaultCount: countDefault, publishedCrs });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).type('text/xml').send(xml);
       } catch (err) {
@@ -888,7 +895,12 @@ export const registerWfsRoutes = ({
       const bboxParsed = parseBbox(getQueryCI(req, 'BBOX'));
       const bbox = bboxParsed?.bbox || null;
       const bboxCrs = normalizeSrsName(bboxParsed?.crs) || null;
-      const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || normalizeSrsName(getQueryCI(req, 'CRS')) || bboxCrs || 'EPSG:3857';
+      const serviceConfig = readProjectConfig(projectId, { useCache: false }) || {};
+      const publishedCrs = normalizePublishedCrs(serviceConfig.services?.publishedCrs || []);
+      const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || normalizeSrsName(getQueryCI(req, 'CRS')) || bboxCrs || publishedCrs[0] || 'EPSG:3857';
+      if (publishedCrs.length && !publishedCrs.includes(srsName)) {
+        return res.status(400).type('application/xml').send(wfsExceptionXml(`CRS ${srsName} is not published for this project`, { code: 'InvalidParameterValue' }));
+      }
       const requestedCountRaw = getQueryCI(req, 'MAXFEATURES') ?? getQueryCI(req, 'COUNT');
       const hasExplicitCount = requestedCountRaw != null && String(requestedCountRaw).trim() !== '';
       const requestedCount = clampInt(requestedCountRaw, { min: 1, max: 10_000_000, fallback: null });

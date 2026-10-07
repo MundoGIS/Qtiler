@@ -324,9 +324,10 @@ async function loadSearchableCatalog() {
     const projectId = String(project?.id || '').trim();
     if (!projectId) return null;
     try {
-      const [layersResponse, searchableResponse] = await Promise.all([
+      const [layersResponse, searchableResponse, projectConfig] = await Promise.all([
         api(`/projects/${encodeURIComponent(projectId)}/layers`),
-        api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`)
+        api(`/auth-admin/projects/${encodeURIComponent(projectId)}/layers`),
+        api(`/projects/${encodeURIComponent(projectId)}/config`)
       ]);
       const allLayers = Array.isArray(layersResponse?.layers) ? layersResponse.layers : [];
       const projectLayers = allLayers.filter((l) => l && l.name);
@@ -334,6 +335,7 @@ async function loadSearchableCatalog() {
       const permissionByName = new Map(layerPermissions.map((entry) => [String(entry?.name || ''), entry]));
       return {
         projectId,
+        services: projectConfig?.services || {},
         layers: projectLayers,
         searchable: layerPermissions.map((entry) => entry?.search).filter(Boolean),
         layerPermissions,
@@ -356,6 +358,7 @@ async function loadSearchableCatalog() {
   const layerPermissionsByProject = {};
   const layersByProject = {};
   const layerAttributesByProject = {};
+  const projectServicesByProject = {};
   results.filter(Boolean).forEach((entry) => {
     searchableByProject[entry.projectId] = entry.searchable;
     layerPermissionsByProject[entry.projectId] = entry.permissionByName || new Map();
@@ -364,11 +367,13 @@ async function loadSearchableCatalog() {
       ...(entry.permissionByName?.get(String(layer.name || '')) || {})
     }));
     layerAttributesByProject[entry.projectId] = entry.attributes;
+    projectServicesByProject[entry.projectId] = entry.services || {};
   });
   state.searchableByProject = searchableByProject;
   state.layerPermissionsByProject = layerPermissionsByProject;
   state.layersByProject = layersByProject;
   state.layerAttributesByProject = layerAttributesByProject;
+  state.projectServicesByProject = projectServicesByProject;
 }
 
 const getRandomInt = (max) => {
@@ -913,6 +918,26 @@ function renderPublicProjects() {
   });
 }
 
+function isVectorPermissionLayer(layer) {
+  const isTheme = layer.isTheme === true || layer.kind === 'theme' || layer.type === 'THEME' || String(layer.name || '').startsWith('theme:');
+  const type = String(layer.type || '').toLowerCase();
+  const geometry = String(layer.geometry_type || '').toLowerCase();
+  return !isTheme && !['raster', 'wms', 'wmts', 'xyz'].includes(type)
+    && (['vector', 'wfs'].includes(type) || layer.kind === 'vector' || /point|line|polygon/.test(geometry));
+}
+
+async function savePublishedCrsForProject(projectId, value) {
+  const codes = Array.from(new Set(String(value || '').split(',').map((code) => code.trim().toUpperCase()).filter(Boolean)));
+  if (codes.length > 32 || codes.some((code) => !/^(EPSG:[1-9][0-9]*|CRS:84)$/.test(code))) throw new Error('Invalid published CRS');
+  for (const code of codes) {
+    if (code !== 'CRS:84') await api(`/api/proj4/${encodeURIComponent(code)}`);
+  }
+  const saved = await api(`/projects/${encodeURIComponent(projectId)}/config`, { method: 'PATCH', body: { services: { publishedCrs: codes } } });
+  state.projectServicesByProject = state.projectServicesByProject || {};
+  state.projectServicesByProject[projectId] = saved.services || { publishedCrs: codes };
+  return codes;
+}
+
 function renderLayerPermissions() {
   const container = document.getElementById('layer-permissions-list');
   if (!container) return;
@@ -926,24 +951,67 @@ function renderLayerPermissions() {
 
   const grid = document.createElement('div');
   grid.className = 'permission-grid';
-
+  const selectedProject = projectList.find((project) => project.id === state.layerPermissionProjectId) || projectList[0];
+  state.layerPermissionProjectId = selectedProject.id;
+  const projectField = document.createElement('label');
+  projectField.className = 'layer-project-picker';
+  const projectLabel = document.createElement('span');
+  projectLabel.textContent = 'Project';
+  const projectSelect = document.createElement('select');
+  projectSelect.id = 'layer-permissions-project';
   projectList.forEach((project) => {
+    const option = document.createElement('option');
+    option.value = project.id;
+    option.textContent = project.name || project.id;
+    option.selected = project.id === selectedProject.id;
+    projectSelect.appendChild(option);
+  });
+  projectSelect.addEventListener('change', () => {
+    state.layerPermissionProjectId = projectSelect.value;
+    renderLayerPermissions();
+  });
+  projectField.append(projectLabel, projectSelect);
+  container.appendChild(projectField);
+  const crsField = document.createElement('label');
+  crsField.className = 'layer-project-picker';
+  const crsLabel = document.createElement('span');
+  crsLabel.textContent = 'WMS/WFS CRS';
+  const crsInput = document.createElement('input');
+  crsInput.id = 'layer-permissions-crs';
+  crsInput.type = 'text';
+  crsInput.placeholder = 'EPSG:3006, EPSG:3857';
+  crsInput.value = (state.projectServicesByProject?.[selectedProject.id]?.publishedCrs || []).join(', ');
+  crsInput.addEventListener('change', async () => {
+    const value = crsInput.value;
+    try {
+      crsInput.disabled = true;
+      const codes = await savePublishedCrsForProject(selectedProject.id, value);
+      crsInput.value = codes.join(', ');
+      showMessage('success', `Service CRS saved for ${selectedProject.name || selectedProject.id}.`, { ttlMs: 2500 });
+    } catch (err) {
+      showMessage('error', parseError(err, 'Unable to save service CRS.'));
+    } finally {
+      crsInput.disabled = false;
+    }
+  });
+  crsField.append(crsLabel, crsInput);
+  container.appendChild(crsField);
+
+  [selectedProject].forEach((project) => {
     const projectId = project.id;
     const projectLayers = Array.isArray(state.layersByProject?.[projectId]) ? state.layersByProject[projectId] : [];
     const layerAttributes = state.layerAttributesByProject?.[projectId] || {};
     const layerPermissions = state.layerPermissionsByProject?.[projectId] || new Map();
 
     const card = document.createElement('article');
-    card.className = 'permission-card is-collapsed';
+    card.className = 'permission-card layer-permission-project';
     card.dataset.projectId = projectId;
 
     const header = document.createElement('header');
     header.className = 'permission-card-header';
 
-    const toggleButton = document.createElement('button');
-    toggleButton.type = 'button';
-    toggleButton.className = 'permission-card-toggle';
-    toggleButton.setAttribute('aria-expanded', 'false');
+    const toggleButton = document.createElement('div');
+    toggleButton.className = 'permission-project-title';
 
     const titleWrap = document.createElement('div');
     const heading = document.createElement('h3');
@@ -953,10 +1021,7 @@ function renderLayerPermissions() {
     meta.textContent = `${projectLayers.length} layer${projectLayers.length === 1 ? '' : 's'}`;
     titleWrap.append(heading, meta);
 
-    const chevron = document.createElement('span');
-    chevron.className = 'permission-card-chevron';
-    chevron.textContent = '›';
-    toggleButton.append(titleWrap, chevron);
+    toggleButton.append(titleWrap);
 
     const bulkActions = document.createElement('div');
     bulkActions.className = 'permission-bulk-actions';
@@ -983,24 +1048,21 @@ function renderLayerPermissions() {
 
     bulkActions.append(
       makeBulkButton('Exclude all', () => setBulkChecked('.exclude-check', true)),
-      makeBulkButton('Clear exclude', () => setBulkChecked('.exclude-check', false)),
-      makeBulkButton('Edit all', () => setBulkChecked('.edit-check', true)),
-      makeBulkButton('Clear edit', () => setBulkChecked('.edit-check', false))
+      makeBulkButton('Clear exclude', () => setBulkChecked('.exclude-check', false))
     );
+    if (projectLayers.some(isVectorPermissionLayer)) {
+      bulkActions.append(
+        makeBulkButton('Edit all', () => setBulkChecked('.edit-check', true)),
+        makeBulkButton('Clear edit', () => setBulkChecked('.edit-check', false))
+      );
+    }
 
     header.append(toggleButton, bulkActions);
     card.appendChild(header);
 
     const list = document.createElement('div');
     list.className = 'layer-permission-list';
-    list.hidden = true;
-
-    toggleButton.addEventListener('click', () => {
-      const expanded = toggleButton.getAttribute('aria-expanded') === 'true';
-      toggleButton.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      list.hidden = expanded;
-      card.classList.toggle('is-collapsed', expanded);
-    });
+    list.hidden = false;
 
     if (!projectLayers.length) {
       const empty = document.createElement('p');
@@ -1011,8 +1073,7 @@ function renderLayerPermissions() {
       projectLayers.forEach((layer) => {
         const permission = layerPermissions.get(String(layer.name || '')) || layer || {};
         const config = permission.search || {};
-        const isThemeLayer = layer.isTheme === true || layer.kind === 'theme' || layer.type === 'THEME' || String(layer.name || '').startsWith('theme:');
-        const isVectorLayer = !isThemeLayer && (layer.type === 'WFS' || layer.kind === 'vector' || !!layer.geometry_type);
+        const isVectorLayer = isVectorPermissionLayer(layer);
         const layerMeta = layerAttributes[layer.name] || { all: [], nonGeometry: [], geometry: [] };
         const savedColumns = [
           config.searchAttribute,
@@ -1077,6 +1138,14 @@ function renderLayerPermissions() {
         searchInput.disabled = !isVectorLayer;
         searchToggle.append(searchInput, document.createTextNode('Search'));
 
+        const infoToggle = document.createElement('label');
+        infoToggle.className = 'permission-chip';
+        const infoInput = document.createElement('input');
+        infoInput.type = 'checkbox';
+        infoInput.className = 'info-check';
+        infoInput.checked = isVectorLayer && permission.wmsQueryable !== false;
+        infoToggle.append(infoInput, document.createTextNode('WMS infoclick'));
+
         const searchControls = document.createElement('div');
         searchControls.className = `search-config-row${isVectorLayer && searchableEnabled ? '' : ' is-hidden'}`;
 
@@ -1128,7 +1197,8 @@ function renderLayerPermissions() {
         });
 
         searchControls.append(searchField, idField, hintField);
-        row.append(layerName, excludeToggle, editToggle, searchToggle, searchControls);
+        row.append(layerName, excludeToggle);
+        if (isVectorLayer) row.append(infoToggle, editToggle, searchToggle, searchControls);
         row.querySelectorAll('input, select').forEach((control) => {
           if (control === searchInput || control === editInput) return;
           control.addEventListener('change', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
@@ -1164,6 +1234,7 @@ function collectLayerPermissionPayload(list) {
       publicExcluded,
       wfsEditable,
       wfsSearchable,
+      wmsQueryable: isVectorLayer && !!row.querySelector('.info-check')?.checked,
       search: wfsSearchable && searchAttribute && idAttribute
         ? {
           name: layerName,
@@ -1182,6 +1253,7 @@ function collectLayerPermissionPayload(list) {
 function scheduleLayerPermissionAutosave(projectId, projectLabel, list) {
   const key = String(projectId || '').trim();
   if (!key) return;
+  state.layerPermissionsByProject[key] = new Map(collectLayerPermissionPayload(list).map((entry) => [entry.name, entry]));
   const existing = layerPermissionAutosaveTimers.get(key);
   if (existing) window.clearTimeout(existing);
   const timer = window.setTimeout(async () => {

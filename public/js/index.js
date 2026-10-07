@@ -2239,6 +2239,7 @@
           // If the project is already active and the user edited controls, keep their inputs.
           const preserveUserInputs = wasActive && state && state.controlsEdited;
           if (cfg && !preserveUserInputs) {
+            if (publishedCrsInput) publishedCrsInput.value = (cfg.services?.publishedCrs || []).join(', ');
             if (cfg.zoom) {
               if (zoomMinInput && cfg.zoom.min != null) zoomMinInput.value = Math.round(cfg.zoom.min);
               if (zoomMaxInput && cfg.zoom.max != null) zoomMaxInput.value = Math.round(cfg.zoom.max);
@@ -4351,6 +4352,7 @@
   const zoomMaxInput = document.getElementById('zoom_max');
   const modeSelect = document.getElementById('cache_mode');
   const tileCrsInput = document.getElementById('tile_crs');
+  const publishedCrsInput = document.getElementById('published_crs');
   const allowRemoteCheckbox = document.getElementById('allow_remote');
   const throttleInput = document.getElementById('throttle_ms');
   const jobsWrap = document.getElementById('jobs');
@@ -4391,6 +4393,26 @@
       }
 
       enforceCacheControls();
+
+      publishedCrsInput?.addEventListener('change', async () => {
+        const projectId = activeProjectId;
+        const inputValue = publishedCrsInput.value;
+        if (!projectId || suppressControlSync) return;
+        try {
+          const codes = Array.from(new Set(inputValue.split(',').map((code) => code.trim().toUpperCase()).filter(Boolean)));
+          if (codes.length > 32 || codes.some((code) => !/^(EPSG:[1-9][0-9]*|CRS:84)$/.test(code))) throw new Error('Invalid published CRS');
+          for (const code of codes) {
+            if (code === 'CRS:84') continue;
+            const response = await fetch('/api/proj4/' + encodeURIComponent(code), { credentials: 'include' });
+            if (!response.ok) throw new Error('Unknown CRS: ' + code);
+          }
+          if (projectId !== activeProjectId || inputValue !== publishedCrsInput.value) return;
+          publishedCrsInput.value = codes.join(', ');
+          queueProjectConfigSave(projectId, { services: { publishedCrs: codes } });
+        } catch (err) {
+          showStatus(err.message, true);
+        }
+      });
 
       if (uploadBtn && uploadInput) {
         uploadBtn.addEventListener('click', () => uploadInput.click());

@@ -1792,7 +1792,12 @@ export const registerProjectRoutes = ({
       console.warn('Pre-validate extent check failed', e);
     }
 
-    const patch = buildProjectConfigPatch(req.body || {});
+    let patch;
+    try {
+      patch = buildProjectConfigPatch(req.body || {});
+    } catch (err) {
+      return res.status(400).json({ error: 'invalid_project_config', message: err.message });
+    }
     console.log('[PATCH] built patch:', JSON.stringify(patch));
     try {
       const updated = updateProjectConfig(projectId, patch);

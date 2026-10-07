@@ -961,6 +961,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         name,
         wfsEditable: row.wfsEditable === true,
         wfsSearchable: row.wfsSearchable === true,
+        wmsQueryable: row.wmsQueryable !== false,
         publicExcluded: row.publicExcluded === true || row.excluded === true,
         search: searchEntry
       };
@@ -980,6 +981,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         ...previous,
         wfsEditable: row.wfsEditable === true,
         wfsSearchable: row.wfsSearchable === true,
+        wmsQueryable: typeof row.wmsQueryable === 'boolean' ? row.wmsQueryable : previous.wmsQueryable !== false,
         publicExcluded: row.publicExcluded === true || row.excluded === true
       };
       if (row.wfsSearchable === true && row.search && typeof row.search === 'object') {

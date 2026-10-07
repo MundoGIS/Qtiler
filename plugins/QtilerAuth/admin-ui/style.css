@@ -424,9 +424,37 @@ label {
   margin-top: 12px;
 }
 
+.layer-project-picker {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  margin-bottom: 16px;
+}
+
+.layer-project-picker select {
+  width: 100%;
+  min-width: 0;
+}
+
+.layer-permission-project {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.permission-project-title {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.permission-project-title .help {
+  margin: 2px 0 0;
+}
+
 .layer-permission-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, auto);
   gap: 12px;
   align-items: center;
   padding: 12px;
