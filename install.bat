@@ -147,7 +147,7 @@ echo   PowerShell: OK
 echo   Windows Service Control: OK
 echo   Required Qtiler files: OK
 echo   Qtiler package version: %QTILER_VERSION%
-echo   Node.js: system Node 22-24 is used when available; otherwise private Node 24 is downloaded
+echo   Node.js: system Node 24 is used when available; otherwise private Node 24 is downloaded
 echo   QGIS Desktop: you will be asked for a QGIS 3.x folder after setup mode is selected
 echo.
 >>"%QTILER_INSTALL_LOG%" echo Preflight OK.
@@ -995,6 +995,7 @@ echo  Restart the %QTILER_SERVICE_NAME% service after editing .env.
 echo.
 echo  QtilerAuth policy:
 echo    Eligible new installs enable the first 1-month trial.
+echo    Test and production profiles use the same trial activation policy.
 echo    Updates preserve existing license/trial state and never renew a trial.
 echo    If the preserved QtilerAuth license or trial is expired, QtilerAuth stays disabled.
 echo    Bundled Qtiler plugins are updated from this package; custom plugins are preserved.
@@ -1092,7 +1093,7 @@ exit /b 0
 
 :ensure_node
 REM ----------------------------------------------------------------------
-REM  Select Node.js 22-24, or install private portable Node.js 24
+REM  Select Node.js 24, or install private portable Node.js 24
 REM ----------------------------------------------------------------------
 >>"%QTILER_INSTALL_LOG%" echo Checking for a compatible Node.js runtime.
 set "QTILER_NODE_EXE="

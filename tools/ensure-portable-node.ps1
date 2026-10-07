@@ -54,7 +54,7 @@ function Get-CompatibleSystemNode {
     if ([string]::IsNullOrWhiteSpace($version)) { return $null }
     $major = [int]($version.Split('.')[0])
     $candidateNpmCli = Join-Path (Split-Path -Parent $candidate) 'node_modules\npm\bin\npm-cli.js'
-    if ($major -ge 22 -and $major -le 24 -and (Test-Path -LiteralPath $candidateNpmCli)) {
+    if ($major -eq $MajorVersion -and (Test-Path -LiteralPath $candidateNpmCli)) {
       return @{
         NodeExe = (Resolve-Path -LiteralPath $candidate).Path
         NpmCli = (Resolve-Path -LiteralPath $candidateNpmCli).Path

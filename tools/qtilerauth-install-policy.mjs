@@ -101,12 +101,12 @@ const ensureNewInstallTrial = (store, pluginName) => {
     },
     readJson(machineTrialFile, null)?.plugins?.[pluginName]
   ].filter(Boolean);
-  const current = candidates.find((trial) => isFutureDate(trial.expiresAt));
+  const current = candidates.find((trial) => verifyTrial(pluginName, store.instanceId, trial) && isFutureDate(trial.expiresAt));
   const historical = candidates[0] || null;
   const created = !current && !historical;
   const trial = current || historical || (() => {
     const startedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(Date.parse(startedAt) + 30 * 24 * 60 * 60 * 1000).toISOString();
     return { startedAt, expiresAt, sig: signTrial(pluginName, store.instanceId, startedAt, expiresAt) };
   })();
 
@@ -225,6 +225,13 @@ const disableQtilerAuth = () => {
   writePlugins(plugins);
 };
 
+if ((!entitlementValid && entitlementStatus === 'none') || entitlementStatus === 'machine_trial_active') {
+  const trialStore = store || { instanceId: machineFingerprint, plugins: {} };
+  const result = ensureNewInstallTrial(trialStore, 'QtilerAuth');
+  entitlementValid = verifyTrial('QtilerAuth', trialStore.instanceId, result.trial) && isFutureDate(result.trial.expiresAt);
+  entitlementStatus = entitlementValid ? (result.created ? 'trial_created' : 'trial_active') : 'trial_expired_or_invalid';
+}
+
 if (mode === 'update') {
   if (entitlementValid) {
     // A previous startup/license check may have removed QtilerAuth from
@@ -250,7 +257,7 @@ if (mode === 'update') {
 } else {
   if (!entitlementValid) {
     const result = ensureNewInstallTrial(store || { instanceId: machineFingerprint, plugins: {} }, 'QtilerAuth');
-    entitlementValid = isFutureDate(result?.trial?.expiresAt);
+    entitlementValid = verifyTrial('QtilerAuth', (store?.instanceId || machineFingerprint), result?.trial) && isFutureDate(result?.trial?.expiresAt);
     entitlementStatus = entitlementValid
       ? (result.created ? 'trial_created' : 'trial_active')
       : 'trial_expired';
