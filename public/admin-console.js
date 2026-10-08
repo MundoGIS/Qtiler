@@ -6,6 +6,8 @@
 
 'use strict';
 
+import { uploadPluginArchive, waitForPluginInstallation } from './js/plugin-installation.js';
+
 const footerYearEl = document.getElementById('portal_year');
 if (footerYearEl) {
   footerYearEl.textContent = String(new Date().getFullYear());
@@ -44,6 +46,13 @@ const I18N = {
     enabledStatus: 'Enabled',
     disabledStatus: 'Not enabled',
     packageInactiveStatus: 'Package present (inactive)',
+    installUploading: 'Uploading package',
+    installPreparing: 'Preparing package',
+    installStarting: 'Loading plugin on the server',
+    installTitle: 'Installing plugin',
+    installation_failed: 'The plugin could not be loaded by all server workers. Check the server log.',
+    installation_timeout: 'Installation has not been confirmed yet. Check the server log before retrying.',
+    installation_unsupported: 'The server does not support installation confirmation. Update Qtiler and retry.',
     uninstall: 'Uninstall',
     backup: 'Backup',
     restore: 'Restore',
@@ -153,6 +162,13 @@ const I18N = {
     enabledStatus: 'Habilitado',
     disabledStatus: 'No habilitado',
     packageInactiveStatus: 'Paquete presente (inactivo)',
+    installUploading: 'Subiendo paquete',
+    installPreparing: 'Preparando paquete',
+    installStarting: 'Cargando plugin en el servidor',
+    installTitle: 'Instalando plugin',
+    installation_failed: 'No todos los workers pudieron cargar el plugin. Revisa el registro del servidor.',
+    installation_timeout: 'La instalación aún no está confirmada. Revisa el registro del servidor antes de reintentar.',
+    installation_unsupported: 'El servidor no admite la confirmación de instalación. Actualiza Qtiler y vuelve a intentarlo.',
     uninstall: 'Desinstalar',
     backup: 'Copia de seguridad',
     restore: 'Restaurar',
@@ -262,6 +278,13 @@ const I18N = {
     enabledStatus: 'Aktiverad',
     disabledStatus: 'Inte aktiverad',
     packageInactiveStatus: 'Paket finns (inaktivt)',
+    installUploading: 'Laddar upp paket',
+    installPreparing: 'Förbereder paket',
+    installStarting: 'Laddar plugin på servern',
+    installTitle: 'Installerar plugin',
+    installation_failed: 'Alla serverprocesser kunde inte ladda pluginet. Kontrollera serverloggen.',
+    installation_timeout: 'Installationen är inte bekräftad ännu. Kontrollera serverloggen innan du försöker igen.',
+    installation_unsupported: 'Servern stöder inte installationsbekräftelse. Uppdatera Qtiler och försök igen.',
     uninstall: 'Avinstallera',
     backup: 'Säkerhetskopia',
     restore: 'Återställ',
@@ -1615,8 +1638,60 @@ async function uninstallPlugin(name) {
   }
 }
 
+let installationOriginalInert = null;
+let installationFrame = null;
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin || event.data?.type !== 'qtiler:viewer-installation') return;
+  if (![...document.querySelectorAll('#admin-root iframe')].some((frame) => frame.contentWindow === event.source)) return;
+  if (event.data.busy === true) {
+    if (document.getElementById('plugin-installation-dialog')?.open && installationFrame !== event.source) return;
+    installationFrame = event.source;
+    setPluginInstallationBusy(true, String(event.data.phase || t('installStarting')).slice(0, 200));
+  } else if (event.data.busy === false && installationFrame === event.source) {
+    installationFrame = null;
+    setPluginInstallationBusy(false);
+  }
+});
+
+function setPluginInstallationBusy(busy, phase = '', percentage = null) {
+  const root = document.getElementById('admin-root');
+  const dialog = document.getElementById('plugin-installation-dialog');
+  if (!root || !dialog) return;
+  if (busy && installationOriginalInert === null) installationOriginalInert = root.inert;
+  root.inert = busy || installationOriginalInert === true;
+  if (!busy) installationOriginalInert = null;
+  root.dataset.installing = String(busy);
+  document.getElementById('plugin-installation-title').textContent = t('installTitle');
+  document.getElementById('plugin-installation-phase').textContent = phase;
+  const progress = document.getElementById('plugin-installation-progress');
+  if (percentage === null) progress.removeAttribute('value');
+  else progress.value = percentage;
+  if (busy && !dialog.open) dialog.showModal();
+  if (!busy && dialog.open) dialog.close();
+}
+
+async function installPluginFromForm(body) {
+  setPluginInstallationBusy(true, t('installUploading'), 0);
+  const payload = await uploadPluginArchive(body, (percentage) => setPluginInstallationBusy(true, percentage === 100 ? t('installPreparing') : t('installUploading'), percentage === 100 ? null : percentage));
+  setPluginInstallationBusy(true, t('installStarting'));
+  await waitForPluginInstallation(payload.statusUrl);
+  return payload;
+}
+
+async function finishPluginInstallation(payload) {
+  const pluginName = payload?.plugin?.name || payload?.name || 'plugin';
+  setPluginInstallationBusy(false);
+  showMessage('success', t('successInstall', { plugin: pluginName }));
+  pluginUploadForm.reset();
+  try { await api('/auth/me'); }
+  catch (err) { if (err.status === 401 || err.status === 403) { window.location.href = '/login?justInstalled=1'; return; } }
+  await loadPlugins();
+}
+
 function setupUploadForm() {
   if (!pluginUploadForm) return;
+  document.getElementById('plugin-installation-dialog')?.addEventListener('cancel', (event) => event.preventDefault());
   pluginUploadForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const fileInput = document.getElementById('plugin-file');
@@ -1626,22 +1701,16 @@ function setupUploadForm() {
     }
     const formData = new FormData(pluginUploadForm);
     const submitBtn = pluginUploadForm.querySelector('button[type="submit"]');
+    const submitWasDisabled = submitBtn?.disabled;
     try {
       if (submitBtn) submitBtn.disabled = true;
-      const payload = await api('/plugins/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const pluginName = payload?.plugin?.name || payload?.name || 'plugin';
-      showMessage('success', t('successInstall', { plugin: pluginName }));
-      pluginUploadForm.reset();
-      // Installing the auth plugin makes /plugins admin-only.
-      // Send the user to login (and then they can access the admin console again).
-      window.location.href = pluginName === 'QtilerAuth' ? '/login?justInstalled=1' : '/admin';
+      const payload = await installPluginFromForm(formData);
+      await finishPluginInstallation(payload);
       return;
     } catch (err) {
       const code = err?.code;
       if (code === 'license_required' || code === 'license_expired') {
+        setPluginInstallationBusy(false);
         const key = window.prompt(t('licenseInstallPrompt'));
         if (!key) {
           showMessage('error', t('licenseInstallRequired'));
@@ -1653,14 +1722,8 @@ function setupUploadForm() {
           formData.append('licenseKey', key);
         }
         try {
-          const retryPayload = await api('/plugins/upload', {
-            method: 'POST',
-            body: formData
-          });
-          const pluginName = retryPayload?.plugin?.name || retryPayload?.name || 'plugin';
-          showMessage('success', t('successInstall', { plugin: pluginName }));
-          pluginUploadForm.reset();
-          window.location.href = pluginName === 'QtilerAuth' ? '/login?justInstalled=1' : '/admin';
+          const retryPayload = await installPluginFromForm(formData);
+          await finishPluginInstallation(retryPayload);
           return;
         } catch (retryErr) {
           const retryCode = retryErr?.code;
@@ -1668,7 +1731,7 @@ function setupUploadForm() {
             showMessage('error', t('licenseInstallInvalid'));
             return;
           }
-          showMessage('error', parseError(retryErr, t('errorUpload')));
+          showMessage('error', retryErr?.code?.startsWith('installation_') ? t(retryErr.code) : parseError(retryErr, t('errorUpload')));
           return;
         }
       }
@@ -1676,9 +1739,10 @@ function setupUploadForm() {
         showMessage('error', t('licenseInstallInvalid'));
         return;
       }
-      showMessage('error', parseError(err, t('errorUpload')));
+      showMessage('error', err?.code?.startsWith('installation_') ? t(err.code) : parseError(err, t('errorUpload')));
     } finally {
-      if (submitBtn) submitBtn.disabled = false;
+      setPluginInstallationBusy(false);
+      if (submitBtn) submitBtn.disabled = submitWasDisabled;
     }
   });
 }

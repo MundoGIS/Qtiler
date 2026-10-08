@@ -35,6 +35,10 @@ Qtiler ships with an optional plugin ecosystem. Most plugins are now open source
 | ProjectSearch | `0.1.0` | MPL-2.0 | Cross-project attribute search |
 | QuantizedMesh | `0.1.0` | MPL-2.0 | Quantized-mesh terrain endpoints |
 
+Fresh installations use `config/plugin-defaults.json` to enable the shipped QtilerAuth, Qtiler2Origo, Qtiler2Hajk and Qtiler2qwc packages, subject to the licence policy. Existing local activation is preserved in `data/plugins.json`; this private file is not published. Qtiler-3D-eye is excluded from factory activation.
+
+Admin shows upload progress and blocks configuration while installing a plugin package. Success is shown only after all server workers confirm the uploaded revision. The Origo, Hajk and QWC2 viewer installers also block configuration until setup and installation-status verification finish.
+
 ## QtilerAuth — the only commercial plugin (recommended)
 
 If you are about to expose Qtiler outside an isolated LAN, **QtilerAuth** is the

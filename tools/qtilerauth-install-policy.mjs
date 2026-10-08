@@ -168,7 +168,12 @@ const isLicenseBoundToMachine = (payload, licenseStore) => {
   return !!instanceId && (instanceId === licenseStore?.instanceId || instanceId === licenseStore?.legacyInstanceId);
 };
 
-const plugins = readJson(pluginsFile, { enabled: [] });
+const factoryDefaults = readJson(path.join(root, 'config', 'plugin-defaults.json'), { enabled: [] });
+const initialEnabled = (Array.isArray(factoryDefaults.enabled) ? factoryDefaults.enabled : []).filter((name) => {
+  if (typeof name !== 'string' || !/^[A-Za-z0-9_-]+$/.test(name) || name === 'Qtiler-3D-eye') return false;
+  return fs.existsSync(path.join(root, 'plugins', name, 'index.js')) && fs.existsSync(path.join(root, 'plugins', name, 'plugin.json'));
+});
+const plugins = readJson(pluginsFile, { enabled: initialEnabled });
 if (!Array.isArray(plugins.enabled)) plugins.enabled = [];
 plugins.enabled = plugins.enabled.filter((item) => String(item || '').trim());
 

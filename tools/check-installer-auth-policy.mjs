@@ -103,3 +103,18 @@ test('a valid historical 90-day trial is preserved instead of reset to 30 days',
   assert.match(result.stdout, /QTILERAUTH_EXPECTED=1/);
   assert.deepEqual((await readState(root)).licenses.plugins.QtilerAuth.trial, trial);
 });
+
+test('a new checkout activates shipped factory plugins but never 3D-eye or missing packages', async (context) => {
+  const { root, env } = await fixture(context);
+  await fs.rm(path.join(root, 'data', 'plugins.json'));
+  await fs.mkdir(path.join(root, 'config'));
+  await fs.writeFile(path.join(root, 'config', 'plugin-defaults.json'), JSON.stringify({ enabled: ['QtilerAuth', 'Qtiler2Hajk', 'Qtiler2Origo', 'Qtiler2qwc', 'Qrigo', 'Qtiler-3D-eye'] }));
+  for (const name of ['QtilerAuth', 'Qtiler2Hajk', 'Qtiler2Origo', 'Qtiler2qwc', 'Qtiler-3D-eye']) {
+    const directory = path.join(root, 'plugins', name);
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, 'index.js'), 'export const register = () => ({});');
+    await fs.writeFile(path.join(directory, 'plugin.json'), JSON.stringify({ name }));
+  }
+  await execute(process.execPath, [policy, root, 'new'], { env });
+  assert.deepEqual((await readState(root)).plugins.enabled, ['QtilerAuth', 'Qtiler2Hajk', 'Qtiler2Origo', 'Qtiler2qwc']);
+});

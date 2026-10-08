@@ -12,6 +12,7 @@ import multer from "multer";
 import crypto from "crypto";
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { INSTALL_RECEIPT, readInstallationStatus } from '../lib/pluginInstallation.js';
 import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
 
@@ -563,10 +564,10 @@ export const registerPluginRoutes = ({
       return status.status !== 'expired';
     });
   }
-  const requestClusterRestart = () => {
+  const requestClusterRestart = (revision = null) => {
     try {
       if (typeof process.send === 'function') {
-        process.send({ cmd: 'restartAllWorkers' });
+        process.send({ cmd: 'restartAllWorkers', revision });
       } else {
         process.exit(0);
       }
@@ -575,14 +576,14 @@ export const registerPluginRoutes = ({
       try { process.exit(0); } catch (_) { /* noop */ }
     }
   };
-  const restartAfterResponse = (res, delayMs = 250) => {
+  const restartAfterResponse = (res, delayMs = 250, revision = null) => {
     let scheduled = false;
     const schedule = () => {
       if (scheduled) return;
       scheduled = true;
       setTimeout(() => {
         // Restart once the response is flushed to avoid client-side ERR_CONNECTION_RESET.
-        requestClusterRestart();
+        requestClusterRestart(revision);
       }, Math.max(0, Number(delayMs) || 0));
     };
 
@@ -592,6 +593,13 @@ export const registerPluginRoutes = ({
     });
   };
   // Allow non-admin access to plugins list if no auth plugin is enabled (to install first plugin)
+  app.get('/plugins/installations/:id', async (req, res) => {
+    try {
+      const status = await readInstallationStatus(dataDir, pluginManager, req.params.id);
+      res.set('Cache-Control', 'no-store');
+      res.status(status.state === 'not_found' ? 404 : 200).json(status);
+    } catch { res.status(500).json({ error: 'installation_status_failed' }); }
+  });
   app.get("/plugins", async (req, res) => {
     if (security.isEnabled && security.isEnabled()) {
       if (!req.user || req.user.role !== 'admin') {
@@ -1095,6 +1103,7 @@ export const registerPluginRoutes = ({
 
         const destination = path.join(pluginsDir, pluginName);
         const operationId = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        const revision = crypto.randomUUID();
         const stagedDestination = path.join(pluginsDir, `.${pluginName}.install-${operationId}`);
         const previousDestination = path.join(pluginsDir, `.${pluginName}.previous-${operationId}`);
 
@@ -1111,6 +1120,9 @@ export const registerPluginRoutes = ({
           if (pluginName === 'QtilerAuth') {
             await verifyQtilerAuthPackage(stagedDestination);
           }
+          await fs.promises.writeFile(path.join(stagedDestination, INSTALL_RECEIPT), JSON.stringify({ revision }), 'utf8');
+          await fs.promises.mkdir(path.join(dataDir, 'plugin-operations'), { recursive: true });
+          await fs.promises.writeFile(path.join(dataDir, 'plugin-operations', `${revision}.json`), JSON.stringify({ plugin: pluginName, state: 'loading' }), 'utf8');
 
           if (hadPreviousFiles) {
             await fs.promises.rename(destination, previousDestination);
@@ -1151,8 +1163,8 @@ export const registerPluginRoutes = ({
           }
         } catch {}
 
-        const response = { status: "enabled", plugin: { name: pluginName } };
-        restartAfterResponse(res);
+        const response = { status: "loading", plugin: { name: pluginName }, revision, statusUrl: `/plugins/installations/${revision}` };
+        restartAfterResponse(res, 250, revision);
         res.status(201).json(response);
         return;
       } catch (uploadErr) {

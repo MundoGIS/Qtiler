@@ -2,7 +2,7 @@
   pageLang,
   pageTitle: 'Qtiler · Admin console',
   pageTitleI18nKey: 'admin.title',
-  extraStyles: ['/css/admin.css', '/css/admin-extra.css'],
+  extraStyles: ['/css/admin.css', '/css/admin-extra.css', '/css/plugin-installation.css'],
   bodyClass: 'admin-page'
 }) %>
   <div class="app-shell admin-shell">
@@ -118,6 +118,12 @@
         </div><!-- /installed-plugins-body -->
       </section>
     </main>
+
+    <dialog id="plugin-installation-dialog" class="plugin-installation-dialog" aria-labelledby="plugin-installation-title">
+      <h2 id="plugin-installation-title">Installing plugin</h2>
+      <p id="plugin-installation-phase" role="status" aria-live="polite"></p>
+      <progress id="plugin-installation-progress" max="100"></progress>
+    </dialog>
 
     <%- include('partials/footer') %>
   </div>

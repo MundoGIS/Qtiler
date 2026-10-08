@@ -71,6 +71,8 @@ data/qtiler-settings/
 data/*entitlement*.json
 data/auth/
 data/job-pids/
+data/plugin-operations/
+plugins/**/.qtiler-installation.json
 tools/licenses/
 
 # Archives

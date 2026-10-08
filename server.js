@@ -39,6 +39,7 @@ import AdmZip from "adm-zip";
 import cookieParser from "cookie-parser";
  //ort { spawnSync } from 'child_process';
 import { PluginManager } from "./lib/pluginManager.js";
+import { completeInstallation } from "./lib/pluginInstallation.js";
 import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removeProjectAccessFromDb, purgeProjectFromUsersInDb, persistProjectAccessInDb } from "./lib/authDb.js";
 
 
@@ -10082,6 +10083,9 @@ const startServer = async () => {
   }
   initializeProjectSchedules();
   startScheduleHeartbeat();
+  if (typeof process.send === 'function') {
+    process.send({ cmd: 'pluginRevisionsLoaded', revisions: Array.from(pluginManager.getRegistry().values()).map((entry) => entry.revision).filter(Boolean) });
+  }
   const server = app.listen(APP_PORT, () => console.log(`🚀 Servidor Node.js en http://localhost:${APP_PORT}`));
   // Increase timeout for tile rendering requests (default is 2 minutes)
   server.timeout = 300000; // 5 minutes
@@ -10097,6 +10101,7 @@ if (cluster.isPrimary || cluster.isMaster) {
   const plannedWorkerExits = new Set();
   const startingReplacementWorkers = new Set();
   let workerRestartQueue = Promise.resolve();
+  const workerPluginRevisions = new Map();
   console.log(`[Qtiler] starting master: cpuCount=${cpuCount}, configuredWorkers=${configuredWorkers}, forking=${numCPUs}`);
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
@@ -10155,9 +10160,21 @@ if (cluster.isPrimary || cluster.isMaster) {
 
   // Listen for worker requests to restart the cluster (e.g., after plugin install/uninstall)
   cluster.on('message', (worker, msg) => {
+    if (msg?.cmd === 'pluginRevisionsLoaded') {
+      workerPluginRevisions.set(worker.id, new Set(Array.isArray(msg.revisions) ? msg.revisions : []));
+      return;
+    }
     if (msg && msg.cmd === 'restartAllWorkers') {
       workerRestartQueue = workerRestartQueue
-        .then(restartAllWorkersRolling)
+        .then(async () => {
+          let revisions = [];
+          try {
+            await restartAllWorkersRolling();
+            revisions = Object.values(cluster.workers).filter(Boolean).map((entry) => workerPluginRevisions.get(entry.id));
+          } finally {
+            await completeInstallation(dataDir, msg.revision, revisions);
+          }
+        })
         .catch((err) => console.warn('[Qtiler] Rolling worker restart failed', err?.message || err));
       return;
     }
@@ -10185,6 +10202,7 @@ if (cluster.isPrimary || cluster.isMaster) {
   }, 10000);
 
   cluster.on("exit", (worker, code, signal) => {
+    workerPluginRevisions.delete(worker.id);
     if (plannedWorkerExits.delete(worker.id)) {
       return;
     }

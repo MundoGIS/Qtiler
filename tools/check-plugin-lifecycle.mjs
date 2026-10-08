@@ -7,6 +7,8 @@ import test from 'node:test';
 import AdmZip from 'adm-zip';
 import { PluginManager } from '../lib/pluginManager.js';
 import { registerPluginRoutes } from '../routes/plugins.js';
+import { INSTALL_RECEIPT, readInstallationStatus, completeInstallation } from '../lib/pluginInstallation.js';
+import { waitForPluginInstallation } from '../public/js/plugin-installation.js';
 
 async function fixture(context) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'qtiler-lifecycle-test-'));
@@ -97,9 +99,12 @@ test('uninstall preserves Auth, its license and plugin data; listing never mutat
   assert.deepEqual(new Set(response.payload.installed), new Set(['ValidPlugin', 'Qtiler-3D-eye']));
 });
 
-for (const invalid of [false, true]) {
-  test(`real upload route: ${invalid ? 'invalid replacement preserves previous package' : 'reinstall preserves Auth and license state'}`, async (context) => {
+for (const scenario of ['success', 'invalid', 'status-storage-error']) {
+  const invalid = scenario === 'invalid';
+  const storageError = scenario === 'status-storage-error';
+  test(`real upload route: ${invalid ? 'invalid replacement preserves previous package' : storageError ? 'status storage failure preserves previous package' : 'reinstall preserves Auth and license state'}`, async (context) => {
     const { root, pluginsDir, dataDir, manager } = await fixture(context);
+    if (storageError) await fs.writeFile(path.join(dataDir, 'plugin-operations'), 'not a directory');
     const destination = path.join(pluginsDir, 'Hajk');
     await fs.mkdir(destination);
     await fs.writeFile(path.join(destination, 'index.js'), 'export const register = () => ({version: 1});');
@@ -129,13 +134,78 @@ for (const invalid of [false, true]) {
     response.json = (payload) => { response.payload = payload; finish(); return response; };
     await routes.get('post /plugins/upload').at(-1)({ file: { path: zipPath }, body: {} }, response);
     await completed;
-    assert.equal(response.statusCode, invalid ? 500 : 201);
+    assert.equal(response.statusCode, invalid || storageError ? 500 : 201);
     assert.equal(await fs.readFile(licensePath, 'utf8'), licenseState);
     assert.deepEqual((await manager.store.read()).enabled, ['QtilerAuth', 'Hajk']);
     assert.deepEqual(manager.listEnabled(), ['QtilerAuth', 'Hajk']);
     assert.equal(manager.registry.has('QtilerAuth'), true);
     assert.equal(manager.registry.has('Hajk'), true);
-    assert.match(await fs.readFile(path.join(destination, 'index.js'), 'utf8'), invalid ? /version: 1/ : /version: 2/);
+    assert.match(await fs.readFile(path.join(destination, 'index.js'), 'utf8'), invalid || storageError ? /version: 1/ : /version: 2/);
     assert.deepEqual(await fs.readdir(pluginsDir), ['Hajk']);
+    if (!invalid && !storageError) {
+      assert.equal(response.payload.status, 'loading');
+      assert.equal(response.payload.statusUrl, `/plugins/installations/${response.payload.revision}`);
+      const receipt = JSON.parse(await fs.readFile(path.join(destination, INSTALL_RECEIPT), 'utf8'));
+      assert.equal(receipt.revision, response.payload.revision);
+      assert.equal((await readInstallationStatus(dataDir, manager, receipt.revision)).state, 'loading');
+    }
   });
 }
+
+test('installation confirmation requires both the cluster result and the loaded revision', async (context) => {
+  const { dataDir, manager } = await fixture(context);
+  const revision = '12345678-1234-1234-1234-123456789abc';
+  const operationDir = path.join(dataDir, 'plugin-operations');
+  await fs.mkdir(operationDir);
+  const operationPath = path.join(operationDir, `${revision}.json`);
+  assert.equal((await readInstallationStatus(dataDir, manager, '../licenses.json')).state, 'not_found');
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'not_found');
+  await fs.writeFile(operationPath, JSON.stringify({ plugin: 'Hajk', state: 'loading' }));
+  manager.registry.get('Hajk').revision = revision;
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'loading');
+  await fs.writeFile(operationPath, JSON.stringify({ plugin: 'Hajk', state: 'ready' }));
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'ready');
+  manager.registry.get('Hajk').revision = 'old-package';
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'loading');
+  await fs.writeFile(operationPath, JSON.stringify({ plugin: 'Hajk', state: 'failed' }));
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'failed');
+  manager.registry.get('Hajk').revision = revision;
+  await completeInstallation(dataDir, revision, [new Set([revision]), undefined]);
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'failed');
+  await completeInstallation(dataDir, revision, []);
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'failed');
+  await completeInstallation(dataDir, revision, [new Set([revision]), new Set(['old-package'])]);
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'failed');
+  await completeInstallation(dataDir, revision, [new Set([revision]), new Set([revision])]);
+  assert.equal((await readInstallationStatus(dataDir, manager, revision)).state, 'ready');
+  await completeInstallation(dataDir, '../licenses.json', []);
+});
+
+test('a receipt changed during plugin registration never identifies stale code as the new revision', async (context) => {
+  const { pluginsDir, manager } = await fixture(context);
+  const pluginDir = path.join(pluginsDir, 'RevisionRace');
+  await fs.mkdir(pluginDir);
+  await fs.writeFile(path.join(pluginDir, 'package.json'), JSON.stringify({ type: 'module' }));
+  await fs.writeFile(path.join(pluginDir, INSTALL_RECEIPT), JSON.stringify({ revision: 'old-package' }));
+  await fs.writeFile(path.join(pluginDir, 'index.js'), `import fs from 'node:fs/promises'; import path from 'node:path'; export async function register(context) { await fs.writeFile(path.join(context.baseDir, '${INSTALL_RECEIPT}'), JSON.stringify({ revision: 'new-package' })); return {}; }`);
+  await manager.loadPlugin('RevisionRace');
+  assert.equal(manager.registry.get('RevisionRace').revision, null);
+});
+
+test('browser polling tolerates restart outages but never reports failures or timeouts as ready', async () => {
+  const url = '/plugins/installations/12345678-1234-1234-1234-123456789abc';
+  let clock = 0;
+  let requests = 0;
+  const options = { now: () => clock, delay: async () => { clock += 1000; }, timeoutMs: 4000 };
+  const result = await waitForPluginInstallation(url, { ...options, read: async () => {
+    requests += 1;
+    if (requests === 1) throw Object.assign(new Error('Restarting'), { status: 503 });
+    return { state: requests === 2 ? 'loading' : 'ready' };
+  } });
+  assert.equal(result.state, 'ready');
+  assert.equal(requests, 3);
+  await assert.rejects(waitForPluginInstallation(url, { ...options, read: async () => ({ state: 'failed' }) }), /could not be loaded/);
+  await assert.rejects(waitForPluginInstallation(url, { ...options, read: async () => ({ state: 'loading' }) }), /not been confirmed/);
+  await assert.rejects(waitForPluginInstallation('https://outside.example/status', options), /does not support/);
+  await assert.rejects(waitForPluginInstallation(url, { ...options, read: async () => { throw Object.assign(new Error('Not found'), { status: 404 }); } }), /Not found/);
+});

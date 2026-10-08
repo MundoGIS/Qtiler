@@ -5428,25 +5428,31 @@ includePrereleaseEl?.addEventListener('change', () => loadReleases());
 
 installBtn?.addEventListener('click', async () => {
   installBtn.disabled = true;
+  let finishInstallation = () => {};
   try {
+    const { beginViewerInstallation } = await import('/js/plugin-installation.js');
+    finishInstallation = beginViewerInstallation('Hajk');
     // If we have selected a specific version from the select box, we can pass its assetUrl to bypass fallback logic
     const selectedOpt = versionEl.options[versionEl.selectedIndex];
     const assetUrl = selectedOpt && selectedOpt.dataset.asseturl ? selectedOpt.dataset.asseturl : null;
     
     await api('/plugins/Qtiler2Hajk/api/install', {
       method: 'POST',
+      signal: AbortSignal.timeout(300000),
       body: { 
         repo: String(repoEl.value || '').trim(), 
         version: String(versionEl.value || '').trim(),
         assetUrl: assetUrl
       }
     });
-    addLog(t('Qtiler2Hajk.log_installed'), 'ok');
     await loadStatus();
+    if (!currentStatus?.installed) throw new Error('Viewer installation has not been confirmed');
+    addLog(t('Qtiler2Hajk.log_installed'), 'ok');
     await loadPublishedProfiles();
   } catch (err) {
     addLog(t('Qtiler2Hajk.log_error', { msg: err.message }), 'error');
   } finally {
+    finishInstallation();
     installBtn.disabled = false;
   }
 });

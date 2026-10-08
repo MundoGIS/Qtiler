@@ -5728,17 +5728,23 @@ includePrereleaseEl?.addEventListener('change', () => loadReleases());
 
 installBtn?.addEventListener('click', async () => {
   installBtn.disabled = true;
+  let finishInstallation = () => {};
   try {
+    const { beginViewerInstallation } = await import('/js/plugin-installation.js');
+    finishInstallation = beginViewerInstallation('Origo-map');
     await api('/plugins/Qtiler2Origo/api/install', {
       method: 'POST',
+      signal: AbortSignal.timeout(300000),
       body: { repo: String(repoEl.value || '').trim(), version: String(versionEl.value || '').trim() }
     });
-    addLog(t('Qtiler2Origo.log_installed'), 'ok');
     await loadStatus();
+    if (!currentStatus?.installed) throw new Error('Viewer installation has not been confirmed');
+    addLog(t('Qtiler2Origo.log_installed'), 'ok');
     await loadPublishedProfiles();
   } catch (err) {
     addLog(t('Qtiler2Origo.log_error', { msg: err.message }), 'error');
   } finally {
+    finishInstallation();
     installBtn.disabled = false;
   }
 });
