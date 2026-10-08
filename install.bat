@@ -859,44 +859,11 @@ if errorlevel 1 (
 echo [Qtiler] Waiting for Qtiler HTTP endpoint to become ready on port %QTILER_PORT%...
 call :write_progress "Checking readiness" 94 "Waiting for Qtiler and QtilerAuth to respond on the configured port."
 >>"%QTILER_INSTALL_LOG%" echo Step 5b: waiting for HTTP readiness on port %QTILER_PORT%.
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$rootUrl = 'http://127.0.0.1:%QTILER_PORT%/';" ^
-    "$authUrl = 'http://127.0.0.1:%QTILER_PORT%/auth/login-status';" ^
-        "$authExpected = '%QTILERAUTH_EXPECTED%' -eq '1';" ^
-  "$deadline = (Get-Date).AddMinutes(2);" ^
-    "$rootReady = $false;" ^
-        "$authReady = -not $authExpected;" ^
-    "$authBody = '{\"username\":\"__bootstrap_probe__\"}';" ^
-  "while ((Get-Date) -lt $deadline) {" ^
-    "  if (-not $rootReady) {" ^
-    "    try {" ^
-    "      $resp = Invoke-WebRequest -Uri $rootUrl -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0 -ErrorAction Stop;" ^
-    "      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $rootReady = $true }" ^
-    "    } catch {" ^
-    "      $status = $null;" ^
-    "      try { $status = [int]$_.Exception.Response.StatusCode } catch {}" ^
-    "      if ($status -and $status -ge 200 -and $status -lt 500) { $rootReady = $true }" ^
-    "    }" ^
-    "  }" ^
-    "  if ($authExpected -and $rootReady -and -not $authReady) {" ^
-    "    try {" ^
-    "      $authResp = Invoke-RestMethod -Uri $authUrl -Method Post -UseBasicParsing -TimeoutSec 5 -ContentType 'application/json' -Body $authBody -ErrorAction Stop;" ^
-    "      if ($null -ne $authResp -and $authResp.PSObject.Properties.Name -contains 'requireCaptcha') { $authReady = $true }" ^
-    "    } catch {" ^
-    "      $authStatus = $null;" ^
-    "      try { $authStatus = [int]$_.Exception.Response.StatusCode } catch {}" ^
-    "      if ($authStatus -eq 200) { $authReady = $true }" ^
-    "    }" ^
-    "  }" ^
-    "  if ($rootReady -and $authReady) { break }" ^
-  "  Start-Sleep -Milliseconds 2000;" ^
-  "}" ^
-    "if (-not $rootReady) { Write-Host ('ERROR: Qtiler did not become ready at ' + $rootUrl + ' within the timeout.'); exit 1 }" ^
-    "if ($authExpected -and -not $authReady) { Write-Host ('ERROR: QtilerAuth did not become ready at ' + $authUrl + ' within the timeout.'); exit 1 }" ^
-    "Write-Host ('  Qtiler is responding at ' + $rootUrl);" ^
-    "if ($authExpected) { Write-Host ('  QtilerAuth is responding at ' + $authUrl) } else { Write-Host '  QtilerAuth readiness skipped because it is not enabled by the preserved license state.' }"
+set "QTILER_READINESS_AUTH_SWITCH="
+if /i "%QTILERAUTH_EXPECTED%"=="1" set "QTILER_READINESS_AUTH_SWITCH=-RequireAuth"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\wait-qtiler-readiness.ps1" -Port "%QTILER_PORT%" -TimeoutSeconds 300 %QTILER_READINESS_AUTH_SWITCH%
 if errorlevel 1 (
-    echo ERROR: Qtiler service started but Qtiler or the expected QtilerAuth endpoint did not become ready in time.
+    echo ERROR: Qtiler service started but readiness checks failed. See the HTTP status or connection diagnostic above.
     echo Check logs in %QTILER_ROOT%\logs and Windows Services for %QTILER_SERVICE_NAME% startup details.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service started but HTTP/QtilerAuth readiness failed. QtilerAuth expected=%QTILERAUTH_EXPECTED%.
     powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service started, but Qtiler did not become ready in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log and application logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Readiness Failed', 'OK', 'Error')" >nul
@@ -921,39 +888,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
     )
     echo [Qtiler] Waiting for Qtiler to become ready again on port %QTILER_PORT%...
     >>"%QTILER_INSTALL_LOG%" echo Step 5c: waiting for HTTP readiness after service restart.
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "$rootUrl = 'http://127.0.0.1:%QTILER_PORT%/';" ^
-        "$authUrl = 'http://127.0.0.1:%QTILER_PORT%/auth/login-status';" ^
-        "$deadline = (Get-Date).AddMinutes(2);" ^
-        "$rootReady = $false;" ^
-        "$authReady = $false;" ^
-        "$authBody = '{\"username\":\"__bootstrap_probe__\"}';" ^
-        "while ((Get-Date) -lt $deadline) {" ^
-        "  if (-not $rootReady) {" ^
-        "    try {" ^
-        "      $resp = Invoke-WebRequest -Uri $rootUrl -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0 -ErrorAction Stop;" ^
-        "      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $rootReady = $true }" ^
-        "    } catch {" ^
-        "      $status = $null;" ^
-        "      try { $status = [int]$_.Exception.Response.StatusCode } catch {}" ^
-        "      if ($status -and $status -ge 200 -and $status -lt 500) { $rootReady = $true }" ^
-        "    }" ^
-        "  }" ^
-        "  if ($rootReady -and -not $authReady) {" ^
-        "    try {" ^
-        "      $authResp = Invoke-RestMethod -Uri $authUrl -Method Post -UseBasicParsing -TimeoutSec 5 -ContentType 'application/json' -Body $authBody -ErrorAction Stop;" ^
-        "      if ($null -ne $authResp -and $authResp.PSObject.Properties.Name -contains 'requireCaptcha') { $authReady = $true }" ^
-        "    } catch {" ^
-        "      $authStatus = $null;" ^
-        "      try { $authStatus = [int]$_.Exception.Response.StatusCode } catch {}" ^
-        "      if ($authStatus -eq 200) { $authReady = $true }" ^
-        "    }" ^
-        "  }" ^
-        "  if ($rootReady -and $authReady) { break }" ^
-        "  Start-Sleep -Milliseconds 2000;" ^
-        "}" ^
-        "if (-not $rootReady -or -not $authReady) { Write-Host 'ERROR: Qtiler did not become ready again after the service restart.'; exit 1 }" ^
-        "Write-Host ('  Qtiler and QtilerAuth are ready after restart at ' + $rootUrl)"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\wait-qtiler-readiness.ps1" -Port "%QTILER_PORT%" -TimeoutSeconds 300 -RequireAuth
     if errorlevel 1 (
         echo ERROR: Qtiler service restarted but did not become ready again in time.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service restarted but HTTP/QtilerAuth readiness failed.

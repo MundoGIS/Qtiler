@@ -27,3 +27,16 @@ test('single-window entry point launches a hidden worker and embeds its logs', (
   assert.ok(gui.includes('$drainedLines -lt 100'));
   assert.ok(gui.includes('$1=[REDACTED]'));
 });
+
+test('service readiness retries startup and reports an unavailable QtilerAuth route', () => {
+  const batch = fs.readFileSync('install.bat', 'utf8');
+  const probe = fs.readFileSync('tools/wait-qtiler-readiness.ps1', 'utf8');
+  assert.equal((batch.match(/wait-qtiler-readiness\.ps1/g) || []).length, 2);
+  assert.ok(batch.includes('-TimeoutSeconds 300 %QTILER_READINESS_AUTH_SWITCH%'));
+  assert.ok(batch.includes('-TimeoutSeconds 300 -RequireAuth'));
+  assert.ok(probe.includes("-Method Post"));
+  assert.ok(probe.includes("$lastAuthStatus -eq 429"));
+  assert.ok(probe.includes('Last QtilerAuth HTTP status: $lastAuthStatus'));
+  assert.ok(probe.includes('The Auth route is not registered'));
+  assert.ok(probe.includes('Failed to load plugin QtilerAuth'));
+});
