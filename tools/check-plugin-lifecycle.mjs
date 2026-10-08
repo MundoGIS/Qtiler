@@ -83,12 +83,18 @@ test('uninstall preserves Auth, its license and plugin data; listing never mutat
   await fs.mkdir(path.join(pluginsDir, 'ValidPlugin'));
   await fs.writeFile(path.join(pluginsDir, 'ValidPlugin', 'index.js'), 'export const register = () => ({});');
   await fs.writeFile(path.join(pluginsDir, 'ValidPlugin', 'plugin.json'), JSON.stringify({ name: 'ValidPlugin' }));
+  await fs.mkdir(path.join(pluginsDir, 'Qtiler-3D-eye'));
+  await fs.writeFile(path.join(pluginsDir, 'Qtiler-3D-eye', 'index.js'), 'export const register = () => ({});');
+  await fs.writeFile(path.join(pluginsDir, 'Qtiler-3D-eye', 'plugin.json'), JSON.stringify({ name: 'Qtiler-3D-eye', showWhenInactive: false }));
   await manager.store.write({ enabled: ['QtilerAuth', 'AbsentPlugin'] });
   manager.deactivatePlugin = () => { throw new Error('No licensed plugin in this fixture'); };
   const before = await manager.store.read();
   await routes.get('get /plugins').at(-1)({ user: null }, response);
   assert.deepEqual(await manager.store.read(), before);
   assert.deepEqual(response.payload.installed, ['ValidPlugin']);
+  await manager.updateEnabledList((enabled) => enabled.add('Qtiler-3D-eye'));
+  await routes.get('get /plugins').at(-1)({ user: null }, response);
+  assert.deepEqual(new Set(response.payload.installed), new Set(['ValidPlugin', 'Qtiler-3D-eye']));
 });
 
 for (const invalid of [false, true]) {

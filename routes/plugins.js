@@ -601,6 +601,11 @@ export const registerPluginRoutes = ({
 
     try {
       await enforceLicenses();
+      const configured = await pluginManager.store.read();
+      const activatedPackages = new Set([
+        ...pluginManager.listEnabled(),
+        ...(Array.isArray(configured?.enabled) ? configured.enabled : [])
+      ]);
       let installed = [];
       try {
         const entries = await fs.promises.readdir(pluginsDir, { withFileTypes: true });
@@ -609,6 +614,7 @@ export const registerPluginRoutes = ({
           try {
             await fs.promises.access(path.join(pluginsDir, entry.name, 'index.js'), fs.constants.R_OK);
             const manifest = JSON.parse(await fs.promises.readFile(path.join(pluginsDir, entry.name, 'plugin.json'), 'utf8'));
+            if (manifest?.showWhenInactive === false && !activatedPackages.has(entry.name)) return null;
             return manifest && typeof manifest === 'object' && !Array.isArray(manifest) ? entry.name : null;
           } catch { return null; }
         }));

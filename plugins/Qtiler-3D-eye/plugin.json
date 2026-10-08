@@ -2,6 +2,7 @@
   "name": "Qtiler-3D-eye",
   "version": "0.1.0",
   "displayName": "Qtiler 3D Eye (Cesium)",
+  "showWhenInactive": false,
   "description": "Publish Cesium 3D maps from Qtiler projects with terrain, WMS/WFS layers, 3D Tiles, models, galleries and QtilerAuth-aware project access.",
   "docs": {
     "en": {
