@@ -79,11 +79,16 @@ test('uninstall preserves Auth, its license and plugin data; listing never mutat
   assert.deepEqual(manager.listEnabled(), ['QtilerAuth', 'Hajk']);
   manager.setLicenseGuard(() => true);
   manager.listEnabled = () => ['AbsentPlugin'];
+  await fs.mkdir(path.join(pluginsDir, 'EmptyPlugin'));
+  await fs.mkdir(path.join(pluginsDir, 'ValidPlugin'));
+  await fs.writeFile(path.join(pluginsDir, 'ValidPlugin', 'index.js'), 'export const register = () => ({});');
+  await fs.writeFile(path.join(pluginsDir, 'ValidPlugin', 'plugin.json'), JSON.stringify({ name: 'ValidPlugin' }));
   await manager.store.write({ enabled: ['QtilerAuth', 'AbsentPlugin'] });
   manager.deactivatePlugin = () => { throw new Error('No licensed plugin in this fixture'); };
   const before = await manager.store.read();
   await routes.get('get /plugins').at(-1)({ user: null }, response);
   assert.deepEqual(await manager.store.read(), before);
+  assert.deepEqual(response.payload.installed, ['ValidPlugin']);
 });
 
 for (const invalid of [false, true]) {

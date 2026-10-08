@@ -1,6 +1,6 @@
 {
   "name": "qtiler",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "Qtiler by MundoGIS – tile cache orchestration for QGIS projects",
   "type": "module",
   "main": "server.js",
@@ -44,7 +44,7 @@
     "node": ">=22 <25"
   },
   "dependencies": {
-    "adm-zip": "^0.6.1",
+    "adm-zip": "0.6.1",
     "archiver": "7.0.1",
     "bcryptjs": "2.4.3",
     "better-sqlite3": "12.8.0",
@@ -61,12 +61,12 @@
     "node-windows": "1.0.0-beta.8",
     "ol": "10.8.0",
     "ol-mapbox-style": "13.4.0",
-    "pg": "^8.16.3",
+    "pg": "8.16.3",
     "proj4": "2.20.8",
-    "sharp": "^0.35.5",
-    "tslib": "^2.8.1",
+    "sharp": "0.35.5",
+    "tslib": "2.8.1",
     "wellknown": "0.5.0",
-    "yauzl": "^3.4.0"
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "nodemon": "3.1.10"

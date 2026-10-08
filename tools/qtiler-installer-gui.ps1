@@ -3,8 +3,29 @@ param(
   [Parameter(Mandatory = $true)] [string] $OutputPath,
   [string] $DefaultPreviousRoot = '',
   [string] $ProgressLog = '',
-  [string] $InstallLog = ''
+  [string] $InstallLog = '',
+  [switch] $RunInstaller
 )
+
+if ($RunInstaller) {
+  $Root = [IO.Path]::GetFullPath($Root)
+  $administrator = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if (-not $administrator) {
+    $elevated = New-Object System.Diagnostics.ProcessStartInfo
+    $elevated.FileName = 'powershell.exe'
+    $elevated.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -STA -File "' + $PSCommandPath + '" -Root "' + $Root + '" -OutputPath "' + $OutputPath + '" -RunInstaller'
+    $elevated.WorkingDirectory = $Root
+    $elevated.UseShellExecute = $true
+    $elevated.Verb = 'runas'
+    $elevated.WindowStyle = 'Hidden'
+    try { [void][Diagnostics.Process]::Start($elevated) } catch { exit 2 }
+    exit 0
+  }
+  New-Item -ItemType Directory -Path (Join-Path $Root 'temp') -Force | Out-Null
+  if ([string]::IsNullOrWhiteSpace($DefaultPreviousRoot)) {
+    $DefaultPreviousRoot = & (Join-Path $Root 'tools\detect-qtiler-service-root.ps1')
+  }
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -15,7 +36,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $progressForm = New-Object System.Windows.Forms.Form
   $progressForm.Text = 'Qtiler Installer - MundoGIS'
   $progressForm.StartPosition = 'CenterScreen'
-  $progressForm.Size = New-Object System.Drawing.Size(690, 430)
+  $progressForm.Size = New-Object System.Drawing.Size(760, 640)
   $progressForm.FormBorderStyle = 'FixedDialog'
   $progressForm.MaximizeBox = $false
   $progressForm.BackColor = [System.Drawing.Color]::White
@@ -76,10 +97,24 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $progressClose = New-Object System.Windows.Forms.Button
   $progressClose.Text = 'Close'
   $progressClose.Enabled = $false
-  $progressClose.Location = New-Object System.Drawing.Point(532, 328)
+  $progressClose.Location = New-Object System.Drawing.Point(632, 548)
   $progressClose.Size = New-Object System.Drawing.Size(100, 32)
   $progressForm.Controls.Add($progressClose)
   $progressClose.Add_Click({ $progressForm.Close() })
+  $logViewer = New-Object System.Windows.Forms.RichTextBox
+  $logViewer.Location = New-Object System.Drawing.Point(42, 300)
+  $logViewer.Size = New-Object System.Drawing.Size(690, 230)
+  $logViewer.ReadOnly = $true
+  $logViewer.DetectUrls = $false
+  $logViewer.Font = New-Object System.Drawing.Font('Consolas', 9)
+  $progressForm.Controls.Add($logViewer)
+  $script:installWorker = $null
+  $script:stdoutRead = $null
+  $script:stderrRead = $null
+  $progressForm.Add_FormClosing({
+    param($sender, $event)
+    if ($script:installWorker -and -not $script:installWorker.HasExited) { $event.Cancel = $true }
+  })
 
   $script:installLogPosition = 0
   if ($InstallLog -and (Test-Path -LiteralPath $InstallLog)) {
@@ -88,6 +123,34 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $timer = New-Object System.Windows.Forms.Timer
   $timer.Interval = 350
   $timer.Add_Tick({
+    if ($script:installWorker) {
+      foreach ($streamName in @('stdout', 'stderr')) {
+        $drainedLines = 0
+        $pending = if ($streamName -eq 'stdout') { $script:stdoutRead } else { $script:stderrRead }
+        while ($pending -and $pending.IsCompleted -and $drainedLines -lt 100) {
+          $drainedLines += 1
+          $text = $pending.GetAwaiter().GetResult()
+          if ($null -ne $text) {
+            $text = [regex]::Replace($text, '(?i)(password|jwtSecret|api[_-]?key|license[_-]?key|LICENSE_SECRET|token)\s*[=:]\s*[^\r\n;]+', '$1=[REDACTED]')
+            $logViewer.AppendText($text + [Environment]::NewLine)
+            $logViewer.SelectionStart = $logViewer.TextLength
+            $logViewer.ScrollToCaret()
+          }
+          $nextRead = if ($null -ne $text) {
+            if ($streamName -eq 'stdout') { $script:installWorker.StandardOutput.ReadLineAsync() } else { $script:installWorker.StandardError.ReadLineAsync() }
+          } else { $null }
+          if ($streamName -eq 'stdout') { $script:stdoutRead = $nextRead } else { $script:stderrRead = $nextRead }
+          $pending = $nextRead
+        }
+      }
+      if ($script:installWorker.HasExited -and -not $progressClose.Enabled) {
+        $progressClose.Enabled = $true
+        if ($script:installWorker.ExitCode -ne 0) {
+          $progressPhase.Text = 'Installation needs attention'
+          $progressDetail.Text = 'The installer stopped with an error. Review the log below.'
+        }
+      }
+    }
     if (Test-Path -LiteralPath $ProgressLog) {
       $line = Get-Content -LiteralPath $ProgressLog -Tail 1 -ErrorAction SilentlyContinue
       if ($line) {
@@ -101,7 +164,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
           if ($parts[0] -eq 'Completed' -or $parts[0] -eq 'Error') {
             $progressClose.Enabled = $true
             $progressClose.Focus()
-            $timer.Stop()
+            if (-not $script:installWorker) { $timer.Stop() }
             $progressTitle.Text = if ($parts[0] -eq 'Completed') { 'Qtiler is ready' } else { 'Installation needs attention' }
             $progressPhase.ForeColor = if ($parts[0] -eq 'Completed') { [System.Drawing.Color]::FromArgb(30, 125, 75) } else { [System.Drawing.Color]::FromArgb(180, 45, 45) }
           }
@@ -119,6 +182,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
           $reader = New-Object System.IO.StreamReader($stream)
           try { $newLogText = $reader.ReadToEnd() } finally { $reader.Dispose() }
           $script:installLogPosition = $logLength
+          if (-not $script:installWorker) { $logViewer.AppendText($newLogText) }
           $errorLine = $newLogText -split '\r?\n' | Where-Object { $_ -match 'ERROR:' } | Select-Object -Last 1
         } finally {
           $stream.Dispose()
@@ -129,11 +193,35 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
         $progressDetail.Text = $errorLine.Trim()
         $progressPhase.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 45)
         $progressClose.Enabled = $true
-        $timer.Stop()
+        if (-not $script:installWorker) { $timer.Stop() }
       }
     }
   })
-  $progressForm.Add_Shown({ $timer.Start() })
+  $progressForm.Add_Shown({
+    if ($RunInstaller) {
+      $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+      $startInfo.FileName = $env:ComSpec
+      $startInfo.Arguments = '/d /c ""' + (Join-Path $Root 'install.bat') + '" --elevated --root "' + $Root + '" <NUL"'
+      $startInfo.WorkingDirectory = $Root
+      $startInfo.UseShellExecute = $false
+      $startInfo.CreateNoWindow = $true
+      $startInfo.RedirectStandardOutput = $true
+      $startInfo.RedirectStandardError = $true
+      $startInfo.EnvironmentVariables['QTILER_GUI_WORKER'] = '1'
+      $script:installWorker = New-Object System.Diagnostics.Process
+      $script:installWorker.StartInfo = $startInfo
+      try { [void]$script:installWorker.Start() } catch {
+        $logViewer.AppendText('Could not start the installer worker: ' + $_.Exception.Message)
+        $progressPhase.Text = 'Installation needs attention'
+        $progressClose.Enabled = $true
+        $script:installWorker = $null
+        return
+      }
+      $script:stdoutRead = $script:installWorker.StandardOutput.ReadLineAsync()
+      $script:stderrRead = $script:installWorker.StandardError.ReadLineAsync()
+    }
+    $timer.Start()
+  })
   [void]$progressForm.ShowDialog()
   exit 0
 }
@@ -304,12 +392,24 @@ $licenseLink.LinkColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
 $licenseLink.ActiveLinkColor = [System.Drawing.Color]::FromArgb(0, 71, 145)
 $licenseLink.VisitedLinkColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
 $licenseLink.Add_LinkClicked({
-  $licenseFile = Join-Path $Root 'LICENSE'
-  if (Test-Path -LiteralPath $licenseFile) {
-    Start-Process -FilePath $licenseFile | Out-Null
-  } else {
-    Start-Process -FilePath 'https://www.mozilla.org/en-US/MPL/2.0/' | Out-Null
+  $readerForm = New-Object System.Windows.Forms.Form
+  $readerForm.Text = 'Qtiler license terms and third-party notices'
+  $readerForm.StartPosition = 'CenterParent'
+  $readerForm.Size = New-Object System.Drawing.Size(800, 620)
+  $reader = New-Object System.Windows.Forms.RichTextBox
+  $reader.Dock = 'Fill'
+  $reader.ReadOnly = $true
+  $reader.DetectUrls = $false
+  $reader.Font = New-Object System.Drawing.Font('Consolas', 10)
+  $documents = foreach ($name in @('LICENSE', 'THIRD-PARTY-LICENSES.txt')) {
+    $document = Join-Path $Root $name
+    if (Test-Path -LiteralPath $document) { $name + [Environment]::NewLine + [IO.File]::ReadAllText($document) }
+    else { 'Missing document: ' + $name }
   }
+  $reader.Text = $documents -join ([Environment]::NewLine + [Environment]::NewLine)
+  $readerForm.Controls.Add($reader)
+  [void]$readerForm.ShowDialog($form)
+  $readerForm.Dispose()
 })
 $panel.Controls.Add($licenseLink)
 
@@ -338,8 +438,10 @@ function Update-InstallerState {
   $publicUrl.Enabled = $qgisReady
   $password.Enabled = $qgisReady
   $showPassword.Enabled = $qgisReady
-  $licenseLink.Enabled = $qgisReady
-  $licenseAccepted.Enabled = $qgisReady
+  $licenseLink.Enabled = $true
+  $documentsReady = (Test-Path -LiteralPath (Join-Path $Root 'LICENSE')) -and (Test-Path -LiteralPath (Join-Path $Root 'THIRD-PARTY-LICENSES.txt'))
+  $licenseAccepted.Enabled = $qgisReady -and $documentsReady
+  if (-not $documentsReady) { $licenseAccepted.Checked = $false }
 
   if (-not $qgisReady) {
     $licenseAccepted.Checked = $false
@@ -350,7 +452,7 @@ function Update-InstallerState {
     $qgisStatus.ForeColor = [System.Drawing.Color]::FromArgb(30, 125, 75)
   }
 
-  $ok.Enabled = $qgisReady -and $licenseAccepted.Checked
+  $ok.Enabled = $qgisReady -and $documentsReady -and $licenseAccepted.Checked
 }
 
 $qgisRoot.Add_TextChanged({ Update-InstallerState })
@@ -429,4 +531,9 @@ Update-InstallerState
 
 $result = $form.ShowDialog()
 if ($result -ne [System.Windows.Forms.DialogResult]::OK) { exit 2 }
+if ($RunInstaller) {
+  $progressPath = Join-Path $Root 'temp\qtiler-install-progress.txt'
+  [IO.File]::WriteAllText($progressPath, 'Preparing installation|5|Starting installation.')
+  & $PSCommandPath -Root $Root -OutputPath $OutputPath -ProgressLog $progressPath -InstallLog (Join-Path $Root 'logs\install.log') -RunInstaller
+}
 exit 0

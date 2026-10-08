@@ -4,6 +4,12 @@ REM  Qtiler Installer by MundoGIS
 REM  Double-click to install. Requires Windows administrator privileges.
 REM ==========================================================================
 setlocal enabledelayedexpansion
+if not defined QTILER_GUI_WORKER (
+    if exist "%~dp0install.vbs" (
+        wscript.exe "%~dp0install.vbs"
+        exit /b
+    )
+)
 title Qtiler Installer by MundoGIS
 
 set "QTILER_ELEVATED_ARG="
@@ -185,6 +191,13 @@ for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass
 
 set "QTILER_GUI_CONFIG=%QTILER_ROOT%\temp\qtiler-installer-config.txt"
 set "QTILER_PROGRESS_LOG=%QTILER_ROOT%\temp\qtiler-install-progress.txt"
+if defined QTILER_GUI_WORKER (
+    if not exist "%QTILER_GUI_CONFIG%" (
+        echo ERROR: Installer configuration is missing. Reopen the installation wizard.
+        exit /b 1
+    )
+    goto gui_config_loaded
+)
 if exist "%QTILER_GUI_CONFIG%" del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
 if not exist "%QTILER_ROOT%\temp" mkdir "%QTILER_ROOT%\temp" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%QTILER_ROOT%\tools\qtiler-installer-gui.ps1" -Root "%QTILER_ROOT%" -OutputPath "%QTILER_GUI_CONFIG%" -DefaultPreviousRoot "%QTILER_PREVIOUS_ROOT%"
@@ -240,6 +253,7 @@ if /i "%QTILER_SETUP_MODE%"=="update" set "QTILER_ADMIN_PASSWORD_PRESERVE=1"
 
 del /q "%QTILER_GUI_CONFIG%" >nul 2>&1
 >"%QTILER_PROGRESS_LOG%" echo Preparing installation^|5^|Starting the Qtiler installation wizard.
+if defined QTILER_GUI_WORKER goto progress_window_ready
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$args = @('-NoProfile','-ExecutionPolicy','Bypass','-File','%QTILER_ROOT%\tools\qtiler-installer-gui.ps1','-Root','%QTILER_ROOT%','-OutputPath','%QTILER_PROGRESS_LOG%','-ProgressLog','%QTILER_PROGRESS_LOG%','-InstallLog','%QTILER_INSTALL_LOG%'); Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Normal" >nul
 if errorlevel 1 (
     echo ERROR: The installation progress window could not be started.
@@ -249,6 +263,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:progress_window_ready
 if defined QTILER_PREVIOUS_ROOT (
     >>"%QTILER_INSTALL_LOG%" echo Existing Qtiler service detected at %QTILER_PREVIOUS_ROOT%.
 )

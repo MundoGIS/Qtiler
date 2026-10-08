@@ -36,13 +36,14 @@ const I18N = {
     backToDashboard: 'Back to Dashboard',
     plugins: 'Plugins',
     installPlugin: 'Install plugin',
-    installedPlugins: 'Installed plugins',
+    installedPlugins: 'Plugin packages',
     noPlugins: 'No plugins installed.',
     uploadZip: 'Plugin ZIP file:',
     installBtn: 'Install plugin',
     enable: 'Enable',
     enabledStatus: 'Enabled',
     disabledStatus: 'Not enabled',
+    packageInactiveStatus: 'Package present (inactive)',
     uninstall: 'Uninstall',
     backup: 'Backup',
     restore: 'Restore',
@@ -144,13 +145,14 @@ const I18N = {
     backToDashboard: 'Volver al Dashboard',
     plugins: 'Plugins',
     installPlugin: 'Instalar plugin',
-    installedPlugins: 'Plugins instalados',
+    installedPlugins: 'Paquetes de plugins',
     noPlugins: 'No hay plugins instalados.',
     uploadZip: 'Archivo ZIP del plugin:',
     installBtn: 'Instalar plugin',
     enable: 'Habilitar',
     enabledStatus: 'Habilitado',
     disabledStatus: 'No habilitado',
+    packageInactiveStatus: 'Paquete presente (inactivo)',
     uninstall: 'Desinstalar',
     backup: 'Copia de seguridad',
     restore: 'Restaurar',
@@ -252,13 +254,14 @@ const I18N = {
     backToDashboard: 'Tillbaka till Dashboard',
     plugins: 'Plugins',
     installPlugin: 'Installera plugin',
-    installedPlugins: 'Installerade plugins',
+    installedPlugins: 'Pluginpaket',
     noPlugins: 'Inga plugins installerade.',
     uploadZip: 'Plugin ZIP-fil:',
     installBtn: 'Installera plugin',
     enable: 'Aktivera',
     enabledStatus: 'Aktiverad',
     disabledStatus: 'Inte aktiverad',
+    packageInactiveStatus: 'Paket finns (inaktivt)',
     uninstall: 'Avinstallera',
     backup: 'Säkerhetskopia',
     restore: 'Återställ',
@@ -1153,7 +1156,7 @@ function renderPlugins() {
     heading.textContent = name;
     const status = document.createElement('span');
     status.className = `chip ${isEnabled ? 'chip--ok' : 'chip--muted'}`;
-    status.textContent = isEnabled ? t('enabledStatus') : t('disabledStatus');
+    status.textContent = isEnabled ? t('enabledStatus') : t('packageInactiveStatus');
     meta.append(heading, status);
 
     const docs = getPluginDocs(name);

@@ -301,6 +301,10 @@ npm install
 ```
 
 ## Initial admin login (required after install)
+For the graphical Windows installer, double-click `install.vbs` from the extracted Qtiler folder and accept the Windows administrator prompt. The installation window contains progress and logs; the batch worker runs without a console. `install.bat` remains available and forwards to the same wizard.
+
+The license link opens the bundled `LICENSE` and `THIRD-PARTY-LICENSES.txt` in the wizard. A first eligible QtilerAuth activation receives 30 days. Valid historical trials, including older 90-day trials, retain their original expiry instead of being renewed or shortened.
+
 After installation, sign in with the default admin account:
 
 - Username: `admin`

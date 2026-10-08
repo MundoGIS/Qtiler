@@ -88,3 +88,18 @@ test('machine-only trial is restored without changing its expiry', async (contex
   assert.match(result.stdout, /QTILERAUTH_EXPECTED=1/);
   assert.deepEqual((await readState(root)).licenses.plugins.QtilerAuth.trial, trial);
 });
+
+test('a valid historical 90-day trial is preserved instead of reset to 30 days', async (context) => {
+  const { root, env } = await fixture(context);
+  const startedAt = new Date(Date.now() - 26 * 86400000).toISOString();
+  const expiresAt = new Date(Date.parse(startedAt) + 90 * 86400000).toISOString();
+  const secret = crypto.createHash('sha256').update(`qtiler-plugin-trial|${fingerprint}`).digest('hex');
+  const sig = crypto.createHmac('sha256', secret).update(`QtilerAuth|${fingerprint}|${startedAt}|${expiresAt}`).digest('hex');
+  const trial = { startedAt, expiresAt, sig };
+  const machineDir = path.join(env.ProgramData, 'Qtiler');
+  await fs.mkdir(machineDir, { recursive: true });
+  await fs.writeFile(path.join(machineDir, 'plugin-trials.json'), JSON.stringify({ plugins: { QtilerAuth: trial } }));
+  const result = await execute(process.execPath, [policy, root, 'new'], { env });
+  assert.match(result.stdout, /QTILERAUTH_EXPECTED=1/);
+  assert.deepEqual((await readState(root)).licenses.plugins.QtilerAuth.trial, trial);
+});

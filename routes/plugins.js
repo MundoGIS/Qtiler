@@ -604,7 +604,15 @@ export const registerPluginRoutes = ({
       let installed = [];
       try {
         const entries = await fs.promises.readdir(pluginsDir, { withFileTypes: true });
-        installed = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+        const candidates = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'));
+        const packages = await Promise.all(candidates.map(async (entry) => {
+          try {
+            await fs.promises.access(path.join(pluginsDir, entry.name, 'index.js'), fs.constants.R_OK);
+            const manifest = JSON.parse(await fs.promises.readFile(path.join(pluginsDir, entry.name, 'plugin.json'), 'utf8'));
+            return manifest && typeof manifest === 'object' && !Array.isArray(manifest) ? entry.name : null;
+          } catch { return null; }
+        }));
+        installed = packages.filter(Boolean);
       } catch (dirErr) {
         if (dirErr.code !== "ENOENT") throw dirErr;
       }
