@@ -866,7 +866,7 @@ if errorlevel 1 (
     echo ERROR: Qtiler service started but readiness checks failed. See the HTTP status or connection diagnostic above.
     echo Check logs in %QTILER_ROOT%\logs and Windows Services for %QTILER_SERVICE_NAME% startup details.
     >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service started but HTTP/QtilerAuth readiness failed. QtilerAuth expected=%QTILERAUTH_EXPECTED%.
-    powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service started, but Qtiler did not become ready in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log and application logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Readiness Failed', 'OK', 'Error')" >nul
+    if not defined QTILER_GUI_WORKER powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service started, but Qtiler did not become ready in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check the installer log and application logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Readiness Failed', 'OK', 'Error')" >nul
     call :recover_previous_update_service
     pause
     exit /b 1
@@ -881,7 +881,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
     if errorlevel 1 (
         echo ERROR: Could not restart Qtiler Windows service after first QtilerAuth readiness: %QTILER_SERVICE_NAME%
         >>"%QTILER_INSTALL_LOG%" echo ERROR: could not restart Qtiler Windows service after first QtilerAuth readiness.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth became ready, but the Windows service could not be restarted.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Restart the service once from Windows Services before the first login.', 'Qtiler Installer - Service Restart Failed', 'OK', 'Error')" >nul
+        if not defined QTILER_GUI_WORKER powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('QtilerAuth became ready, but the Windows service could not be restarted.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + [Environment]::NewLine + 'Restart the service once from Windows Services before the first login.', 'Qtiler Installer - Service Restart Failed', 'OK', 'Error')" >nul
         call :recover_previous_update_service
         pause
         exit /b 1
@@ -892,7 +892,7 @@ if /i "%QTILERAUTH_EXPECTED%"=="1" (
     if errorlevel 1 (
         echo ERROR: Qtiler service restarted but did not become ready again in time.
         >>"%QTILER_INSTALL_LOG%" echo ERROR: Qtiler service restarted but HTTP/QtilerAuth readiness failed.
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service was restarted, but Qtiler did not become ready again in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Restart Readiness Failed', 'OK', 'Error')" >nul
+        if not defined QTILER_GUI_WORKER powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('The Windows service was restarted, but Qtiler did not become ready again in time.' + [Environment]::NewLine + [Environment]::NewLine + 'Service: %QTILER_SERVICE_NAME%' + [Environment]::NewLine + 'Port: %QTILER_PORT%' + [Environment]::NewLine + [Environment]::NewLine + 'Check Windows Services and logs under:' + [Environment]::NewLine + '%QTILER_ROOT%\logs', 'Qtiler Installer - Service Restart Readiness Failed', 'OK', 'Error')" >nul
         call :recover_previous_update_service
         pause
         exit /b 1
@@ -905,18 +905,6 @@ REM ----------------------------------------------------------------------
 REM  Step 6: Success notification
 REM ----------------------------------------------------------------------
 call :write_progress "Completed" 100 "Qtiler is installed and the Windows service is ready."
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Add-Type -AssemblyName System.Windows.Forms;" ^
-    "$balloon = [char]::ConvertFromUtf32(0x1F388); $party = [char]::ConvertFromUtf32(0x1F389);" ^
-    "$nl = [Environment]::NewLine;" ^
-    "$isUpdate = $env:QTILER_SETUP_MODE -ieq 'update';" ^
-    "$headline = if ($isUpdate) { 'Qtiler update completed successfully.' } else { 'Qtiler installation completed successfully.' };" ^
-    "$versionLine = if ($isUpdate) { 'Updated to version: ' + $env:QTILER_VERSION } else { 'Installed version: ' + $env:QTILER_VERSION };" ^
-    "$previousLine = if ($isUpdate -and $env:QTILER_PREVIOUS_VERSION) { 'Previous version: ' + $env:QTILER_PREVIOUS_VERSION + $nl } else { '' };" ^
-    "$passwordNote = if ($isUpdate) { 'The existing administrator password was preserved.' } else { 'Store this administrator password now.' };" ^
-    "$body = ($balloon + ' ' + $party + ' ' + $balloon + $nl + $nl + $headline + $nl + $versionLine + $nl + $previousLine + $nl + 'Setup mode: ' + $env:QTILER_SETUP_MODE + $nl + 'Configured profile: ' + $env:QTILER_INSTALL_MODE + $nl + 'Windows service: ' + $env:QTILER_SERVICE_NAME + $nl + 'Public URL: ' + $env:QTILER_PUBLIC_URL + $nl + 'Port: ' + $env:QTILER_PORT + $nl + 'IIS / HTTPS: ' + $env:QTILER_BEHIND_IIS + ' / ' + $env:QTILER_HTTPS + $nl + 'QtilerAuth status: ' + $env:QTILERAUTH_INSTALL_STATUS + $nl + $nl + 'Administrator login:' + $nl + 'Username: admin' + $nl + 'Password: ' + $env:QTILER_ADMIN_PASSWORD_DISPLAY + $nl + $nl + $passwordNote + $nl + $nl + 'Updates preserve .env, users, licenses, uploaded projects, cache and plugin user data.' + $nl + 'Bundled Qtiler plugins are updated from the installed package; custom plugins are preserved.' + $nl + 'Updates do not issue or renew QtilerAuth trial licenses.' + $nl + $nl + 'These settings are stored in .env. Restart the selected Windows service after editing .env.' + $nl + $nl + 'For license contract questions about the authentication plugin, contact support@mundogis.se.');" ^
-    "[System.Windows.Forms.MessageBox]::Show($body, 'Qtiler Installation Complete', 'OK', 'Information')" >nul
-
 echo ================================================================
 if /i "%QTILER_SETUP_MODE%"=="update" (
     echo  Qtiler update completed successfully.
@@ -936,7 +924,7 @@ echo    Port:           %QTILER_PORT%
 echo    IIS:            %QTILER_BEHIND_IIS%
 echo    HTTPS:          %QTILER_HTTPS%
 echo    Admin user:     admin
-echo    Admin password: %QTILER_ADMIN_PASSWORD_DISPLAY%
+echo    Admin password: stored in .env
 echo    QtilerAuth:     %QTILERAUTH_INSTALL_STATUS%
 echo.
 echo  You can change these settings later in:

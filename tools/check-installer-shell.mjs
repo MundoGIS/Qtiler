@@ -40,3 +40,15 @@ test('service readiness retries startup and reports an unavailable QtilerAuth ro
   assert.ok(probe.includes('The Auth route is not registered'));
   assert.ok(probe.includes('Failed to load plugin QtilerAuth'));
 });
+
+test('installation result is shown in the progress window and failure includes support contact', () => {
+  const batch = fs.readFileSync('install.bat', 'utf8');
+  const gui = fs.readFileSync('tools/qtiler-installer-gui.ps1', 'utf8');
+  assert.ok(!batch.includes('Qtiler Installation Complete'));
+  assert.ok(batch.includes('Admin password: stored in .env'));
+  assert.ok(gui.includes('$script:installWorker.ExitCode -eq 0'));
+  assert.ok(gui.includes('Installation completed successfully'));
+  assert.ok(gui.includes('For help with this installation, contact support@mundogis.se.'));
+  assert.ok(gui.includes("$progressResult.Visible = $true"));
+  assert.ok(batch.includes('if not defined QTILER_GUI_WORKER powershell') && batch.includes('Service Readiness Failed'));
+});

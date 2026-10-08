@@ -94,6 +94,13 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $progressPercent.Location = New-Object System.Drawing.Point(42, 262)
   $progressPercent.Size = New-Object System.Drawing.Size(590, 24)
   $progressForm.Controls.Add($progressPercent)
+  $progressResult = New-Object System.Windows.Forms.Label
+  $progressResult.Text = ''
+  $progressResult.Location = New-Object System.Drawing.Point(42, 290)
+  $progressResult.Size = New-Object System.Drawing.Size(690, 42)
+  $progressResult.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+  $progressResult.Visible = $false
+  $progressForm.Controls.Add($progressResult)
   $progressClose = New-Object System.Windows.Forms.Button
   $progressClose.Text = 'Close'
   $progressClose.Enabled = $false
@@ -102,13 +109,14 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
   $progressForm.Controls.Add($progressClose)
   $progressClose.Add_Click({ $progressForm.Close() })
   $logViewer = New-Object System.Windows.Forms.RichTextBox
-  $logViewer.Location = New-Object System.Drawing.Point(42, 300)
-  $logViewer.Size = New-Object System.Drawing.Size(690, 230)
+  $logViewer.Location = New-Object System.Drawing.Point(42, 340)
+  $logViewer.Size = New-Object System.Drawing.Size(690, 190)
   $logViewer.ReadOnly = $true
   $logViewer.DetectUrls = $false
   $logViewer.Font = New-Object System.Drawing.Font('Consolas', 9)
   $progressForm.Controls.Add($logViewer)
   $script:installWorker = $null
+  $script:installResultShown = $false
   $script:stdoutRead = $null
   $script:stderrRead = $null
   $progressForm.Add_FormClosing({
@@ -141,13 +149,6 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
           } else { $null }
           if ($streamName -eq 'stdout') { $script:stdoutRead = $nextRead } else { $script:stderrRead = $nextRead }
           $pending = $nextRead
-        }
-      }
-      if ($script:installWorker.HasExited -and -not $progressClose.Enabled) {
-        $progressClose.Enabled = $true
-        if ($script:installWorker.ExitCode -ne 0) {
-          $progressPhase.Text = 'Installation needs attention'
-          $progressDetail.Text = 'The installer stopped with an error. Review the log below.'
         }
       }
     }
@@ -196,6 +197,28 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
         if (-not $script:installWorker) { $timer.Stop() }
       }
     }
+    if ($script:installWorker -and $script:installWorker.HasExited -and -not $script:installResultShown) {
+      $script:installResultShown = $true
+      $progressClose.Enabled = $true
+      $progressResult.Visible = $true
+      if ($script:installWorker.ExitCode -eq 0) {
+        $progressTitle.Text = 'Qtiler is ready'
+        $progressPhase.Text = 'Installation completed successfully'
+        $progressDetail.Text = 'The Windows service and configured endpoints passed their readiness checks.'
+        $progressResult.Text = "Qtiler and QtilerAuth passed their startup checks.`r`nAdministrator: admin  |  Initial password is stored in .env."
+        $progressResult.ForeColor = [System.Drawing.Color]::FromArgb(30, 125, 75)
+        $progressPhase.ForeColor = [System.Drawing.Color]::FromArgb(30, 125, 75)
+      } else {
+        $progressTitle.Text = 'Installation needs attention'
+        $progressPhase.Text = 'Installation did not complete'
+        $errorSummary = $logViewer.Lines | Where-Object { $_ -match '^(ERROR:|Last QtilerAuth HTTP status:|Last QtilerAuth connection error:|The Auth route is not registered)' } | Select-Object -Last 1
+        $progressDetail.Text = if ($errorSummary) { $errorSummary.Trim() } else { 'Review the installer log below for the last error.' }
+        $progressResult.Text = "Logs: $Root\logs`r`nFor help with this installation, contact support@mundogis.se."
+        $progressResult.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 45)
+        $progressPhase.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 45)
+      }
+      $progressClose.Focus()
+    }
   })
   $progressForm.Add_Shown({
     if ($RunInstaller) {
@@ -213,6 +236,10 @@ if (-not [string]::IsNullOrWhiteSpace($ProgressLog)) {
       try { [void]$script:installWorker.Start() } catch {
         $logViewer.AppendText('Could not start the installer worker: ' + $_.Exception.Message)
         $progressPhase.Text = 'Installation needs attention'
+        $progressDetail.Text = 'The installer process could not be started.'
+        $progressResult.Text = "For help with this installation, contact support@mundogis.se.`r`nInstaller folder: $Root"
+        $progressResult.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 45)
+        $progressResult.Visible = $true
         $progressClose.Enabled = $true
         $script:installWorker = $null
         return
