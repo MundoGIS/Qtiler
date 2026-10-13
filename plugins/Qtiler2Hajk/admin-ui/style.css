@@ -1346,6 +1346,16 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   word-break: normal;
 }
 
+.Qtiler2Hajk-control-order [data-tool-rank] {
+  flex: 0 0 2ch;
+  min-width: 2ch;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 900px) {
   .publish-editor {
     padding: 0;
@@ -1926,6 +1936,103 @@ body.publish-editor-open .tab-panel--active > :not(#publishModal) {
   display: grid;
   gap: 6px;
   font-weight: 600;
+}
+
+.Qtiler2Hajk-rule-editor-shell [hidden] {
+  display: none !important;
+}
+
+.Qtiler2Hajk-rule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+
+.Qtiler2Hajk-rule-fields > label {
+  min-width: 0;
+  margin: 0;
+}
+
+.Qtiler2Hajk-rule-subheading {
+  margin: 18px 0 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #34537d;
+}
+
+.Qtiler2Hajk-rule-subheading:first-child {
+  margin-top: 4px;
+}
+
+.Qtiler2Hajk-rule-visibility {
+  display: grid;
+  gap: 12px;
+}
+
+.Qtiler2Hajk-rule-visibility > label {
+  max-width: 280px;
+}
+
+.Qtiler2Hajk-rule-editor-shell label.Qtiler2Hajk-rule-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  cursor: pointer;
+}
+
+.Qtiler2Hajk-rule-editor-shell input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+}
+
+.Qtiler2Hajk-rule-editor-shell input[type="color"] {
+  width: 56px;
+  height: 38px;
+  min-height: 38px;
+  padding: 3px;
+  border: 1px solid #c7d2e3;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.Qtiler2Hajk-rule-editor-shell input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.Qtiler2Hajk-rule-editor-shell input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+
+.Qtiler2Hajk-rule-editor-shell input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+
+.Qtiler2Hajk-rule-fields textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.Qtiler2Hajk-rule-full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .Qtiler2Hajk-rule-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .Qtiler2Hajk-rule-visibility > label {
+    max-width: none;
+  }
 }
 
 .Qtiler2Hajk-rule-summary {

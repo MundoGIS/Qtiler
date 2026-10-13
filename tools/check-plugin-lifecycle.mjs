@@ -548,6 +548,36 @@ test('deferred uninstall retries transient Windows rename locks and removes code
   }
 });
 
+test('deferred uninstall falls back to staged recursive removal when Windows keeps rejecting directory rename', async context => {
+  const { pluginsDir, dataDir } = await fixture(context);
+  const plugin = path.join(pluginsDir, 'Qtiler2Origo');
+  await fs.mkdir(path.join(plugin, 'client'), { recursive: true });
+  await fs.writeFile(path.join(plugin, 'index.js'), 'plugin entry');
+  await fs.writeFile(path.join(plugin, 'client', 'viewer.js'), 'viewer bundle');
+  const operationId = '11111111-2222-4333-8444-888888888888';
+  await fs.mkdir(path.join(dataDir, 'plugin-operations'), { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'plugin-operations', `uninstall-${operationId}.json`), JSON.stringify({ id: operationId, plugin: 'Qtiler2Origo', state: 'uninstalling', keepData: true }));
+  await fs.writeFile(path.join(dataDir, PENDING_UNINSTALLATION), JSON.stringify({ id: operationId, plugin: 'Qtiler2Origo' }));
+  const originalRename = fs.rename;
+  fs.rename = async (source, destination) => {
+    if (source === plugin) {
+      const error = new Error('Windows denies rename while the directory is scanned');
+      error.code = 'EPERM';
+      throw error;
+    }
+    return originalRename(source, destination);
+  };
+  try {
+    const result = await finalizeUninstallation(dataDir, pluginsDir, operationId);
+    assert.equal(result.state, 'ready');
+    assert.equal(result.removedFiles, true);
+    await assert.rejects(fs.access(plugin), error => error.code === 'ENOENT');
+    await assert.rejects(fs.access(path.join(pluginsDir, `.Qtiler2Origo.uninstall-${operationId}`)), error => error.code === 'ENOENT');
+  } finally {
+    fs.rename = originalRename;
+  }
+});
+
 test('startup recovers an interrupted uninstall without removing the package', async context => {
   const { pluginsDir, dataDir, manager } = await fixture(context);
   const operationId = '11111111-2222-4333-8444-666666666666';

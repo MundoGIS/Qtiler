@@ -188,6 +188,9 @@ Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc
 - **Hosted Hajk viewer** — Hajk is downloaded from a pinned GitHub release and served dynamically without needing a separate React/Node deployment.
 - **Project publishing workflow** — Publish layered maps directly from QGIS projects using the graphical admin UI.
 - **Dynamic configurations** — Automatic translation of Qtiler layers into Hajk `simpleMapAndLayersConfig.json` equivalents, preserving WMS outputs and WFS/vector properties alongside OGC editing tools.
+- **WFS labels per rule** — Symbols and labels have independent zoom/scale ranges. Labels support backgrounds, opacity, borders, halos, collision margins and line repetition. The layer must still be enabled; crowded labels are omitted rather than overlapped.
+   The rule editor selects Zoom or Scale explicitly, so hidden limits do not restrict rendering. Existing rules that use both keep a combined mode until changed. Label text supports multiple lines; background options are shown only when enabled.
+- **Stable tool order** — Active tools show their position in the editor. Saved order becomes Hajk's native tool `index`, so asynchronous module loading cannot change the toolbar order. New maps reset to the default tool order.
 - **CMS / Portal Editor** — A visual page builder to construct the landing page of the maps portal, using hero banners, rich text, side-by-side cards, and map galleries.
 - **Thumbnail generation** — Automatically generates layer thumbnails to power Hajk legends and portal gallery views.
 

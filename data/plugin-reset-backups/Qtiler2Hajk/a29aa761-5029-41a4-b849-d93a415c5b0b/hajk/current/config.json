@@ -1,0 +1,95 @@
+{
+  "searchServiceUrl": "/Qtiler2Hajk/search",
+  "searchDataServiceUrl": "",
+  "editServiceUrl": "/wfs",
+  "mapInfoServiceUrl": "/wms",
+  "permalinkServiceUrl": "",
+  "elevationServiceUrl": "",
+  "featureReportService": "",
+  "documentServiceUrl": "",
+  "authServiceUrl": "",
+  "plugins": {
+    "common": [
+      {
+        "name": "View3D"
+      }
+    ],
+    "desktop": [
+      {
+        "name": "BackgroundSwitcher3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "LayerTree3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "Measure3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "MapLight3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "Settings3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "MapCopyright3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "HideObjects3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "ExportObjects3D",
+        "availableIn3D": true
+      }
+    ],
+    "mobile": [
+      {
+        "name": "BackgroundSwitcher3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "LayerTree3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "Measure3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "MapLight3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "Settings3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "MapCopyright3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "HideObjects3D",
+        "availableIn3D": true
+      },
+      {
+        "name": "ExportObjects3D",
+        "availableIn3D": true
+      }
+    ]
+  },
+  "projections": [
+    {
+      "code": "EPSG:3006",
+      "proj": "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
+      "label": "SWEREF99 TM"
+    }
+  ],
+  "backgroundLayers": [],
+  "defaultBackgroundLayers": []
+}

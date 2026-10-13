@@ -1,0 +1,54 @@
+{
+  "id": "1791790115677-t6584h",
+  "projectId": "3d-demoprojekt",
+  "terrainId": "demo-terrang",
+  "terrainName": "demo-terrang",
+  "demPath": "C:\\Qtiler\\qgisprojects\\3d-demoprojekt\\3D-demoprojekt\\64925_3000_25.tif",
+  "waterThreshold": 0.5,
+  "maxSearchDist": 100,
+  "smoothing": 0,
+  "ownerPid": 10244,
+  "status": "completed",
+  "progress": 100,
+  "startedAt": "2026-10-12T07:28:35.677Z",
+  "endedAt": "2026-10-12T07:28:42.258Z",
+  "error": null,
+  "output": {
+    "outputTif": "C:\\Qtiler\\cache\\hydro-dem\\demo-terrang\\dem.tif",
+    "width": 3197,
+    "height": 1672,
+    "bounds": {
+      "west": 11.562701120358277,
+      "south": 58.52698689621375,
+      "east": 11.607748201865059,
+      "north": 58.55054608303869
+    },
+    "elevation": {
+      "min": 53.33209228515625,
+      "max": 189.57908630371094,
+      "mean": 133.5458625561454,
+      "std": 38.556373480346664
+    },
+    "waterThreshold": 0.5,
+    "maxSearchDist": 100,
+    "smoothing": 0,
+    "crs": "EPSG:4326"
+  },
+  "terrain": {
+    "id": "demo-terrang",
+    "key": "generated:demo-terrang",
+    "source": "generated",
+    "name": "demo-terrang",
+    "sourceProjectId": "3d-demoprojekt",
+    "demPath": "C:\\Qtiler\\qgisprojects\\3d-demoprojekt\\3D-demoprojekt\\64925_3000_25.tif",
+    "type": "heightmap",
+    "createdAt": "2026-10-12T07:28:42.252Z",
+    "updatedAt": "2026-10-12T07:28:42.252Z",
+    "terrainUrl": null,
+    "heightmapInfoUrl": "/plugins/Qtiler-3D-eye/api/heightmap-info/demo-terrang",
+    "heightmapTileUrlTemplate": "/plugins/Qtiler-3D-eye/heightmap/demo-terrang/{z}/{x}/{y}.bin",
+    "downloadUrl": "/plugins/Qtiler-3D-eye/api/terrain-download/demo-terrang",
+    "previewUrl": "/plugins/Qtiler-3D-eye/view/?terrain=demo-terrang",
+    "deleteUrl": "/plugins/Qtiler-3D-eye/api/terrain-library/generated/demo-terrang"
+  }
+}

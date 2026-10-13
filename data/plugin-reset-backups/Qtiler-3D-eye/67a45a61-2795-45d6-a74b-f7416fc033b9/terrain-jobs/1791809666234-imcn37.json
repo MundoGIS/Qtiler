@@ -1,0 +1,54 @@
+{
+  "id": "1791809666234-imcn37",
+  "projectId": "3d-demoprojekt",
+  "terrainId": "3d-demoprojekt_terrain",
+  "terrainName": "3d-demoprojekt terrain",
+  "demPath": "C:\\Qtiler\\qgisprojects\\3d-demoprojekt\\3D-demoprojekt\\64925_3000_25.tif",
+  "waterThreshold": 0.5,
+  "maxSearchDist": 100,
+  "smoothing": 0,
+  "ownerPid": 20600,
+  "status": "completed",
+  "progress": 100,
+  "startedAt": "2026-10-12T12:54:26.234Z",
+  "endedAt": "2026-10-12T12:54:33.157Z",
+  "error": null,
+  "output": {
+    "outputTif": "C:\\Qtiler\\cache\\hydro-dem\\3d-demoprojekt_terrain\\dem.tif",
+    "width": 3197,
+    "height": 1672,
+    "bounds": {
+      "west": 11.562701120358277,
+      "south": 58.52698689621375,
+      "east": 11.607748201865059,
+      "north": 58.55054608303869
+    },
+    "elevation": {
+      "min": 53.33209228515625,
+      "max": 189.57908630371094,
+      "mean": 133.5458625561454,
+      "std": 38.556373480346664
+    },
+    "waterThreshold": 0.5,
+    "maxSearchDist": 100,
+    "smoothing": 0,
+    "crs": "EPSG:4326"
+  },
+  "terrain": {
+    "id": "3d-demoprojekt_terrain",
+    "key": "generated:3d-demoprojekt_terrain",
+    "source": "generated",
+    "name": "3d-demoprojekt terrain",
+    "sourceProjectId": "3d-demoprojekt",
+    "demPath": "C:\\Qtiler\\qgisprojects\\3d-demoprojekt\\3D-demoprojekt\\64925_3000_25.tif",
+    "type": "heightmap",
+    "createdAt": "2026-10-12T12:54:33.146Z",
+    "updatedAt": "2026-10-12T12:54:33.146Z",
+    "terrainUrl": null,
+    "heightmapInfoUrl": "/plugins/Qtiler-3D-eye/api/heightmap-info/3d-demoprojekt_terrain",
+    "heightmapTileUrlTemplate": "/plugins/Qtiler-3D-eye/heightmap/3d-demoprojekt_terrain/{z}/{x}/{y}.bin",
+    "downloadUrl": "/plugins/Qtiler-3D-eye/api/terrain-download/3d-demoprojekt_terrain",
+    "previewUrl": "/plugins/Qtiler-3D-eye/view/?terrain=3d-demoprojekt_terrain",
+    "deleteUrl": "/plugins/Qtiler-3D-eye/api/terrain-library/generated/3d-demoprojekt_terrain"
+  }
+}

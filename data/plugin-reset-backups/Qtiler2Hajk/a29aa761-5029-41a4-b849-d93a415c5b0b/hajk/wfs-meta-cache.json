@@ -1,0 +1,2976 @@
+{
+  "http://localhost:3009||markforhandling_web||Markforhandling_ytor": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Markforhandling_ytor",
+          "title": "Markforhandling_ytor",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "kommunkod",
+          "title": "kommunkod",
+          "type": "text"
+        },
+        {
+          "name": "kommunnamn",
+          "title": "kommunnamn",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        },
+        {
+          "name": "fastigheter",
+          "title": "fastigheter",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "person_org_nr",
+          "title": "person_org_nr",
+          "type": "text"
+        },
+        {
+          "name": "andel",
+          "title": "andel",
+          "type": "text"
+        },
+        {
+          "name": "adress",
+          "title": "adress",
+          "type": "text"
+        },
+        {
+          "name": "information",
+          "title": "information",
+          "type": "text"
+        },
+        {
+          "name": "fodelsear",
+          "title": "fodelsear",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "epost",
+          "title": "epost",
+          "type": "text"
+        },
+        {
+          "name": "telefon",
+          "title": "telefon",
+          "type": "text"
+        },
+        {
+          "name": "layer",
+          "title": "layer",
+          "type": "text"
+        },
+        {
+          "name": "path",
+          "title": "path",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1789648229759
+  },
+  "http://localhost:3009||markforhandling_web||PO_screening": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "PO_screening",
+          "title": "PO_screening",
+          "type": "text"
+        },
+        {
+          "name": "Nr",
+          "title": "Nr",
+          "type": "text"
+        },
+        {
+          "name": "Namn",
+          "title": "Namn",
+          "type": "text"
+        },
+        {
+          "name": "Kommun",
+          "title": "Kommun",
+          "type": "text"
+        },
+        {
+          "name": "Lan",
+          "title": "Lan",
+          "type": "text"
+        },
+        {
+          "name": "Kv_km",
+          "title": "Kv_km",
+          "type": "text"
+        },
+        {
+          "name": "Fast_inom_PO",
+          "title": "Fast_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fast_ag_kat",
+          "title": "Fast_ag_kat",
+          "type": "text"
+        },
+        {
+          "name": "Elomr",
+          "title": "Elomr",
+          "type": "text"
+        },
+        {
+          "name": "NVV_klass",
+          "title": "NVV_klass",
+          "type": "text"
+        },
+        {
+          "name": "NVV_vind",
+          "title": "NVV_vind",
+          "type": "text"
+        },
+        {
+          "name": "MIUU_medelvind",
+          "title": "MIUU_medelvind",
+          "type": "text"
+        },
+        {
+          "name": "Screening",
+          "title": "Screening",
+          "type": "text"
+        },
+        {
+          "name": "Forhandling_PL",
+          "title": "Forhandling_PL",
+          "type": "text"
+        },
+        {
+          "name": "Grind",
+          "title": "Grind",
+          "type": "text"
+        },
+        {
+          "name": "Status",
+          "title": "Status",
+          "type": "text"
+        },
+        {
+          "name": "VKV",
+          "title": "VKV",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning",
+          "title": "Bedomning",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning_datum",
+          "title": "Bedomning_datum",
+          "type": "text"
+        },
+        {
+          "name": "Info_fritext",
+          "title": "Info_fritext",
+          "type": "text"
+        },
+        {
+          "name": "Risk_Mojligh",
+          "title": "Risk_Mojligh",
+          "type": "text"
+        },
+        {
+          "name": "Nasta_steg",
+          "title": "Nasta_steg",
+          "type": "text"
+        },
+        {
+          "name": "Markanv",
+          "title": "Markanv",
+          "type": "text"
+        },
+        {
+          "name": "Kommunanalys",
+          "title": "Kommunanalys",
+          "type": "text"
+        },
+        {
+          "name": "Turism_LIS",
+          "title": "Turism_LIS",
+          "type": "text"
+        },
+        {
+          "name": "Aktuellt",
+          "title": "Aktuellt",
+          "type": "text"
+        },
+        {
+          "name": "Veto_analys",
+          "title": "Veto_analys",
+          "type": "text"
+        },
+        {
+          "name": "Vaderradar_0_3_50_km",
+          "title": "Vaderradar_0_3_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Forsv_avst_25_50_km",
+          "title": "MSA_Forsv_avst_25_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Trafikverket",
+          "title": "MSA_Trafikverket",
+          "type": "text"
+        },
+        {
+          "name": "VKV_drift_inom_kommun",
+          "title": "VKV_drift_inom_kommun",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_10_km",
+          "title": "VKV_inom_10_km",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_2_km",
+          "title": "VKV_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Kyrkor_inom_2_km",
+          "title": "Kyrkor_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Master_inom_2km",
+          "title": "Master_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Naturvard_inom_2_km",
+          "title": "RI_Naturvard_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Kulturmiljov_inom_2km",
+          "title": "RI_Kulturmiljov_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "N_park_inom_2_km",
+          "title": "N_park_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "N_reservat_inom_2km",
+          "title": "N_reservat_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SCI_habitat_inom_2_km",
+          "title": "Natura_SCI_habitat_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SPA_fagel_inom_2_km",
+          "title": "Natura_SPA_fagel_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Lagflyg_omr_forsvaret_inom_PO",
+          "title": "Lagflyg_omr_forsvaret_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fornlamn_inom_PO",
+          "title": "Fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Mojl_fornlamn_inom_PO",
+          "title": "Mojl_fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "VMI_2_5_inom_PO",
+          "title": "VMI_2_5_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_sjoar_inom_PO",
+          "title": "Kalk_sjoar_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_vatmark_inom_PO",
+          "title": "Kalk_vatmark_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1789648229770
+  },
+  "http://localhost:3009||orebrokartan||traktyta": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "traktyta",
+          "title": "traktyta",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "senastandrad",
+          "title": "senastandrad",
+          "type": "date"
+        },
+        {
+          "name": "lanskod",
+          "title": "lanskod",
+          "type": "text"
+        },
+        {
+          "name": "kommunkod",
+          "title": "kommunkod",
+          "type": "text"
+        },
+        {
+          "name": "outrett",
+          "title": "outrett",
+          "type": "checkbox"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790670597313
+  },
+  "http://localhost:3009||orebrokartan||registerenhetsomradesyta": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "registerenhetsomradesyta",
+          "title": "registerenhetsomradesyta",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "registerenhetsreferens",
+          "title": "registerenhetsreferens",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "senastandrad",
+          "title": "senastandrad",
+          "type": "date"
+        },
+        {
+          "name": "lanskod",
+          "title": "lanskod",
+          "type": "text"
+        },
+        {
+          "name": "kommunkod",
+          "title": "kommunkod",
+          "type": "text"
+        },
+        {
+          "name": "kommunnamn",
+          "title": "kommunnamn",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "block",
+          "title": "block",
+          "type": "text"
+        },
+        {
+          "name": "enhet",
+          "title": "enhet",
+          "type": "text"
+        },
+        {
+          "name": "omradesnummer",
+          "title": "omradesnummer",
+          "type": "text"
+        },
+        {
+          "name": "samjelittera",
+          "title": "samjelittera",
+          "type": "text"
+        },
+        {
+          "name": "osakertlage",
+          "title": "osakertlage",
+          "type": "checkbox"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790671017391
+  },
+  "http://localhost:3009||orebrokartan||granspunkt": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "granspunkt",
+          "title": "granspunkt",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "senastandrad",
+          "title": "senastandrad",
+          "type": "date"
+        },
+        {
+          "name": "granspunktsomrade",
+          "title": "granspunktsomrade",
+          "type": "text"
+        },
+        {
+          "name": "granspunktsnummer",
+          "title": "granspunktsnummer",
+          "type": "text"
+        },
+        {
+          "name": "riksrosebeteckning",
+          "title": "riksrosebeteckning",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "markeringstyp",
+          "title": "markeringstyp",
+          "type": "text"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        },
+        {
+          "name": "markeringslage",
+          "title": "markeringslage",
+          "type": "text"
+        },
+        {
+          "name": "kvalitetsforbattrad",
+          "title": "kvalitetsforbattrad",
+          "type": "checkbox"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "matmetodplan",
+          "title": "matmetodplan",
+          "type": "text"
+        },
+        {
+          "name": "flyghojd",
+          "title": "flyghojd",
+          "type": "text"
+        },
+        {
+          "name": "skaladigitaliseringsunderlag",
+          "title": "skaladigitaliseringsunderlag",
+          "type": "text"
+        },
+        {
+          "name": "inpassad",
+          "title": "inpassad",
+          "type": "checkbox"
+        },
+        {
+          "name": "ursprungskoordinatsystem",
+          "title": "ursprungskoordinatsystem",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790674556455
+  },
+  "http://localhost:3009||orebrokartan||byggnad": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "byggnad",
+          "title": "byggnad",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "insamlingslage",
+          "title": "insamlingslage",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn1",
+          "title": "byggnadsnamn1",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn2",
+          "title": "byggnadsnamn2",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn3",
+          "title": "byggnadsnamn3",
+          "type": "text"
+        },
+        {
+          "name": "husnummer",
+          "title": "husnummer",
+          "type": "text"
+        },
+        {
+          "name": "huvudbyggnad",
+          "title": "huvudbyggnad",
+          "type": "text"
+        },
+        {
+          "name": "andamal1",
+          "title": "andamal1",
+          "type": "text"
+        },
+        {
+          "name": "andamal2",
+          "title": "andamal2",
+          "type": "text"
+        },
+        {
+          "name": "andamal3",
+          "title": "andamal3",
+          "type": "text"
+        },
+        {
+          "name": "andamal4",
+          "title": "andamal4",
+          "type": "text"
+        },
+        {
+          "name": "andamal5",
+          "title": "andamal5",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790857971764
+  },
+  "http://localhost:3009||orebrokartan||sankmark": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "sankmark",
+          "title": "sankmark",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790857971779
+  },
+  "http://localhost:3009||orebrokartan||mark": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "mark",
+          "title": "mark",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "vattenytaid",
+          "title": "vattenytaid",
+          "type": "text"
+        },
+        {
+          "name": "hojd_over_havet",
+          "title": "hojd_over_havet",
+          "type": "text"
+        },
+        {
+          "name": "reglerat_vatten",
+          "title": "reglerat_vatten",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790858735215
+  },
+  "http://localhost:3010||orebrokartan||byggnad": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "byggnad",
+          "title": "byggnad",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "insamlingslage",
+          "title": "insamlingslage",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn1",
+          "title": "byggnadsnamn1",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn2",
+          "title": "byggnadsnamn2",
+          "type": "text"
+        },
+        {
+          "name": "byggnadsnamn3",
+          "title": "byggnadsnamn3",
+          "type": "text"
+        },
+        {
+          "name": "husnummer",
+          "title": "husnummer",
+          "type": "text"
+        },
+        {
+          "name": "huvudbyggnad",
+          "title": "huvudbyggnad",
+          "type": "text"
+        },
+        {
+          "name": "andamal1",
+          "title": "andamal1",
+          "type": "text"
+        },
+        {
+          "name": "andamal2",
+          "title": "andamal2",
+          "type": "text"
+        },
+        {
+          "name": "andamal3",
+          "title": "andamal3",
+          "type": "text"
+        },
+        {
+          "name": "andamal4",
+          "title": "andamal4",
+          "type": "text"
+        },
+        {
+          "name": "andamal5",
+          "title": "andamal5",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790914354166
+  },
+  "http://localhost:3010||orebrokartan||granspunkt": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "granspunkt",
+          "title": "granspunkt",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "senastandrad",
+          "title": "senastandrad",
+          "type": "date"
+        },
+        {
+          "name": "granspunktsomrade",
+          "title": "granspunktsomrade",
+          "type": "text"
+        },
+        {
+          "name": "granspunktsnummer",
+          "title": "granspunktsnummer",
+          "type": "text"
+        },
+        {
+          "name": "riksrosebeteckning",
+          "title": "riksrosebeteckning",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "markeringstyp",
+          "title": "markeringstyp",
+          "type": "text"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        },
+        {
+          "name": "markeringslage",
+          "title": "markeringslage",
+          "type": "text"
+        },
+        {
+          "name": "kvalitetsforbattrad",
+          "title": "kvalitetsforbattrad",
+          "type": "checkbox"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "matmetodplan",
+          "title": "matmetodplan",
+          "type": "text"
+        },
+        {
+          "name": "flyghojd",
+          "title": "flyghojd",
+          "type": "text"
+        },
+        {
+          "name": "skaladigitaliseringsunderlag",
+          "title": "skaladigitaliseringsunderlag",
+          "type": "text"
+        },
+        {
+          "name": "inpassad",
+          "title": "inpassad",
+          "type": "checkbox"
+        },
+        {
+          "name": "ursprungskoordinatsystem",
+          "title": "ursprungskoordinatsystem",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790914354173
+  },
+  "http://localhost:3010||orebrokartan||mark": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "mark",
+          "title": "mark",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        },
+        {
+          "name": "vattenytaid",
+          "title": "vattenytaid",
+          "type": "text"
+        },
+        {
+          "name": "hojd_over_havet",
+          "title": "hojd_over_havet",
+          "type": "text"
+        },
+        {
+          "name": "reglerat_vatten",
+          "title": "reglerat_vatten",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790914354180
+  },
+  "http://localhost:3010||orebrokartan||sankmark": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "sankmark",
+          "title": "sankmark",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "objektidentitet",
+          "title": "objektidentitet",
+          "type": "text"
+        },
+        {
+          "name": "versiongiltigfran",
+          "title": "versiongiltigfran",
+          "type": "date"
+        },
+        {
+          "name": "lagesosakerhetplan",
+          "title": "lagesosakerhetplan",
+          "type": "text"
+        },
+        {
+          "name": "lagesosakerhethojd",
+          "title": "lagesosakerhethojd",
+          "type": "text"
+        },
+        {
+          "name": "ursprunglig_organisation",
+          "title": "ursprunglig_organisation",
+          "type": "text"
+        },
+        {
+          "name": "objektversion",
+          "title": "objektversion",
+          "type": "text"
+        },
+        {
+          "name": "objekttypnr",
+          "title": "objekttypnr",
+          "type": "text"
+        },
+        {
+          "name": "objekttyp",
+          "title": "objekttyp",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790914354186
+  },
+  "http://localhost:3010||markforhandling_web||Markforhandling_ytor": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Markforhandling_ytor",
+          "title": "Markforhandling_ytor",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "kommunkod",
+          "title": "kommunkod",
+          "type": "text"
+        },
+        {
+          "name": "kommunnamn",
+          "title": "kommunnamn",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        },
+        {
+          "name": "fastigheter",
+          "title": "fastigheter",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "person_org_nr",
+          "title": "person_org_nr",
+          "type": "text"
+        },
+        {
+          "name": "andel",
+          "title": "andel",
+          "type": "text"
+        },
+        {
+          "name": "adress",
+          "title": "adress",
+          "type": "text"
+        },
+        {
+          "name": "information",
+          "title": "information",
+          "type": "text"
+        },
+        {
+          "name": "fodelsear",
+          "title": "fodelsear",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "epost",
+          "title": "epost",
+          "type": "text"
+        },
+        {
+          "name": "telefon",
+          "title": "telefon",
+          "type": "text"
+        },
+        {
+          "name": "layer",
+          "title": "layer",
+          "type": "text"
+        },
+        {
+          "name": "path",
+          "title": "path",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790916464035
+  },
+  "http://localhost:3010||markforhandling_web||PO_screening": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "PO_screening",
+          "title": "PO_screening",
+          "type": "text"
+        },
+        {
+          "name": "Nr",
+          "title": "Nr",
+          "type": "text"
+        },
+        {
+          "name": "Namn",
+          "title": "Namn",
+          "type": "text"
+        },
+        {
+          "name": "Kommun",
+          "title": "Kommun",
+          "type": "text"
+        },
+        {
+          "name": "Lan",
+          "title": "Lan",
+          "type": "text"
+        },
+        {
+          "name": "Kv_km",
+          "title": "Kv_km",
+          "type": "text"
+        },
+        {
+          "name": "Fast_inom_PO",
+          "title": "Fast_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fast_ag_kat",
+          "title": "Fast_ag_kat",
+          "type": "text"
+        },
+        {
+          "name": "Elomr",
+          "title": "Elomr",
+          "type": "text"
+        },
+        {
+          "name": "NVV_klass",
+          "title": "NVV_klass",
+          "type": "text"
+        },
+        {
+          "name": "NVV_vind",
+          "title": "NVV_vind",
+          "type": "text"
+        },
+        {
+          "name": "MIUU_medelvind",
+          "title": "MIUU_medelvind",
+          "type": "text"
+        },
+        {
+          "name": "Screening",
+          "title": "Screening",
+          "type": "text"
+        },
+        {
+          "name": "Forhandling_PL",
+          "title": "Forhandling_PL",
+          "type": "text"
+        },
+        {
+          "name": "Grind",
+          "title": "Grind",
+          "type": "text"
+        },
+        {
+          "name": "Status",
+          "title": "Status",
+          "type": "text"
+        },
+        {
+          "name": "VKV",
+          "title": "VKV",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning",
+          "title": "Bedomning",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning_datum",
+          "title": "Bedomning_datum",
+          "type": "text"
+        },
+        {
+          "name": "Info_fritext",
+          "title": "Info_fritext",
+          "type": "text"
+        },
+        {
+          "name": "Risk_Mojligh",
+          "title": "Risk_Mojligh",
+          "type": "text"
+        },
+        {
+          "name": "Nasta_steg",
+          "title": "Nasta_steg",
+          "type": "text"
+        },
+        {
+          "name": "Markanv",
+          "title": "Markanv",
+          "type": "text"
+        },
+        {
+          "name": "Kommunanalys",
+          "title": "Kommunanalys",
+          "type": "text"
+        },
+        {
+          "name": "Turism_LIS",
+          "title": "Turism_LIS",
+          "type": "text"
+        },
+        {
+          "name": "Aktuellt",
+          "title": "Aktuellt",
+          "type": "text"
+        },
+        {
+          "name": "Veto_analys",
+          "title": "Veto_analys",
+          "type": "text"
+        },
+        {
+          "name": "Vaderradar_0_3_50_km",
+          "title": "Vaderradar_0_3_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Forsv_avst_25_50_km",
+          "title": "MSA_Forsv_avst_25_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Trafikverket",
+          "title": "MSA_Trafikverket",
+          "type": "text"
+        },
+        {
+          "name": "VKV_drift_inom_kommun",
+          "title": "VKV_drift_inom_kommun",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_10_km",
+          "title": "VKV_inom_10_km",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_2_km",
+          "title": "VKV_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Kyrkor_inom_2_km",
+          "title": "Kyrkor_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Master_inom_2km",
+          "title": "Master_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Naturvard_inom_2_km",
+          "title": "RI_Naturvard_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Kulturmiljov_inom_2km",
+          "title": "RI_Kulturmiljov_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "N_park_inom_2_km",
+          "title": "N_park_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "N_reservat_inom_2km",
+          "title": "N_reservat_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SCI_habitat_inom_2_km",
+          "title": "Natura_SCI_habitat_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SPA_fagel_inom_2_km",
+          "title": "Natura_SPA_fagel_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Lagflyg_omr_forsvaret_inom_PO",
+          "title": "Lagflyg_omr_forsvaret_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fornlamn_inom_PO",
+          "title": "Fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Mojl_fornlamn_inom_PO",
+          "title": "Mojl_fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "VMI_2_5_inom_PO",
+          "title": "VMI_2_5_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_sjoar_inom_PO",
+          "title": "Kalk_sjoar_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_vatmark_inom_PO",
+          "title": "Kalk_vatmark_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1790916464052
+  },
+  "http://localhost:3010||energiparker||RK_Vindkraftparker_v2": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK_Vindkraftparker_v2",
+          "title": "RK_Vindkraftparker_v2",
+          "type": "text"
+        },
+        {
+          "name": "Vindpark",
+          "title": "Vindpark",
+          "type": "text"
+        },
+        {
+          "name": "Kommun",
+          "title": "Kommun",
+          "type": "text"
+        },
+        {
+          "name": "Fastighet",
+          "title": "Fastighet",
+          "type": "text"
+        },
+        {
+          "name": "SWEREF99_N",
+          "title": "SWEREF99_N",
+          "type": "text"
+        },
+        {
+          "name": "SWEREF99_E",
+          "title": "SWEREF99_E",
+          "type": "text"
+        },
+        {
+          "name": "Z",
+          "title": "Z",
+          "type": "text"
+        },
+        {
+          "name": "model",
+          "title": "model",
+          "type": "text"
+        },
+        {
+          "name": "azimut",
+          "title": "azimut",
+          "type": "text"
+        },
+        {
+          "name": "_gare",
+          "title": "_gare",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "VKV_nr",
+          "title": "VKV_nr",
+          "type": "text"
+        },
+        {
+          "name": "OEM__",
+          "title": "OEM__",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791183484875
+  },
+  "http://localhost:3010||energiparker||lst.vbk_vindkraftverk": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "lst.vbk_vindkraftverk",
+          "title": "lst.vbk_vindkraftverk",
+          "type": "text"
+        },
+        {
+          "name": "ogc_fid",
+          "title": "ogc_fid",
+          "type": "text"
+        },
+        {
+          "name": "objectid",
+          "title": "objectid",
+          "type": "text"
+        },
+        {
+          "name": "verkid",
+          "title": "verkid",
+          "type": "text"
+        },
+        {
+          "name": "omrid",
+          "title": "omrid",
+          "type": "text"
+        },
+        {
+          "name": "projnamn",
+          "title": "projnamn",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "handlingst",
+          "title": "handlingst",
+          "type": "text"
+        },
+        {
+          "name": "uppfort",
+          "title": "uppfort",
+          "type": "text"
+        },
+        {
+          "name": "mb_tillsta",
+          "title": "mb_tillsta",
+          "type": "text"
+        },
+        {
+          "name": "totalhojd",
+          "title": "totalhojd",
+          "type": "text"
+        },
+        {
+          "name": "navhojd",
+          "title": "navhojd",
+          "type": "text"
+        },
+        {
+          "name": "rotdiamete",
+          "title": "rotdiamete",
+          "type": "text"
+        },
+        {
+          "name": "maxeffekt",
+          "title": "maxeffekt",
+          "type": "text"
+        },
+        {
+          "name": "calprod",
+          "title": "calprod",
+          "type": "text"
+        },
+        {
+          "name": "fabrikat",
+          "title": "fabrikat",
+          "type": "text"
+        },
+        {
+          "name": "modell",
+          "title": "modell",
+          "type": "text"
+        },
+        {
+          "name": "orgnamn",
+          "title": "orgnamn",
+          "type": "text"
+        },
+        {
+          "name": "orgnmr",
+          "title": "orgnmr",
+          "type": "text"
+        },
+        {
+          "name": "placering",
+          "title": "placering",
+          "type": "text"
+        },
+        {
+          "name": "komnamn",
+          "title": "komnamn",
+          "type": "text"
+        },
+        {
+          "name": "lansnamn",
+          "title": "lansnamn",
+          "type": "text"
+        },
+        {
+          "name": "el_namn",
+          "title": "el_namn",
+          "type": "text"
+        },
+        {
+          "name": "senasteupp",
+          "title": "senasteupp",
+          "type": "text"
+        },
+        {
+          "name": "ejaktuell",
+          "title": "ejaktuell",
+          "type": "text"
+        },
+        {
+          "name": "raderad",
+          "title": "raderad",
+          "type": "text"
+        },
+        {
+          "name": "arendestat",
+          "title": "arendestat",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791183484885
+  },
+  "http://localhost:3000||energiparker||RK_Vindkraftparker_v2": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK_Vindkraftparker_v2",
+          "title": "RK_Vindkraftparker_v2",
+          "type": "text"
+        },
+        {
+          "name": "Vindpark",
+          "title": "Vindpark",
+          "type": "text"
+        },
+        {
+          "name": "Kommun",
+          "title": "Kommun",
+          "type": "text"
+        },
+        {
+          "name": "Fastighet",
+          "title": "Fastighet",
+          "type": "text"
+        },
+        {
+          "name": "SWEREF99_N",
+          "title": "SWEREF99_N",
+          "type": "text"
+        },
+        {
+          "name": "SWEREF99_E",
+          "title": "SWEREF99_E",
+          "type": "text"
+        },
+        {
+          "name": "Z",
+          "title": "Z",
+          "type": "text"
+        },
+        {
+          "name": "model",
+          "title": "model",
+          "type": "text"
+        },
+        {
+          "name": "azimut",
+          "title": "azimut",
+          "type": "text"
+        },
+        {
+          "name": "_gare",
+          "title": "_gare",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "VKV_nr",
+          "title": "VKV_nr",
+          "type": "text"
+        },
+        {
+          "name": "OEM__",
+          "title": "OEM__",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906891
+  },
+  "http://localhost:3000||energiparker||RK-batteriparker": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK-batteriparker",
+          "title": "RK-batteriparker",
+          "type": "text"
+        },
+        {
+          "name": "gid",
+          "title": "gid",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivning",
+          "title": "beskrivning",
+          "type": "text"
+        },
+        {
+          "name": "bilder",
+          "title": "bilder",
+          "type": "text"
+        },
+        {
+          "name": "ansvarig",
+          "title": "ansvarig",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906914
+  },
+  "http://localhost:3000||energiparker||RK-finskaprojekt": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK-finskaprojekt",
+          "title": "RK-finskaprojekt",
+          "type": "text"
+        },
+        {
+          "name": "gid",
+          "title": "gid",
+          "type": "text"
+        },
+        {
+          "name": "fid",
+          "title": "fid",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivnimng",
+          "title": "beskrivnimng",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "typ",
+          "title": "typ",
+          "type": "text"
+        },
+        {
+          "name": "area_km2_",
+          "title": "area_km2_",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906937
+  },
+  "http://localhost:3000||energiparker||RK-solparker": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK-solparker",
+          "title": "RK-solparker",
+          "type": "text"
+        },
+        {
+          "name": "gid",
+          "title": "gid",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "beskrivning",
+          "title": "beskrivning",
+          "type": "text"
+        },
+        {
+          "name": "bild",
+          "title": "bild",
+          "type": "text"
+        },
+        {
+          "name": "ansvarig",
+          "title": "ansvarig",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906953
+  },
+  "http://localhost:3000||energiparker||RK_vindkraftparker_ytor": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK_vindkraftparker_ytor",
+          "title": "RK_vindkraftparker_ytor",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "omrid",
+          "title": "omrid",
+          "type": "text"
+        },
+        {
+          "name": "projnamn",
+          "title": "projnamn",
+          "type": "text"
+        },
+        {
+          "name": "antalverk",
+          "title": "antalverk",
+          "type": "text"
+        },
+        {
+          "name": "antalejxy",
+          "title": "antalejxy",
+          "type": "text"
+        },
+        {
+          "name": "calprod",
+          "title": "calprod",
+          "type": "text"
+        },
+        {
+          "name": "pbyggstart",
+          "title": "pbyggstart",
+          "type": "text"
+        },
+        {
+          "name": "pdrift",
+          "title": "pdrift",
+          "type": "text"
+        },
+        {
+          "name": "andringsansokan",
+          "title": "andringsansokan",
+          "type": "text"
+        },
+        {
+          "name": "underbyggnation",
+          "title": "underbyggnation",
+          "type": "text"
+        },
+        {
+          "name": "orgnamn",
+          "title": "orgnamn",
+          "type": "text"
+        },
+        {
+          "name": "orgnr",
+          "title": "orgnr",
+          "type": "text"
+        },
+        {
+          "name": "ejaktuell",
+          "title": "ejaktuell",
+          "type": "text"
+        },
+        {
+          "name": "komnamn",
+          "title": "komnamn",
+          "type": "text"
+        },
+        {
+          "name": "lansnamn",
+          "title": "lansnamn",
+          "type": "text"
+        },
+        {
+          "name": "el_namn",
+          "title": "el_namn",
+          "type": "text"
+        },
+        {
+          "name": "raderat",
+          "title": "raderat",
+          "type": "text"
+        },
+        {
+          "name": "arendestatusuppdaterat",
+          "title": "arendestatusuppdaterat",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906970
+  },
+  "http://localhost:3000||energiparker||lst.lst_uppforda_solcellsparker_over_05_mw": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "lst.lst_uppforda_solcellsparker_over_05_mw",
+          "title": "lst.lst_uppforda_solcellsparker_over_05_mw",
+          "type": "text"
+        },
+        {
+          "name": "ogc_fid",
+          "title": "ogc_fid",
+          "type": "text"
+        },
+        {
+          "name": "objectid",
+          "title": "objectid",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "namn_vh",
+          "title": "namn_vh",
+          "type": "text"
+        },
+        {
+          "name": "tillkomstd",
+          "title": "tillkomstd",
+          "type": "text"
+        },
+        {
+          "name": "stem_id",
+          "title": "stem_id",
+          "type": "text"
+        },
+        {
+          "name": "ovrid",
+          "title": "ovrid",
+          "type": "text"
+        },
+        {
+          "name": "produktion",
+          "title": "produktion",
+          "type": "text"
+        },
+        {
+          "name": "installera",
+          "title": "installera",
+          "type": "text"
+        },
+        {
+          "name": "placering",
+          "title": "placering",
+          "type": "text"
+        },
+        {
+          "name": "lanskod",
+          "title": "lanskod",
+          "type": "text"
+        },
+        {
+          "name": "knamn",
+          "title": "knamn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivnin",
+          "title": "beskrivnin",
+          "type": "text"
+        },
+        {
+          "name": "metodbeskr",
+          "title": "metodbeskr",
+          "type": "text"
+        },
+        {
+          "name": "tillkdatum",
+          "title": "tillkdatum",
+          "type": "text"
+        },
+        {
+          "name": "revdatum",
+          "title": "revdatum",
+          "type": "text"
+        },
+        {
+          "name": "shape_star",
+          "title": "shape_star",
+          "type": "text"
+        },
+        {
+          "name": "shape_stle",
+          "title": "shape_stle",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377906988
+  },
+  "http://localhost:3000||energiparker||lst.vbk_projekteringsomraden": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "lst.vbk_projekteringsomraden",
+          "title": "lst.vbk_projekteringsomraden",
+          "type": "text"
+        },
+        {
+          "name": "ogc_fid",
+          "title": "ogc_fid",
+          "type": "text"
+        },
+        {
+          "name": "objectid",
+          "title": "objectid",
+          "type": "text"
+        },
+        {
+          "name": "omrid",
+          "title": "omrid",
+          "type": "text"
+        },
+        {
+          "name": "projnamn",
+          "title": "projnamn",
+          "type": "text"
+        },
+        {
+          "name": "antalverk",
+          "title": "antalverk",
+          "type": "text"
+        },
+        {
+          "name": "antalejxy",
+          "title": "antalejxy",
+          "type": "text"
+        },
+        {
+          "name": "calprod",
+          "title": "calprod",
+          "type": "text"
+        },
+        {
+          "name": "pbyggstart",
+          "title": "pbyggstart",
+          "type": "text"
+        },
+        {
+          "name": "pdrift",
+          "title": "pdrift",
+          "type": "text"
+        },
+        {
+          "name": "andringsan",
+          "title": "andringsan",
+          "type": "text"
+        },
+        {
+          "name": "underbyggn",
+          "title": "underbyggn",
+          "type": "text"
+        },
+        {
+          "name": "orgnamn",
+          "title": "orgnamn",
+          "type": "text"
+        },
+        {
+          "name": "orgnr",
+          "title": "orgnr",
+          "type": "text"
+        },
+        {
+          "name": "komnamn",
+          "title": "komnamn",
+          "type": "text"
+        },
+        {
+          "name": "lansnamn",
+          "title": "lansnamn",
+          "type": "text"
+        },
+        {
+          "name": "el_namn",
+          "title": "el_namn",
+          "type": "text"
+        },
+        {
+          "name": "arendestat",
+          "title": "arendestat",
+          "type": "text"
+        },
+        {
+          "name": "ejaktuell",
+          "title": "ejaktuell",
+          "type": "text"
+        },
+        {
+          "name": "raderat",
+          "title": "raderat",
+          "type": "text"
+        },
+        {
+          "name": "shape_star",
+          "title": "shape_star",
+          "type": "text"
+        },
+        {
+          "name": "shape_stle",
+          "title": "shape_stle",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377907007
+  },
+  "http://localhost:3000||energiparker||lst.vbk_vindkraftverk": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "lst.vbk_vindkraftverk",
+          "title": "lst.vbk_vindkraftverk",
+          "type": "text"
+        },
+        {
+          "name": "ogc_fid",
+          "title": "ogc_fid",
+          "type": "text"
+        },
+        {
+          "name": "objectid",
+          "title": "objectid",
+          "type": "text"
+        },
+        {
+          "name": "verkid",
+          "title": "verkid",
+          "type": "text"
+        },
+        {
+          "name": "omrid",
+          "title": "omrid",
+          "type": "text"
+        },
+        {
+          "name": "projnamn",
+          "title": "projnamn",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "handlingst",
+          "title": "handlingst",
+          "type": "text"
+        },
+        {
+          "name": "uppfort",
+          "title": "uppfort",
+          "type": "text"
+        },
+        {
+          "name": "mb_tillsta",
+          "title": "mb_tillsta",
+          "type": "text"
+        },
+        {
+          "name": "totalhojd",
+          "title": "totalhojd",
+          "type": "text"
+        },
+        {
+          "name": "navhojd",
+          "title": "navhojd",
+          "type": "text"
+        },
+        {
+          "name": "rotdiamete",
+          "title": "rotdiamete",
+          "type": "text"
+        },
+        {
+          "name": "maxeffekt",
+          "title": "maxeffekt",
+          "type": "text"
+        },
+        {
+          "name": "calprod",
+          "title": "calprod",
+          "type": "text"
+        },
+        {
+          "name": "fabrikat",
+          "title": "fabrikat",
+          "type": "text"
+        },
+        {
+          "name": "modell",
+          "title": "modell",
+          "type": "text"
+        },
+        {
+          "name": "orgnamn",
+          "title": "orgnamn",
+          "type": "text"
+        },
+        {
+          "name": "orgnmr",
+          "title": "orgnmr",
+          "type": "text"
+        },
+        {
+          "name": "placering",
+          "title": "placering",
+          "type": "text"
+        },
+        {
+          "name": "komnamn",
+          "title": "komnamn",
+          "type": "text"
+        },
+        {
+          "name": "lansnamn",
+          "title": "lansnamn",
+          "type": "text"
+        },
+        {
+          "name": "el_namn",
+          "title": "el_namn",
+          "type": "text"
+        },
+        {
+          "name": "senasteupp",
+          "title": "senasteupp",
+          "type": "text"
+        },
+        {
+          "name": "ejaktuell",
+          "title": "ejaktuell",
+          "type": "text"
+        },
+        {
+          "name": "raderad",
+          "title": "raderad",
+          "type": "text"
+        },
+        {
+          "name": "arendestat",
+          "title": "arendestat",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791377907024
+  },
+  "http://localhost:3011||markforhandling_web||Markforhandling_ytor": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Markforhandling_ytor",
+          "title": "Markforhandling_ytor",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "kommunkod",
+          "title": "kommunkod",
+          "type": "text"
+        },
+        {
+          "name": "kommunnamn",
+          "title": "kommunnamn",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "etikett",
+          "title": "etikett",
+          "type": "text"
+        },
+        {
+          "name": "fastigheter",
+          "title": "fastigheter",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "person_org_nr",
+          "title": "person_org_nr",
+          "type": "text"
+        },
+        {
+          "name": "andel",
+          "title": "andel",
+          "type": "text"
+        },
+        {
+          "name": "adress",
+          "title": "adress",
+          "type": "text"
+        },
+        {
+          "name": "information",
+          "title": "information",
+          "type": "text"
+        },
+        {
+          "name": "fodelsear",
+          "title": "fodelsear",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "epost",
+          "title": "epost",
+          "type": "text"
+        },
+        {
+          "name": "telefon",
+          "title": "telefon",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791795292833
+  },
+  "http://localhost:3011||markforhandling_web||PO_screening": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "PO_screening",
+          "title": "PO_screening",
+          "type": "text"
+        },
+        {
+          "name": "Nr",
+          "title": "Nr",
+          "type": "text"
+        },
+        {
+          "name": "Namn",
+          "title": "Namn",
+          "type": "text"
+        },
+        {
+          "name": "Kommun",
+          "title": "Kommun",
+          "type": "text"
+        },
+        {
+          "name": "Lan",
+          "title": "Lan",
+          "type": "text"
+        },
+        {
+          "name": "Kv_km",
+          "title": "Kv_km",
+          "type": "text"
+        },
+        {
+          "name": "Fast_inom_PO",
+          "title": "Fast_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fast_ag_kat",
+          "title": "Fast_ag_kat",
+          "type": "text"
+        },
+        {
+          "name": "Elomr",
+          "title": "Elomr",
+          "type": "text"
+        },
+        {
+          "name": "NVV_klass",
+          "title": "NVV_klass",
+          "type": "text"
+        },
+        {
+          "name": "NVV_vind",
+          "title": "NVV_vind",
+          "type": "text"
+        },
+        {
+          "name": "MIUU_medelvind",
+          "title": "MIUU_medelvind",
+          "type": "text"
+        },
+        {
+          "name": "Screening",
+          "title": "Screening",
+          "type": "text"
+        },
+        {
+          "name": "Forhandling_PL",
+          "title": "Forhandling_PL",
+          "type": "text"
+        },
+        {
+          "name": "Grind",
+          "title": "Grind",
+          "type": "text"
+        },
+        {
+          "name": "Status",
+          "title": "Status",
+          "type": "text"
+        },
+        {
+          "name": "VKV",
+          "title": "VKV",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning",
+          "title": "Bedomning",
+          "type": "text"
+        },
+        {
+          "name": "Bedomning_datum",
+          "title": "Bedomning_datum",
+          "type": "text"
+        },
+        {
+          "name": "Info_fritext",
+          "title": "Info_fritext",
+          "type": "text"
+        },
+        {
+          "name": "Risk_Mojligh",
+          "title": "Risk_Mojligh",
+          "type": "text"
+        },
+        {
+          "name": "Nasta_steg",
+          "title": "Nasta_steg",
+          "type": "text"
+        },
+        {
+          "name": "Markanv",
+          "title": "Markanv",
+          "type": "text"
+        },
+        {
+          "name": "Kommunanalys",
+          "title": "Kommunanalys",
+          "type": "text"
+        },
+        {
+          "name": "Turism_LIS",
+          "title": "Turism_LIS",
+          "type": "text"
+        },
+        {
+          "name": "Aktuellt",
+          "title": "Aktuellt",
+          "type": "text"
+        },
+        {
+          "name": "Veto_analys",
+          "title": "Veto_analys",
+          "type": "text"
+        },
+        {
+          "name": "Vaderradar_0_3_50_km",
+          "title": "Vaderradar_0_3_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Forsv_avst_25_50_km",
+          "title": "MSA_Forsv_avst_25_50_km",
+          "type": "text"
+        },
+        {
+          "name": "MSA_Trafikverket",
+          "title": "MSA_Trafikverket",
+          "type": "text"
+        },
+        {
+          "name": "VKV_drift_inom_kommun",
+          "title": "VKV_drift_inom_kommun",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_10_km",
+          "title": "VKV_inom_10_km",
+          "type": "text"
+        },
+        {
+          "name": "VKV_inom_2_km",
+          "title": "VKV_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Kyrkor_inom_2_km",
+          "title": "Kyrkor_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Master_inom_2km",
+          "title": "Master_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Naturvard_inom_2_km",
+          "title": "RI_Naturvard_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "RI_Kulturmiljov_inom_2km",
+          "title": "RI_Kulturmiljov_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "N_park_inom_2_km",
+          "title": "N_park_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "N_reservat_inom_2km",
+          "title": "N_reservat_inom_2km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SCI_habitat_inom_2_km",
+          "title": "Natura_SCI_habitat_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Natura_SPA_fagel_inom_2_km",
+          "title": "Natura_SPA_fagel_inom_2_km",
+          "type": "text"
+        },
+        {
+          "name": "Lagflyg_omr_forsvaret_inom_PO",
+          "title": "Lagflyg_omr_forsvaret_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Fornlamn_inom_PO",
+          "title": "Fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Mojl_fornlamn_inom_PO",
+          "title": "Mojl_fornlamn_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "VMI_2_5_inom_PO",
+          "title": "VMI_2_5_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_sjoar_inom_PO",
+          "title": "Kalk_sjoar_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "Kalk_vatmark_inom_PO",
+          "title": "Kalk_vatmark_inom_PO",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791795292852
+  },
+  "http://localhost:3011||eda_jarnskog||Edas_projektomrade_241010": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Edas_projektomrade_241010",
+          "title": "Edas_projektomrade_241010",
+          "type": "text"
+        },
+        {
+          "name": "id_0",
+          "title": "id_0",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "type",
+          "title": "type",
+          "type": "text"
+        },
+        {
+          "name": "koordinate",
+          "title": "koordinate",
+          "type": "text"
+        },
+        {
+          "name": "version",
+          "title": "version",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791798440829
+  },
+  "http://localhost:3011||eda_jarnskog||Edas_turbiner_20241211": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Edas_turbiner_20241211",
+          "title": "Edas_turbiner_20241211",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "type",
+          "title": "type",
+          "type": "text"
+        },
+        {
+          "name": "descriptio",
+          "title": "descriptio",
+          "type": "text"
+        },
+        {
+          "name": "result",
+          "title": "result",
+          "type": "text"
+        },
+        {
+          "name": "wtgmanufac",
+          "title": "wtgmanufac",
+          "type": "text"
+        },
+        {
+          "name": "wtgtype",
+          "title": "wtgtype",
+          "type": "text"
+        },
+        {
+          "name": "wtgrotordi",
+          "title": "wtgrotordi",
+          "type": "text"
+        },
+        {
+          "name": "wtgpower",
+          "title": "wtgpower",
+          "type": "text"
+        },
+        {
+          "name": "wtghubheig",
+          "title": "wtghubheig",
+          "type": "text"
+        },
+        {
+          "name": "wtgproduct",
+          "title": "wtgproduct",
+          "type": "text"
+        },
+        {
+          "name": "userlabel",
+          "title": "userlabel",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791798440851
+  },
+  "http://localhost:3011||eda_jarnskog||fotopunkter_rk": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "fotopunkter_rk",
+          "title": "fotopunkter_rk",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "bild",
+          "title": "bild",
+          "type": "text"
+        },
+        {
+          "name": "datum_skapat",
+          "title": "datum_skapat",
+          "type": "date"
+        },
+        {
+          "name": "konsult",
+          "title": "konsult",
+          "type": "text"
+        },
+        {
+          "name": "pano",
+          "title": "pano",
+          "type": "text"
+        },
+        {
+          "name": "Plats",
+          "title": "Plats",
+          "type": "text"
+        },
+        {
+          "name": "Numrering",
+          "title": "Numrering",
+          "type": "text"
+        },
+        {
+          "name": "avst",
+          "title": "avst",
+          "type": "text"
+        },
+        {
+          "name": "avstand",
+          "title": "avstand",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791798440871
+  },
+  "http://localhost:3011||3d-demoprojekt||geodata — pipe": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "geodata_pipe",
+          "title": "geodata_pipe",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791833989726
+  },
+  "http://localhost:3011||3d-demoprojekt||geodata — polygon": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "geodata_polygon",
+          "title": "geodata_polygon",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791833989741
+  }
+}

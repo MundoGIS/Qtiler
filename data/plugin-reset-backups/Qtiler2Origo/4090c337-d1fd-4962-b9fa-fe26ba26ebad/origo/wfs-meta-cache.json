@@ -1,0 +1,146 @@
+{
+  "http://localhost:3010||energiparker||lst.vbk_vindkraftverk": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "lst.vbk_vindkraftverk",
+          "title": "lst.vbk_vindkraftverk",
+          "type": "text"
+        },
+        {
+          "name": "ogc_fid",
+          "title": "ogc_fid",
+          "type": "text"
+        },
+        {
+          "name": "objectid",
+          "title": "objectid",
+          "type": "text"
+        },
+        {
+          "name": "verkid",
+          "title": "verkid",
+          "type": "text"
+        },
+        {
+          "name": "omrid",
+          "title": "omrid",
+          "type": "text"
+        },
+        {
+          "name": "projnamn",
+          "title": "projnamn",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        },
+        {
+          "name": "handlingst",
+          "title": "handlingst",
+          "type": "text"
+        },
+        {
+          "name": "uppfort",
+          "title": "uppfort",
+          "type": "text"
+        },
+        {
+          "name": "mb_tillsta",
+          "title": "mb_tillsta",
+          "type": "text"
+        },
+        {
+          "name": "totalhojd",
+          "title": "totalhojd",
+          "type": "text"
+        },
+        {
+          "name": "navhojd",
+          "title": "navhojd",
+          "type": "text"
+        },
+        {
+          "name": "rotdiamete",
+          "title": "rotdiamete",
+          "type": "text"
+        },
+        {
+          "name": "maxeffekt",
+          "title": "maxeffekt",
+          "type": "text"
+        },
+        {
+          "name": "calprod",
+          "title": "calprod",
+          "type": "text"
+        },
+        {
+          "name": "fabrikat",
+          "title": "fabrikat",
+          "type": "text"
+        },
+        {
+          "name": "modell",
+          "title": "modell",
+          "type": "text"
+        },
+        {
+          "name": "orgnamn",
+          "title": "orgnamn",
+          "type": "text"
+        },
+        {
+          "name": "orgnmr",
+          "title": "orgnmr",
+          "type": "text"
+        },
+        {
+          "name": "placering",
+          "title": "placering",
+          "type": "text"
+        },
+        {
+          "name": "komnamn",
+          "title": "komnamn",
+          "type": "text"
+        },
+        {
+          "name": "lansnamn",
+          "title": "lansnamn",
+          "type": "text"
+        },
+        {
+          "name": "el_namn",
+          "title": "el_namn",
+          "type": "text"
+        },
+        {
+          "name": "senasteupp",
+          "title": "senasteupp",
+          "type": "text"
+        },
+        {
+          "name": "ejaktuell",
+          "title": "ejaktuell",
+          "type": "text"
+        },
+        {
+          "name": "raderad",
+          "title": "raderad",
+          "type": "text"
+        },
+        {
+          "name": "arendestat",
+          "title": "arendestat",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1791200771057
+  }
+}

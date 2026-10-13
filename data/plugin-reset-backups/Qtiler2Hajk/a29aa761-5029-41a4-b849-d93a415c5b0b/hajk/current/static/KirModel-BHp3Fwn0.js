@@ -1,0 +1,1 @@
+class t{constructor(e){this.map=e.map,this.app=e.app,this.localObserver=e.localObserver,this.config=this.app.plugins.kir.options,this.config.srsName=this.map.getView().getProjection().getCode(),this.layers={buffer:null,draw:null,marker:null,features:null}}getWfsById=e=>this.config.wfsLayers.find(r=>r.id===e);getMap(){return this.map}}export{t as default};

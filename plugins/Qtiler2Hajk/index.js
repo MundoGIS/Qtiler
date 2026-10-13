@@ -1087,6 +1087,10 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
       }
       next = next.replace(/\}\)\|\|U\.find\(Z=>!Z\.property\)\|\|U\[0\];/g, '});');
       next = next.replace(/\}\)\|\|U\[0\];/g, '});');
+      next = next.replace(/function Q\(\$\)\{if\(!Array\.isArray\(U\)[\s\S]*?\}function B\(\)\{/, match => {
+        const geometryFunction = match.replace('function Q($)', 'function qtilerGeometry($)').slice(0, -'function B(){'.length);
+        return `${geometryFunction}function Q(feature,resolution){return window.qtilerHajkRuleLabels?window.qtilerHajkRuleLabels(feature,resolution,qtilerGeometry(feature),U):qtilerGeometry(feature)}function B(){`;
+      });
       if (next !== raw) {
         await fs.promises.writeFile(filePath, next, 'utf8');
       }
@@ -3829,7 +3833,7 @@ ${mapIcon}
     }
     const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
     const lantmateriScript = await buildLantmateriControlBootstrap(payload.controls);
-    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261012-categories-native"></script>`;
+    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261013-labels-v1"></script>`;
     const previewShim = `<script>
 (function() {
   var previewConfigUrl = ${JSON.stringify(configUrl)};
@@ -4331,6 +4335,7 @@ ${mapIcon}
   const toHajkVectorScaleZoomOptions = (styleDef, resolutions, projCode = '') => {
     const rule = unwrapPrimaryStyleRule(styleDef);
     const out = {};
+    if (Array.isArray(styleDef) && (styleDef.length > 1 || styleDef.some(group => (Array.isArray(group) ? group : [group]).some(entry => entry?.text)))) return out;
     const maxScaleResolution = scaleDenominatorToResolution(rule?.maxScale, projCode);
     const minScaleResolution = scaleDenominatorToResolution(rule?.minScale, projCode);
     const minZoom = firstZoomAtOrBelowResolution(resolutions, maxScaleResolution);
@@ -4499,24 +4504,39 @@ ${mapIcon}
     };
   };
 
-  const toHajkRuntimeStyleRules = (styleDef, baseUrl = '') => {
+  const toHajkRuntimeStyleRules = (styleDef, baseUrl = '', resolutions = [], projCode = '') => {
     const entries = getHajkLegendStyleEntries(styleDef, {});
     return entries
       .map((entry) => {
         const filter = parseQtilerRuleFilter(entry.filter);
+        const ruleEntries = (styleDef || []).map(group => Array.isArray(group) ? group : [group]).find(group => group.includes(entry)) || [];
+        const labels = ruleEntries.filter(item => item?.text).map(item => ({
+          ...item.text,
+          minResolution: scaleDenominatorToResolution(item.minScale, projCode),
+          maxResolution: scaleDenominatorToResolution(item.maxScale, projCode)
+        }));
+        const visibility = {
+          labels,
+          minZoom: entry.minZoom,
+          maxZoom: entry.maxZoom,
+          minResolution: scaleDenominatorToResolution(entry.minScale, projCode),
+          maxResolution: scaleDenominatorToResolution(entry.maxScale, projCode),
+          resolutions
+        };
         if (entry?.icon && typeof entry.icon === 'object' && entry.icon.src) {
           const fromScale = Number(entry.icon.scale) > 0 ? hajkMapPointSizeFromIconScale(entry.icon.scale) : null;
           const explicitPointSize = Number(entry.pointSize);
           const pointSize = fromScale ?? (Number.isFinite(explicitPointSize) ? explicitPointSize : DEFAULT_POINT_ICON_SIZE);
           return {
             ...(filter || {}),
+            ...visibility,
             icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
             pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
             anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
             anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5
           };
         }
-        if (!entry || (!entry.fill && !entry.stroke)) return null;
+        if (!entry || (!entry.fill && !entry.stroke && !entry.circle && !labels.length)) return null;
         const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object'
           ? entry.qtilerPatternStyle
           : null;
@@ -4528,6 +4548,8 @@ ${mapIcon}
               : 45;
         return {
           ...(filter || {}),
+          ...visibility,
+          circle: entry.circle || null,
           hasFill: !!entry.fill,
           fillColor: String(entry.fill?.color || 'rgba(0,0,0,0)'),
           hasStroke: !!entry.stroke,
@@ -5665,7 +5687,7 @@ ${mapIcon}
            const hasMultiRuleLegend = legendEntries.length > 1;
            try { styleOptions = toHajkVectorStyleOptions(fullVectorStyle, l); } catch (e) { console.warn('[Qtiler2Hajk] styleOptions failed for', l?.name || l?.id || '', e?.message || e); styleOptions = toHajkVectorStyleOptions(null, l); }
            try { scaleZoomOptions = toHajkVectorScaleZoomOptions(fullVectorStyle, finalResolutions, projCode); } catch (e) { console.warn('[Qtiler2Hajk] scaleZoom failed for', l?.name || l?.id || '', e?.message || e); scaleZoomOptions = {}; }
-           try { qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] qtilerStyleRules failed for', l?.name || l?.id || '', e?.message || e); qtilerStyleRules = []; }
+           try { qtilerStyleRules = toHajkRuntimeStyleRules(fullVectorStyle, baseUrl, finalResolutions, projCode); } catch (e) { console.warn('[Qtiler2Hajk] qtilerStyleRules failed for', l?.name || l?.id || '', e?.message || e); qtilerStyleRules = []; }
            try { vectorRuleLegendIcon = toHajkVectorRuleLegendIcon(fullVectorStyle, l, baseUrl); } catch (e) { console.warn('[Qtiler2Hajk] ruleLegendIcon failed for', l?.name || l?.id || '', e?.message || e); vectorRuleLegendIcon = ''; }
            vectorLegendIcon = hasMultiRuleLegend ? '' : (vectorRuleLegendIcon || toHajkVectorLegendIcon(styleOptions));
            try { vectorLegend = toHajkVectorRuleLegend(fullVectorStyle, l, baseUrl) || vectorLegendIcon; } catch (e) { console.warn('[Qtiler2Hajk] ruleLegend failed for', l?.name || l?.id || '', e?.message || e); vectorLegend = vectorLegendIcon; }
@@ -6077,6 +6099,7 @@ ${mapIcon}
       const toolOrder = new Map(profileToolEntries.map((entry, index) => [entry.name, index]));
       tools.sort((a, b) => (toolOrder.get(a.type) ?? Number.MAX_SAFE_INTEGER) - (toolOrder.get(b.type) ?? Number.MAX_SAFE_INTEGER));
     }
+    tools.forEach((tool, index) => { tool.index = index; });
     let referenceProjections = [];
     try {
       const referenceConfigPath = path.join(installRoot, 'simpleMapAndLayersConfig.json');
@@ -6731,7 +6754,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           toHajkVectorScaleZoomOptions(previewStyles[styleName], finalResolutions, projCode)
         );
         {
-          const qtilerStyleRules = toHajkRuntimeStyleRules(previewStyles[styleName], baseUrl);
+          const qtilerStyleRules = toHajkRuntimeStyleRules(previewStyles[styleName], baseUrl, finalResolutions, projCode);
           if (qtilerStyleRules.length) {
             wfsDef.qtilerStyleRules = qtilerStyleRules;
             delete wfsDef.sldText;
@@ -6931,7 +6954,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const publishedConfigUrl = `${getRequestBaseUrl(req)}/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
       const lantmateriScript = await buildLantmateriControlBootstrap(profile?.controls);
-      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261012-categories-native"></script>`;
+      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261013-labels-v1"></script>`;
       const publishedShim = `<script>
 (function(){
   var publishedConfigUrl = ${JSON.stringify(publishedConfigUrl)};

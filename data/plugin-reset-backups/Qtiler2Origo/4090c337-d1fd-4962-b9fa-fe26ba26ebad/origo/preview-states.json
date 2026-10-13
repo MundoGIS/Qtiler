@@ -1,0 +1,59 @@
+{
+  "preview_muy4n7oq_olyg5c54": {
+    "createdAt": 1791378731707,
+    "payload": {
+      "project": "energiparker",
+      "layers": "[{\"name\":\"RK_Vindkraftparker_v2\",\"title\":\"RK_Vindkraftparker_v2\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-batteriparker\",\"title\":\"RK-batteriparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-finskaprojekt\",\"title\":\"RK-finskaprojekt\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-solparker\",\"title\":\"RK-solparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK_vindkraftparker_ytor\",\"title\":\"RK_vindkraftparker_ytor\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"title\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_projekteringsomraden\",\"title\":\"lst.vbk_projekteringsomraden\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_vindkraftverk\",\"title\":\"lst.vbk_vindkraftverk\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"}]",
+      "groups": "[]",
+      "layerRules": "{\"RK_Vindkraftparker_v2\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-batteriparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-finskaprojekt\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-solparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK_vindkraftparker_ytor\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.lst_uppforda_solcellsparker_over_05_mw\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_projekteringsomraden\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_vindkraftverk\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null}}",
+      "bgProject": "bakgrunder-qgis",
+      "bgLayer": "theme:sv-ng",
+      "bgKey": "layer:bakgrunder-qgis:theme:sv-ng",
+      "center": "",
+      "centerCrs": "",
+      "zoom": "",
+      "extent": "",
+      "minZoom": "",
+      "maxZoom": "",
+      "controls": "[{\"name\":\"home\",\"options\":{\"zoomOnStart\":true}},{\"name\":\"mapmenu\",\"options\":{\"isActive\":false}},{\"name\":\"legend\",\"options\":{\"useGroupIndication\":true}}]"
+    }
+  },
+  "preview_muy4nld0_jac40h2n": {
+    "createdAt": 1791378749413,
+    "payload": {
+      "project": "energiparker",
+      "layers": "[{\"name\":\"RK_Vindkraftparker_v2\",\"title\":\"RK_Vindkraftparker_v2\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-batteriparker\",\"title\":\"RK-batteriparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-finskaprojekt\",\"title\":\"RK-finskaprojekt\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-solparker\",\"title\":\"RK-solparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK_vindkraftparker_ytor\",\"title\":\"RK_vindkraftparker_ytor\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"title\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_projekteringsomraden\",\"title\":\"lst.vbk_projekteringsomraden\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_vindkraftverk\",\"title\":\"lst.vbk_vindkraftverk\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"}]",
+      "groups": "[]",
+      "layerRules": "{\"RK_Vindkraftparker_v2\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-batteriparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-finskaprojekt\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-solparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK_vindkraftparker_ytor\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.lst_uppforda_solcellsparker_over_05_mw\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_projekteringsomraden\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_vindkraftverk\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null}}",
+      "bgProject": "bakgrunder-qgis",
+      "bgLayer": "theme:sv-ng",
+      "bgKey": "layer:bakgrunder-qgis:theme:sv-ng",
+      "center": "[421431,6939256]",
+      "centerCrs": "EPSG:3006",
+      "zoom": "1.50",
+      "extent": "[-841786,6283119,1684648,7595393]",
+      "minZoom": "2",
+      "maxZoom": "28",
+      "controls": "[{\"name\":\"home\",\"options\":{\"zoomOnStart\":true}},{\"name\":\"mapmenu\",\"options\":{\"isActive\":false}},{\"name\":\"legend\",\"options\":{\"useGroupIndication\":true}}]"
+    }
+  },
+  "preview_muy4nnip_x98jsl6x": {
+    "createdAt": 1791378752210,
+    "payload": {
+      "project": "energiparker",
+      "layers": "[{\"name\":\"RK_Vindkraftparker_v2\",\"title\":\"RK_Vindkraftparker_v2\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-batteriparker\",\"title\":\"RK-batteriparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-finskaprojekt\",\"title\":\"RK-finskaprojekt\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK-solparker\",\"title\":\"RK-solparker\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"RK_vindkraftparker_ytor\",\"title\":\"RK_vindkraftparker_ytor\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"title\":\"lst.lst_uppforda_solcellsparker_over_05_mw\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_projekteringsomraden\",\"title\":\"lst.vbk_projekteringsomraden\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"},{\"name\":\"lst.vbk_vindkraftverk\",\"title\":\"lst.vbk_vindkraftverk\",\"isTheme\":false,\"themeName\":null,\"sourceProjectId\":\"energiparker\",\"visible\":true,\"group\":\"root\"}]",
+      "groups": "[]",
+      "layerRules": "{\"RK_Vindkraftparker_v2\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-batteriparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-finskaprojekt\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK-solparker\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"RK_vindkraftparker_ytor\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.lst_uppforda_solcellsparker_over_05_mw\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_projekteringsomraden\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null},\"lst.vbk_vindkraftverk\":{\"searchable\":false,\"editable\":false,\"searchAttribute\":null,\"idAttribute\":null,\"geometryAttribute\":null,\"hintText\":null}}",
+      "bgProject": "bakgrunder-qgis",
+      "bgLayer": "theme:sv-ng",
+      "bgKey": "layer:bakgrunder-qgis:theme:sv-ng",
+      "center": "[421431,6939256]",
+      "centerCrs": "EPSG:3006",
+      "zoom": "1.50",
+      "extent": "[-841786,6283119,1684648,7595393]",
+      "minZoom": "2",
+      "maxZoom": "28",
+      "controls": "[{\"name\":\"home\",\"options\":{\"zoomOnStart\":true}},{\"name\":\"mapmenu\",\"options\":{\"isActive\":false}},{\"name\":\"legend\",\"options\":{\"useGroupIndication\":true}}]"
+    }
+  }
+}

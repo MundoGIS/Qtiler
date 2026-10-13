@@ -1,0 +1,1 @@
+import{R as o,bQ as e,h as s}from"./app-core-CdjlP1aJ.js";function n(t){const[i,u]=o.useState({functionalCookiesOk:s(),thirdPartyCookiesOk:e()});return o.useEffect(()=>{const a=t.subscribe("core.cookieLevelChanged",()=>{u({functionalCookiesOk:s(),thirdPartyCookiesOk:e()})});return()=>{a.unsubscribe()}},[t]),i}export{n as u};

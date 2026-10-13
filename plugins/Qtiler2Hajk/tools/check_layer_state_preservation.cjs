@@ -84,5 +84,15 @@ assert.ok(
 assert.ok(hajkApp.includes('publishState.layerOrder = keys;'), 'Hajk editor must retain the user-defined layer order');
 assert.ok(hajkApp.includes('const selected = getOrderedHajkToolDefs()'), 'Hajk editor must serialize tools in their visible order');
 assert.ok(hajk.includes('tools.sort((a, b) => (toolOrder.get(a.type)'), 'Hajk config must honor the profile tool order');
+const toolIndexAssignment = hajk.match(/tools\.forEach\(\(tool, index\) => \{ tool\.index = index; \}\);/);
+assert.ok(toolIndexAssignment, 'Hajk native index must be assigned after sorting; array order alone is not consumed by the asynchronous module loader');
+const orderedTools = [{ type: 'print' }, { type: 'sketch' }, { type: 'layerswitcher' }];
+vm.runInNewContext(toolIndexAssignment[0], { tools: orderedTools });
+const completedImports = orderedTools.slice().reverse().map(tool => ({ type: tool.type, sortOrder: tool.index || 0 }));
+completedImports.sort((first, second) => first.sortOrder - second.sortOrder);
+assert.deepEqual(completedImports.map(tool => tool.type), ['print', 'sketch', 'layerswitcher'], 'Toolbar order must remain stable when import completion order changes');
+assert.ok(hajkApp.includes('applyHajkToolOrder(HAJK_TOOL_DEFS.map(def => ({ name: def.name })))'), 'New maps must reset tool order instead of inheriting the last edited map');
+assert.ok(hajkApp.includes('data-tool-rank'), 'Active tools must display their saved order position');
+assert.ok(hajkApp.includes('const sibling = rows[rows.indexOf(item) + direction]'), 'Move buttons must reorder active tools, skipping unchecked modules');
 
 console.log('Layer state preservation checks passed for Qtiler2Origo and Qtiler2Hajk.');

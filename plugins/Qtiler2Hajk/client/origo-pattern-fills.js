@@ -5,6 +5,7 @@
   const styleCache = new Map();
   const categoryLayers = new Map();
   const categoryControlStates = new WeakMap();
+  const runtimeLabelStyles = new WeakMap();
 
   function normalizeColorSignature(value) {
     return String(value || '').replace(/\s+/g, '').toLowerCase();
@@ -23,6 +24,80 @@
     if (origo) return origo.ol.style;
     return window.ol && window.ol.style ? window.ol.style : null;
   }
+
+  function renderRuleLabels(feature, resolution, geometryStyles, rules) {
+    const styleApi = getOlStyleApi();
+    const selected = (rules || []).find(function (rule) {
+      if (!rule.property) return false;
+      return evaluateFilterExpression('[' + rule.property + '] ' + (rule.operator || '==') + " '" + String(rule.value ?? '').replace(/'/g, "\\'") + "'", feature);
+    }) || (rules || []).find(function (rule) { return !rule.property; });
+    if (!selected) return [];
+    const zoomResolutions = selected.resolutions || [];
+    function visible(options) {
+      if (options.minResolution != null && resolution < options.minResolution) return false;
+      if (options.maxResolution != null && resolution > options.maxResolution) return false;
+      if (options.minZoom != null && zoomResolutions[options.minZoom] != null && resolution > zoomResolutions[options.minZoom]) return false;
+      if (options.maxZoom != null && zoomResolutions[options.maxZoom] != null && resolution < zoomResolutions[options.maxZoom]) return false;
+      return true;
+    }
+    const sourceStyles = Array.isArray(geometryStyles) ? geometryStyles : (geometryStyles ? [geometryStyles] : []);
+    const result = visible(selected) ? sourceStyles.filter(function (style) { return !(style.getText && style.getText()); }) : [];
+    if (!styleApi || !styleApi.Text) return result;
+    for (let index = 0; index < result.length; index += 1) {
+      const style = result[index];
+      const image = style.getImage && style.getImage();
+      if (!image || !style.clone || !style.setImage) continue;
+      const options = {
+        declutterMode: 'none',
+        scale: image.getScale(),
+        rotation: image.getRotation(),
+        rotateWithView: image.getRotateWithView()
+      };
+      let replacement;
+      if (image.getRadius && styleApi.Circle) {
+        replacement = new styleApi.Circle(Object.assign(options, { radius: image.getRadius(), fill: image.getFill(), stroke: image.getStroke() }));
+      } else if (image.getSrc && image.getSrc() && styleApi.Icon) {
+        replacement = new styleApi.Icon(Object.assign(options, {
+          src: image.getSrc(), opacity: image.getOpacity(), color: image.getColor(),
+          anchor: image.getAnchor() || [0.5, 0.5], anchorXUnits: image.getAnchor() ? 'pixels' : 'fraction', anchorYUnits: image.getAnchor() ? 'pixels' : 'fraction',
+          size: image.getSize() || undefined, offset: image.getOrigin() || undefined, crossOrigin: 'anonymous'
+        }));
+      }
+      if (replacement) {
+        const copy = style.clone();
+        copy.setImage(replacement);
+        result[index] = copy;
+      }
+    }
+    if (visible(selected) && selected.circle && !result.length && styleApi.Circle) {
+      result.push(new styleApi.Style({ image: new styleApi.Circle({
+        declutterMode: 'none',
+        radius: selected.circle.radius,
+        fill: selected.circle.fill ? new styleApi.Fill(selected.circle.fill) : undefined,
+        stroke: selected.circle.stroke ? new styleApi.Stroke(selected.circle.stroke) : undefined
+      }) }));
+    }
+    (selected.labels || []).forEach(function (label) {
+      if (!visible(label)) return;
+      const text = String(label.text || '').replace(/\{\{([^}]+)\}\}|\[([^\]]+)\]/g, function (token, mustache, bracket) {
+        const value = feature.get(mustache || bracket);
+        return value == null ? '' : String(value);
+      });
+      if (!text.trim()) return;
+      const options = Object.assign({}, label, {
+        text: text,
+        fill: label.fill ? new styleApi.Fill(label.fill) : undefined,
+        stroke: label.stroke ? new styleApi.Stroke(label.stroke) : undefined,
+        backgroundFill: label.backgroundFill ? new styleApi.Fill(label.backgroundFill) : undefined,
+        backgroundStroke: label.backgroundStroke ? new styleApi.Stroke(label.backgroundStroke) : undefined,
+        padding: Array.isArray(label.padding) ? label.padding : [6, 6, 6, 6]
+      });
+      result.push(new styleApi.Style({ text: new styleApi.Text(options) }));
+    });
+    return result;
+  }
+
+  window.qtilerHajkRuleLabels = renderRuleLabels;
 
   function makePatternKey(meta) {
     return JSON.stringify({
@@ -553,6 +628,10 @@
       if (!styleName) return;
       const currentCategories = categoryLayers.get(layer);
       if (currentCategories && layer.getStyle() === currentCategories.styleFn) return;
+      if (runtimeLabelStyles.get(layer) === layer.getStyle()) return;
+      const runtimeLayerDef = vectorLayers.find(function (entry) { return entry.style === styleName; });
+      const runtimeRules = runtimeLayerDef && runtimeLayerDef.qtilerStyleRules;
+      if (runtimeRules && typeof layer.setDeclutter === 'function') layer.setDeclutter('qtiler-labels');
       const embeddedRules = styleDefs ? extractPatternRulesFromStyleDef(styleDefs[styleName]) : [];
       const polygonRules = styleDefs ? extractPolygonStyleRulesFromStyleDef(styleDefs[styleName]) : [];
       const pointRules = styleDefs ? extractPointStyleRulesFromStyleDef(styleDefs[styleName]) : [];
@@ -562,7 +641,7 @@
         ? patternStyles[styleName]
         : null;
       const nativeStyle = layer.getStyle();
-      const styleFn = !styleApi
+      let styleFn = !styleApi
         ? function (feature, resolution) { return getStyleArray(nativeStyle, feature, resolution); }
         : pointRules.length
         ? buildPointWrappingStyleFunction(styleName, layer.getStyle(), pointRules, styleApi)
@@ -572,6 +651,12 @@
         ? buildPatternWrappingStyleFunction(styleName, layer.getStyle(), embeddedRules, styleApi)
         : (legacyMeta ? buildPatternStyleFunction(styleName, legacyMeta) : null);
       if (!styleFn) return;
+      if (runtimeRules) {
+        const geometryStyleFn = styleFn;
+        styleFn = function (feature, resolution) {
+          return renderRuleLabels(feature, resolution, getStyleArray(geometryStyleFn, feature, resolution), runtimeRules);
+        };
+      }
       try {
         const rules = pointRules.length ? pointRules : polygonRules;
         if (rules.some(function (rule) { return !!rule.filter; })) {
@@ -591,6 +676,7 @@
           layer.setStyle(state.styleFn);
         } else {
           layer.setStyle(styleFn);
+          runtimeLabelStyles.set(layer, styleFn);
         }
       } catch (err) {
         console.warn('[Qtiler2Hajk] Failed to apply runtime pattern style for', styleName, err);

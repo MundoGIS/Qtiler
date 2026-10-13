@@ -1,0 +1,1 @@
+const t="Du behöver tillåta att applikationen visar din position. För datorer: De flesta webbläsare har en lås-ikon i adressfältet som du kan klicka på för att tillåta Plats/Position.",a=Object.freeze({variant:"info",persist:!1,anchorOrigin:{vertical:"top",horizontal:"center"}});export{t as L,a};

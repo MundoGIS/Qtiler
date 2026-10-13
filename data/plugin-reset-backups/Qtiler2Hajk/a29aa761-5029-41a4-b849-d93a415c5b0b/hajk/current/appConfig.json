@@ -1,0 +1,44 @@
+{
+  "mapserviceBase": "",
+  "defaultMap": "map_1",
+  "availableTools": [
+    "Anchor",
+    "Bookmarks",
+    "Buffer",
+    "Coordinates",
+    "DocumentHandler",
+    "Edit",
+    "FmeServer",
+    "InfoDialog",
+    "LayerComparer",
+    "LayerSwitcher",
+    "Location",
+    "Measurer",
+    "Print",
+    "PropertyChecker",
+    "Routing",
+    "Search",
+    "Sketch",
+    "StreetView",
+    "TimeSlider"
+  ],
+  "loadErrorTitle": "Ett fel har inträffat",
+  "loadErrorMessage": "Fel när applikationen skulle läsas in. Du kan försöka att återställa applikationen genom att trycka på knappen nedan. Om felet kvarstår kan du kontakta systemansvarig.",
+  "loadErrorReloadButtonText": "Återställ applikationen",
+  "announcements": [
+    {
+      "id": 1,
+      "active": true,
+      "text": "Hi, this is **Hajk**! 😃 \n\nWe hope you enjoy it. 🚀💯",
+      "showOnlyOnce": true,
+      "maps": [
+        "map_1",
+        "simpleMapAndLayersConfig"
+      ],
+      "timeout": 5000,
+      "startTime": "2020-06-29",
+      "stopTime": "2099-12-31",
+      "type": "info"
+    }
+  ]
+}

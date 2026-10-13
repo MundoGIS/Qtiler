@@ -424,6 +424,27 @@ const QTWC_I18N = {
     'Qtiler2Hajk.wfs_label_placement_line': 'Follow line',
     'Qtiler2Hajk.wfs_label_offsetx': 'Offset X (px)',
     'Qtiler2Hajk.wfs_label_offsety': 'Offset Y (px)',
+    'Qtiler2Hajk.wfs_symbol_zoom_from': 'Symbol from zoom',
+    'Qtiler2Hajk.wfs_symbol_zoom_to': 'Symbol up to zoom',
+    'Qtiler2Hajk.wfs_label_zoom_from': 'Label from zoom',
+    'Qtiler2Hajk.wfs_visibility': 'Visibility',
+    'Qtiler2Hajk.wfs_visibility_mode': 'Visibility range',
+    'Qtiler2Hajk.wfs_visibility_zoom': 'Zoom',
+    'Qtiler2Hajk.wfs_visibility_scale': 'Scale (1:N)',
+    'Qtiler2Hajk.wfs_visibility_both': 'Zoom + scale (existing configuration)',
+    'Qtiler2Hajk.wfs_label_text_section': 'Text and placement',
+    'Qtiler2Hajk.wfs_label_halo_section': 'Text halo',
+    'Qtiler2Hajk.wfs_label_zoom_to': 'Label up to zoom',
+    'Qtiler2Hajk.wfs_label_spacing': 'Label margin (px)',
+    'Qtiler2Hajk.wfs_label_repeat': 'Repeat distance (px)',
+    'Qtiler2Hajk.wfs_label_overflow': 'Allow text outside geometry',
+    'Qtiler2Hajk.wfs_label_background': 'Label background',
+    'Qtiler2Hajk.wfs_label_background_color': 'Background color',
+    'Qtiler2Hajk.wfs_label_background_opacity': 'Background opacity',
+    'Qtiler2Hajk.wfs_label_border_color': 'Border color',
+    'Qtiler2Hajk.wfs_label_border_width': 'Border width (px)',
+    'Qtiler2Hajk.wfs_label_halo_color': 'Halo color',
+    'Qtiler2Hajk.wfs_label_halo_width': 'Halo width (px)',
     'Qtiler2Hajk.wfs_label_from': 'Label from 1:',
     'Qtiler2Hajk.wfs_label_to': 'Label up to 1:',
     'Qtiler2Hajk.wfs_label_from_tip': 'Minimum scale at which the label is visible',
@@ -936,6 +957,27 @@ const QTWC_I18N = {
     'Qtiler2Hajk.wfs_label_placement_line': 'Seguir la línea',
     'Qtiler2Hajk.wfs_label_offsetx': 'Desplaz. X (px)',
     'Qtiler2Hajk.wfs_label_offsety': 'Desplaz. Y (px)',
+    'Qtiler2Hajk.wfs_symbol_zoom_from': 'Símbolo desde zoom',
+    'Qtiler2Hajk.wfs_symbol_zoom_to': 'Símbolo hasta zoom',
+    'Qtiler2Hajk.wfs_label_zoom_from': 'Etiqueta desde zoom',
+    'Qtiler2Hajk.wfs_visibility': 'Visibilidad',
+    'Qtiler2Hajk.wfs_visibility_mode': 'Rango de visibilidad',
+    'Qtiler2Hajk.wfs_visibility_zoom': 'Zoom',
+    'Qtiler2Hajk.wfs_visibility_scale': 'Escala (1:N)',
+    'Qtiler2Hajk.wfs_visibility_both': 'Zoom + escala (configuración existente)',
+    'Qtiler2Hajk.wfs_label_text_section': 'Texto y posición',
+    'Qtiler2Hajk.wfs_label_halo_section': 'Halo del texto',
+    'Qtiler2Hajk.wfs_label_zoom_to': 'Etiqueta hasta zoom',
+    'Qtiler2Hajk.wfs_label_spacing': 'Margen de etiqueta (px)',
+    'Qtiler2Hajk.wfs_label_repeat': 'Distancia de repetición (px)',
+    'Qtiler2Hajk.wfs_label_overflow': 'Permitir texto fuera de la geometría',
+    'Qtiler2Hajk.wfs_label_background': 'Fondo de etiqueta',
+    'Qtiler2Hajk.wfs_label_background_color': 'Color de fondo',
+    'Qtiler2Hajk.wfs_label_background_opacity': 'Opacidad del fondo',
+    'Qtiler2Hajk.wfs_label_border_color': 'Color de borde',
+    'Qtiler2Hajk.wfs_label_border_width': 'Ancho de borde (px)',
+    'Qtiler2Hajk.wfs_label_halo_color': 'Color del halo',
+    'Qtiler2Hajk.wfs_label_halo_width': 'Ancho del halo (px)',
     'Qtiler2Hajk.wfs_label_from': 'Etiqueta desde 1:',
     'Qtiler2Hajk.wfs_label_to': 'Etiqueta hasta 1:',
     'Qtiler2Hajk.wfs_label_from_tip': 'Escala mínima a la que se ve la etiqueta',
@@ -1448,6 +1490,27 @@ const QTWC_I18N = {
     'Qtiler2Hajk.wfs_label_placement_line': 'Följ linje',
     'Qtiler2Hajk.wfs_label_offsetx': 'Förskjutning X (px)',
     'Qtiler2Hajk.wfs_label_offsety': 'Förskjutning Y (px)',
+    'Qtiler2Hajk.wfs_symbol_zoom_from': 'Symbol från zoom',
+    'Qtiler2Hajk.wfs_symbol_zoom_to': 'Symbol till zoom',
+    'Qtiler2Hajk.wfs_label_zoom_from': 'Etikett från zoom',
+    'Qtiler2Hajk.wfs_visibility': 'Synlighet',
+    'Qtiler2Hajk.wfs_visibility_mode': 'Synlighetsintervall',
+    'Qtiler2Hajk.wfs_visibility_zoom': 'Zoom',
+    'Qtiler2Hajk.wfs_visibility_scale': 'Skala (1:N)',
+    'Qtiler2Hajk.wfs_visibility_both': 'Zoom + skala (befintlig konfiguration)',
+    'Qtiler2Hajk.wfs_label_text_section': 'Text och placering',
+    'Qtiler2Hajk.wfs_label_halo_section': 'Texthalo',
+    'Qtiler2Hajk.wfs_label_zoom_to': 'Etikett till zoom',
+    'Qtiler2Hajk.wfs_label_spacing': 'Etikettmarginal (px)',
+    'Qtiler2Hajk.wfs_label_repeat': 'Upprepningsavstånd (px)',
+    'Qtiler2Hajk.wfs_label_overflow': 'Tillåt text utanför geometrin',
+    'Qtiler2Hajk.wfs_label_background': 'Etikettbakgrund',
+    'Qtiler2Hajk.wfs_label_background_color': 'Bakgrundsfärg',
+    'Qtiler2Hajk.wfs_label_background_opacity': 'Bakgrundens opacitet',
+    'Qtiler2Hajk.wfs_label_border_color': 'Kantfärg',
+    'Qtiler2Hajk.wfs_label_border_width': 'Kantbredd (px)',
+    'Qtiler2Hajk.wfs_label_halo_color': 'Halofärg',
+    'Qtiler2Hajk.wfs_label_halo_width': 'Halobredd (px)',
     'Qtiler2Hajk.wfs_label_from': 'Etikett från 1:',
     'Qtiler2Hajk.wfs_label_to': 'Etikett upp till 1:',
     'Qtiler2Hajk.wfs_label_from_tip': 'Minsta skala där etiketten syns',
@@ -1931,6 +1994,7 @@ function syncControlsFromCheckboxes() {
       return merged ? { name: def.name, options: merged } : { name: def.name };
     });
   controlsJsonInput.value = JSON.stringify(selected, null, 2);
+  updateHajkToolOrderControls();
   try { renderPublishConfigSummary(); } catch {}
   try { schedulePreviewRefresh(); } catch {}
 }
@@ -1963,6 +2027,23 @@ function applyHajkToolOrder(controlsArray) {
     const item = label?.closest('.Qtiler2Hajk-control-row') || label;
     if (item && !names.includes(def.name)) grid.appendChild(item);
   });
+  updateHajkToolOrderControls();
+}
+
+function updateHajkToolOrderControls() {
+  const grid = document.querySelector('.Qtiler2Hajk-controls-grid');
+  if (!grid) return;
+  const rows = Array.from(grid.children).filter(row => row.querySelector('input[id^="ctrl-"]'));
+  const activeRows = rows.filter(row => row.querySelector('input[id^="ctrl-"]')?.checked);
+  rows.forEach(row => {
+    const rank = row.querySelector('[data-tool-rank]');
+    const position = activeRows.indexOf(row);
+    if (rank) rank.textContent = position < 0 ? '' : String(position + 1);
+    const up = row.querySelector('[data-tool-move="-1"]');
+    const down = row.querySelector('[data-tool-move="1"]');
+    if (up) up.disabled = position <= 0;
+    if (down) down.disabled = position < 0 || position === activeRows.length - 1;
+  });
 }
 
 /** Set checkboxes from a saved Hajk tools array. */
@@ -1985,6 +2066,7 @@ function syncCheckboxesFromControls(controlsArray) {
     const cb = document.getElementById(def.id);
     if (cb) cb.checked = activeNames.has(def.name);
   });
+  updateHajkToolOrderControls();
   // Re-render the inline configurator panels so saved options become visible.
   if (typeof renderControlConfigPanels === 'function') renderControlConfigPanels();
   try { renderPublishConfigSummary(); } catch {}
@@ -5353,6 +5435,8 @@ async function preparePublishModal(editProfileId = null) {
     backgroundLayersList.innerHTML = `<p class="help">${escapeHtml(t('Qtiler2Hajk.optional_select'))}</p>`;
     refreshBackgroundOptions();
     // Reset Origo controls to defaults
+    publishState.controlsOptions = {};
+    applyHajkToolOrder(HAJK_TOOL_DEFS.map(def => ({ name: def.name })));
     HAJK_TOOL_DEFS.forEach((def) => {
       const cb = document.getElementById(def.id);
       if (cb) cb.checked = def.defaultChecked === true;
@@ -6893,9 +6977,10 @@ document.querySelectorAll('.Qtiler2Hajk-control-item').forEach((item) => {
   if (!input || !HAJK_TOOL_DEFS.some((def) => def.id === input.id)) return;
   const controls = document.createElement('span');
   controls.className = 'Qtiler2Hajk-control-order';
-  controls.innerHTML = '<button type="button" class="button is-small is-light" data-tool-move="-1" title="Move tool up">↑</button><button type="button" class="button is-small is-light" data-tool-move="1" title="Move tool down">↓</button>';
+  controls.innerHTML = '<span data-tool-rank></span><button type="button" class="button is-small is-light" data-tool-move="-1" title="Move tool up" aria-label="Move tool up">↑</button><button type="button" class="button is-small is-light" data-tool-move="1" title="Move tool down" aria-label="Move tool down">↓</button>';
   item.appendChild(controls);
 });
+updateHajkToolOrderControls();
 
 document.querySelector('.Qtiler2Hajk-controls-grid')?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-tool-move]') : null;
@@ -6904,7 +6989,8 @@ document.querySelector('.Qtiler2Hajk-controls-grid')?.addEventListener('click', 
   const label = button.closest('.Qtiler2Hajk-control-item');
   const item = label?.closest('.Qtiler2Hajk-control-row') || label;
   const direction = Number(button.getAttribute('data-tool-move'));
-  const sibling = direction < 0 ? item?.previousElementSibling : item?.nextElementSibling;
+  const rows = Array.from(item?.parentElement?.children || []).filter(row => row.querySelector('input[id^="ctrl-"]')?.checked);
+  const sibling = rows[rows.indexOf(item) + direction];
   if (!item || !sibling) return;
   if (direction < 0) item.parentElement.insertBefore(item, sibling);
   else item.parentElement.insertBefore(sibling, item);
@@ -7845,7 +7931,9 @@ function defaultRule(geomFamily) {
     legendLabel: '',
     minScale: '',
     maxScale: '',
-    label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '' },
+    minZoom: '',
+    maxZoom: '',
+    label: { enabled: false, text: '', color: '#000000', size: 12, offsetX: 0, offsetY: -14, placement: 'point', minScale: '', maxScale: '', minZoom: '', maxZoom: '', spacing: 6, repeat: 250, background: false, backgroundColor: '#ffffff', backgroundOpacity: 0.85, borderColor: '#555555', borderWidth: 1, haloColor: '#ffffff', haloWidth: 3, overflow: true },
     designerOptions: null
   };
   if (geomFamily === 'point') {
@@ -7864,6 +7952,14 @@ function geomFamilyOf(g) {
   if (s.includes('point')) return 'point';
   if (s.includes('line') || s.includes('linestring')) return 'line';
   return 'polygon';
+}
+
+function getRuleVisibilityMode(options) {
+  if (['zoom', 'scale', 'both'].includes(options.visibilityMode)) return options.visibilityMode;
+  const hasLimit = key => options[key] !== '' && options[key] != null && Number.isFinite(Number(options[key]));
+  const hasZoom = hasLimit('minZoom') || hasLimit('maxZoom');
+  const hasScale = hasLimit('minScale') || hasLimit('maxScale');
+  return hasScale ? (hasZoom ? 'both' : 'scale') : 'zoom';
 }
 
 function dashKeyToArray(key) {
@@ -7978,8 +8074,16 @@ function rulesToOrigoStyle(rules) {
     // In Origo: maxScale = larger denom (zoomed-out limit), minScale = smaller denom (zoomed-in limit)
     // We expose: "Visible desde escala 1:X" (less detail) → maxScale=X
     //            "Visible hasta escala 1:Y" (more detail) → minScale=Y
-    if (gMin != null) geomEntry.maxScale = gMin;
-    if (gMax != null) geomEntry.minScale = gMax;
+    const symbolVisibility = getRuleVisibilityMode(r);
+    geomEntry.qtilerVisibilityMode = symbolVisibility;
+    if (symbolVisibility !== 'zoom') {
+      if (gMin != null) geomEntry.maxScale = gMin;
+      if (gMax != null) geomEntry.minScale = gMax;
+    }
+    if (symbolVisibility !== 'scale') {
+      if (normScale(r.minZoom) != null) geomEntry.minZoom = normScale(r.minZoom);
+      if (normScale(r.maxZoom) != null) geomEntry.maxZoom = normScale(r.maxZoom);
+    }
     entries.push(geomEntry);
 
     if (r.label && r.label.enabled && r.label.text) {
@@ -7989,12 +8093,26 @@ function rulesToOrigoStyle(rules) {
         text: legacyToMustache(r.label.text),
         font: `${r.label.size || 12}px sans-serif`,
         fill: { color: r.label.color || '#000000' },
-        stroke: { color: '#FFFFFF', width: 3 },
+        stroke: { color: r.label.haloColor || '#ffffff', width: r.label.haloWidth ?? 3 },
         offsetX: r.label.offsetX != null ? Number(r.label.offsetX) || 0 : 0,
         offsetY: r.label.offsetY != null ? Number(r.label.offsetY) || 0 : -14,
         textAlign: 'center',
-        overflow: true
+        overflow: r.label.overflow !== false,
+        padding: Array(4).fill(Number(r.label.spacing ?? 6)),
+        repeat: Number(r.label.repeat ?? 250)
       };
+      if (r.label.background) {
+        textEntry.text.backgroundFill = { color: hexToRgba(r.label.backgroundColor || '#ffffff', r.label.backgroundOpacity ?? 0.85) };
+        textEntry.text.backgroundStroke = { color: r.label.borderColor || '#555555', width: Number(r.label.borderWidth ?? 1) };
+      }
+      const labelMinZoom = normScale(r.label.minZoom);
+      const labelMaxZoom = normScale(r.label.maxZoom);
+      const labelVisibility = getRuleVisibilityMode(r.label);
+      textEntry.text.qtilerVisibilityMode = labelVisibility;
+      if (labelVisibility !== 'scale') {
+        if (labelMinZoom != null) textEntry.text.minZoom = labelMinZoom;
+        if (labelMaxZoom != null) textEntry.text.maxZoom = labelMaxZoom;
+      }
       // Origo/OL: when placement is 'line', the label follows the geometry.
       if (r.label.placement === 'line') {
         textEntry.text.placement = 'line';
@@ -8003,8 +8121,10 @@ function rulesToOrigoStyle(rules) {
       }
       const lMin = normScale(r.label.maxScale);
       const lMax = normScale(r.label.minScale);
-      if (lMin != null) textEntry.maxScale = lMin;
-      if (lMax != null) textEntry.minScale = lMax;
+      if (labelVisibility !== 'zoom') {
+        if (lMin != null) textEntry.maxScale = lMin;
+        if (lMax != null) textEntry.minScale = lMax;
+      }
       entries.push(textEntry);
     }
     return entries;
@@ -8033,6 +8153,9 @@ function origoStyleToRules(styleDef) {
     if (def) {
       if (def.maxScale != null) r.maxScale = def.maxScale;
       if (def.minScale != null) r.minScale = def.minScale;
+      if (def.minZoom != null) r.minZoom = def.minZoom;
+      if (def.maxZoom != null) r.maxZoom = def.maxZoom;
+      if (def.qtilerVisibilityMode) r.visibilityMode = def.qtilerVisibilityMode;
     }
     if (textEntry) {
       r.label.enabled = true;
@@ -8043,6 +8166,25 @@ function origoStyleToRules(styleDef) {
       if (textEntry.text.offsetX != null) r.label.offsetX = textEntry.text.offsetX;
       if (textEntry.text.offsetY != null) r.label.offsetY = textEntry.text.offsetY;
       if (textEntry.text.placement === 'line') r.label.placement = 'line';
+      if (textEntry.text.qtilerVisibilityMode) r.label.visibilityMode = textEntry.text.qtilerVisibilityMode;
+      for (const key of ['minZoom', 'maxZoom', 'repeat', 'overflow']) {
+        if (textEntry.text[key] != null) r.label[key] = textEntry.text[key];
+      }
+      if (Array.isArray(textEntry.text.padding)) r.label.spacing = textEntry.text.padding[0];
+      if (textEntry.text.stroke) {
+        r.label.haloColor = parseColorString(textEntry.text.stroke.color, '#ffffff').hex;
+        r.label.haloWidth = textEntry.text.stroke.width ?? 3;
+      }
+      if (textEntry.text.backgroundFill) {
+        const background = parseColorString(textEntry.text.backgroundFill.color, '#ffffff', 0.85);
+        r.label.background = true;
+        r.label.backgroundColor = background.hex;
+        r.label.backgroundOpacity = background.op;
+      }
+      if (textEntry.text.backgroundStroke) {
+        r.label.borderColor = parseColorString(textEntry.text.backgroundStroke.color, '#555555').hex;
+        r.label.borderWidth = textEntry.text.backgroundStroke.width ?? 1;
+      }
       if (textEntry.maxScale != null) r.label.maxScale = textEntry.maxScale;
       if (textEntry.minScale != null) r.label.minScale = textEntry.minScale;
     }
@@ -8309,6 +8451,49 @@ function renderSvgGrid(cats, filter) {
 }
 svgPickerSearch?.addEventListener('input', () => loadSvgLibrary().then(cats => renderSvgGrid(cats, svgPickerSearch.value)));
 
+function buildRuleVisibilityMarkup(options, prefix, isLabel) {
+  const T = key => t(`Qtiler2Hajk.${key}`);
+  const mode = getRuleVisibilityMode(options);
+  const zoomPrefix = isLabel ? 'wfs_label_zoom_' : 'wfs_symbol_zoom_';
+  const scaleFrom = isLabel ? 'wfs_label_from' : 'wfs_visible_from';
+  const scaleTo = isLabel ? 'wfs_label_to' : 'wfs_visible_to';
+  return `<div class="Qtiler2Hajk-rule-visibility" data-visibility-prefix="${prefix}">
+    <label>${T('wfs_visibility_mode')}<select data-rk="${prefix}.visibilityMode">
+      <option value="zoom"${mode === 'zoom' ? ' selected' : ''}>${T('wfs_visibility_zoom')}</option>
+      <option value="scale"${mode === 'scale' ? ' selected' : ''}>${T('wfs_visibility_scale')}</option>
+      ${mode === 'both' ? `<option value="both" selected>${T('wfs_visibility_both')}</option>` : ''}
+    </select></label>
+    <div class="Qtiler2Hajk-rule-fields" data-visibility-fields="zoom" ${mode === 'scale' ? 'hidden' : ''}>
+      <label>${T(`${zoomPrefix}from`)}<input type="number" min="0" step="1" data-rk="${prefix}.minZoom" value="${options.minZoom ?? ''}" placeholder="${T('wfs_no_limit')}" ${mode === 'scale' ? 'disabled' : ''} /></label>
+      <label>${T(`${zoomPrefix}to`)}<input type="number" min="0" step="1" data-rk="${prefix}.maxZoom" value="${options.maxZoom ?? ''}" placeholder="${T('wfs_no_limit')}" ${mode === 'scale' ? 'disabled' : ''} /></label>
+    </div>
+    <div class="Qtiler2Hajk-rule-fields" data-visibility-fields="scale" ${mode === 'zoom' ? 'hidden' : ''}>
+      <label>${T(scaleFrom)}<input type="number" min="1" step="1" data-rk="${prefix}.maxScale" value="${options.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" ${mode === 'zoom' ? 'disabled' : ''} /></label>
+      <label>${T(scaleTo)}<input type="number" min="1" step="1" data-rk="${prefix}.minScale" value="${options.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" ${mode === 'zoom' ? 'disabled' : ''} /></label>
+    </div>
+  </div>`;
+}
+
+function syncRuleEditorSections(root, rule) {
+  if (!root || !rule) return;
+  const labelSettings = root.querySelector('[data-label-settings]');
+  if (labelSettings) labelSettings.hidden = !rule.label.enabled;
+  const backgroundSettings = root.querySelector('[data-background-settings]');
+  if (backgroundSettings) {
+    backgroundSettings.hidden = !rule.label.background;
+    backgroundSettings.querySelectorAll('input').forEach(input => { input.disabled = !rule.label.background; });
+  }
+  root.querySelectorAll('[data-visibility-prefix]').forEach(section => {
+    const options = section.dataset.visibilityPrefix === 'lab' ? rule.label : rule;
+    const mode = getRuleVisibilityMode(options);
+    section.querySelectorAll('[data-visibility-fields]').forEach(fields => {
+      const inactive = mode !== 'both' && fields.dataset.visibilityFields !== mode;
+      fields.hidden = inactive;
+      fields.querySelectorAll('input').forEach(input => { input.disabled = inactive; });
+    });
+  });
+}
+
 function buildRuleEditorMarkup(rule, idx) {
   const T = (k) => t('Qtiler2Hajk.' + k);
   const fieldOptions = [`<option value="">${T('wfs_no_filter')}</option>`]
@@ -8391,9 +8576,7 @@ function buildRuleEditorMarkup(rule, idx) {
           <option value="point"${placement === 'point' ? ' selected' : ''}>${T('wfs_label_placement_point')}</option>
           <option value="line"${placement === 'line' ? ' selected' : ''}>${T('wfs_label_placement_line')}</option>
         </select></label>
-        <label>${T('wfs_label_offsetx')}<input type="number" step="1" data-rk="lab.offsetX" value="${rule.label.offsetX ?? 0}" /></label>
   ` : '';
-  const offsetYHtml = `<label>${T('wfs_label_offsety')}<input type="number" step="1" data-rk="lab.offsetY" value="${rule.label.offsetY ?? -14}" /></label>`;
 
   return `
     <div class="Qtiler2Hajk-rule-editor-shell" data-rule-editor-root="${idx}" data-rule-editor-index="${idx}">
@@ -8418,17 +8601,17 @@ function buildRuleEditorMarkup(rule, idx) {
           <button type="button" class="button small is-link is-light" data-rk="stylebasic">${T('wfs_edit_visual_style')}</button>
         </div>
         ${geomHtml}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-          <label title="${T('wfs_visible_from_tip')}">${T('wfs_visible_from')}<input type="number" min="0" step="1" data-rk="r.maxScale" value="${rule.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-          <label title="${T('wfs_visible_to_tip')}">${T('wfs_visible_to')}<input type="number" min="0" step="1" data-rk="r.minScale" value="${rule.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-        </div>
+        <h4 class="Qtiler2Hajk-rule-subheading">${T('wfs_visibility')}</h4>
+        ${buildRuleVisibilityMarkup(rule, 'r', false)}
       </fieldset>
 
       <fieldset>
-        <legend><label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" data-rk="lab.enabled" ${rule.label.enabled ? 'checked' : ''}/> ${T('wfs_label')}</label></legend>
-        <div style="display:grid;grid-template-columns:3fr 1fr;gap:10px;align-items:end">
+        <legend><label class="Qtiler2Hajk-rule-toggle"><input type="checkbox" data-rk="lab.enabled" ${rule.label.enabled ? 'checked' : ''}/> ${T('wfs_label')}</label></legend>
+        <div data-label-settings ${rule.label.enabled ? '' : 'hidden'}>
+        <h4 class="Qtiler2Hajk-rule-subheading">${T('wfs_label_text_section')}</h4>
+        <div class="Qtiler2Hajk-rule-fields">
           <label>${T('wfs_text_help')}
-            <input type="text" data-rk="lab.text" value="${(rule.label.text || '').replace(/"/g,'&quot;')}" placeholder="${T('wfs_text_placeholder')}" />
+            <textarea rows="2" data-rk="lab.text" placeholder="${T('wfs_text_placeholder')}">${escapeHtml(rule.label.text || '')}</textarea>
           </label>
           <label>${T('wfs_insert_field')}
             <select data-rk="lab.insertField"><option value="">--</option>${labelFieldOpts}</select>
@@ -8436,9 +8619,26 @@ function buildRuleEditorMarkup(rule, idx) {
           <label>${T('wfs_color')}<input type="color" data-rk="lab.color" value="${rule.label.color}" /></label>
           <label>${T('wfs_size')}<input type="number" min="6" max="48" data-rk="lab.size" value="${rule.label.size}" /></label>
           ${placementHtml}
-          ${offsetYHtml}
-          <label title="${T('wfs_label_from_tip')}">${T('wfs_label_from')}<input type="number" min="0" step="1" data-rk="lab.maxScale" value="${rule.label.maxScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
-          <label title="${T('wfs_label_to_tip')}">${T('wfs_label_to')}<input type="number" min="0" step="1" data-rk="lab.minScale" value="${rule.label.minScale ?? ''}" placeholder="${T('wfs_no_limit')}" /></label>
+          <label>${T('wfs_label_offsetx')}<input type="number" step="1" data-rk="lab.offsetX" value="${rule.label.offsetX ?? 0}" /></label>
+          <label>${T('wfs_label_offsety')}<input type="number" step="1" data-rk="lab.offsetY" value="${rule.label.offsetY ?? -14}" /></label>
+          <label>${T('wfs_label_spacing')}<input type="number" min="0" max="100" data-rk="lab.spacing" value="${rule.label.spacing ?? 6}" /></label>
+          ${isLine ? `<label>${T('wfs_label_repeat')}<input type="number" min="30" data-rk="lab.repeat" value="${rule.label.repeat ?? 250}" /></label>` : ''}
+          <label class="Qtiler2Hajk-rule-toggle Qtiler2Hajk-rule-full"><input type="checkbox" data-rk="lab.overflow" ${rule.label.overflow !== false ? 'checked' : ''} /> ${T('wfs_label_overflow')}</label>
+        </div>
+        <h4 class="Qtiler2Hajk-rule-subheading">${T('wfs_visibility')}</h4>
+        ${buildRuleVisibilityMarkup(rule.label, 'lab', true)}
+        <h4 class="Qtiler2Hajk-rule-subheading">${T('wfs_label_halo_section')}</h4>
+        <div class="Qtiler2Hajk-rule-fields">
+          <label>${T('wfs_label_halo_color')}<input type="color" data-rk="lab.haloColor" value="${rule.label.haloColor || '#ffffff'}" /></label>
+          <label>${T('wfs_label_halo_width')}<input type="number" min="0" max="10" data-rk="lab.haloWidth" value="${rule.label.haloWidth ?? 3}" /></label>
+        </div>
+        <div class="Qtiler2Hajk-rule-subheading"><label class="Qtiler2Hajk-rule-toggle"><input type="checkbox" data-rk="lab.background" ${rule.label.background ? 'checked' : ''} /> ${T('wfs_label_background')}</label></div>
+        <div class="Qtiler2Hajk-rule-fields" data-background-settings ${rule.label.background ? '' : 'hidden'}>
+          <label>${T('wfs_label_background_color')}<input type="color" data-rk="lab.backgroundColor" value="${rule.label.backgroundColor || '#ffffff'}" /></label>
+          <label>${T('wfs_label_background_opacity')}<input type="number" min="0" max="1" step="0.05" data-rk="lab.backgroundOpacity" value="${rule.label.backgroundOpacity ?? 0.85}" /></label>
+          <label>${T('wfs_label_border_color')}<input type="color" data-rk="lab.borderColor" value="${rule.label.borderColor || '#555555'}" /></label>
+          <label>${T('wfs_label_border_width')}<input type="number" min="0" max="10" data-rk="lab.borderWidth" value="${rule.label.borderWidth ?? 1}" /></label>
+        </div>
         </div>
       </fieldset>
     </div>
@@ -8452,13 +8652,14 @@ function attachRuleEditorHandlers(root, idx) {
     const handle = (val) => updateRuleField(idx, k, val);
     if (el.tagName === 'INPUT' && el.type === 'checkbox') {
       el.addEventListener('change', () => handle(el.checked));
-    } else if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+    } else if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
       el.addEventListener('input', () => handle(el.value));
       el.addEventListener('change', () => handle(el.value));
     } else if (el.tagName === 'BUTTON') {
       el.addEventListener('click', () => handle(true));
     }
   });
+  syncRuleEditorSections(root, currentRules[idx]);
   wireRuleRadios(root);
 }
 
@@ -8621,6 +8822,7 @@ function updateRuleField(idx, key, value) {
     // Per-rule scale fields (geometry)
     const sub = key.slice(2);
     r[sub] = value === '' ? '' : (isNaN(Number(value)) ? value : Number(value));
+    syncRuleEditorSections(document.querySelector(`[data-rule-editor-root="${idx}"]`), r);
     afterRuleChange();
     return;
   }
@@ -8629,21 +8831,22 @@ function updateRuleField(idx, key, value) {
     if (sub === 'insertField' && value) {
       // Insert at the end; if text already ends with the same token, do nothing
       const cur = r.label.text || '';
-      if (!cur.endsWith(value)) r.label.text = cur + value;
+      if (!cur.endsWith(value)) r.label.text = cur + (/\}\}$/.test(cur) ? ' ' : '') + value;
       return renderRulesPanel();
     }
-    if (sub === 'minScale' || sub === 'maxScale') {
+    if (['minScale', 'maxScale', 'minZoom', 'maxZoom'].includes(sub)) {
       r.label[sub] = value === '' ? '' : (isNaN(Number(value)) ? value : Number(value));
       afterRuleChange();
       return;
     }
-    if (sub === 'offsetX' || sub === 'offsetY' || sub === 'size') {
+    if (['offsetX', 'offsetY', 'size', 'spacing', 'repeat', 'backgroundOpacity', 'borderWidth', 'haloWidth'].includes(sub)) {
       const n = Number(value);
       r.label[sub] = isNaN(n) ? 0 : n;
       afterRuleChange();
       return;
     }
     r.label[sub] = value;
+    syncRuleEditorSections(document.querySelector(`[data-rule-editor-root="${idx}"]`), r);
     afterRuleChange();
     return;
   }
