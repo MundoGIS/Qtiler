@@ -12,7 +12,7 @@ import multer from "multer";
 import crypto from "crypto";
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { INSTALL_RECEIPT, readInstallationStatus } from '../lib/pluginInstallation.js';
+import { INSTALL_RECEIPT, PENDING_INSTALLATION, PENDING_UNINSTALLATION, clearPendingInstallation, readInstallationStatus, readUninstallationStatus } from '../lib/pluginInstallation.js';
 import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
 
@@ -122,7 +122,8 @@ export const registerPluginRoutes = ({
   // (price tag, "Request license" button, "Add license key" button) is
   // hidden because /licenses/status only iterates Object.keys(pricing).
   const pricing = {
-    QtilerAuth: { price: 250, currency: 'EUR', period: 'year' }
+    QtilerAuth: { price: 250, currency: 'EUR', period: 'year' },
+    'Qtiler-3D-eye': { price: 700, currency: 'EUR', period: 'year' }
   };
 
   const loadLicenseStore = () => {
@@ -564,10 +565,10 @@ export const registerPluginRoutes = ({
       return status.status !== 'expired';
     });
   }
-  const requestClusterRestart = (revision = null) => {
+  const requestClusterRestart = (revision = null, uninstall = null) => {
     try {
       if (typeof process.send === 'function') {
-        process.send({ cmd: 'restartAllWorkers', revision });
+        process.send({ cmd: 'restartAllWorkers', revision, uninstall });
       } else {
         process.exit(0);
       }
@@ -576,23 +577,31 @@ export const registerPluginRoutes = ({
       try { process.exit(0); } catch (_) { /* noop */ }
     }
   };
-  const restartAfterResponse = (res, delayMs = 250, revision = null) => {
+  const restartAfterResponse = (res, delayMs = 250, revision = null, uninstall = null) => {
     let scheduled = false;
     const schedule = () => {
       if (scheduled) return;
       scheduled = true;
       setTimeout(() => {
         // Restart once the response is flushed to avoid client-side ERR_CONNECTION_RESET.
-        requestClusterRestart(revision);
+        requestClusterRestart(revision, uninstall);
       }, Math.max(0, Number(delayMs) || 0));
     };
 
     res.once('finish', schedule);
     res.once('close', () => {
-      if (res.writableEnded) schedule();
+      if (res.writableEnded || uninstall) schedule();
     });
   };
   // Allow non-admin access to plugins list if no auth plugin is enabled (to install first plugin)
+  app.get('/plugins/uninstallations/:id', async (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store').json(await readUninstallationStatus(dataDir, req.params.id));
+    } catch (error) {
+      if (error.code === 'ENOENT') return res.json({ state: 'not_found' });
+      res.status(500).json({ error: 'uninstallation_status_failed' });
+    }
+  });
   app.get('/plugins/installations/:id', async (req, res) => {
     try {
       const status = await readInstallationStatus(dataDir, pluginManager, req.params.id);
@@ -820,91 +829,29 @@ export const registerPluginRoutes = ({
   app.delete("/plugins/:name", requireAdmin, async (req, res) => {
     let releaseOperation = null;
     try {
-    releaseOperation = await pluginManager.acquireOperationLock();
-    const raw = req.params.name;
-    const pluginName = sanitizePluginName(raw);
-    if (!pluginName) {
-      return res.status(400).json({ error: "plugin_name_required" });
-    }
-    const pluginPath = path.join(pluginsDir, pluginName);
-    const pluginDataPath = path.join(dataDir, pluginName);
-    const exists = fs.existsSync(pluginPath);
-    const wasEnabled = pluginManager.listEnabled().includes(pluginName);
-    let removedFiles = false;
-    if (exists) {
+      releaseOperation = await pluginManager.acquireOperationLock();
+      const pluginName = sanitizePluginName(req.params.name);
+      if (!pluginName) return res.status(400).json({ error: 'plugin_name_required' });
+      const exists = fs.existsSync(path.join(pluginsDir, pluginName));
+      const wasEnabled = pluginManager.listEnabled().includes(pluginName);
+      if (!exists) return res.status(404).json({ error: 'plugin_not_found' });
+      const operationId = crypto.randomUUID();
+      const keepData = req.query.keepData === '1';
+      const operationPath = path.join(dataDir, 'plugin-operations', `uninstall-${operationId}.json`);
+      const pendingPath = path.join(dataDir, PENDING_UNINSTALLATION);
+      await fs.promises.mkdir(path.dirname(operationPath), { recursive: true });
+      await fs.promises.writeFile(operationPath, JSON.stringify({ id: operationId, plugin: pluginName, state: 'uninstalling', keepData, wasEnabled, startedAt: new Date().toISOString() }), 'utf8');
       try {
-        await removeRecursive(pluginPath);
-        removedFiles = true;
-      } catch (rmErr) {
-        return res.status(500).json({ error: "plugin_remove_failed", details: String(rmErr?.message || rmErr) });
+        await fs.promises.writeFile(pendingPath, JSON.stringify({ id: operationId, plugin: pluginName, keepData, wasEnabled, ownerPid: process.pid }), { encoding: 'utf8', flag: 'wx' });
+        await pluginManager.updateEnabledList(enabledSet => { enabledSet.delete(pluginName); return enabledSet; });
+      } catch (error) {
+        await fs.promises.rm(pendingPath, { force: true }).catch(() => {});
+        await fs.promises.rm(operationPath, { force: true }).catch(() => {});
+        throw error;
       }
-    }
-
-    let removedData = false;
-    if (req.query.keepData !== "1") {
-      try {
-        await removeRecursive(pluginDataPath);
-        removedData = true;
-      } catch (rmDataErr) {
-        if (rmDataErr?.code !== "ENOENT") {
-          return res.status(500).json({ error: "plugin_data_remove_failed", details: String(rmDataErr?.message || rmDataErr) });
-        }
-      }
-    }
-
-    const removedCachePaths = [];
-    if (pluginName === 'WmsCache' && req.query.keepData !== "1") {
-      const cacheCandidates = [
-        path.join(process.cwd(), 'cache', 'external-wms'),
-        path.join(process.cwd(), 'cache', '_external_wms'),
-        path.join(process.cwd(), 'cache', 'wmscache')
-      ];
-      for (const cachePath of cacheCandidates) {
-        try {
-          await removeRecursive(cachePath);
-          removedCachePaths.push(cachePath);
-        } catch (rmCacheErr) {
-          if (rmCacheErr?.code !== 'ENOENT') {
-            return res.status(500).json({ error: 'plugin_cache_remove_failed', details: String(rmCacheErr?.message || rmCacheErr) });
-          }
-        }
-      }
-    }
-    if (pluginName === 'VectorTiles' && req.query.keepData !== "1") {
-      const cacheCandidates = [
-        path.join(process.cwd(), 'cache', 'vector-tiles')
-      ];
-      for (const cachePath of cacheCandidates) {
-        try {
-          await removeRecursive(cachePath);
-          removedCachePaths.push(cachePath);
-        } catch (rmCacheErr) {
-          if (rmCacheErr?.code !== 'ENOENT') {
-            return res.status(500).json({ error: 'plugin_cache_remove_failed', details: String(rmCacheErr?.message || rmCacheErr) });
-          }
-        }
-      }
-    }
-
-    if (!wasEnabled && !exists) {
-      return res.status(404).json({ error: "plugin_not_found" });
-    }
-
-    await pluginManager.updateEnabledList((enabledSet) => {
-      enabledSet.delete(pluginName);
-      return enabledSet;
-    });
-    restartAfterResponse(res);
-    res.json({
-      status: "uninstalled",
-      plugin: {
-        name: pluginName,
-        wasEnabled,
-        removedFiles,
-        removedData,
-        removedCachePaths
-      }
-    });
+      await releaseOperation(); releaseOperation = null;
+      restartAfterResponse(res, 250, null, { id: operationId, name: pluginName, keepData, wasEnabled });
+      return res.status(202).json({ status: 'uninstalling', plugin: { name: pluginName, wasEnabled }, operationId, statusUrl: `/plugins/uninstallations/${operationId}` });
 
     } catch (err) {
       return res.status(err.statusCode || 500).json({ error: err.code || 'plugin_remove_failed', details: err.message });
@@ -1088,6 +1035,16 @@ export const registerPluginRoutes = ({
         }
         releaseOperation = await pluginManager.acquireOperationLock();
 
+        const installMode = String(req.body?.installMode || '').trim();
+        if (installMode && !['preserve', 'reset'].includes(installMode)) {
+          throw Object.assign(new Error('Unsupported plugin installation mode.'), { statusCode: 400, code: 'plugin_install_mode_invalid' });
+        }
+        const existingData = fs.existsSync(path.join(dataDir, pluginName));
+        const existingPackage = fs.existsSync(path.join(pluginsDir, pluginName));
+        if ((existingPackage || existingData) && !installMode) {
+          return res.status(409).json({ error: 'plugin_exists', plugin: { name: pluginName, installed: existingPackage, hasData: existingData } });
+        }
+
         if (pricing[pluginName]) {
           const store = loadLicenseStore();
           ensureInstanceId(store);
@@ -1106,11 +1063,14 @@ export const registerPluginRoutes = ({
         const revision = crypto.randomUUID();
         const stagedDestination = path.join(pluginsDir, `.${pluginName}.install-${operationId}`);
         const previousDestination = path.join(pluginsDir, `.${pluginName}.previous-${operationId}`);
+        const pluginDataDestination = path.join(dataDir, pluginName);
+        const dataBackupDestination = path.join(dataDir, 'plugin-reset-backups', pluginName, revision);
 
         const persistedSnapshot = await pluginManager.store.read();
         const wasPersisted = persistedSnapshot?.enabled?.includes(pluginName) === true;
         const hadPreviousFiles = fs.existsSync(destination);
         let replacementStarted = false;
+        let dataResetStarted = false;
         try {
           // Copy and validate first so a malformed/incomplete archive never
           // destroys the currently installed plugin.
@@ -1122,7 +1082,15 @@ export const registerPluginRoutes = ({
           }
           await fs.promises.writeFile(path.join(stagedDestination, INSTALL_RECEIPT), JSON.stringify({ revision }), 'utf8');
           await fs.promises.mkdir(path.join(dataDir, 'plugin-operations'), { recursive: true });
-          await fs.promises.writeFile(path.join(dataDir, 'plugin-operations', `${revision}.json`), JSON.stringify({ plugin: pluginName, state: 'loading' }), 'utf8');
+          await fs.promises.writeFile(path.join(dataDir, 'plugin-operations', `${revision}.json`), JSON.stringify({ plugin: pluginName, state: 'loading', installMode: installMode || 'preserve', wasPersisted, packageBackup: hadPreviousFiles ? path.basename(previousDestination) : null, hasDataBackup: installMode === 'reset' && existingData }), 'utf8');
+          await fs.promises.writeFile(path.join(dataDir, PENDING_INSTALLATION), JSON.stringify({ plugin: pluginName, revision, installMode: installMode || 'preserve', ownerPid: typeof process.send === 'function' ? process.ppid : process.pid }), { encoding: 'utf8', flag: 'wx' });
+
+          if (installMode === 'reset' && existingData) {
+            await fs.promises.mkdir(path.dirname(dataBackupDestination), { recursive: true });
+            await fs.promises.rename(pluginDataDestination, dataBackupDestination);
+            dataResetStarted = true;
+            await fs.promises.mkdir(pluginDataDestination, { recursive: true });
+          }
 
           if (hadPreviousFiles) {
             await fs.promises.rename(destination, previousDestination);
@@ -1133,9 +1101,6 @@ export const registerPluginRoutes = ({
           await pluginManager.updateEnabledList((enabledSet) => {
             enabledSet.add(pluginName);
             return enabledSet;
-          });
-          await removeRecursive(previousDestination).catch((cleanupErr) => {
-            console.warn('[plugins] Previous package cleanup failed', cleanupErr?.message || cleanupErr);
           });
         } catch (loadErr) {
           await removeRecursive(stagedDestination).catch(() => { });
@@ -1150,20 +1115,26 @@ export const registerPluginRoutes = ({
               return enabledSet;
             }).catch(() => { });
           }
+          if (dataResetStarted) {
+            await removeRecursive(pluginDataDestination).catch(() => {});
+            await fs.promises.rename(dataBackupDestination, pluginDataDestination);
+          }
+          await fs.promises.writeFile(path.join(dataDir, 'plugin-operations', `${revision}.json`), JSON.stringify({ plugin: pluginName, state: 'failed', installMode: installMode || 'preserve' }), 'utf8').catch(() => {});
+          await clearPendingInstallation(dataDir, revision).catch(() => {});
           loadErr.restartRequired = replacementStarted;
           throw Object.assign(loadErr, { statusCode: 500, code: "PLUGIN_ENABLE_FAILED" });
         }
 
         // Ensure trial on first install
         try {
-          if (pricing[pluginName]) {
+          if (pricing[pluginName] && !existingPackage && !existingData && !wasPersisted) {
             const store = loadLicenseStore();
             ensureInstanceId(store);
             ensureTrial(store, pluginName);
           }
         } catch {}
 
-        const response = { status: "loading", plugin: { name: pluginName }, revision, statusUrl: `/plugins/installations/${revision}` };
+        const response = { status: "loading", plugin: { name: pluginName }, revision, installMode: installMode || 'preserve', hasDataBackup: dataResetStarted, statusUrl: `/plugins/installations/${revision}` };
         restartAfterResponse(res, 250, revision);
         res.status(201).json(response);
         return;

@@ -39,7 +39,27 @@ Fresh installations use `config/plugin-defaults.json` to enable the shipped Qtil
 
 Admin shows upload progress and blocks configuration while installing a plugin package. Success is shown only after all server workers confirm the uploaded revision. The Origo, Hajk and QWC2 viewer installers also block configuration until setup and installation-status verification finish.
 
-## QtilerAuth — the only commercial plugin (recommended)
+Uploading an existing plugin (or one with retained data) requires a localized confirmation. **Update and keep all data** replaces only the code. **Clean installation** resets only that plugin's data after an additional acknowledgement and keeps an automatic backup under `data/plugin-reset-backups/<plugin>/<revision>`. Shared QtilerAuth users, permissions and licenses are never reset by this choice. If replacement workers cannot load the package, the previous package and data are restored. Other plugin operations remain blocked until installation readiness is confirmed; a clean installation temporarily pauses only the selected plugin's routes. Interrupted installations are recovered before workers start on the next core startup.
+
+Uninstallation is deferred until replacement workers are listening and the old workers have disposed their plugins and closed their HTTP servers. The admin waits for the removal status rather than reporting success immediately. On Windows this avoids deleting plugin files while a worker or child process still has them open. If file removal fails, the package is restored/retained, an error is reported, and a previously enabled plugin is re-enabled. Interrupted uninstall operations are marked failed and recovered on the next core startup.
+
+These installation safeguards belong to the Qtiler core, not individual plugin archives. Production must receive the updated core (including `server.js`, `lib/pluginManager.js`, `lib/pluginInstallation.js`, `routes/plugins.js` and the admin assets); uploading a plugin ZIP alone does not deploy them. Keep a normal deployment backup and validate the update in staging before production.
+
+## WFS Z in Qtiler 3D Eye
+
+Every 3D map has an owned 16:9 thumbnail in `data/Qtiler-3D-eye/scene-thumbnails/`. Publishing starts WMS-based generation without waiting for it; maps created earlier generate their image on first request. Map cards and galleries use this same image. **Change image** uploads PNG/JPEG/WebP (maximum 5 MB), **Regenerate image** refreshes the automatic preview, and **Use 3D view as thumbnail** in the initial-view preview stores an attributed capture of the actual Cesium view. Save the map before capturing. An unavailable WMS service produces a marked provisional image rather than preventing publication. Thumbnail reads and writes enforce scene project access; images are retained when editing and removed when deleting the map.
+
+WFS styles are grouped into Appearance, Height and 3D Geometry, and Scale Visibility, with presets and advanced rules kept separate. The editor preserves the same saved style fields across these sections.
+
+The 3D WFS adapter preserves Z while reprojecting XY. In the layer style editor, **Geometry height** selects automatic Z detection, absolute altitude, terrain-relative Z, or terrain clamping. Height offsets accept negative values. Heights must use a known vertical datum: absolute Cesium heights are ellipsoidal; XY reprojection does not convert orthometric heights or a vertical CRS.
+
+Point/MultiPoint layers support simple symbols, SVG/image billboards and GLTF/GLB models. Line/MultiLineString layers support pixel-width lines or metre-radius pipelines. Polygon/MultiPolygon and polygon faces in GeometryCollections preserve their vertex heights, holes, vertical walls and sloping roofs. LoD2 details must already exist as polygon faces or a model; 2D footprints cannot reconstruct roofs, textures or building details automatically. Set extrusion to zero to preserve source surfaces rather than creating a flat extruded roof. **Show underground geometry** makes terrain translucent and allows the camera below it; this affects the entire scene while the selected layer is visible.
+
+**Generate 3D Tiles** is available for point, line and polygon WFS layers. Geometry surfaces and pipelines export as b3dm meshes, models as i3dm instances, and icons as embedded textured planes. Cached icons have a physical width in metres and do not face the camera like live billboards. Pixel-width lines export as physical pipelines using the configured radius. GLTF/GLB instances retain their asset URLs, so those assets must remain reachable with the map's access policy. Absolute-Z caches remain independent of the chosen DEM; relative/clamped caches must be regenerated when their source terrain changes. Rule zoom limits apply to live WFS styling; a generated mesh cache bakes its style at generation time.
+
+Validation: `node --test tools/check-3d-eye.mjs` and `python tools/check-3d-eye-geometry.py`. Update the 3D plugin and recalculate older caches to use the new Z-aware meshes.
+
+## QtilerAuth (recommended)
 
 If you are about to expose Qtiler outside an isolated LAN, **QtilerAuth** is the
 plugin you want. It turns Qtiler into a multi-tenant, audit-ready GIS server

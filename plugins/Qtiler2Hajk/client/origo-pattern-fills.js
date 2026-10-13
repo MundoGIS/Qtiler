@@ -3,6 +3,8 @@
 
   const patternCache = new Map();
   const styleCache = new Map();
+  const categoryLayers = new Map();
+  const categoryControlStates = new WeakMap();
 
   function normalizeColorSignature(value) {
     return String(value || '').replace(/\s+/g, '').toLowerCase();
@@ -265,6 +267,7 @@
         index: index,
         filter: String(geomEntry.filter || '').trim(),
         hasFill: !!geomEntry.fill,
+        label: String(geomEntry.legendLabel || geomEntry.label || geomEntry.filter || ''),
         hasStroke: !!geomEntry.stroke,
         fillColor: geomEntry.fill && geomEntry.fill.color ? geomEntry.fill.color : null,
         strokeColor: geomEntry.stroke && geomEntry.stroke.color ? geomEntry.stroke.color : null,
@@ -299,6 +302,7 @@
         index: index,
         filter: String(geomEntry.filter || '').trim(),
         icon: geomEntry.icon && typeof geomEntry.icon === 'object' ? geomEntry.icon : null,
+        label: String(geomEntry.legendLabel || geomEntry.label || geomEntry.filter || ''),
         circle: geomEntry.circle && typeof geomEntry.circle === 'object' ? geomEntry.circle : null
       });
     });
@@ -307,7 +311,6 @@
 
   function selectStyleRule(styleRules, feature, geomStyle) {
     if (!Array.isArray(styleRules) || !styleRules.length) return null;
-    if (styleRules.length === 1) return styleRules[0];
     const stroke = geomStyle && typeof geomStyle.getStroke === 'function' ? geomStyle.getStroke() : null;
     const fill = geomStyle && typeof geomStyle.getFill === 'function' ? geomStyle.getFill() : null;
     const styleFill = normalizeColorSignature(fill && typeof fill.getColor === 'function' ? fill.getColor() : '');
@@ -317,7 +320,7 @@
     const filtered = styleRules.filter(function (entry) {
       return evaluateFilterExpression(entry.filter, feature);
     });
-    const candidates = filtered.length ? filtered : styleRules;
+    const candidates = filtered;
     const exact = candidates.find(function (entry) {
       return (!entry.fillColor || normalizeColorSignature(entry.fillColor) === styleFill)
         && (!entry.strokeColor || normalizeColorSignature(entry.strokeColor) === styleStroke)
@@ -364,7 +367,7 @@
       });
       const geomStyle = geomIndex >= 0 ? styleArray[geomIndex] : null;
       const selected = selectStyleRule(styleRules, feature, geomStyle);
-      if (!selected) return sourceStyles;
+      if (!selected) return [];
       if (!styleArray.length || geomIndex < 0) return [createPolygonStyle(selected, styleApi)].filter(Boolean);
       const cloned = styleArray.map(function (style, index) {
         if (index !== geomIndex || !style || typeof style.clone !== 'function') return style;
@@ -432,6 +435,7 @@
       const sourceStyles = getStyleArray(originalStyle, feature, resolution);
       const styleArray = Array.isArray(sourceStyles) ? sourceStyles : (sourceStyles ? [sourceStyles] : []);
       const selected = selectPointStyleRule(pointRules, feature);
+      if (!selected) return [];
       const geometryStyle = createPointStyle(selected, styleApi);
       if (!geometryStyle) return sourceStyles;
       const textStyles = styleArray.filter(function (style) {
@@ -515,7 +519,6 @@
       || (legacyViewer && typeof legacyViewer.getMap === 'function' ? legacyViewer.getMap() : null);
     const styleApi = getOlStyleApi();
     if (!map || typeof map.getLayers !== 'function') return;
-    if (!styleApi) return;
 
     const vectorStyleByLayerKey = new Map();
     const vectorLayers = cfg && cfg.layersConfig && Array.isArray(cfg.layersConfig.vectorlayers)
@@ -548,13 +551,20 @@
       if (!layer || typeof layer.get !== 'function' || typeof layer.setStyle !== 'function') return;
       const styleName = getLayerStyleName(layer);
       if (!styleName) return;
+      const currentCategories = categoryLayers.get(layer);
+      if (currentCategories && layer.getStyle() === currentCategories.styleFn) return;
       const embeddedRules = styleDefs ? extractPatternRulesFromStyleDef(styleDefs[styleName]) : [];
       const polygonRules = styleDefs ? extractPolygonStyleRulesFromStyleDef(styleDefs[styleName]) : [];
       const pointRules = styleDefs ? extractPointStyleRulesFromStyleDef(styleDefs[styleName]) : [];
+      const categoryRules = pointRules.length ? pointRules : polygonRules;
+      if (!styleApi && !categoryRules.some(function (rule) { return !!rule.filter; })) return;
       const legacyMeta = patternStyles && patternStyles[styleName] && !Array.isArray(patternStyles[styleName])
         ? patternStyles[styleName]
         : null;
-      const styleFn = pointRules.length
+      const nativeStyle = layer.getStyle();
+      const styleFn = !styleApi
+        ? function (feature, resolution) { return getStyleArray(nativeStyle, feature, resolution); }
+        : pointRules.length
         ? buildPointWrappingStyleFunction(styleName, layer.getStyle(), pointRules, styleApi)
         : polygonRules.length
         ? buildPolygonWrappingStyleFunction(styleName, layer.getStyle(), polygonRules, styleApi)
@@ -563,10 +573,106 @@
         : (legacyMeta ? buildPatternStyleFunction(styleName, legacyMeta) : null);
       if (!styleFn) return;
       try {
-        layer.setStyle(styleFn);
+        const rules = pointRules.length ? pointRules : polygonRules;
+        if (rules.some(function (rule) { return !!rule.filter; })) {
+          const layerDef = vectorLayers.find(function (entry) {
+            return entry.style === styleName && [entry.id, entry.layer, entry.name, entry.caption].some(function (value) {
+              return value && [layer.get('id'), layer.get('name'), layer.get('caption')].includes(value);
+            });
+          });
+          const state = {
+            rules: rules,
+            disabled: currentCategories ? currentCategories.disabled : new Set(),
+            layerDef: layerDef || {},
+            styleFn: null
+          };
+          state.styleFn = buildCategoryStyleFunction(styleFn, state);
+          categoryLayers.set(layer, state);
+          layer.setStyle(state.styleFn);
+        } else {
+          layer.setStyle(styleFn);
+        }
       } catch (err) {
         console.warn('[Qtiler2Hajk] Failed to apply runtime pattern style for', styleName, err);
       }
+    });
+    mountCategoryControls();
+  }
+
+  function buildCategoryStyleFunction(styleFn, state) {
+    return function categoryStyle(feature, resolution) {
+      const selected = selectStyleRule(state.rules, feature, null);
+      if (!selected || state.disabled.has(selected.index)) return [];
+      return styleFn(feature, resolution);
+    };
+  }
+
+  function mountCategoryControls() {
+    if (!document.body || !categoryLayers.size) return;
+    const backButton = document.getElementById('layer-item-details-back-button');
+    if (!backButton) return;
+    let panel = backButton.parentElement;
+    const heading = panel.cloneNode(true);
+    heading.querySelectorAll('button').forEach(function (button) { button.remove(); });
+    const layerCaption = heading.textContent.trim();
+    while (panel && !panel.querySelector('#toggle-legend-icon')) panel = panel.parentElement;
+    if (!panel) return;
+    categoryLayers.forEach(function (state, layer) {
+      if (state.layerDef.caption && state.layerDef.caption !== layerCaption) return;
+      const legend = state.layerDef.legendIcon || state.layerDef.legend;
+      if (!legend) return;
+      const images = Array.from(panel.querySelectorAll('img')).filter(function (image) {
+        return image.getAttribute('src') === legend && !image.closest('.qtiler-category-controls');
+      });
+      images.forEach(function (image) {
+        const parent = image.parentElement;
+        if (!parent) return;
+        const existing = parent.querySelector('.qtiler-category-controls');
+        if (existing && categoryControlStates.get(existing) === state) return;
+        if (existing) existing.remove();
+        const controls = document.createElement('div');
+        controls.className = 'qtiler-category-controls';
+        categoryControlStates.set(controls, state);
+        const language = String(document.documentElement.lang || 'sv').slice(0, 2);
+        const captions = { en: ['Categories', 'Default'], es: ['Categorías', 'Por defecto'], sv: ['Kategorier', 'Standard'], no: ['Kategorier', 'Standard'], da: ['Kategorier', 'Standard'], fi: ['Luokat', 'Oletus'] };
+        const caption = captions[language] || captions.en;
+        controls.setAttribute('role', 'group');
+        controls.setAttribute('aria-label', caption[0]);
+        state.rules.forEach(function (rule) {
+          const row = document.createElement('label');
+          row.style.cssText = 'display:flex;align-items:center;gap:10px;min-height:32px;cursor:pointer;font:inherit;';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = !state.disabled.has(rule.index);
+          checkbox.style.cssText = 'width:16px;height:16px;margin:0;accent-color:#1976d2;flex-shrink:0;';
+          checkbox.addEventListener('change', function () {
+            if (checkbox.checked) state.disabled.delete(rule.index);
+            else state.disabled.add(rule.index);
+            layer.changed();
+          });
+          const swatch = document.createElement(rule.icon && rule.icon.src ? 'img' : 'span');
+          swatch.setAttribute('aria-hidden', 'true');
+          swatch.style.cssText = 'display:inline-block;width:26px;height:16px;flex-shrink:0;box-sizing:border-box;';
+          if (rule.icon && rule.icon.src) {
+            swatch.src = rule.icon.src;
+            swatch.alt = '';
+            swatch.style.objectFit = 'contain';
+          } else {
+            swatch.style.backgroundColor = rule.fillColor || (rule.circle && rule.circle.fill && rule.circle.fill.color) || 'transparent';
+            swatch.style.border = '2px solid ' + (rule.strokeColor || (rule.circle && rule.circle.stroke && rule.circle.stroke.color) || 'transparent');
+            swatch.style.borderRadius = rule.circle ? '50%' : '2px';
+            if (rule.meta) swatch.style.backgroundImage = 'repeating-linear-gradient(135deg,transparent,transparent 4px,' + (rule.strokeColor || '#333') + ' 4px,' + (rule.strokeColor || '#333') + ' 5px)';
+          }
+          const label = document.createElement('span');
+          label.textContent = rule.label || caption[1];
+          label.style.cssText = 'overflow-wrap:anywhere;min-width:0;';
+          row.append(checkbox, swatch, label);
+          controls.appendChild(row);
+        });
+        image.hidden = true;
+        image.style.display = 'none';
+        parent.appendChild(controls);
+      });
     });
   }
 
@@ -669,6 +775,7 @@
     autoExpandLayerLegend();
     var observer = new MutationObserver(function () {
       autoExpandLayerLegend();
+      mountCategoryControls();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }

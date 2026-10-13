@@ -1034,7 +1034,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   const pluginMapSources = [
     { id: 'Qtiler2qwc', label: 'QWC maps', runtime: path.join(dataRoot, 'Qtiler2qwc', 'qwc2'), publicBase: '/plugins/Qtiler2qwc/published' },
     { id: 'Qtiler2Origo', label: 'Origo maps', runtime: path.join(dataRoot, 'Qtiler2Origo', 'origo'), publicBase: '/plugins/Qtiler2Origo/published' },
-    { id: 'Qtiler2Hajk', label: 'Hajk maps', runtime: path.join(dataRoot, 'Qtiler2Hajk', 'hajk'), publicBase: '/plugins/Qtiler2Hajk/published' }
+    { id: 'Qtiler2Hajk', label: 'Hajk maps', runtime: path.join(dataRoot, 'Qtiler2Hajk', 'hajk'), publicBase: '/plugins/Qtiler2Hajk/published' },
+    { id: 'Qtiler-3D-eye', label: '3D Eye maps', scenesFile: path.join(dataRoot, 'Qtiler-3D-eye', 'maps.json') }
   ];
 
   const collectPublishedProfileProjectIds = (profile) => {
@@ -1044,6 +1045,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
       if (id) ids.add(id);
     };
     add(profile?.projectId);
+    add(profile?.mainProjectId || profile?.qgisProject);
+    for (const layer of [...(profile?.mainLayers || []), ...(profile?.externalLayers || []), ...(profile?.backgroundLayers || [])]) {
+      if (layer?.included !== false) add(layer?.projectId || layer?.sourceProjectId || profile?.mainProjectId);
+    }
+    for (const project of [...(profile?.backgroundProjects || []), ...(profile?.terrainProjects || [])]) add(project);
     for (const layer of (Array.isArray(profile?.layers) ? profile.layers : [])) {
       add(layer?.sourceProjectId || profile?.projectId);
     }
@@ -1054,6 +1060,29 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
   };
 
   const readPublishedPluginMaps = () => pluginMapSources.map((source) => {
+    if (source.scenesFile) {
+      let scenes = [];
+      try { const value = JSON.parse(fs.readFileSync(source.scenesFile, 'utf8')); if (Array.isArray(value)) scenes = value; } catch {}
+      let terrains = [];
+      let assets = [];
+      try { const value = JSON.parse(fs.readFileSync(path.join(path.dirname(source.scenesFile), 'terrains.json'), 'utf8')); if (Array.isArray(value)) terrains = value; } catch {}
+      try { const value = JSON.parse(fs.readFileSync(path.join(path.dirname(source.scenesFile), 'assets.json'), 'utf8')); if (Array.isArray(value)) assets = value; } catch {}
+      const sceneProjects = (scene) => {
+        const ids = collectPublishedProfileProjectIds({ ...scene, terrainProjects: [] });
+        for (const id of scene.terrainProjects || []) ids.push(sanitizeProjectId(terrains.find((item) => item.id === id)?.sourceProjectId || id));
+        for (const asset of assets.filter((item) => (scene.assetIds || []).includes(item.id))) {
+          if (asset.metadata?.projectId) ids.push(sanitizeProjectId(asset.metadata.projectId));
+        }
+        return [...new Set(ids.filter(Boolean))];
+      };
+      const maps = scenes.filter((scene) => scene?.id && scene?.mainProjectId).map((scene) => ({
+        id: `${source.id}:${scene.id}`, pluginId: source.id, pluginLabel: source.label,
+        profileKey: scene.id, projectId: sanitizeProjectId(scene.mainProjectId), projectIds: sceneProjects(scene),
+        title: String(scene.title || scene.id), description: String(scene.description || ''), updatedAt: scene.updatedAt || null,
+        url: `/plugins/${source.id}/view/?scene=${encodeURIComponent(scene.id)}`
+      })).sort((left, right) => left.title.localeCompare(right.title));
+      return { id: source.id, label: source.label, maps };
+    }
     const publishedDir = path.join(source.runtime, 'published');
     let entries = [];
     try {

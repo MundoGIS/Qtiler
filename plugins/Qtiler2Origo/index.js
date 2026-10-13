@@ -3933,6 +3933,12 @@ ${mapIcon}
       const visit = (node) => {
         if (!node || typeof node !== 'object') return;
         if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (Array.isArray(node.lineDash)) {
+          const lineDash = node.lineDash.map(Number);
+          node.lineDash = lineDash.some((segment) => !Number.isFinite(segment) || segment < 0) || !lineDash.some((segment) => segment > 0)
+            ? []
+            : lineDash;
+        }
         if (node.icon && typeof node.icon === 'object'
             && typeof node.icon.src === 'string'
             && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))) {

@@ -39,7 +39,7 @@ import AdmZip from "adm-zip";
 import cookieParser from "cookie-parser";
  //ort { spawnSync } from 'child_process';
 import { PluginManager } from "./lib/pluginManager.js";
-import { completeInstallation } from "./lib/pluginInstallation.js";
+import { completeInstallation, finalizeUninstallation, recoverInterruptedUninstallation, PENDING_INSTALLATION, PENDING_UNINSTALLATION } from "./lib/pluginInstallation.js";
 import { getAuthDb, closeAuthDb, authDbExists, readProjectAccessFromDb, removeProjectAccessFromDb, purgeProjectFromUsersInDb, persistProjectAccessInDb } from "./lib/authDb.js";
 
 
@@ -53,6 +53,7 @@ const resolveAppPort = (rawValue) => {
 };
 const APP_PORT = resolveAppPort(process.env.PORT);
 const INTERNAL_APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
+let activeHttpServer = null;
 
 const ensureLicenseSecret = () => {
   const current = process.env.LICENSE_SECRET || '';
@@ -10080,13 +10081,15 @@ const startServer = async () => {
     await pluginManager.init();
   } catch (err) {
     console.error('Plugin initialization failed', err);
+    throw err;
   }
   initializeProjectSchedules();
   startScheduleHeartbeat();
   if (typeof process.send === 'function') {
-    process.send({ cmd: 'pluginRevisionsLoaded', revisions: Array.from(pluginManager.getRegistry().values()).map((entry) => entry.revision).filter(Boolean) });
+    process.send({ cmd: 'pluginRevisionsLoaded', plugins: Array.from(pluginManager.getRegistry().keys()), revisions: Array.from(pluginManager.getRegistry().values()).map((entry) => entry.revision).filter(Boolean) });
   }
   const server = app.listen(APP_PORT, () => console.log(`🚀 Servidor Node.js en http://localhost:${APP_PORT}`));
+  activeHttpServer = server;
   // Increase timeout for tile rendering requests (default is 2 minutes)
   server.timeout = 300000; // 5 minutes
   server.keepAliveTimeout = 310000; // Slightly longer than timeout
@@ -10094,6 +10097,24 @@ const startServer = async () => {
 };
 
 if (cluster.isPrimary || cluster.isMaster) {
+  try {
+    const pending = JSON.parse(await fs.promises.readFile(path.join(dataDir, PENDING_INSTALLATION), 'utf8'));
+    let ownerRunning = true;
+    try { process.kill(pending.ownerPid, 0); } catch (error) { if (error.code === 'ESRCH') ownerRunning = false; else throw error; }
+    if (!ownerRunning) {
+      await completeInstallation(dataDir, pending.revision, [], { pluginsDir, pluginManager });
+      console.warn('[Qtiler] Recovered an interrupted plugin installation before starting workers');
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  try {
+    const recovered = await recoverInterruptedUninstallation(dataDir, pluginManager);
+    if (recovered) console.warn(`[Qtiler] Recovered interrupted uninstall of ${recovered.plugin}; retained the package and restored its enabled state`);
+  } catch (error) {
+    console.error('[Qtiler] Failed to recover interrupted plugin uninstall', error);
+    throw error;
+  }
   const cpuCount = os.cpus().length;
   const configuredWorkers = parseInt(process.env.WORKER_COUNT || "0", 10) || 0;
   const numCPUs = (configuredWorkers > 0) ? configuredWorkers : cpuCount;
@@ -10102,24 +10123,38 @@ if (cluster.isPrimary || cluster.isMaster) {
   const startingReplacementWorkers = new Set();
   let workerRestartQueue = Promise.resolve();
   const workerPluginRevisions = new Map();
+  const workerPluginNames = new Map();
+  const uninstallOperationsInProgress = new Set();
   console.log(`[Qtiler] starting master: cpuCount=${cpuCount}, configuredWorkers=${configuredWorkers}, forking=${numCPUs}`);
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
   }
 
-  const forkReadyWorker = () => new Promise((resolve, reject) => {
+  const forkReadyWorker = (requiredPlugins = [], revision = null) => new Promise((resolve, reject) => {
     const replacement = cluster.fork();
     startingReplacementWorkers.add(replacement.id);
     const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`replacement worker ${replacement.process.pid} did not start listening within 60 seconds`));
+      rejectReplacement(new Error(`replacement worker ${replacement.process.pid} did not start listening within 60 seconds`));
     }, 60000);
     const cleanup = () => {
       clearTimeout(timeout);
       replacement.removeListener('listening', onListening);
       replacement.removeListener('exit', onExit);
     };
+    const rejectReplacement = (error) => {
+      plannedWorkerExits.add(replacement.id);
+      startingReplacementWorkers.delete(replacement.id);
+      cleanup();
+      try { replacement.process.kill(); } catch {}
+      reject(error);
+    };
     const onListening = () => {
+      const loaded = workerPluginNames.get(replacement.id);
+      const missing = requiredPlugins.filter((name) => !loaded?.has(name));
+      if (missing.length || (revision && !workerPluginRevisions.get(replacement.id)?.has(revision))) {
+        rejectReplacement(new Error(`replacement worker ${replacement.process.pid} failed plugin readiness: ${missing.join(', ') || 'installed revision not loaded'}`));
+        return;
+      }
       startingReplacementWorkers.delete(replacement.id);
       cleanup();
       resolve(replacement);
@@ -10135,47 +10170,117 @@ if (cluster.isPrimary || cluster.isMaster) {
   const stopWorker = (worker) => new Promise((resolve) => {
     if (!worker || worker.isDead()) return resolve();
     plannedWorkerExits.add(worker.id);
-    const timeout = setTimeout(resolve, 10000);
+    const timeout = setTimeout(() => {
+      try { worker.process.kill(); } catch {}
+      resolve();
+    }, 60000);
     worker.once('exit', () => {
       clearTimeout(timeout);
       resolve();
     });
-    try {
-      worker.process.kill();
-    } catch {
-      clearTimeout(timeout);
-      resolve();
-    }
+    try { worker.process.send({ cmd: 'prepareForRestart' }); }
+    catch { try { worker.process.kill(); } catch { clearTimeout(timeout); resolve(); } }
   });
 
-  const restartAllWorkersRolling = async () => {
+  const restartAllWorkersRolling = async (revision = null, extraRequired = []) => {
     const workersToReplace = Object.values(cluster.workers).filter(Boolean);
+    const configured = await pluginManager.store.read();
+    const configuredNames = new Set(Array.isArray(configured?.enabled) ? configured.enabled : []);
     console.log(`[Qtiler] Rolling restart of ${workersToReplace.length} workers`);
     for (const worker of workersToReplace) {
-      await forkReadyWorker();
+      const required = new Set(Array.from(workerPluginNames.get(worker.id) || []).filter((name) => configuredNames.has(name)));
+      for (const name of extraRequired) required.add(name);
+      if (configuredNames.has('QtilerAuth')) required.add('QtilerAuth');
+      await forkReadyWorker(Array.from(required), revision);
       await stopWorker(worker);
     }
     console.log('[Qtiler] Rolling worker restart complete');
   };
 
+  const recoverOrphanedUninstall = async () => {
+    let pending;
+    try { pending = JSON.parse(await fs.promises.readFile(path.join(dataDir, PENDING_UNINSTALLATION), 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    if (!pending?.id || uninstallOperationsInProgress.has(pending.id)) return;
+    try { process.kill(pending.ownerPid, 0); return; }
+    catch (error) { if (error.code !== 'ESRCH') return; }
+    uninstallOperationsInProgress.add(pending.id);
+    workerRestartQueue = workerRestartQueue.then(async () => {
+      const current = JSON.parse(await fs.promises.readFile(path.join(dataDir, PENDING_UNINSTALLATION), 'utf8').catch(() => 'null'));
+      if (!current || current.id !== pending.id) return;
+      await restartAllWorkersRolling();
+      await finalizeUninstallation(dataDir, pluginsDir, pending.id);
+      console.warn(`[Qtiler] Recovered orphaned uninstall of ${pending.plugin}`);
+    }).catch(async error => {
+      console.error(`[Qtiler] Orphaned uninstall recovery failed for ${pending.plugin}`, error);
+      const operationPath = path.join(dataDir, 'plugin-operations', `uninstall-${pending.id}.json`);
+      const operation = JSON.parse(await fs.promises.readFile(operationPath, 'utf8').catch(() => '{}'));
+      if (pending.wasEnabled && fs.existsSync(path.join(pluginsDir, pending.plugin))) {
+        await pluginManager.updateEnabledList(enabled => { enabled.add(pending.plugin); return enabled; }).catch(() => {});
+        await restartAllWorkersRolling(null, [pending.plugin]).catch(() => {});
+      }
+      await fs.promises.writeFile(operationPath, JSON.stringify({ ...operation, state: 'failed', error: error.message, completedAt: new Date().toISOString() }), 'utf8').catch(() => {});
+      await fs.promises.rm(path.join(dataDir, PENDING_UNINSTALLATION), { force: true }).catch(() => {});
+    }).finally(() => uninstallOperationsInProgress.delete(pending.id));
+  };
+  const orphanedUninstallTimer = setInterval(() => {
+    recoverOrphanedUninstall().catch(error => console.warn('[Qtiler] Pending uninstall check failed', error.message));
+  }, 2000);
+  orphanedUninstallTimer.unref?.();
+
   // Listen for worker requests to restart the cluster (e.g., after plugin install/uninstall)
   cluster.on('message', (worker, msg) => {
     if (msg?.cmd === 'pluginRevisionsLoaded') {
       workerPluginRevisions.set(worker.id, new Set(Array.isArray(msg.revisions) ? msg.revisions : []));
+      workerPluginNames.set(worker.id, new Set(Array.isArray(msg.plugins) ? msg.plugins : []));
       return;
     }
     if (msg && msg.cmd === 'restartAllWorkers') {
+      if (msg.uninstall?.id) uninstallOperationsInProgress.add(msg.uninstall.id);
       workerRestartQueue = workerRestartQueue
         .then(async () => {
           let revisions = [];
           try {
-            await restartAllWorkersRolling();
+            await restartAllWorkersRolling(msg.revision);
             revisions = Object.values(cluster.workers).filter(Boolean).map((entry) => workerPluginRevisions.get(entry.id));
+            if (msg.uninstall) {
+              const operationId = msg.uninstall.id;
+              const operationPath = path.join(dataDir, 'plugin-operations', `uninstall-${operationId}.json`);
+              try {
+                const cachePaths = msg.uninstall.name === 'WmsCache' && !msg.uninstall.keepData
+                  ? ['external-wms', '_external_wms', 'wmscache'].map(name => path.join(process.cwd(), 'cache', name))
+                  : msg.uninstall.name === 'VectorTiles' && !msg.uninstall.keepData ? [path.join(process.cwd(), 'cache', 'vector-tiles')] : [];
+                for (const cachePath of cachePaths) await removeRecursive(cachePath);
+                await finalizeUninstallation(dataDir, pluginsDir, operationId);
+              } catch (error) {
+                console.error(`[plugins] Deferred uninstall failed for ${msg.uninstall.name}`, error);
+                const current = JSON.parse(await fs.promises.readFile(operationPath, 'utf8').catch(() => '{}'));
+                if (msg.uninstall.wasEnabled && fs.existsSync(path.join(pluginsDir, msg.uninstall.name))) {
+                  await pluginManager.updateEnabledList(enabled => { enabled.add(msg.uninstall.name); return enabled; });
+                  await restartAllWorkersRolling(null, [msg.uninstall.name]).catch(restoreError => console.error('[plugins] Uninstall rollback worker restart failed', restoreError.message));
+                }
+                await fs.promises.writeFile(operationPath, JSON.stringify({ ...current, state: 'failed', error: error.message, completedAt: new Date().toISOString() }), 'utf8').catch(() => {});
+                await fs.promises.rm(path.join(dataDir, PENDING_UNINSTALLATION), { force: true }).catch(() => {});
+              }
+            }
           } finally {
-            await completeInstallation(dataDir, msg.revision, revisions);
+            await completeInstallation(dataDir, msg.revision, revisions, { pluginsDir, pluginManager });
           }
+          if (msg.uninstall?.id) uninstallOperationsInProgress.delete(msg.uninstall.id);
         })
-        .catch((err) => console.warn('[Qtiler] Rolling worker restart failed', err?.message || err));
+        .catch(async (err) => {
+          console.warn('[Qtiler] Rolling worker restart failed', err?.message || err);
+          if (!msg.uninstall) return;
+          const operationPath = path.join(dataDir, 'plugin-operations', `uninstall-${msg.uninstall.id}.json`);
+          const current = JSON.parse(await fs.promises.readFile(operationPath, 'utf8').catch(() => '{}'));
+          if (msg.uninstall.wasEnabled && fs.existsSync(path.join(pluginsDir, msg.uninstall.name))) {
+            await pluginManager.updateEnabledList(enabled => { enabled.add(msg.uninstall.name); return enabled; }).catch(() => {});
+            await restartAllWorkersRolling(null, [msg.uninstall.name]).catch(restoreError => console.error('[plugins] Uninstall rollback worker restart failed', restoreError.message));
+          }
+          await fs.promises.writeFile(operationPath, JSON.stringify({ ...current, state: 'failed', error: err.message, completedAt: new Date().toISOString() }), 'utf8').catch(() => {});
+          await fs.promises.rm(path.join(dataDir, PENDING_UNINSTALLATION), { force: true }).catch(() => {});
+          if (msg.uninstall?.id) uninstallOperationsInProgress.delete(msg.uninstall.id);
+        });
       return;
     }
 
@@ -10203,6 +10308,7 @@ if (cluster.isPrimary || cluster.isMaster) {
 
   cluster.on("exit", (worker, code, signal) => {
     workerPluginRevisions.delete(worker.id);
+    workerPluginNames.delete(worker.id);
     if (plannedWorkerExits.delete(worker.id)) {
       return;
     }
@@ -10227,6 +10333,16 @@ if (cluster.isPrimary || cluster.isMaster) {
       } else if (msg && msg.cmd === 'abortGenerateCacheJob' && msg.id) {
         // Best-effort local abort. This is intentionally async and fire-and-forget.
         abortGenerateCacheJobInternal(String(msg.id), { silentAbort: true }).catch(() => {});
+      } else if (msg && msg.cmd === 'prepareForRestart') {
+        void (async () => {
+          await pluginManager.disposeAllPlugins();
+          if (activeHttpServer) {
+            activeHttpServer.close(() => process.exit(0));
+            activeHttpServer.closeIdleConnections?.();
+          }
+          else process.exit(0);
+          setTimeout(() => process.exit(1), 15000).unref();
+        })().catch(error => { console.error('[Qtiler] graceful worker shutdown failed', error); process.exit(1); });
       }
     } catch (e) {
       // ignore
@@ -10235,6 +10351,6 @@ if (cluster.isPrimary || cluster.isMaster) {
 
   startServer().catch((err) => {
     console.error('Failed to start server', err);
-    process.exitCode = 1;
+    process.exit(1);
   });
 }

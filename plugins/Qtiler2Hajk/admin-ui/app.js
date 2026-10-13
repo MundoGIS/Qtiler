@@ -3934,6 +3934,7 @@ function renderLayerChecklist(container, layers, rules = {}) {
         <button type="button" class="button is-small is-info is-light Qtiler2Hajk-mode-switch__config" data-style-layer="${escapeHtml(layerKey)}">${rule.serveAsWfs
           ? (rule.wfsStyle ? t('Qtiler2Hajk.wfs_style_yes') || 'Estilo WFS' : t('Qtiler2Hajk.wfs_style_no') || 'Config. estilo')
           : escapeHtml(t('Qtiler2Hajk.legend_pick_title'))}</button>
+        ${rule.serveAsWfs ? `<label class="checkbox" title="${escapeHtml(t('Qtiler2Hajk.wfs_edit_helper'))}"><input type="checkbox" data-layer-editable="${escapeHtml(layerKey)}" ${rule.editable === true ? 'checked' : ''}> ${escapeHtml(t('Qtiler2Hajk.editable'))}</label>` : ''}
       `;
     } else if (isMainLayerList && !layer.isTheme) {
       // Raster/non-vector layer: WMS only, but still offer legend icon choice.
@@ -5652,6 +5653,19 @@ projectLayersList?.addEventListener('change', (event) => {
     return;
   }
   if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+
+  if (target.hasAttribute('data-layer-editable')) {
+    const layerKey = String(target.getAttribute('data-layer-editable') || '').trim();
+    if (!layerKey) return;
+    publishState.mainRules[layerKey] = publishState.mainRules[layerKey] || {};
+    publishState.mainRules[layerKey].editable = target.checked;
+    const checkedNames = getCheckedLayerNames(projectLayersList);
+    renderLayerChecklist(projectLayersList, getAllPublishLayers(), publishState.mainRules);
+    setCheckedLayerNames(projectLayersList, checkedNames);
+    renderPublishConfigSummary();
+    schedulePreviewRefresh();
+    return;
+  }
 
   if (target.hasAttribute('data-wfs-toggle')) {
     const layerName = String(target.getAttribute('data-wfs-toggle') || '').trim();
@@ -7857,7 +7871,7 @@ function dashKeyToArray(key) {
     case 'dashed': return [8, 6];
     case 'dotted': return [2, 4];
     case 'dashdot': return [8, 4, 2, 4];
-    default: return [0];
+    default: return [];
   }
 }
 function dashArrayToKey(arr) {

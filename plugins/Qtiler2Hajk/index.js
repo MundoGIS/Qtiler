@@ -968,7 +968,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const qtilerRulesReturnAnchor = 'return[new ur(X())]}}class';
     const qtilerRulesReturnReplacement = 'return U.length?Q:[new ur(X())]}}class';
     const editRefreshPattern = /refreshLayer\(e\)\{.*?\}parseWFSTresponse\(e\)\{/;
+    const editCleanupRefreshPattern = /refreshEditingLayer\(\)\{[\s\S]*?\}setLayer\(e,t\)\{/;
+    const editCleanupRefreshReplacement = 'refreshEditingLayer(){/*qtilerEditRefreshV3*/const layerName=this.editSource&&this.editSource.layers&&this.editSource.layers[0];if(layerName)this.refreshLayer(layerName)}setLayer(e,t){';
     const editRefreshReplacement = 'refreshLayer(e){/*qtilerRefreshV2*/const t=[],n=i=>{if(!i)return;const s=i.getLayers;if(typeof s=="function"){s().getArray().forEach(n);return}t.push(i)},o=i=>{const s=i&&i.getSource?i.getSource():null;if(!s)return;try{typeof i.getVisible=="function"&&typeof i.setVisible=="function"&&!i.getVisible()&&i.setVisible(!0)}catch{}try{typeof s.getFeatures=="function"&&typeof s.clear=="function"&&s.clear(!0)}catch{}try{typeof s.refresh=="function"?s.refresh():typeof s.changed=="function"&&s.changed()}catch{}try{typeof s.updateParams=="function"&&s.updateParams({time:Date.now()})}catch{}try{typeof i.changed=="function"&&i.changed()}catch{}};this.map.getLayers().getArray().forEach(n);const i=t.find(s=>{const a=s&&s.getSource?s.getSource():null;if(!a||typeof a.getParams!="function")return!1;const l=a.getParams()||{},n=Array.isArray(l.LAYERS)?l.LAYERS[0]:l.LAYERS;if(typeof n!="string")return!1;const r=String(e||"").split(":").pop(),u=n.split(":").pop();return e===n||r===u});if(i)o(i);else {const r=String(e||"").split(":").pop(),u=t.find(s=>{if(!s||typeof s.get!=="function")return!1;return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)});if(u)o(u);else for(const s of t){const a=s&&s.getSource?s.getSource():null,l=a&&typeof a.getUrl=="function"?a.getUrl():"";a&&(typeof a.refresh=="function"||typeof a.changed=="function")&&String(l||"").match(/(?:^|[?&/])wfs(?:[?&/]|$)/i)&&o(s)}}this.map.updateSize()}parseWFSTresponse(e){';
+    const editRefreshReplacementV3 = editRefreshReplacement
+      .replace('qtilerRefreshV2', 'qtilerRefreshV3')
+      .replace('return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)', 'const service=this.editSource||this.source||{},layerId=String(service.id||"").replace(/_edit$/,"");return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r||(service.caption&&String(a)===String(service.caption))||(layerId&&String(a)===layerId))');
     for (const filePath of candidates) {
       let raw;
       try {
@@ -977,6 +982,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         continue;
       }
       let next = raw;
+      const infoclickImageAnchor = 'this.components={...RO,p:';
+      const infoclickImageReplacement = 'this.components={...RO,img:({node:e,...n})=>x.jsx("img",{...n,style:{maxWidth:"100%",height:"auto",objectFit:"contain",...n.style}}),p:';
+      if (next.includes(infoclickImageAnchor)) {
+        next = next.split(infoclickImageAnchor).join(infoclickImageReplacement);
+        patched++;
+      }
       if (next.includes(wmtsProtocolAnchor)) {
         next = next.split(wmtsProtocolAnchor).join(wmtsProtocolReplacement);
         patched++;
@@ -986,10 +997,15 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         patched++;
       }
       if (/\b(?:EditModel|CollectorModel)-[^/\\]+\.js$/i.test(filePath)) {
-        if (next.includes('qtilerRefreshV2')) {
+        if (editCleanupRefreshPattern.test(next)) {
+          const refreshed = next.replace(editCleanupRefreshPattern, editCleanupRefreshReplacement);
+          if (refreshed !== next) patched++;
+          next = refreshed;
+        }
+        if (next.includes('qtilerRefreshV3')) {
           already++;
         } else if (editRefreshPattern.test(next)) {
-          next = next.replace(editRefreshPattern, editRefreshReplacement);
+          next = next.replace(editRefreshPattern, editRefreshReplacementV3);
           patched++;
         }
       }
@@ -1069,6 +1085,8 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
           patched += fallbackCount;
         }
       }
+      next = next.replace(/\}\)\|\|U\.find\(Z=>!Z\.property\)\|\|U\[0\];/g, '});');
+      next = next.replace(/\}\)\|\|U\[0\];/g, '});');
       if (next !== raw) {
         await fs.promises.writeFile(filePath, next, 'utf8');
       }
@@ -3811,7 +3829,7 @@ ${mapIcon}
     }
     const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
     const lantmateriScript = await buildLantmateriControlBootstrap(payload.controls);
-    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261012-categories-native"></script>`;
     const previewShim = `<script>
 (function() {
   var previewConfigUrl = ${JSON.stringify(configUrl)};
@@ -4024,6 +4042,12 @@ ${mapIcon}
       const visit = (node) => {
         if (!node || typeof node !== 'object') return;
         if (Array.isArray(node)) { node.forEach(visit); return; }
+        if (Array.isArray(node.lineDash)) {
+          const lineDash = node.lineDash.map(Number);
+          node.lineDash = lineDash.some((segment) => !Number.isFinite(segment) || segment < 0) || !lineDash.some((segment) => segment > 0)
+            ? []
+            : lineDash;
+        }
         if (node.icon && typeof node.icon === 'object'
             && typeof node.icon.src === 'string'
             && (node.icon.src.startsWith('/qgis-svg/') || node.icon.src.startsWith('/qtiler-symbology-svg/'))) {
@@ -4113,14 +4137,27 @@ ${mapIcon}
         }
         const name = String(attr?.name || '').trim();
         if (!name) return '';
-        return `**${attr.title || name}:** {${name}}`;
+        const title = String(attr.title || name).replace(/:\s*$/, '').replace(/[\[\]\\]/g, '\\$&');
+        const url = hajkInfoboxPlaceholder(attr.url || `{${name}}`);
+        if (attr.type === 'image') {
+          return `**${title}:**\n\n[![${title}](${url})](${url})`;
+        }
+        if (attr.type === 'url') {
+          return `**${title}:** [{${name}}](${url})`;
+        }
+        return `**${title}:** {${name}}`;
       })
       .filter(Boolean)
-      .join('  \n');
+      .join('\n\n');
   };
 
   const hasHtmlInfoclickRows = (layers) => (Array.isArray(layers) ? layers : [])
     .some((layer) => normalizeInfoclickAttributes(layer?.attributes).some((attr) => String(attr?.html || '').trim()));
+
+  const getHajkInfoclickOptions = (layers, options = {}) => ({
+    ...options,
+    ...(hasHtmlInfoclickRows(layers) ? { allowDangerousHtml: true } : {})
+  });
 
   const shouldUseWfsForPublishedLayer = (layerLike, fallbackEditable = false) => {
     if (!layerLike || typeof layerLike !== 'object') return fallbackEditable === true;
@@ -5954,7 +5991,7 @@ ${mapIcon}
     if (isToolEnabled('infoclick')) {
       tools.push({
         type: 'infoclick',
-        options: mergeToolOptions('infoclick', {
+        options: getHajkInfoclickOptions(layers, mergeToolOptions('infoclick', {
           height: 'dynamic',
           anchor: [0.5, 1],
           scale: 0.15,
@@ -5967,7 +6004,7 @@ ${mapIcon}
           useLevel1FeatureHighlight: true,
           transformLinkUri: true,
           visibleForGroups: []
-        })
+        }))
       });
     }
     if (searchLayerRefs.length && isToolEnabled('search')) {
@@ -6894,7 +6931,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       const publishedConfigUrl = `${getRequestBaseUrl(req)}/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
       const lantmateriScript = await buildLantmateriControlBootstrap(profile?.controls);
-      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js"></script>`;
+      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261012-categories-native"></script>`;
       const publishedShim = `<script>
 (function(){
   var publishedConfigUrl = ${JSON.stringify(publishedConfigUrl)};
@@ -7838,7 +7875,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           visible: (typeof incomingVisibility[layerRuleKey] === 'undefined') ? true : !!incomingVisibility[layerRuleKey],
           group: incomingGroupByName[layerRuleKey] || String(rule.group || sourceLayer?.group || 'root'),
           searchable: isTheme ? false : ((rule.searchable === true) || fallbackSearchable),
-          editable: isTheme ? false : ((rule.editable === true) || fallbackEditable),
+          editable: isTheme ? false : (typeof rule.editable === 'boolean' ? rule.editable : fallbackEditable),
           serveAsWfs: isTheme ? false : (rule.serveAsWfs === true),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,

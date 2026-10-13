@@ -63,6 +63,7 @@ const PORTAL_PERMISSIONS = [
   { id: 'Qtiler2qwc', label: 'QWC admin', permission: 'portal:edit:Qtiler2qwc' },
   { id: 'Qtiler2Origo', label: 'Origo admin', permission: 'portal:edit:Qtiler2Origo' },
   { id: 'Qtiler2Hajk', label: 'Hajk admin', permission: 'portal:edit:Qtiler2Hajk' },
+  { id: 'Qtiler-3D-eye', label: '3D Eye editor', permission: 'portal:edit:Qtiler-3D-eye' },
   { id: 'databaseGateway', label: 'Database gateway', permission: 'database:read' }
 ];
 

@@ -6,7 +6,7 @@
 
 'use strict';
 
-import { uploadPluginArchive, waitForPluginInstallation } from './js/plugin-installation.js';
+import { uploadPluginArchive, waitForPluginInstallation, waitForPluginUninstallation, confirmPluginReplacement, pluginInstallationText } from './js/plugin-installation.js';
 
 const footerYearEl = document.getElementById('portal_year');
 if (footerYearEl) {
@@ -1626,7 +1626,10 @@ async function uninstallPlugin(name) {
   }
 
   try {
-    await api(`/plugins/${encodeURIComponent(name)}?keepData=1`, { method: 'DELETE' });
+    const result = await api(`/plugins/${encodeURIComponent(name)}?keepData=1`, { method: 'DELETE' });
+    setPluginInstallationBusy(true, pluginInstallationText('uninstallWaiting', { plugin: name }));
+    try { await waitForPluginUninstallation(result.statusUrl); }
+    finally { setPluginInstallationBusy(false); }
     showMessage('success', t('successUninstall', { plugin: name }));
     await loadPlugins();
   } catch (err) {
@@ -1662,7 +1665,7 @@ function setPluginInstallationBusy(busy, phase = '', percentage = null) {
   root.inert = busy || installationOriginalInert === true;
   if (!busy) installationOriginalInert = null;
   root.dataset.installing = String(busy);
-  document.getElementById('plugin-installation-title').textContent = t('installTitle');
+  document.getElementById('plugin-installation-title').textContent = pluginInstallationText('title');
   document.getElementById('plugin-installation-phase').textContent = phase;
   const progress = document.getElementById('plugin-installation-progress');
   if (percentage === null) progress.removeAttribute('value');
@@ -1672,9 +1675,16 @@ function setPluginInstallationBusy(busy, phase = '', percentage = null) {
 }
 
 async function installPluginFromForm(body) {
-  setPluginInstallationBusy(true, t('installUploading'), 0);
-  const payload = await uploadPluginArchive(body, (percentage) => setPluginInstallationBusy(true, percentage === 100 ? t('installPreparing') : t('installUploading'), percentage === 100 ? null : percentage));
-  setPluginInstallationBusy(true, t('installStarting'));
+  setPluginInstallationBusy(true, pluginInstallationText('uploading'), 0);
+  const payload = await uploadPluginArchive(body, (percentage) => setPluginInstallationBusy(true, pluginInstallationText(percentage === 100 ? 'preparing' : 'uploading'), percentage === 100 ? null : percentage), {
+    confirmReplacement: async plugin => {
+      setPluginInstallationBusy(false);
+      const mode = await confirmPluginReplacement(plugin);
+      if (mode) setPluginInstallationBusy(true, pluginInstallationText('uploading'), 0);
+      return mode;
+    }
+  });
+  setPluginInstallationBusy(true, pluginInstallationText('starting'));
   await waitForPluginInstallation(payload.statusUrl);
   return payload;
 }
@@ -1709,6 +1719,10 @@ function setupUploadForm() {
       return;
     } catch (err) {
       const code = err?.code;
+      if (code === 'installation_cancelled') {
+        showMessage('info', pluginInstallationText('cancelled'));
+        return;
+      }
       if (code === 'license_required' || code === 'license_expired') {
         setPluginInstallationBusy(false);
         const key = window.prompt(t('licenseInstallPrompt'));

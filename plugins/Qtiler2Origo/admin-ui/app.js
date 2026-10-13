@@ -8203,7 +8203,7 @@ function dashKeyToArray(key) {
     case 'dashed': return [8, 6];
     case 'dotted': return [2, 4];
     case 'dashdot': return [8, 4, 2, 4];
-    default: return [0];
+    default: return [];
   }
 }
 function dashArrayToKey(arr) {

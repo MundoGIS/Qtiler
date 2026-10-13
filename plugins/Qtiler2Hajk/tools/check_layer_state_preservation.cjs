@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 
 for (const plugin of ['Qtiler2Origo', 'Qtiler2Hajk']) {
   const app = fs.readFileSync(`plugins/${plugin}/admin-ui/app.js`, 'utf8');
@@ -53,6 +54,15 @@ for (const plugin of ['Qtiler2Origo', 'Qtiler2Hajk']) {
 
 const hajk = fs.readFileSync('plugins/Qtiler2Hajk/index.js', 'utf8');
 const hajkApp = fs.readFileSync('plugins/Qtiler2Hajk/admin-ui/app.js', 'utf8');
+const editableExpression = hajk.match(/editable: (isTheme \? false : \(typeof rule\.editable[^\n]+),/);
+assert.ok(editableExpression, 'Hajk publish must prioritize an explicit per-map editable setting');
+const publishedEditable = (rule, fallbackEditable, isTheme = false) => vm.runInNewContext(editableExpression[1], { rule, fallbackEditable, isTheme });
+assert.equal(publishedEditable({ editable: false }, true), false, 'A read-only webmap must not inherit QtilerAuth editability');
+assert.equal(publishedEditable({ editable: true }, false), true, 'A webmap can expose editing while WFS-T still enforces QtilerAuth');
+assert.equal(publishedEditable({}, true), true, 'Legacy profiles retain their inherited setting when no override exists');
+assert.equal(publishedEditable({ editable: true }, true, true), false, 'Map themes must never become editable');
+assert.ok(hajkApp.includes('data-layer-editable='), 'WFS map rows must expose an editable checkbox');
+assert.ok(hajkApp.includes('publishState.mainRules[layerKey].editable = target.checked;'), 'The editable checkbox must persist false as well as true');
 assert.ok(hajk.includes('qtilerRefreshV2'), 'Hajk WFS-T refresh patch must be versioned so old installs get re-patched');
 assert.ok(hajk.includes('!i.getVisible()&&i.setVisible(!0)'), 'Hajk WFS-T refresh must keep the edited layer visible');
 assert.ok(hajk.includes('typeof s.getFeatures=="function"&&typeof s.clear=="function"&&s.clear(!0)'), 'Hajk WFS-T refresh must clear cached vector features before reloading');
