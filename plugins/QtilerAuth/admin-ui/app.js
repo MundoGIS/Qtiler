@@ -7,6 +7,12 @@ const state = {
   users: [],
   projects: [],
   permissions: {},
+  pluginMapsLoaded: false,
+  pluginAccessNeedsRender: true,
+  pluginAccessDrafts: new Map(),
+  pluginPermissionDrafts: new Map(),
+  layerCatalogLoaded: false,
+  layerCatalogPromise: null,
   searchableByProject: {},
   layerPermissionsByProject: {},
   pluginMaps: [],
@@ -78,6 +84,7 @@ const getManagedPermissions = () => [
 
 const isAdminUser = (user) => user?.role === 'admin';
 const ADMIN_ALL_PROJECTS_LABEL = 'All projects (view + edit)';
+const PLUGIN_MAP_PERMISSION_PREFIX = 'plugin-map:';
 
 const initTabs = () => {
   const buttons = Array.from(document.querySelectorAll('.tab-button[data-tab]'));
@@ -87,6 +94,15 @@ const initTabs = () => {
       const target = button.dataset.tab;
       buttons.forEach((btn) => btn.classList.toggle('active', btn === button));
       panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.tabPanel === target));
+      if (target === 'plugins' && state.pluginAccessNeedsRender) {
+        renderPluginAccess();
+        state.pluginAccessNeedsRender = false;
+      }
+      if (target === 'layers') {
+        ensureLayerCatalogLoaded().then(renderLayerPermissions).catch((err) => {
+          showMessage('error', parseError(err, 'Failed to load layer permissions.'));
+        });
+      }
     });
   });
 };
@@ -379,6 +395,17 @@ async function loadSearchableCatalog() {
   state.layerAttributesByProject = layerAttributesByProject;
   state.projectServicesByProject = projectServicesByProject;
   state.projectCrsByProject = projectCrsByProject;
+  state.layerCatalogLoaded = true;
+}
+
+async function ensureLayerCatalogLoaded() {
+  if (state.layerCatalogLoaded) return;
+  if (!state.layerCatalogPromise) {
+    state.layerCatalogPromise = loadSearchableCatalog().finally(() => {
+      state.layerCatalogPromise = null;
+    });
+  }
+  return state.layerCatalogPromise;
 }
 
 const getRandomInt = (max) => {
@@ -585,7 +612,6 @@ function renderUsers() {
     cell.textContent = 'No users found.';
     row.appendChild(cell);
     usersTableBody.appendChild(row);
-    renderPluginAccess();
     return;
   }
   state.users.forEach((user) => {
@@ -726,7 +752,6 @@ function renderUsers() {
     row.append(usernameCell, roleCell, statusCell, apiKeyCell, projectsCell, createdCell, updatedCell, actionsCell);
     usersTableBody.appendChild(row);
   });
-  renderPluginAccess();
 }
 
 function renderPluginAccess() {
@@ -746,14 +771,21 @@ function renderPluginAccess() {
 
   const plugins = Array.isArray(state.pluginMaps) ? state.pluginMaps : [];
   const allMaps = plugins.flatMap((plugin) => (Array.isArray(plugin.maps) ? plugin.maps : []));
-  const mapProjectUniverse = new Set(allMaps.flatMap((map) => (
-    Array.isArray(map.projectIds) ? map.projectIds : []
-  ).filter((projectId) => state.permissions?.[projectId]?.public !== true)));
+  const knownMapPermissions = new Set(allMaps.map((map) => `${PLUGIN_MAP_PERMISSION_PREFIX}${map.id}`));
+  const policyGrantsProject = (user, projectId) => {
+    const access = state.permissions?.[projectId] || {};
+    return access.public === true
+      || (Array.isArray(access.allowedUsers) && access.allowedUsers.includes(user.id))
+      || (Array.isArray(access.allowedRoles) && access.allowedRoles.includes(user.role));
+  };
 
   state.users.forEach((user) => {
     const permissions = new Set(Array.isArray(user.permissions) ? user.permissions : []);
+    const mapPermissions = new Set(Array.from(permissions).filter((permission) => permission.startsWith(PLUGIN_MAP_PERMISSION_PREFIX)));
     const isAdmin = isAdminUser(user);
     const userProjects = new Set(Array.isArray(user.projects) ? user.projects : []);
+    const permissionDraft = state.pluginPermissionDrafts.get(user.id);
+    const mapDraft = state.pluginAccessDrafts.get(user.id);
     const row = document.createElement('tr');
 
     const userCell = document.createElement('td');
@@ -770,10 +802,20 @@ function renderPluginAccess() {
       input.type = 'checkbox';
       input.dataset.permission = portal.permission;
       const isDatabasePermission = portal.permission.startsWith('database:read');
-      input.checked = isAdmin
+      input.checked = permissionDraft?.has(portal.permission)
+        ? permissionDraft.get(portal.permission)
+        : isAdmin
         || permissions.has(portal.permission)
         || (!isDatabasePermission && permissions.has('portal:edit'));
       input.disabled = isAdmin;
+      input.addEventListener('change', () => {
+        const draft = state.pluginPermissionDrafts.get(user.id) || new Map(managedPermissions.map((entry) => [
+          entry.permission,
+          permissions.has(entry.permission) || (!entry.permission.startsWith('database:read') && permissions.has('portal:edit'))
+        ]));
+        draft.set(portal.permission, input.checked);
+        state.pluginPermissionDrafts.set(user.id, draft);
+      });
       label.append(input, document.createTextNode(portal.label));
       adminOptions.appendChild(label);
     });
@@ -800,18 +842,26 @@ function renderPluginAccess() {
           const projectIds = Array.isArray(map.projectIds) ? map.projectIds : [];
           const publicProjects = projectIds.filter((projectId) => state.permissions?.[projectId]?.public === true);
           const allPublic = projectIds.length > 0 && publicProjects.length === projectIds.length;
-          const hasAccess = isAdmin
-            || allPublic
-            || (projectIds.length > 0 && projectIds.every((projectId) => state.permissions?.[projectId]?.public === true || userProjects.has(projectId)));
+          const hasProjectAccess = projectIds.length > 0 && projectIds.every((projectId) => policyGrantsProject(user, projectId) || userProjects.has(projectId));
+          const mapPermission = `${PLUGIN_MAP_PERMISSION_PREFIX}${map.id}`;
+          const hasMapGrant = mapPermissions.has(mapPermission);
+          const hasAccess = isAdmin || allPublic || hasProjectAccess || hasMapGrant;
+          const canEditMapAccess = !isAdmin && !allPublic && !hasProjectAccess && projectIds.length > 0;
           const label = document.createElement('label');
           label.className = 'map-access-row';
           const input = document.createElement('input');
           input.type = 'checkbox';
           input.dataset.mapId = map.id;
-          input.dataset.projectIds = projectIds.join(',');
+          input.dataset.mapPermission = mapPermission;
           input.dataset.publicMap = allPublic ? '1' : '0';
-          input.checked = hasAccess;
-          input.disabled = isAdmin || allPublic || !projectIds.length;
+          input.checked = canEditMapAccess && mapDraft?.has(map.id) ? mapDraft.get(map.id) : hasMapGrant || hasAccess;
+          input.disabled = !canEditMapAccess;
+          if (!canEditMapAccess) mapDraft?.delete(map.id);
+          input.addEventListener('change', () => {
+            const draft = state.pluginAccessDrafts.get(user.id) || new Map();
+            draft.set(map.id, input.checked);
+            state.pluginAccessDrafts.set(user.id, draft);
+          });
           const copy = document.createElement('span');
           const accessNote = allPublic ? 'Public map' : (projectIds.length ? projectIds.join(', ') : 'No source project detected');
           copy.innerHTML = `<strong>${escapeHtml(map.title || map.profileKey)}</strong><small>${escapeHtml(accessNote)}</small>`;
@@ -836,25 +886,27 @@ function renderPluginAccess() {
         if (input.checked) nextPermissions.add(input.dataset.permission);
       });
 
-      const nextProjects = new Set(Array.isArray(user.projects) ? user.projects : []);
-      mapProjectUniverse.forEach((projectId) => nextProjects.delete(projectId));
-      row.querySelectorAll('input[data-map-id]').forEach((input) => {
-        if (input.dataset.publicMap === '1') return;
-        if (!input.checked) return;
-        String(input.dataset.projectIds || '').split(',').map((id) => id.trim()).filter(Boolean).forEach((projectId) => nextProjects.add(projectId));
+      knownMapPermissions.forEach((permission) => nextPermissions.delete(permission));
+      row.querySelectorAll('input[data-map-permission]').forEach((input) => {
+        if (input.checked) nextPermissions.add(input.dataset.mapPermission);
       });
 
       try {
-        await api(`/auth-admin/users/${user.id}`, {
+        const result = await api(`/auth-admin/users/${user.id}`, {
           method: 'PATCH',
           body: {
-            permissions: Array.from(nextPermissions),
-            projects: Array.from(nextProjects)
+            permissions: Array.from(nextPermissions)
           }
         });
+        if (result?.user) {
+          state.users = state.users.map((entry) => entry.id === user.id ? { ...entry, ...result.user } : entry);
+        }
+        state.pluginAccessDrafts.delete(user.id);
+        state.pluginPermissionDrafts.delete(user.id);
+        renderUsers();
+        renderPluginAccess();
+        state.pluginAccessNeedsRender = false;
         showMessage('success', `Plugin map access updated for ${user.username}.`);
-        await loadUsers(false);
-        await loadProjects(false);
       } catch (err) {
         showMessage('error', parseError(err, 'Unable to update plugin map permissions.'));
       }
@@ -1417,7 +1469,11 @@ async function loadDatabases() {
     const payload = await api('/auth-admin/databases');
     state.databases = Array.isArray(payload?.connections) ? payload.connections : [];
     renderDatabases();
-    renderPluginAccess();
+    state.pluginAccessNeedsRender = true;
+    if (document.querySelector('.tab-panel.active')?.dataset.tabPanel === 'plugins') {
+      renderPluginAccess();
+      state.pluginAccessNeedsRender = false;
+    }
   } catch (err) {
     showMessage('error', parseError(err, 'Failed to load database connections.'));
   }
@@ -1535,6 +1591,14 @@ async function loadUsers(showFeedback = false) {
     const payload = await api('/auth-admin/users');
     state.users = Array.isArray(payload?.users) ? payload.users : [];
     renderUsers();
+    state.pluginAccessNeedsRender = true;
+    if (state.pluginMapsLoaded && document.querySelector('.tab-panel.active')?.dataset.tabPanel === 'plugins') {
+      renderPluginAccess();
+      state.pluginAccessNeedsRender = false;
+    }
+    if (showFeedback && state.pluginMapsLoaded && document.querySelector('.tab-panel.active')?.dataset.tabPanel !== 'plugins') {
+      state.pluginAccessNeedsRender = true;
+    }
     if (showFeedback) showMessage('success', 'Users refreshed.');
   } catch (err) {
     showMessage('error', parseError(err, 'Failed to load users.'));
@@ -1556,9 +1620,16 @@ async function loadProjects(showFeedback = false) {
     state.projects = normalizedProjects;
     state.permissions = accessList?.projects || {};
     state.pluginMaps = Array.isArray(pluginMapList?.plugins) ? pluginMapList.plugins : [];
-    await loadSearchableCatalog();
+    state.pluginMapsLoaded = true;
+    state.pluginAccessNeedsRender = true;
+    state.layerCatalogLoaded = false;
+    const activePanel = document.querySelector('.tab-panel.active')?.dataset.tabPanel;
+    if (activePanel === 'layers') await ensureLayerCatalogLoaded();
     renderProjects();
-    renderPluginAccess();
+    if (activePanel === 'plugins') {
+      renderPluginAccess();
+      state.pluginAccessNeedsRender = false;
+    }
     if (showFeedback) showMessage('success', 'Permissions refreshed.');
   } catch (err) {
     showMessage('error', parseError(err, 'Failed to load projects.'));
@@ -1648,9 +1719,11 @@ async function bootstrap() {
     }
     return;
   }
-  await loadUsers(false);
-  await loadProjects(false);
-  await loadDatabases();
+  await Promise.all([loadUsers(false), loadProjects(false), loadDatabases()]);
+  if (state.pluginMapsLoaded) {
+    renderPluginAccess();
+    state.pluginAccessNeedsRender = false;
+  }
   await checkDefaultPassword({ justInstalled: justInstalledFlag });
 }
 

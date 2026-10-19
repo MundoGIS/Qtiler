@@ -199,6 +199,7 @@ const normalizeUsername = (value) => String(value || '').trim().toLowerCase();
 
 const API_KEY_PREFIX = 'qk_';
 const API_KEY_PREFIX_LEN = 11; // 'qk_' + first 8 hex chars
+const PLUGIN_MAP_PERMISSION_PREFIX = 'plugin-map:';
 const generateApiKey = () => API_KEY_PREFIX + crypto.randomBytes(24).toString('hex');
 const hashApiKey = (plain) => crypto.createHash('sha256').update(String(plain || ''), 'utf8').digest('hex');
 const apiKeyPrefixOf = (plain) => {
@@ -1120,6 +1121,33 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     return { id: source.id, label: source.label, maps };
   });
 
+  let publishedPluginMapsCache = { ts: 0, data: null };
+  const getPublishedPluginMapsCached = () => {
+    const now = Date.now();
+    if (publishedPluginMapsCache.data && now - publishedPluginMapsCache.ts < 5000) {
+      return publishedPluginMapsCache.data;
+    }
+    const data = readPublishedPluginMaps();
+    publishedPluginMapsCache = { ts: now, data };
+    return data;
+  };
+
+  const userWithPluginMapProjects = (user) => {
+    const payload = pickUserPayload(user);
+    if (!payload) return null;
+    const grantedMaps = new Set(payload.permissions
+      .filter((permission) => permission.startsWith(PLUGIN_MAP_PERMISSION_PREFIX)));
+    if (!grantedMaps.size) return payload;
+    const projectIds = new Set(payload.projects);
+    for (const plugin of getPublishedPluginMapsCached()) {
+      for (const map of plugin.maps || []) {
+        if (!grantedMaps.has(`${PLUGIN_MAP_PERMISSION_PREFIX}${map.id}`)) continue;
+        for (const projectId of map.projectIds || []) projectIds.add(projectId);
+      }
+    }
+    return { ...payload, projects: [...projectIds] };
+  };
+
   /* ---------------------------------------------------------------- */
   /*  Startup initialization                                           */
   /* ---------------------------------------------------------------- */
@@ -1302,10 +1330,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         const decoded = verifyToken(token);
         if (decoded && decoded.sub) {
           const user = findUserById(decoded.sub);
-          req.user = user ? pickUserPayload(user) : null;
+          req.user = userWithPluginMapProjects(user);
 
           const isLogoutRequest = req.path === '/auth/logout' || req.originalUrl === '/auth/logout';
-          if (req.user && !bearer && !isLogoutRequest) {
+          const isSessionCheck = req.path === '/auth/me' && req.get('x-qtiler-session-check') === '1';
+          if (req.user && !bearer && !isLogoutRequest && !isSessionCheck) {
             try {
               const renewedToken = issueToken(user);
               res.cookie(COOKIE_NAME, renewedToken, {
@@ -1337,7 +1366,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
             return res.status(429).json({ error: 'api_key_rate_limited' });
           }
         }
-        req.user = pickUserPayload(user);
+        req.user = userWithPluginMapProjects(user);
         return next();
       }
 
@@ -1356,7 +1385,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
               return res.status(429).json({ error: 'api_key_rate_limited' });
             }
           }
-          req.user = pickUserPayload(user);
+          req.user = userWithPluginMapProjects(user);
           return next();
         }
         const user = findUserByUsername(basicCreds.username);
@@ -1365,7 +1394,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
           return next();
         }
         const valid = await bcrypt.compare(basicCreds.password, user.passwordHash || '');
-        req.user = valid ? pickUserPayload(user) : null;
+        req.user = valid ? userWithPluginMapProjects(user) : null;
         return next();
       }
 

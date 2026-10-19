@@ -8044,19 +8044,27 @@ function rulesToOrigoStyle(rules) {
           anchor: r.point.icon.anchor || [0.5, 0.5],
           opacity: r.point.icon.opacity != null ? r.point.icon.opacity : 1
         };
+        if (Number(r.point.icon.pixelSize) > 0) geomEntry.icon.pixelSize = Math.max(4, Math.min(120, Number(r.point.icon.pixelSize)));
+        for (const key of ['anchorXUnits', 'anchorYUnits', 'rotation', 'rotateWithView']) {
+          if (r.point.icon[key] != null) geomEntry.icon[key] = r.point.icon[key];
+        }
         if (r.point.icon.useColor && r.point.icon.color) {
           geomEntry.icon.color = r.point.icon.color;
         }
       } else if (r.point && r.point.circle) {
         const c = r.point.circle;
         geomEntry.circle = {
-          radius: c.radius || 6,
+          radius: c.radius ?? 6,
           fill: { color: c.fillNone ? 'rgba(0,0,0,0)' : hexToRgba(c.fill, c.fillOpacity) },
-          stroke: { color: hexToRgba(c.stroke, c.strokeOpacity), width: c.strokeWidth || 1 }
+          stroke: { color: hexToRgba(c.stroke, c.strokeOpacity), width: c.strokeWidth ?? 1 }
         };
+        if (r.point.regularShape) {
+          geomEntry.regularShape = { ...r.point.regularShape, ...geomEntry.circle };
+          delete geomEntry.circle;
+        }
       }
     } else if (currentLayerGeomFamily === 'line') {
-      geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width || 2, lineDash: dashKeyToArray(r.stroke.dash) };
+      geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width ?? 2, lineDash: dashKeyToArray(r.stroke.dash) };
     } else {
       if (!r.fill.none) geomEntry.fill = { color: hexToRgba(r.fill.color, r.fill.opacity) };
       if (!r.stroke.none) geomEntry.stroke = { color: hexToRgba(r.stroke.color, r.stroke.opacity), width: r.stroke.width || 1, lineDash: dashKeyToArray(r.stroke.dash) };
@@ -8143,7 +8151,7 @@ function origoStyleToRules(styleDef) {
     for (const e of entries) {
       if (!e || typeof e !== 'object') continue;
       if (e.text && !textEntry) textEntry = e;
-      if (!geomEntry && (e.circle || e.icon || e.image || e.fill || e.stroke)) geomEntry = e;
+      if (!geomEntry && (e.circle || e.regularShape || e.icon || e.image || e.fill || e.stroke)) geomEntry = e;
     }
     const def = geomEntry || entries[0];
     if (def && def.filter) r.filter = def.filter;
@@ -8193,26 +8201,33 @@ function origoStyleToRules(styleDef) {
         r.point.mode = 'icon';
         r.point.icon.src = def.icon.src;
         r.point.icon.scale = def.icon.scale != null ? def.icon.scale : 0.05;
+        if (Number(def.icon.pixelSize) > 0) r.point.icon.pixelSize = Number(def.icon.pixelSize);
         r.point.icon.opacity = def.icon.opacity != null ? def.icon.opacity : 1;
+        if (Array.isArray(def.icon.anchor)) r.point.icon.anchor = [...def.icon.anchor];
+        for (const key of ['anchorXUnits', 'anchorYUnits', 'rotation', 'rotateWithView']) {
+          if (def.icon[key] != null) r.point.icon[key] = def.icon[key];
+        }
         if (def.icon.color) {
           r.point.icon.color = def.icon.color;
           r.point.icon.useColor = true;
         }
-      } else if (def.circle) {
+      } else if (def.circle || def.regularShape) {
+        const shape = def.regularShape || def.circle;
         r.point.mode = 'circle';
-        r.point.circle.radius = def.circle.radius || 6;
-        const fillRaw = def.circle.fill && def.circle.fill.color;
+        r.point.regularShape = def.regularShape ? JSON.parse(JSON.stringify(def.regularShape)) : null;
+        r.point.circle.radius = shape.radius ?? 6;
+        const fillRaw = shape.fill && shape.fill.color;
         const f = parseColorString(fillRaw);
         r.point.circle.fill = f.hex; r.point.circle.fillOpacity = f.op;
         r.point.circle.fillNone = (typeof fillRaw === 'string' && /rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)/i.test(fillRaw));
-        const s = parseColorString(def.circle.stroke && def.circle.stroke.color);
+        const s = parseColorString(shape.stroke && shape.stroke.color);
         r.point.circle.stroke = s.hex; r.point.circle.strokeOpacity = s.op;
-        r.point.circle.strokeWidth = (def.circle.stroke && def.circle.stroke.width) || 1;
+        r.point.circle.strokeWidth = shape.stroke?.width ?? 1;
       }
     } else if (def && currentLayerGeomFamily === 'line') {
       const s = parseColorString(def.stroke && def.stroke.color);
       r.stroke.color = s.hex; r.stroke.opacity = s.op;
-      r.stroke.width = (def.stroke && def.stroke.width) || 2;
+      r.stroke.width = def.stroke?.width ?? 2;
       r.stroke.dash = dashArrayToKey(def.stroke && def.stroke.lineDash);
     } else if (def) {
       r.fill.none = !def.fill;
@@ -8221,7 +8236,7 @@ function origoStyleToRules(styleDef) {
       r.stroke.none = !def.stroke;
       const s = parseColorString(def.stroke && def.stroke.color);
       r.stroke.color = s.hex; r.stroke.opacity = s.op;
-      r.stroke.width = (def.stroke && def.stroke.width) || 1;
+      r.stroke.width = def.stroke?.width ?? 1;
       r.stroke.dash = dashArrayToKey(def.stroke && def.stroke.lineDash);
       r.designerOptions = def.qtilerPatternStyle && typeof def.qtilerPatternStyle === 'object'
         ? JSON.parse(JSON.stringify(def.qtilerPatternStyle))
@@ -8511,6 +8526,9 @@ function buildRuleEditorMarkup(rule, idx) {
         <label style="display:inline-flex;align-items:center;gap:6px"><input type="radio" name="ptmode-${idx}" value="icon" ${isIcon ? 'checked' : ''}/> ${T('wfs_svg_icon')}</label>
       </div>
       <div data-ptpanel="circle" ${isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
+        <label style="grid-column:1/-1">${T('wfs_symbol')}<select data-rk="circle.shape">
+          ${['circle', 'triangle', 'square', 'star'].map(shape => `<option value="${shape}"${(rule.point.regularShape ? (Number(rule.point.regularShape.points) === 3 ? 'triangle' : Number(rule.point.regularShape.points) === 4 ? 'square' : 'star') : 'circle') === shape ? ' selected' : ''}>${T(`wfs_${shape}`)}</option>`).join('')}
+        </select></label>
         <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-bottom:0"><input type="checkbox" data-rk="circle.fillNone" ${rule.point.circle.fillNone ? 'checked' : ''}/> ${T('wfs_no_fill')}</label>
         <label>${T('wfs_fill_color')}<input type="color" data-rk="circle.fill" value="${rule.point.circle.fill}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
         <label>${T('wfs_fill_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.fillOpacity" value="${rule.point.circle.fillOpacity}" ${rule.point.circle.fillNone ? 'disabled' : ''}/></label>
@@ -8520,11 +8538,11 @@ function buildRuleEditorMarkup(rule, idx) {
         <label style="grid-column:1/4">${T('wfs_stroke_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="circle.strokeOpacity" value="${rule.point.circle.strokeOpacity}" /></label>
       </div>
       <div data-ptpanel="icon" ${!isIcon ? 'hidden' : ''} style="display:grid;grid-template-columns:auto 1fr 1fr;gap:10px;align-items:end">
-        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:calc(${(rule.point.icon.scale || 1)} * 32px);height:calc(${(rule.point.icon.scale || 1)} * 32px);max-width:120px;max-height:120px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
+        <div><img data-rk="icon.preview" src="${rule.point.icon.src || ''}" style="width:${Math.max(4, Math.min(120, Number(rule.point.icon.pixelSize) || Number(rule.point.icon.scale) * 480 || 24))}px;height:${Math.max(4, Math.min(120, Number(rule.point.icon.pixelSize) || Number(rule.point.icon.scale) * 480 || 24))}px;max-width:120px;max-height:120px;border:1px solid #ccd5e1;border-radius:10px;background:#fff;object-fit:contain"/></div>
         <button type="button" class="button small" data-rk="icon.pick">${T('wfs_pick_svg')}</button>
         <div></div>
         <label style="grid-column:1/4">${T('wfs_url')}<input type="text" style="width:100%" data-rk="icon.src" value="${rule.point.icon.src}" /></label>
-        <label>${T('wfs_scale_field')}<input type="number" step="0.01" min="0.01" max="5" data-rk="icon.scale" value="${rule.point.icon.scale}" /></label>
+        <label>${T('wfs_size')} (px)<input type="number" step="1" min="4" max="120" data-rk="icon.pixelSize" value="${Math.max(4, Math.min(120, Number(rule.point.icon.pixelSize) || Number(rule.point.icon.scale) * 480 || 24))}" /></label>
         <label>${T('wfs_opacity')}<input type="number" step="0.05" min="0" max="1" data-rk="icon.opacity" value="${rule.point.icon.opacity}" /></label>
         <label>${T('wfs_tint_color')}<input type="color" data-rk="icon.color" value="${rule.point.icon.color || '#000000'}" /></label>
         <div style="grid-column:1/4"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;width:auto"><input type="checkbox" data-rk="icon.useColor" ${rule.point.icon.useColor ? 'checked' : ''} /> ${T('wfs_enable_svg_tint')}</label></div>
@@ -8852,11 +8870,21 @@ function updateRuleField(idx, key, value) {
   }
   if (key.startsWith('circle.')) {
     const sub = key.slice(7);
+    if (sub === 'shape') {
+      r.point.regularShape = value === 'circle' ? null : {
+        points: value === 'triangle' ? 3 : value === 'square' ? 4 : 5,
+        angle: value === 'square' ? Math.PI / 4 : 0,
+        ...(value === 'star' ? { radius2: r.point.circle.radius * 0.45 } : {})
+      };
+      afterRuleChange();
+      return;
+    }
     if (sub === 'fillNone') {
       r.point.circle.fillNone = !!value;
       return renderRulesPanel();
     }
     r.point.circle[sub] = (typeof value === 'boolean' || isNaN(Number(value))) ? value : Number(value);
+    if (sub === 'radius' && r.point.regularShape?.radius2 != null) r.point.regularShape.radius2 = Number(value) * 0.45;
     afterRuleChange();
     return;
   }
@@ -8873,11 +8901,13 @@ function updateRuleField(idx, key, value) {
     if (sub === 'color') r.point.icon.color = value;
     else if (sub === 'useColor') r.point.icon.useColor = !!value;
     else r.point.icon[sub] = (sub === 'src') ? value : Number(value);
-    if (sub === 'scale') {
+    if (sub === 'pixelSize') {
+      r.point.icon.pixelSize = Math.max(4, Math.min(120, Number(value) || 24));
+      r.point.icon.scale = r.point.icon.pixelSize / 480;
       const img = document.querySelector(`[data-rule-editor-root="${idx}"] img[data-rk="icon.preview"]`);
       if (img) {
-        img.style.width = `calc(${r.point.icon.scale || 1} * 32px)`;
-        img.style.height = `calc(${r.point.icon.scale || 1} * 32px)`;
+        img.style.width = `${r.point.icon.pixelSize}px`;
+        img.style.height = `${r.point.icon.pixelSize}px`;
       }
     }
     afterRuleChange();
@@ -8975,19 +9005,30 @@ function rulePreviewSampleSvg(rule, geomFamily) {
       let src = rule.point.icon.src;
       // If a color is set on a served SVG icon, route through the server-side
       // colorizer so the preview reflects the chosen color.
-      const color = rule.point.icon.color;
+      const color = rule.point.icon.useColor ? rule.point.icon.color : null;
       if (color && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(String(color).trim()) && (src.startsWith('/qgis-svg/') || src.startsWith('/qtiler-symbology-svg/'))) {
         const hex = String(color).trim().replace(/^#?/, '#');
         src = src.startsWith('/qtiler-symbology-svg/')
           ? src.replace(/^\/qtiler-symbology-svg\//, '/qtiler-symbology-svg-colored/') + `?color=${encodeURIComponent(hex)}`
           : src.replace(/^\/qgis-svg\//, '/qgis-svg-colored/') + `?color=${encodeURIComponent(hex)}`;
       }
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><image href="${src}" x="${W/2-16}" y="${H/2-16}" width="32" height="32" preserveAspectRatio="xMidYMid meet"/></svg>`;
+      const size = Math.min(36, Number(rule.point.icon.pixelSize) || Number(rule.point.icon.scale) * 480 || 24);
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><image href="${escapeHtml(src)}" x="${(W-size)/2}" y="${(H-size)/2}" width="${size}" height="${size}" opacity="${rule.point.icon.opacity ?? 1}" preserveAspectRatio="xMidYMid meet"/></svg>`;
     }
     const c = rule.point.circle;
     const fill = c.fillNone ? 'none' : hexToRgba(c.fill, c.fillOpacity);
     const stroke = hexToRgba(c.stroke, c.strokeOpacity);
     const r = Math.min(20, c.radius || 6);
+    if (rule.point.regularShape) {
+      const shape = rule.point.regularShape;
+      const count = Number(shape.points) * (shape.radius2 != null ? 2 : 1);
+      const points = Array.from({ length: count }, (_, index) => {
+        const angle = (shape.angle || 0) + (shape.rotation || 0) - Math.PI / 2 + index * Math.PI * 2 / count;
+        const radius = index % 2 && shape.radius2 != null ? r * Number(shape.radius2) / (c.radius || 6) : r;
+        return `${W / 2 + Math.cos(angle) * radius},${H / 2 + Math.sin(angle) * radius}`;
+      }).join(' ');
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${c.strokeWidth ?? 1}"/></svg>`;
+    }
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><circle cx="${W/2}" cy="${H/2}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${c.strokeWidth || 1}"/></svg>`;
   }
   if (geomFamily === 'line') {

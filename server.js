@@ -15,6 +15,7 @@ import { execFile, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { PythonPool } from './lib/PythonPool.js';
+import { getProjectDiagnosticsSnapshot, startProjectDiagnosticsHeartbeat } from './lib/projectDiagnostics.js';
 import { sanitizeProjectId, sanitizePluginName } from "./lib/sanitize.js";
 import { resolvePluginRoot, detectPluginName } from "./lib/pluginArchiveUtils.js";
 import { copyRecursive, removeRecursive } from "./lib/fsRecursive.js";
@@ -4354,8 +4355,11 @@ const pythonExe = process.env.PYTHON_EXE || (process.env.OSGEO4W_BIN ? path.join
 const poolSize = parseInt(process.env.PY_WORKER_POOL_SIZE || "4");
 const pythonScript = path.resolve(__dirname, 'python', 'worker_wrapper.py');
 // --- create the Python worker pool AFTER poolSize and pythonScript are defined ---
-const tileRendererPool = new PythonPool(pythonScript, poolSize);
+const tileRendererPool = cluster.isWorker ? new PythonPool(pythonScript, poolSize) : null;
 app.locals.tileRendererPool = tileRendererPool;
+if (cluster.isWorker) {
+  startProjectDiagnosticsHeartbeat(() => getProjectDiagnosticsSnapshot(tileRendererPool, Number(app.locals.projectLayerExtractions) || 0, cacheDir));
+}
 // crear env para procesos hijos incluyendo OSGeo4W paths si están en .env
 const makeChildEnv = () => {
   const env = { ...process.env };
@@ -5205,7 +5209,7 @@ const buildBootstrapEntriesFromExtract = (projectId, projectPath, extractPayload
   return { entries, projectExtent, projectExtentWgs, projectCrs, defaultTileProfile, requiresAllowRemote };
 };
 
-const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false) => {
+const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false, preExtractPayload = null) => {
   if (!ENABLE_PROJECT_BOOTSTRAP) return false;
   if (!projectId || !projectPath) return false;
   let existing;
@@ -5218,12 +5222,14 @@ const bootstrapProjectCacheIndex = async (projectId, projectPath, force = false)
     console.warn(`[bootstrap] Failed to read existing index for ${projectId}`, err?.message || err);
     existing = null;
   }
-  let extractPayload;
-  try {
-    extractPayload = await runExtractInfoForProject(projectPath);
-  } catch (err) {
-    console.warn(`[bootstrap] Metadata extraction failed for ${projectId}`, err?.message || err);
-    return false;
+  let extractPayload = preExtractPayload;
+  if (!extractPayload) {
+    try {
+      extractPayload = await runExtractInfoForProject(projectPath);
+    } catch (err) {
+      console.warn(`[bootstrap] Metadata extraction failed for ${projectId}`, err?.message || err);
+      return false;
+    }
   }
   if (!extractPayload) {
     return false;
@@ -7810,7 +7816,10 @@ const deriveOnDemandTileGrid = (projectId, targetMode, targetName) => {
 
 export { getTileBBox };
 // --- Control de concurrencia y cola FIFO para generación de tiles ---
-const MAX_CONCURRENT_TILE_JOBS = 2; // Ajusta según capacidad del servidor
+const configuredConcurrentTileJobs = Number.parseInt(process.env.QTILER_MAX_CONCURRENT_TILE_JOBS || '2', 10);
+const MAX_CONCURRENT_TILE_JOBS = Number.isFinite(configuredConcurrentTileJobs) && configuredConcurrentTileJobs > 0
+  ? Math.min(configuredConcurrentTileJobs, 32)
+  : 2;
 let activeTileJobs = 0;
 const tileJobQueue = [];
 

@@ -941,6 +941,7 @@ export const registerWfsRoutes = ({
           action: 'wfs_get_feature',
           project_path: project.file,
           type_name: typeName,
+          layer_id: getQueryCI(req, 'LAYERID') || getQueryCI(req, 'LAYER_ID') || null,
           output_file: outFile,
           version: requestedVersion || null,
           filter_expression: filterExpr || null,
@@ -968,25 +969,6 @@ export const registerWfsRoutes = ({
            fs.promises.readFile(outFile, 'utf8').then(raw => {
              try {
                const parsed = JSON.parse(raw);
-               const force2D = (obj) => {
-                 if (!obj || typeof obj !== 'object') return;
-                 if (obj.type === 'FeatureCollection' && Array.isArray(obj.features)) {
-                   obj.features.forEach(force2D);
-                 } else if (obj.type === 'Feature' && obj.geometry) {
-                   force2D(obj.geometry);
-                 } else if (obj.type && obj.coordinates) {
-                   const wipeZ = (coords) => {
-                     if (!Array.isArray(coords)) return;
-                     if (coords.length > 0 && typeof coords[0] === 'number') {
-                       while(coords.length > 2) coords.pop();
-                     } else {
-                       coords.forEach(wipeZ);
-                     }
-                   };
-                   wipeZ(obj.coordinates);
-                 }
-               };
-               force2D(parsed);
                if (srsName && srsName.toUpperCase().startsWith('EPSG:')) {
                  if (!parsed.crs) {
                    parsed.crs = {
@@ -1457,25 +1439,6 @@ export const registerWfsRoutes = ({
       }
 
       res.setHeader('Cache-Control', 'no-store');
-      const force2D = (obj) => {
-        if (!obj || typeof obj !== 'object') return;
-        if (obj.type === 'FeatureCollection' && Array.isArray(obj.features)) {
-          obj.features.forEach(force2D);
-        } else if (obj.type === 'Feature' && obj.geometry) {
-          force2D(obj.geometry);
-        } else if (obj.type && obj.coordinates) {
-          const wipeZ = (coords) => {
-            if (!Array.isArray(coords)) return;
-            if (coords.length > 0 && typeof coords[0] === 'number') {
-              while(coords.length > 2) coords.pop();
-            } else {
-              coords.forEach(wipeZ);
-            }
-          };
-          wipeZ(obj.coordinates);
-        }
-      };
-      force2D(first);
       if (srsName && srsName.toUpperCase().startsWith('EPSG:')) {
         if (!first.crs) {
           first.crs = {

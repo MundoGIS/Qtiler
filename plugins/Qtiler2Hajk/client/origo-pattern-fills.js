@@ -41,12 +41,22 @@
       return true;
     }
     const sourceStyles = Array.isArray(geometryStyles) ? geometryStyles : (geometryStyles ? [geometryStyles] : []);
-    const result = visible(selected) ? sourceStyles.filter(function (style) { return !(style.getText && style.getText()); }) : [];
+    let result = visible(selected) ? sourceStyles.filter(function (style) { return !(style.getText && style.getText()); }) : [];
     if (!styleApi || !styleApi.Text) return result;
+    if (visible(selected)) {
+      const geometry = typeof feature.getGeometry === 'function' ? feature.getGeometry() : null;
+      const pointGeometry = geometry && /Point$/.test(geometry.getType());
+      const pointStyle = createPointStyle({ icon: selected.iconOptions, circle: selected.circle, regularShape: selected.regularShape }, styleApi);
+      if (pointStyle) result = [pointStyle];
+      else if (!pointGeometry && (selected.hasFill || selected.hasStroke || selected.pattern)) {
+        result = [createPolygonStyle(Object.assign({}, selected, { meta: selected.pattern ? normalizePatternMeta(selected) : null }), styleApi)];
+      }
+    }
     for (let index = 0; index < result.length; index += 1) {
       const style = result[index];
       const image = style.getImage && style.getImage();
       if (!image || !style.clone || !style.setImage) continue;
+      if (image.getDeclutterMode && image.getDeclutterMode() === 'none') continue;
       const options = {
         declutterMode: 'none',
         scale: image.getScale(),
@@ -54,11 +64,16 @@
         rotateWithView: image.getRotateWithView()
       };
       let replacement;
-      if (image.getRadius && styleApi.Circle) {
+      if (image.getPoints && image.getPoints() !== Infinity && styleApi.RegularShape) {
+        replacement = new styleApi.RegularShape(Object.assign(options, {
+          points: image.getPoints(), radius: image.getRadius(), radius2: image.getRadius2(),
+          angle: image.getAngle(), fill: image.getFill(), stroke: image.getStroke()
+        }));
+      } else if (image.getRadius && styleApi.Circle) {
         replacement = new styleApi.Circle(Object.assign(options, { radius: image.getRadius(), fill: image.getFill(), stroke: image.getStroke() }));
       } else if (image.getSrc && image.getSrc() && styleApi.Icon) {
         replacement = new styleApi.Icon(Object.assign(options, {
-          src: image.getSrc(), opacity: image.getOpacity(), color: image.getColor(),
+          src: image.getSrc(), opacity: image.getOpacity(), color: image.getColor() || undefined,
           anchor: image.getAnchor() || [0.5, 0.5], anchorXUnits: image.getAnchor() ? 'pixels' : 'fraction', anchorYUnits: image.getAnchor() ? 'pixels' : 'fraction',
           size: image.getSize() || undefined, offset: image.getOrigin() || undefined, crossOrigin: 'anonymous'
         }));
@@ -370,7 +385,7 @@
     styleDef.forEach(function (ruleArr, index) {
       const entries = Array.isArray(ruleArr) ? ruleArr : [ruleArr];
       const geomEntry = entries.find(function (entry) {
-        return entry && typeof entry === 'object' && (entry.icon || entry.circle) && !entry.text;
+        return entry && typeof entry === 'object' && (entry.icon || entry.circle || entry.regularShape) && !entry.text;
       });
       if (!geomEntry) return;
       out.push({
@@ -378,6 +393,7 @@
         filter: String(geomEntry.filter || '').trim(),
         icon: geomEntry.icon && typeof geomEntry.icon === 'object' ? geomEntry.icon : null,
         label: String(geomEntry.legendLabel || geomEntry.label || geomEntry.filter || ''),
+        regularShape: geomEntry.regularShape && typeof geomEntry.regularShape === 'object' ? geomEntry.regularShape : null,
         circle: geomEntry.circle && typeof geomEntry.circle === 'object' ? geomEntry.circle : null
       });
     });
@@ -467,29 +483,56 @@
     const Style = styleApi.Style;
     const Fill = styleApi.Fill;
     const Stroke = styleApi.Stroke;
+    if (!rule.icon && !rule.circle && !rule.regularShape) return null;
+    const cacheKey = 'point-symbol::' + JSON.stringify(rule);
+    if (styleCache.has(cacheKey)) return styleCache.get(cacheKey);
     if (rule.icon && rule.icon.src && styleApi.Icon) {
+      const rawScale = rule.icon.scale == null ? NaN : Number(rule.icon.scale);
+      const pixelSize = Number(rule.icon.pixelSize);
+      const targetSize = Math.max(4, Math.min(120, Number.isFinite(pixelSize) && pixelSize > 0 ? pixelSize : (Number.isFinite(rawScale) && rawScale >= 0 ? rawScale * 480 : 24)));
       const options = {
         src: String(rule.icon.src),
-        scale: Number.isFinite(Number(rule.icon.scale)) ? Number(rule.icon.scale) : 1,
-        opacity: Number.isFinite(Number(rule.icon.opacity)) ? Number(rule.icon.opacity) : 1,
+        scale: rawScale === 0 && !pixelSize ? 0 : targetSize / 480,
+        declutterMode: 'none',
+        opacity: rule.icon.opacity != null && Number.isFinite(Number(rule.icon.opacity)) ? Math.max(0, Math.min(1, Number(rule.icon.opacity))) : 1,
         anchor: Array.isArray(rule.icon.anchor) ? rule.icon.anchor.map(Number) : [0.5, 0.5],
-        anchorXUnits: 'fraction',
-        anchorYUnits: 'fraction',
+        anchorXUnits: rule.icon.anchorXUnits || (Math.abs(Number(rule.icon.anchor?.[0] ?? 0.5)) <= 1 ? 'fraction' : 'pixels'),
+        anchorYUnits: rule.icon.anchorYUnits || (Math.abs(Number(rule.icon.anchor?.[1] ?? 0.5)) <= 1 ? 'fraction' : 'pixels'),
+        rotation: Number(rule.icon.rotation) || 0,
+        rotateWithView: rule.icon.rotateWithView === true,
         crossOrigin: 'anonymous'
       };
-      if (rule.icon.color) options.color = rule.icon.color;
-      return new Style({ image: new styleApi.Icon(options) });
+      if (rule.icon.color && !/\/(?:qgis-svg-colored|qtiler-symbology-svg-colored)\//i.test(options.src)) options.color = rule.icon.color;
+      const image = new styleApi.Icon(options);
+      const fitImage = function () {
+        const size = image.getSize && image.getSize();
+        if (size && Math.max(size[0], size[1]) > 0 && !(rawScale === 0 && !pixelSize)) image.setScale(targetSize / Math.max(size[0], size[1]));
+      };
+      fitImage();
+      if (image.listenImageChange) image.listenImageChange(fitImage);
+      const style = new Style({ image: image });
+      styleCache.set(cacheKey, style);
+      return style;
     }
-    if (rule.circle && styleApi.Circle) {
-      const fillColor = rule.circle.fill && rule.circle.fill.color ? rule.circle.fill.color : 'rgba(0,0,0,0)';
-      const strokeColor = rule.circle.stroke && rule.circle.stroke.color ? rule.circle.stroke.color : 'rgba(0,0,0,0)';
-      return new Style({
-        image: new styleApi.Circle({
-          radius: Number.isFinite(Number(rule.circle.radius)) ? Number(rule.circle.radius) : 6,
+    const shape = rule.regularShape || rule.circle;
+    const Shape = rule.regularShape ? styleApi.RegularShape : styleApi.Circle;
+    if (shape && Shape) {
+      const fillColor = shape.fill && shape.fill.color ? shape.fill.color : 'rgba(0,0,0,0)';
+      const strokeColor = shape.stroke && shape.stroke.color ? shape.stroke.color : 'rgba(0,0,0,0)';
+      const style = new Style({
+        image: new Shape({
+          declutterMode: 'none',
+          points: shape.points,
+          radius2: shape.radius2,
+          angle: shape.angle,
+          rotation: shape.rotation,
+          radius: Number.isFinite(Number(shape.radius)) ? Math.max(0, Math.min(120, Number(shape.radius))) : 6,
           fill: new Fill({ color: fillColor }),
-          stroke: new Stroke({ color: strokeColor, width: Number(rule.circle.stroke && rule.circle.stroke.width) || 1 })
+          stroke: new Stroke({ color: strokeColor, width: Number.isFinite(Number(shape.stroke && shape.stroke.width)) ? Number(shape.stroke.width) : 1 })
         })
       });
+      styleCache.set(cacheKey, style);
+      return style;
     }
     return null;
   }
@@ -693,6 +736,55 @@
     };
   }
 
+  function createCategorySwatch(rule) {
+    const styleApi = getOlStyleApi();
+    const style = styleApi ? createPointStyle(rule, styleApi) : null;
+    if (style && style.getImage()) {
+      const image = style.getImage();
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 56;
+      canvas.setAttribute('aria-hidden', 'true');
+      canvas.style.cssText = 'display:inline-block;width:32px;height:28px;flex:0 0 32px;';
+      const paint = function () {
+        if (image.getImageState && image.getImageState() !== 2) return;
+        const surface = image.getImage(1);
+        const width = surface.naturalWidth || surface.width;
+        const height = surface.naturalHeight || surface.height;
+        if (!width || !height) return;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        const size = Math.min(48 / width, 40 / height);
+        context.clearRect(0, 0, 64, 56);
+        context.save();
+        context.translate(32, 28);
+        context.rotate(image.getRotation ? image.getRotation() : 0);
+        context.globalAlpha = image.getOpacity ? image.getOpacity() : 1;
+        context.drawImage(surface, -width * size / 2, -height * size / 2, width * size, height * size);
+        context.restore();
+        if (image.unlistenImageChange) image.unlistenImageChange(paint);
+      };
+      if (image.listenImageChange) image.listenImageChange(paint);
+      if (image.load) image.load();
+      paint();
+      return canvas;
+    }
+    const swatch = document.createElement(rule.icon && rule.icon.src ? 'img' : 'span');
+    swatch.setAttribute('aria-hidden', 'true');
+    swatch.style.cssText = 'display:inline-block;width:26px;height:16px;flex-shrink:0;box-sizing:border-box;';
+    if (rule.icon && rule.icon.src) {
+      swatch.src = rule.icon.src;
+      swatch.alt = '';
+      swatch.style.objectFit = 'contain';
+    } else {
+      swatch.style.backgroundColor = rule.fillColor || (rule.circle && rule.circle.fill && rule.circle.fill.color) || 'transparent';
+      swatch.style.border = '2px solid ' + (rule.strokeColor || (rule.circle && rule.circle.stroke && rule.circle.stroke.color) || 'transparent');
+      swatch.style.borderRadius = rule.circle ? '50%' : '2px';
+      if (rule.meta) swatch.style.backgroundImage = 'repeating-linear-gradient(135deg,transparent,transparent 4px,' + (rule.strokeColor || '#333') + ' 4px,' + (rule.strokeColor || '#333') + ' 5px)';
+    }
+    return swatch;
+  }
+
   function mountCategoryControls() {
     if (!document.body || !categoryLayers.size) return;
     const backButton = document.getElementById('layer-item-details-back-button');
@@ -736,19 +828,7 @@
             else state.disabled.add(rule.index);
             layer.changed();
           });
-          const swatch = document.createElement(rule.icon && rule.icon.src ? 'img' : 'span');
-          swatch.setAttribute('aria-hidden', 'true');
-          swatch.style.cssText = 'display:inline-block;width:26px;height:16px;flex-shrink:0;box-sizing:border-box;';
-          if (rule.icon && rule.icon.src) {
-            swatch.src = rule.icon.src;
-            swatch.alt = '';
-            swatch.style.objectFit = 'contain';
-          } else {
-            swatch.style.backgroundColor = rule.fillColor || (rule.circle && rule.circle.fill && rule.circle.fill.color) || 'transparent';
-            swatch.style.border = '2px solid ' + (rule.strokeColor || (rule.circle && rule.circle.stroke && rule.circle.stroke.color) || 'transparent');
-            swatch.style.borderRadius = rule.circle ? '50%' : '2px';
-            if (rule.meta) swatch.style.backgroundImage = 'repeating-linear-gradient(135deg,transparent,transparent 4px,' + (rule.strokeColor || '#333') + ' 4px,' + (rule.strokeColor || '#333') + ' 5px)';
-          }
+          const swatch = createCategorySwatch(rule);
           const label = document.createElement('span');
           label.textContent = rule.label || caption[1];
           label.style.cssText = 'overflow-wrap:anywhere;min-width:0;';

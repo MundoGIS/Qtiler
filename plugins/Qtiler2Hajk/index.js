@@ -21,7 +21,7 @@ import proj4 from 'proj4';
 import { copyRecursive, removeRecursive } from '../../lib/fsRecursive.js';
 import { getAuthDb, readProjectAccessFromDb } from '../../lib/authDb.js';
 import { createJsonStore } from '../../lib/jsonStore.js';
-import { getRequestBaseUrl } from '../../lib/requestBaseUrl.js';
+import { getRequestBaseUrl, getViewerBaseUrl } from '../../lib/requestBaseUrl.js';
 import { findSharedLegendLibraryUsage, initializeSharedLegendLibrary } from '../../lib/sharedLegendLibrary.js';
 
 const DEFAULT_REPO = process.env.QTILER_HAJK_REPO || 'hajkmap/hajk';
@@ -3833,7 +3833,7 @@ ${mapIcon}
     }
     const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
     const lantmateriScript = await buildLantmateriControlBootstrap(payload.controls);
-    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261013-labels-v1"></script>`;
+    const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261015-symbols-v4"></script>`;
     const previewShim = `<script>
 (function() {
   var previewConfigUrl = ${JSON.stringify(configUrl)};
@@ -4100,6 +4100,18 @@ ${mapIcon}
 
   const getNamedInfoclickAttributes = (attrs) => normalizeInfoclickAttributes(attrs)
     .filter((attr) => attr && typeof attr === 'object' && String(attr.name || '').trim());
+
+  const toHajkEditableGeometry = (geometryType) => {
+    const type = String(geometryType || '').trim().replace(/\s+/g, '').replace(/(?:25D|ZM|Z|M)$/i, '').toLowerCase();
+    return {
+      editPoint: type === 'point',
+      editMultiPoint: type === 'multipoint',
+      editLine: type === 'linestring',
+      editMultiLine: type === 'multilinestring',
+      editPolygon: type === 'polygon',
+      editMultiPolygon: type === 'multipolygon'
+    };
+  };
 
   const toHajkEditableField = (attribute) => {
     const fieldName = String(attribute?.name || '').trim();
@@ -4530,13 +4542,14 @@ ${mapIcon}
           return {
             ...(filter || {}),
             ...visibility,
+            iconOptions: { ...entry.icon, src: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl) },
             icon: toAbsoluteHajkIconSrc(entry.icon.src, baseUrl),
             pointSize: Number.isFinite(pointSize) && pointSize > 0 ? pointSize : DEFAULT_POINT_ICON_SIZE,
             anchorX: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[0])) ? Number(entry.icon.anchor[0]) : 0.5,
             anchorY: Array.isArray(entry.icon.anchor) && Number.isFinite(Number(entry.icon.anchor[1])) ? Number(entry.icon.anchor[1]) : 0.5
           };
         }
-        if (!entry || (!entry.fill && !entry.stroke && !entry.circle && !labels.length)) return null;
+        if (!entry || (!entry.fill && !entry.stroke && !entry.circle && !entry.regularShape && !labels.length)) return null;
         const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object'
           ? entry.qtilerPatternStyle
           : null;
@@ -4550,6 +4563,7 @@ ${mapIcon}
           ...(filter || {}),
           ...visibility,
           circle: entry.circle || null,
+          regularShape: entry.regularShape || null,
           hasFill: !!entry.fill,
           fillColor: String(entry.fill?.color || 'rgba(0,0,0,0)'),
           hasStroke: !!entry.stroke,
@@ -4699,7 +4713,7 @@ ${mapIcon}
         // Include any rule that carries visible symbology (icon/circle/fill/
         // stroke). The old `|| geometryType.includes('polygon')` catch-all
         // silently dropped stroke-only rules on non-polygon layers.
-        if (entry.icon || entry.circle || entry.fill || entry.stroke) entries.push(entry);
+        if (entry.icon || entry.circle || entry.regularShape || entry.fill || entry.stroke) entries.push(entry);
       }
     }
     return entries;
@@ -4800,6 +4814,8 @@ ${mapIcon}
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
       .trim();
     if (!/<svg\b/i.test(svg)) return '';
+    const parameterDefaults = { fill: '#000000', outline: '#000000', stroke: '#000000', 'fill-opacity': '1', 'outline-opacity': '1', 'stroke-opacity': '1', 'outline-width': '1', 'stroke-width': '1' };
+    svg = svg.replace(/param\(\s*(fill|outline|stroke|fill-opacity|outline-opacity|stroke-opacity|outline-width|stroke-width)\s*\)(?:[ \t]+(#[0-9a-f]{3,8}|none|\d*\.?\d+))?/gi, (_match, parameter, fallback) => fallback || parameterDefaults[parameter.toLowerCase()]);
     if (!/viewBox\s*=/i.test(svg)) {
       const wMatch = svg.match(/<svg[^>]*\swidth=["']?([\d.]+)["']?/i);
       const hMatch = svg.match(/<svg[^>]*\sheight=["']?([\d.]+)["']?/i);
@@ -4901,10 +4917,11 @@ ${mapIcon}
         const x = (width - legendSize) / 2;
         const y = (height - legendSize) / 2;
         const inlineSvg = inlineSvgIconForLegend(src, entry.icon.color, x, y, legendSize);
-        if (inlineSvg) return { defs: '', body: inlineSvg };
+        const opacity = entry.icon.opacity != null && Number.isFinite(Number(entry.icon.opacity)) ? Math.max(0, Math.min(1, Number(entry.icon.opacity))) : 1;
+        if (inlineSvg) return { defs: '', body: `<g opacity="${opacity}">${inlineSvg}</g>` };
         return {
           defs: '',
-          body: `<image href="${xmlEscape(src)}" x="${x}" y="${y}" width="${legendSize}" height="${legendSize}" preserveAspectRatio="xMidYMid meet"/>`
+          body: `<image href="${xmlEscape(src)}" x="${x}" y="${y}" width="${legendSize}" height="${legendSize}" opacity="${opacity}" preserveAspectRatio="xMidYMid meet"/>`
         };
       }
       const iconColor = svgAttr(entry.icon.color || '#2563eb');
@@ -4919,24 +4936,34 @@ ${mapIcon}
         body: `<g><circle cx="${cx}" cy="${cy}" r="${Math.max(4, legendSize / 3.2)}" fill="${iconColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/><path d="M${cx} ${cy - Math.max(4, legendSize * 0.28)} L${cx + Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} L${cx - Math.max(3, legendSize * 0.22)} ${cy + Math.max(3, legendSize * 0.18)} Z" fill="white" fill-opacity="0.9"/></g>`
       };
     }
-    if (entry.circle && typeof entry.circle === 'object') {
-      const fill = svgAttr(entry.circle.fill?.color || fallbackFill);
-      const stroke = svgAttr(entry.circle.stroke?.color || fallbackStroke);
-      const strokeWidth = Math.max(0, Number(entry.circle.stroke?.width) || 1);
-      const radius = Math.max(3, Math.min(10, Number(entry.circle.radius) || 6));
+    if (entry.regularShape || entry.circle) {
+      const shape = entry.regularShape || entry.circle;
+      const fill = svgAttr(shape.fill?.color || 'rgba(0,0,0,0)');
+      const stroke = svgAttr(shape.stroke?.color || 'rgba(0,0,0,0)');
+      const strokeWidth = Math.max(0, Number(shape.stroke?.width ?? 1));
+      const radius = Math.max(0, Math.min((Math.min(width, height) - strokeWidth - 4) / 2, Number(shape.radius ?? 6)));
+      if (entry.regularShape) {
+        const count = Math.max(3, Math.min(64, Number(shape.points) || 3)) * (shape.radius2 != null ? 2 : 1);
+        const points = Array.from({ length: count }, (_, index) => {
+          const angle = Number(shape.angle || 0) + Number(shape.rotation || 0) - Math.PI / 2 + index * Math.PI * 2 / count;
+          const vertexRadius = index % 2 && shape.radius2 != null ? radius * Number(shape.radius2) / (Number(shape.radius) || 6) : radius;
+          return `${width / 2 + Math.cos(angle) * vertexRadius},${height / 2 + Math.sin(angle) * vertexRadius}`;
+        }).join(' ');
+        return { defs: '', body: `<polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${legendDashAttr(shape.stroke?.lineDash)}/>` };
+      }
       return { defs: '', body: `<circle cx="${width / 2}" cy="${height / 2}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>` };
     }
     if (entry.fill || geometryType.includes('polygon')) {
       const fill = svgAttr(entry.fill?.color || 'rgba(0,0,0,0)');
-      const stroke = svgAttr(entry.stroke?.color || fallbackStroke);
-      const strokeWidth = Math.max(0, Number(entry.stroke?.width) || 1);
+      const stroke = svgAttr(entry.stroke?.color || 'rgba(0,0,0,0)');
+      const strokeWidth = Math.max(0, Number(entry.stroke?.width ?? 1));
       const patternMeta = entry.qtilerPatternStyle && typeof entry.qtilerPatternStyle === 'object' ? entry.qtilerPatternStyle : null;
       const pattern = legendPatternFill(fill, stroke, strokeWidth, patternMeta, rowIndex);
       const dash = legendDashAttr(entry.stroke?.lineDash);
       return { defs: pattern.defs, body: `<rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="2" fill="${pattern.fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash}/>` };
     }
     const stroke = svgAttr(entry.stroke?.color || fallbackStroke);
-    const strokeWidth = Math.max(1, Number(entry.stroke?.width) || 2);
+    const strokeWidth = Math.max(0, Number(entry.stroke?.width ?? 2));
     const dash = legendDashAttr(entry.stroke?.lineDash);
     return { defs: '', body: `<path d="M4 ${height - 6} L${width - 4} 6" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round"${dash}/>` };
   };
@@ -4946,10 +4973,7 @@ ${mapIcon}
      if (entries.length !== 1) return '';
      const entry = entries[0];
     if (!entry) return '';
-    if (entry.icon && typeof entry.icon === 'object' && entry.icon.src) {
-       return toAbsoluteHajkIconSrc(entry.icon.src, baseUrl);
-    }
-    const symbol = hajkLegendSymbolSvg(entry, layer, 0, { width: 32, height: 32 });
+     const symbol = hajkLegendSymbolSvg(entry, layer, 0, { width: 32, height: 32, baseUrl });
     return svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${symbol.defs}${symbol.body}</svg>`);
   };
 
@@ -5663,6 +5687,16 @@ ${mapIcon}
        const lSource = source[l.source];
        const layerProjectId = normalizeProjectId(l.sourceProjectId || projectId) || projectId;
        const isBackgroundLayer = l.group === 'background';
+       const wmsRequestUrl = (() => {
+         if (!lSource?.url || !isBackgroundLayer || l.kind === 'external') return lSource?.url || '';
+         try {
+           const url = new URL(lSource.url, baseUrl);
+           url.searchParams.set('QTILER_PRIORITY', 'background');
+           return url.toString();
+         } catch {
+           return lSource.url;
+         }
+       })();
        const hajkLayerId = isBackgroundLayer
          ? String(backgroundLayerId++)
          : `${String(l.source || 'qtiler').replace(/[^A-Za-z0-9]/g, '_')}_${String(l.name || l.id || 'layer').replace(/[^A-Za-z0-9]/g, '_')}`;
@@ -5793,6 +5827,7 @@ ${mapIcon}
                nonEditableFields: [],
                attributes: l.attributes,
                geometryType: l.geometryType,
+               ...toHajkEditableGeometry(l.geometryType),
                visibleAtStart,
                zIndex: drawOrder
              });
@@ -5858,7 +5893,7 @@ ${mapIcon}
                caption: l.title,
                infoTitle: l.title,
                infoText: String(l.infoText || '').trim() || undefined,
-               url: lSource ? lSource.url : '',
+               url: lSource ? wmsRequestUrl : '',
                  projection: lSource?.projection || projCode,
                  layers: [l.id || l.name],
                  layersInfo: [{ id: l.id || l.name, caption: l.title, legend: wmsLegendUrl || '', legendIcon: wmsLegendUrl || undefined, infobox: wmsInfobox, searchDisplayName: wmsDisplayFieldNames.join(','), style: '', queryable: l.queryable !== false }],
@@ -6269,7 +6304,7 @@ ${mapIcon}
         if (exists) return res.status(req.user ? 403 : 401).json({ error: req.user ? 'map_access_denied' : 'auth_required' });
         return next();
       }
-      const baseUrl = getRequestBaseUrl(req);
+      const baseUrl = getViewerBaseUrl(req);
       const config = await buildHajkIndexConfig(profile, baseUrl, req);
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.json(config);
@@ -6292,7 +6327,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         if (exists) return res.status(req.user ? 403 : 401).json({ error: req.user ? 'map_access_denied' : 'auth_required' });
         return next();
       }
-      const baseUrl = getRequestBaseUrl(req);
+      const baseUrl = getViewerBaseUrl(req);
       const config = await buildHajkIndexConfig(profile, baseUrl, req);
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.json(config);
@@ -6951,10 +6986,10 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       html = html.replace(/<title>[^<]*<\/title>/i, `<title>${title}</title>`);
       const hajkBase = `<base href="/plugins/${pluginSlug}/hajk/">`;
       const hajkFavicon = `<link rel="icon" type="image/x-icon" href="/plugins/${pluginSlug}/hajk/favicon.ico"><link rel="apple-touch-icon" href="/plugins/${pluginSlug}/hajk/icon192.png">`;
-      const publishedConfigUrl = `${getRequestBaseUrl(req)}/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
+      const publishedConfigUrl = `/plugins/${pluginSlug}/hajk/mapconfig.json?qtiler_profile=${encodeURIComponent(String(profileId))}`;
       const lantmateriCss = `<link href="/plugins/${pluginSlug}/origo-controls/lantmateri-search.css" rel="stylesheet">`;
       const lantmateriScript = await buildLantmateriControlBootstrap(profile?.controls);
-      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261013-labels-v1"></script>`;
+      const patternFillScript = `${lantmateriCss}\n${lantmateriScript}\n<style>.hajk-featureinfo-content img{max-width:100%;max-height:320px;object-fit:contain}</style>\n<script src="/Thirdparty/ol/ol.js"></script>\n<script src="/plugins/${pluginSlug}/client/origo-pattern-fills.js?v=20261015-symbols-v4"></script>`;
       const publishedShim = `<script>
 (function(){
   var publishedConfigUrl = ${JSON.stringify(publishedConfigUrl)};
@@ -6971,13 +7006,43 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
   function jsonResponse(value) {
     return Promise.resolve(new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } }));
   }
+  var sessionRedirecting = false;
+  function redirectToLogin() {
+    if (sessionRedirecting) return;
+    sessionRedirecting = true;
+    window.location.reload();
+  }
+  function checkSession() {
+    return originalFetch('/auth/me', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'X-Qtiler-Session-Check': '1' }
+    }).then(function(response) {
+      if (response.status === 401) redirectToLogin();
+    }).catch(function() {});
+  }
   window.fetch = function(input, init) {
     var url = typeof input === 'string' ? input : (input && input.url) || '';
-    if (/simpleMapAndLayersConfig\\.json(?:\\?|$)/.test(url)) {
-      return originalFetch(publishedConfigUrl, Object.assign({ credentials: 'same-origin' }, init || {})).then(rememberConfig);
-    }
-    return originalFetch(input, init);
+    var request = /simpleMapAndLayersConfig\\.json(?:\\?|$)/.test(url)
+      ? originalFetch(publishedConfigUrl, Object.assign({ credentials: 'same-origin' }, init || {}))
+      : originalFetch(input, init);
+    return request.then(function(response) {
+      if (response.status === 401) redirectToLogin();
+      return /simpleMapAndLayersConfig\\.json(?:\\?|$)/.test(url) ? rememberConfig(response) : response;
+    });
   };
+  var originalXhrOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function() {
+    this.addEventListener('load', function() {
+      if (this.status === 401) redirectToLogin();
+    });
+    return originalXhrOpen.apply(this, arguments);
+  };
+  window.addEventListener('focus', checkSession);
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') checkSession();
+  });
+  window.setInterval(checkSession, 30000);
 })();
 </script>`;
       if (/<head(\s[^>]*)?>/i.test(html)) {
@@ -9155,7 +9220,8 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       if (!filePath.toLowerCase().startsWith(svgRoot.toLowerCase())) {
         return res.status(400).end('bad path');
       }
-      let content = await fs.promises.readFile(filePath, 'utf8');
+      let content = prepareInlineSvgContent(await fs.promises.readFile(filePath, 'utf8'), req.query.color);
+      if (!content) return res.status(404).end('svg not found');
 
       // OpenLayers and Hajk Legend require physical width/height and viewBox for accurate aspect scaling
       let hasVB = /viewBox\s*=/i.test(content);
@@ -9180,21 +9246,6 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
          }
       }
 
-      const colorRaw = String(req.query.color || '').trim();
-      const colorMatch = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(colorRaw);
-      if (colorMatch) {
-        const color = '#' + colorMatch[1];
-        // Replace explicit fill attributes (skip 'none')
-        content = content.replace(/fill\s*=\s*"(?!none)([^"]*)"/gi, `fill="${color}"`);
-        content = content.replace(/fill\s*=\s*'(?!none)([^']*)'/gi, `fill='${color}'`);
-        // Replace fill: in style attributes/CSS
-        content = content.replace(/fill\s*:\s*(?!none)#?[0-9a-fA-F]{3,8}/gi, `fill:${color}`);
-        content = content.replace(/fill\s*:\s*(?!none)rgb\([^)]+\)/gi, `fill:${color}`);
-        // Inject default fill on root <svg> if no fill anywhere
-        if (!/fill\s*=|fill\s*:/i.test(content)) {
-          content = content.replace(/<svg\b/i, `<svg fill="${color}"`);
-        }
-      }
       res.setHeader('Content-Type', 'image/svg+xml');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.send(content);

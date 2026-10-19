@@ -191,6 +191,8 @@ Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc
 - **WFS labels per rule** — Symbols and labels have independent zoom/scale ranges. Labels support backgrounds, opacity, borders, halos, collision margins and line repetition. The layer must still be enabled; crowded labels are omitted rather than overlapped.
    The rule editor selects Zoom or Scale explicitly, so hidden limits do not restrict rendering. Existing rules that use both keep a combined mode until changed. Label text supports multiple lines; background options are shown only when enabled.
 - **Stable tool order** — Active tools show their position in the editor. Saved order becomes Hajk's native tool `index`, so asynchronous module loading cannot change the toolbar order. New maps reset to the default tool order.
+- **WFS point symbology** — Circles, triangles, squares and stars retain their shape when rules are saved and reopened. SVG size is expressed in screen pixels (4–120 px), preserving the image aspect ratio regardless of its intrinsic dimensions. Legacy SVG scales are converted to bounded pixel sizes. Legends retain shape, color, opacity and stroke; map SVGs and legend SVGs share QGIS parameter normalization.
+- **WFS creation tools** — Editable Hajk sources enable only the drawing tool matching the layer geometry, including multipart and Z/M variants. Unknown geometry keeps creation disabled. QtilerAuth still authorizes all WFS transactions.
 - **CMS / Portal Editor** — A visual page builder to construct the landing page of the maps portal, using hero banners, rich text, side-by-side cards, and map galleries.
 - **Thumbnail generation** — Automatically generates layer thumbnails to power Hajk legends and portal gallery views.
 
@@ -304,6 +306,7 @@ Sizing guidance:
 - Heavy deployments (20+ users, frequent recache/on-demand): 12-16 vCPU / 64 GB RAM
 
 These values assume QGIS rendering on the same machine as the Node service.
+They are initial sizing guidance only. Profile selection and successful functional tests do not certify a deployment for a particular concurrent-user load; validate with representative projects and a staging load test.
 
 ## Prepare the QGIS environment
 1. Install OSGeo4W (Advanced Install) or a QGIS 3.x standalone build.
@@ -376,14 +379,23 @@ node server.js
 The server listens on `http://localhost:3000` by default; override with `PORT` in `.env`.
 
 ## Dashboard workflow
-1. **Upload or refresh a project** – Use *Upload project* or copy `.qgs/.qgz` files into `qgisprojects/`, then click *Reload layers*.
-2. **Define map themes in QGIS** – Save Map Themes (Kartteman) before uploading so composites appear automatically.
-3. **Set extent and zooms** – Adjust global min/max zooms and use *Show extent map* to draw WGS84 bounding boxes.
-4. **Generate caches** – Trigger per-layer jobs, cache all layers, or build theme mosaics. Each run logs parameters for future recache batches.
-5. **Inspect & share** – Preview layers in the OpenLayers viewer and copy WMTS URLs. The GetCapabilities endpoint lives at `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
+1. **Upload or refresh a project** – Use *Upload project* or copy `.qgs/.qgz` files into `qgisprojects/`, then click *Reload layers*. Uploads are checked with QGIS first; ZIPs must contain exactly one project, and invalid layers require explicit confirmation before installation.
+2. **Diagnose project failures** – Admins can open *Live diagnostics* beside the upload controls to inspect host CPU/memory/disk, per-process Node/QGIS worker usage, queue pressure, WMS tile-cache hits/misses, layer extraction errors, and recent upload/preflight events.
+3. **Tune concurrency** – Preview *Low*, *Medium*, or *Aggressive* worker profiles calculated from the detected CPU/RAM budget. Applying a profile backs up `.env`; changed settings require an explicit Windows service restart. The profiles are conservative planning estimates, not a production load test.
+4. **Define map themes in QGIS** – Save Map Themes (Kartteman) before uploading so composites appear automatically.
+5. **Set extent and zooms** – Adjust global min/max zooms and use *Show extent map* to draw WGS84 bounding boxes.
+6. **Generate caches** – Trigger per-layer jobs, cache all layers, or build theme mosaics. Each run logs parameters for future recache batches.
+7. **Inspect & share** – Preview layers in the OpenLayers viewer and copy WMTS URLs. The GetCapabilities endpoint lives at `/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=<id>`.
 
 ## On-demand WMTS/XYZ tiles
-Qtiler renders tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrency is capped (2 workers by default) so misses are queued safely via FIFO. CRS-aware tile-grid derivation ensures on-demand tiles align with pre-cached tiles. See `README_on_demand.md` for a deeper walkthrough.
+Qtiler renders tiles live whenever a request misses the cache. When `/wmts/:project/:layer/:z/:x/:y.png` (or `/themes/...`) cannot find the PNG on disk, the backend runs `python/generate_cache.py --single` to build just that tile, stores it under `cache/<project>/...`, and serves the result immediately. Concurrent cache jobs are queued FIFO and capped by `QTILER_MAX_CONCURRENT_TILE_JOBS` (default: 2). CRS-aware tile-grid derivation ensures on-demand tiles align with pre-cached tiles. See `README_on_demand.md` for a deeper walkthrough.
+
+## Hajk multi-layer WMS performance
+Published Hajk background layers served through Qtiler WMS carry a background priority. QGIS worker scheduling places FeatureInfo first, then tagged background WMS, other map/WFS work, and legend generation last. This priority affects queued tasks only; it does not kill or interrupt a QGIS render already in progress. WMTS and external WMS backgrounds continue to use their own endpoints and do not use this marker.
+
+Only tile-aligned 256×256 WMS GetMap responses use the per-project disk cache under `cache/<project>/_wms_tiles`; untiled WMS requests are rendered live. Concurrent requests for the same cold tile are coalesced in-process and coordinated across Node workers with an exclusive lock file beside the cache tile. A lock owned by a dead process can be recovered; a waiter returns HTTP 503 after the bounded four-minute wait rather than launching a duplicate render. This cross-process lock relies on the cache filesystem's exclusive-create semantics and must be verified on the target production filesystem. Cache diagnostics report hits, misses and coalesced requests. Legend generation is limited to a small background queue and is temporarily paused after an unexpected native QGIS worker crash so map requests can continue; cached or manual legends remain available.
+
+The Low/Medium/Aggressive optimizer only changes `WORKER_COUNT`, `PY_WORKER_POOL_SIZE`, `PY_WORKER_MAX_QUEUE`, and `QTILER_MAX_CONCURRENT_TILE_JOBS`. It reserves host memory by design, backs up `.env`, and requires an explicitly confirmed Windows service restart. The restart requires the service account to have the necessary Windows Service Control Manager rights. These are starting profiles, not a substitute for staging load tests on the target production hardware. Cross-process coalescing for identical cold WMS tiles is not provided by the in-memory single-flight map; size and test multi-worker deployments for this case.
 
 
 ## Supported OGC service versions

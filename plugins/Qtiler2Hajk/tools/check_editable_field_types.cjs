@@ -27,6 +27,25 @@ assert.equal(context.convert({ name: 'secret', type: 'hidden' }).hidden, true);
 assert.equal(context.convert({ name: '' }), null);
 assert.ok(source.includes('namedAttributes.map(toHajkEditableField)'), 'Generated wfstlayers do not use typed editable fields');
 
+const geometryStart = source.indexOf('  const toHajkEditableGeometry =');
+const geometryEnd = source.indexOf('  const toHajkEditableField =', geometryStart);
+assert.ok(geometryStart >= 0 && geometryEnd > geometryStart, 'Edit geometry flags must be generated');
+vm.runInContext(source.slice(geometryStart, geometryEnd) + '\nglobalThis.geometryFlags = toHajkEditableGeometry;', context);
+for (const [type, flag] of [
+  ['Point', 'editPoint'], ['PointZ', 'editPoint'], ['PointZM', 'editPoint'],
+  ['MultiPoint', 'editMultiPoint'], ['MultiPoint25D', 'editMultiPoint'],
+  ['LineString', 'editLine'], ['LineStringM', 'editLine'],
+  ['MultiLineStringZ', 'editMultiLine'], ['Polygon', 'editPolygon'],
+  ['MultiPolygonZM', 'editMultiPolygon']
+]) {
+  const flags = context.geometryFlags(type);
+  assert.equal(flags[flag], true, `${type} must enable its matching creation tool`);
+  assert.equal(Object.values(flags).filter(Boolean).length, 1, `${type} must not enable incompatible geometry tools`);
+}
+assert.equal(Object.values(context.geometryFlags('GeometryCollection')).some(Boolean), false, 'Unknown geometry must not enable every drawing type');
+assert.equal(Object.values(context.geometryFlags(undefined)).some(Boolean), false, 'Missing geometry must fail closed');
+assert.ok(source.includes('...toHajkEditableGeometry(l.geometryType)'), 'Geometry flags must be attached to wfstlayers, which Hajk copies into edit sources');
+
 const infoboxStart = source.indexOf('  const normalizeInfoclickAttributes =');
 const infoboxEnd = source.indexOf('  const shouldUseWfsForPublishedLayer =', infoboxStart);
 assert.ok(infoboxStart >= 0 && infoboxEnd > infoboxStart, 'Infoclick helpers must be available');
@@ -49,6 +68,19 @@ if (fs.existsSync(staticRoot)) {
   const views = fs.readdirSync(staticRoot).filter((name) => /^(EditView|CollectorView)-.*\.js$/i.test(name));
   assert.ok(views.length > 0, 'No installed Hajk edit views found');
   assert.ok(views.some((name) => fs.readFileSync(path.join(staticRoot, name), 'utf8').includes('case"lista"')), 'Installed Hajk runtime does not support lista fields');
+  const editView = views.find(name => /^EditView-/.test(name));
+  if (editView) {
+    const view = fs.readFileSync(path.join(staticRoot, editView), 'utf8');
+    for (const [type, expression] of [
+      ['Point', '!e.editPoint&&!e.editMultiPoint'],
+      ['LineString', '!e.editLine&&!e.editMultiLine'],
+      ['Polygon', '!e.editPolygon&&!e.editMultiPolygon']
+    ]) {
+      assert.ok(view.includes(`disabled:${expression}`), 'Verify the installed Hajk create-button contract');
+      assert.equal(vm.runInNewContext(expression, { e: context.geometryFlags(type) }), false, `${type} creation button must be enabled in the real EditView condition`);
+      assert.equal(vm.runInNewContext(expression, { e: {} }), true, 'The old missing flags must reproduce disabled creation buttons');
+    }
+  }
 }
 
 async function checkNativeInfoclickParser() {

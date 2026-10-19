@@ -1,0 +1,242 @@
+{
+  "http://localhost:3011||drift_projekt||RK_Vindkraftparker": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "RK_Vindkraftparker",
+          "title": "RK_Vindkraftparker",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "vindpark",
+          "title": "vindpark",
+          "type": "text"
+        },
+        {
+          "name": "kommun",
+          "title": "kommun",
+          "type": "text"
+        },
+        {
+          "name": "fastighet",
+          "title": "fastighet",
+          "type": "text"
+        },
+        {
+          "name": "sweref99_n",
+          "title": "sweref99_n",
+          "type": "text"
+        },
+        {
+          "name": "sweref99_e",
+          "title": "sweref99_e",
+          "type": "text"
+        },
+        {
+          "name": "z",
+          "title": "z",
+          "type": "text"
+        },
+        {
+          "name": "model",
+          "title": "model",
+          "type": "text"
+        },
+        {
+          "name": "azimut",
+          "title": "azimut",
+          "type": "text"
+        },
+        {
+          "name": "_gare",
+          "title": "_gare",
+          "type": "text"
+        },
+        {
+          "name": "trakt",
+          "title": "trakt",
+          "type": "text"
+        },
+        {
+          "name": "vkv_nr",
+          "title": "vkv_nr",
+          "type": "text"
+        },
+        {
+          "name": "oem__",
+          "title": "oem__",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "title": "status",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1792023676180
+  },
+  "http://localhost:3011||drift_projekt||Samlingsplatser": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Samlingsplatser",
+          "title": "Samlingsplatser",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivn",
+          "title": "beskrivn",
+          "type": "text"
+        },
+        {
+          "name": "datum",
+          "title": "datum",
+          "type": "date"
+        },
+        {
+          "name": "skapat_av",
+          "title": "skapat_av",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1792023676201
+  },
+  "http://localhost:3011||drift_projekt||Stallplatser": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "Stallplatser",
+          "title": "Stallplatser",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivning",
+          "title": "beskrivning",
+          "type": "text"
+        },
+        {
+          "name": "datum",
+          "title": "datum",
+          "type": "text"
+        },
+        {
+          "name": "skapat_av",
+          "title": "skapat_av",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1792023676220
+  },
+  "http://localhost:3011||drift_projekt||infarter": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "infarter",
+          "title": "infarter",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivning",
+          "title": "beskrivning",
+          "type": "text"
+        },
+        {
+          "name": "datum",
+          "title": "datum",
+          "type": "text"
+        },
+        {
+          "name": "skapat_av",
+          "title": "skapat_av",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1792023676235
+  },
+  "http://localhost:3011||drift_projekt||vagbommar": {
+    "meta": {
+      "attributes": [
+        {
+          "name": "vagbommar",
+          "title": "vagbommar",
+          "type": "text"
+        },
+        {
+          "name": "id",
+          "title": "id",
+          "type": "text"
+        },
+        {
+          "name": "namn",
+          "title": "namn",
+          "type": "text"
+        },
+        {
+          "name": "beskrivning",
+          "title": "beskrivning",
+          "type": "text"
+        },
+        {
+          "name": "datum",
+          "title": "datum",
+          "type": "text"
+        },
+        {
+          "name": "skapat_av",
+          "title": "skapat_av",
+          "type": "text"
+        }
+      ],
+      "geometryName": "geometry",
+      "featureNS": "http://qtiler.local"
+    },
+    "updatedAt": 1792023676251
+  }
+}

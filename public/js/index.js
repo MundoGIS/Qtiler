@@ -4329,6 +4329,281 @@
   const reloadBtn = document.getElementById('reload');
   const uploadBtn = document.getElementById('upload_project_btn');
   const uploadInput = document.getElementById('project_upload_input');
+  const projectUploadTab = document.getElementById('project_upload_tab');
+  const projectDiagnosticsTab = document.getElementById('project_diagnostics_tab');
+  const projectUploadPanel = document.getElementById('project_upload_panel');
+  const projectDiagnosticsPanel = document.getElementById('project_diagnostics_panel');
+  const projectDiagnosticsConnection = document.getElementById('project_diagnostics_connection');
+  const projectDiagnosticsMetrics = document.getElementById('project_diagnostics_metrics');
+  const projectDiagnosticsProcesses = document.getElementById('project_diagnostics_processes');
+  const projectDiagnosticsEvents = document.getElementById('project_diagnostics_events');
+  const optimizationProfileSelect = document.getElementById('optimization_profile');
+  const optimizationPreview = document.getElementById('optimization_preview');
+  const optimizationStatus = document.getElementById('optimization_status');
+  const optimizationApplyButton = document.getElementById('optimization_apply');
+  const optimizationRestartButton = document.getElementById('optimization_restart');
+  let optimizationProfiles = null;
+  let optimizationLoadPromise = null;
+  let projectDiagnosticsSource = null;
+  const projectDiagnosticsEventById = new Map();
+  const formatDiagnosticBytes = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes < 0) return '—';
+    return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+  };
+  const renderProjectDiagnostics = (payload) => {
+    if (!projectDiagnosticsMetrics || !projectDiagnosticsProcesses || !projectDiagnosticsEvents) return;
+    const snapshot = payload?.snapshot || {};
+    const host = snapshot.host || {};
+    const processInfo = snapshot.process || {};
+    const qgis = snapshot.qgis || {};
+    const cache = snapshot.counters || {};
+    const diskMetric = Number.isFinite(host.diskTotalBytes) && host.diskTotalBytes > 0
+      ? `${formatDiagnosticBytes(host.diskTotalBytes - host.diskFreeBytes)} / ${formatDiagnosticBytes(host.diskTotalBytes)} · ${Number.isFinite(host.diskUsedPercent) ? `${host.diskUsedPercent}%` : '—'}`
+      : '—';
+    const metrics = [
+      [tr('Host CPU'), Number.isFinite(host.cpuPercent) ? `${host.cpuPercent}% · ${host.cpuCores || 0} cores` : '—'],
+      [tr('Host memory'), `${formatDiagnosticBytes(Number(host.memoryTotalBytes) - Number(host.memoryFreeBytes))} / ${formatDiagnosticBytes(host.memoryTotalBytes)} · ${Number.isFinite(host.memoryUsedPercent) ? `${host.memoryUsedPercent}%` : '—'}`],
+      [tr('Qtiler disk'), diskMetric],
+      [tr('Node processes'), String(processInfo.nodeProcesses || 0)],
+      [tr('Node CPU'), Number.isFinite(processInfo.cpuPercent) ? `${processInfo.cpuPercent}%` : '—'],
+      [tr('Node memory'), formatDiagnosticBytes(processInfo.rssBytes)],
+      [tr('QGIS workers (all processes)'), `${qgis.busyWorkers || 0} / ${qgis.workers || 0}`],
+      [tr('Layer extractions (all processes)'), String(processInfo.activeChildProcesses || 0)],
+      [tr('Worker queue'), `${qgis.queuedTasks || 0} / ${qgis.queueLimit || 0}`],
+      [tr('WMS tile cache'), `${cache.wmsTileCacheHits || 0} ${tr('hits')} · ${cache.wmsTileCacheMisses || 0} ${tr('misses')} · ${cache.wmsTileCacheCoalesced || 0} ${tr('coalesced')}`]
+    ];
+    projectDiagnosticsMetrics.replaceChildren();
+    metrics.forEach(([labelText, valueText]) => {
+      const item = document.createElement('div');
+      item.className = 'project-diagnostics-metric';
+      const label = document.createElement('strong');
+      label.textContent = labelText;
+      const value = document.createElement('span');
+      value.textContent = valueText;
+      item.append(label, value);
+      projectDiagnosticsMetrics.appendChild(item);
+    });
+
+    projectDiagnosticsProcesses.replaceChildren();
+    const processHeading = document.createElement('h3');
+    processHeading.textContent = tr('Process breakdown');
+    projectDiagnosticsProcesses.appendChild(processHeading);
+    (Array.isArray(processInfo.processes) ? processInfo.processes : []).forEach((processRow) => {
+      const row = document.createElement('div');
+      row.className = 'project-diagnostics-process-row';
+      const identity = document.createElement('strong');
+      identity.textContent = `PID ${processRow.pid}`;
+      const state = document.createElement('span');
+      const qgisWorkers = (processRow.workerDetails || []).map((worker) => `${worker.pid || '?'}${worker.busy ? `:${worker.action || 'busy'}` : ''}`).join(', ') || '—';
+      state.textContent = `${tr('Node CPU')}: ${Number.isFinite(processRow.cpuPercent) ? `${processRow.cpuPercent}%` : '—'} · ${tr('Node memory')}: ${formatDiagnosticBytes(processRow.rssBytes)} · ${tr('QGIS workers')}: ${processRow.busyWorkers || 0}/${processRow.workers || 0} (${qgisWorkers}) · ${tr('Worker queue')}: ${processRow.queuedTasks || 0}/${processRow.queueLimit || 0} · ${tr('Layer extractions')}: ${processRow.activeChildProcesses || 0}`;
+      row.append(identity, state);
+      projectDiagnosticsProcesses.appendChild(row);
+    });
+
+    let eventBufferChanged = payload?.replaceEvents === true;
+    if (eventBufferChanged) projectDiagnosticsEventById.clear();
+    if (Array.isArray(payload?.events)) {
+      payload.events.forEach((event) => {
+        if (event?.id && !projectDiagnosticsEventById.has(event.id)) {
+          projectDiagnosticsEventById.set(event.id, event);
+          eventBufferChanged = true;
+        }
+      });
+    }
+    while (projectDiagnosticsEventById.size > 400) {
+      projectDiagnosticsEventById.delete(projectDiagnosticsEventById.keys().next().value);
+      eventBufferChanged = true;
+    }
+    if (!eventBufferChanged) return;
+    const events = [...projectDiagnosticsEventById.values()]
+      .sort((left, right) => String(left.at || '').localeCompare(String(right.at || '')))
+      .slice(-200)
+      .reverse();
+    projectDiagnosticsEvents.replaceChildren();
+    if (!events.length) {
+      const empty = document.createElement('p');
+      empty.className = 'meta';
+      empty.textContent = tr('No recent diagnostic events');
+      projectDiagnosticsEvents.appendChild(empty);
+      return;
+    }
+    events.forEach((event) => {
+      const row = document.createElement('article');
+      row.className = 'project-diagnostic-event';
+      row.dataset.level = String(event.level || 'info');
+      const time = document.createElement('time');
+      time.dateTime = String(event.at || '');
+      time.textContent = event.at ? new Date(event.at).toLocaleString() : '—';
+      const area = document.createElement('span');
+      area.className = 'diagnostic-area';
+      area.textContent = `${String(event.level || 'info').toUpperCase()} · ${String(event.area || 'system')}`;
+      const message = document.createElement('span');
+      message.className = 'diagnostic-message';
+      message.textContent = String(event.message || '');
+      row.append(time, area, message);
+      if (event.details && Object.keys(event.details).length) {
+        const details = document.createElement('pre');
+        details.textContent = JSON.stringify(event.details, null, 2);
+        row.appendChild(details);
+      }
+      projectDiagnosticsEvents.appendChild(row);
+    });
+  };
+  const stopProjectDiagnostics = () => {
+    if (!projectDiagnosticsSource) return;
+    projectDiagnosticsSource.close();
+    projectDiagnosticsSource = null;
+  };
+  const renderOptimizationPreview = () => {
+    if (!optimizationProfiles || !optimizationProfileSelect || !optimizationPreview) return;
+    const selected = optimizationProfiles.profiles?.[optimizationProfileSelect.value];
+    if (!selected) return;
+    const current = optimizationProfiles.current || {};
+    const memoryGiB = Number(optimizationProfiles.host?.memoryTotalBytes || 0) / (1024 ** 3);
+    optimizationPreview.textContent = [
+      tr('Hardware detected: {cores} cores, {memory} GB RAM.', {
+        cores: optimizationProfiles.host?.cpuCores || 0,
+        memory: memoryGiB.toFixed(1)
+      }),
+      tr('Current settings: {nodeWorkers} Node processes × {totalWorkers} QGIS workers; queue {queue}.', {
+        nodeWorkers: current.workerCount || 0,
+        totalWorkers: current.totalQgisWorkers || 0,
+        queue: current.maxQueue || 0
+      }),
+      tr('Estimated profile: {nodeWorkers} Node processes × {poolSize} QGIS workers = {totalWorkers} workers; queue {queue}; cache jobs {tileJobs}.', {
+        nodeWorkers: selected.workerCount,
+        poolSize: selected.poolSize,
+        totalWorkers: selected.totalQgisWorkers,
+        queue: selected.maxQueue,
+        tileJobs: selected.concurrentTileJobs
+      }),
+      tr('Memory planning estimate: reserve 25% for Windows and other services; allow about {memory} GB per QGIS worker.', {
+        memory: selected.memoryBudgetPerQgisWorkerGiB
+      })
+    ].join(' ');
+  };
+  const loadOptimizationProfiles = async ({ force = false } = {}) => {
+    if (optimizationProfiles && !force) {
+      renderOptimizationPreview();
+      return optimizationProfiles;
+    }
+    if (optimizationLoadPromise && !force) return optimizationLoadPromise;
+    optimizationLoadPromise = (async () => {
+      if (optimizationStatus) optimizationStatus.textContent = tr('Loading optimization preview…');
+      const response = await fetch('/admin/optimization/profiles', { credentials: 'same-origin', cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+      optimizationProfiles = payload;
+      if (optimizationProfileSelect) {
+        const current = payload.current || {};
+        const matching = Object.values(payload.profiles || {}).find((profile) =>
+          profile.workerCount === current.workerCount
+          && profile.poolSize === current.poolSize
+          && profile.maxQueue === current.maxQueue
+          && profile.concurrentTileJobs === current.concurrentTileJobs);
+        if (matching) optimizationProfileSelect.value = matching.id;
+        else if (!optimizationProfileSelect.value) optimizationProfileSelect.value = 'medium';
+      }
+      renderOptimizationPreview();
+      if (optimizationStatus) optimizationStatus.textContent = '';
+      return payload;
+    })().catch((error) => {
+      if (optimizationStatus) optimizationStatus.textContent = tr('Could not load optimization preview: {error}', { error: error?.message || error });
+      throw error;
+    }).finally(() => { optimizationLoadPromise = null; });
+    return optimizationLoadPromise;
+  };
+  optimizationProfileSelect?.addEventListener('change', renderOptimizationPreview);
+  optimizationApplyButton?.addEventListener('click', async () => {
+    const profile = String(optimizationProfileSelect?.value || '').trim();
+    if (!profile || !optimizationProfiles?.profiles?.[profile]) return;
+    const selected = optimizationProfiles.profiles[profile];
+    const confirmation = tr('Apply profile {profile}: {nodes} Node processes and {workers} QGIS workers? This writes a backup of .env.', {
+      profile: tr(profile === 'low' ? 'Low' : profile === 'medium' ? 'Medium' : 'Aggressive'),
+      nodes: selected.workerCount,
+      workers: selected.totalQgisWorkers
+    });
+    if (!window.confirm(confirmation)) return;
+    optimizationApplyButton.disabled = true;
+    if (optimizationStatus) optimizationStatus.textContent = tr('Saving optimization profile…');
+    try {
+      const response = await fetch('/admin/optimization/apply', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+      optimizationProfiles = { ...optimizationProfiles, profiles: { ...optimizationProfiles.profiles, [profile]: payload.settings } };
+      renderOptimizationPreview();
+      if (optimizationRestartButton) optimizationRestartButton.hidden = !payload.restartRequired;
+      if (optimizationStatus) optimizationStatus.textContent = payload.restartRequired
+        ? tr('Profile saved to .env. Restart Qtiler to apply it.')
+        : tr('The selected settings are already active.');
+    } catch (error) {
+      if (optimizationStatus) optimizationStatus.textContent = tr('Could not apply optimization profile: {error}', { error: error?.message || error });
+    } finally {
+      optimizationApplyButton.disabled = false;
+    }
+  });
+  optimizationRestartButton?.addEventListener('click', async () => {
+    if (!window.confirm(tr('Restart the Qtiler Windows service now? Active maps and uploads will disconnect briefly.'))) return;
+    optimizationRestartButton.disabled = true;
+    if (optimizationStatus) optimizationStatus.textContent = tr('Checking Windows service…');
+    try {
+      const response = await fetch('/admin/optimization/restart-service', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (payload?.error === 'service_not_found') throw new Error(tr('No Qtiler Windows service was found; restart Qtiler manually.'));
+        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      }
+      if (optimizationStatus) optimizationStatus.textContent = tr('Restart requested for service {service}.', { service: payload.serviceName || 'Qtiler' });
+    } catch (error) {
+      if (optimizationStatus) optimizationStatus.textContent = error?.message || String(error);
+      optimizationRestartButton.disabled = false;
+    }
+  });
+  const startProjectDiagnostics = () => {
+    if (!projectDiagnosticsConnection || projectDiagnosticsSource || projectDiagnosticsTab?.hidden) return;
+    loadOptimizationProfiles().catch(() => {});
+    projectDiagnosticsConnection.textContent = tr('Waiting for diagnostics');
+    projectDiagnosticsSource = new EventSource('/admin/project-diagnostics/stream');
+    projectDiagnosticsSource.onopen = () => {
+      if (projectDiagnosticsConnection) projectDiagnosticsConnection.textContent = tr('Connected to live diagnostics');
+    };
+    projectDiagnosticsSource.onmessage = (event) => {
+      try {
+        renderProjectDiagnostics(JSON.parse(event.data));
+      } catch (error) {
+        console.warn('Invalid project diagnostics event', error);
+      }
+    };
+    projectDiagnosticsSource.onerror = () => {
+      if (projectDiagnosticsConnection) projectDiagnosticsConnection.textContent = tr('Diagnostics connection lost; reconnecting…');
+    };
+  };
+  const setProjectAdminTab = (diagnosticsActive) => {
+    if (!projectUploadTab || !projectDiagnosticsTab || !projectUploadPanel || !projectDiagnosticsPanel) return;
+    const showDiagnostics = diagnosticsActive && !projectDiagnosticsTab.hidden;
+    projectUploadTab.classList.toggle('is-active', !showDiagnostics);
+    projectDiagnosticsTab.classList.toggle('is-active', showDiagnostics);
+    projectUploadTab.setAttribute('aria-selected', String(!showDiagnostics));
+    projectDiagnosticsTab.setAttribute('aria-selected', String(showDiagnostics));
+    projectUploadPanel.hidden = showDiagnostics;
+    projectDiagnosticsPanel.hidden = !showDiagnostics;
+    if (showDiagnostics) startProjectDiagnostics();
+    else stopProjectDiagnostics();
+  };
+  projectUploadTab?.addEventListener('click', () => setProjectAdminTab(false));
+  projectDiagnosticsTab?.addEventListener('click', () => setProjectAdminTab(true));
+  document.getElementById('project_diagnostics_reconnect')?.addEventListener('click', () => {
+    stopProjectDiagnostics();
+    startProjectDiagnostics();
+  });
   const languageSelect = document.getElementById('language_selector');
   if (window.qtilerLang?.subscribe) {
     window.qtilerLang.subscribe((lang) => {
@@ -4556,6 +4831,10 @@
           const reloadBtn = document.getElementById('reload');
           if (uploadBtn) uploadBtn.style.display = isAdmin ? '' : 'none';
           if (reloadBtn) reloadBtn.style.display = isAdmin ? '' : 'none';
+          if (projectDiagnosticsTab) {
+            projectDiagnosticsTab.hidden = !isAdmin;
+            if (!isAdmin) setProjectAdminTab(false);
+          }
 
           if (projects.length === 0) {
             layersEl.innerHTML = '<div>' + tr('No projects in qgisprojects/') + '</div>';
@@ -5269,27 +5548,24 @@
         const originalDisabled = btn.disabled;
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = tr('Uploading…');
-        const ext = String(file.name || '').toLowerCase().split('.').pop();
-        if (ext === 'zip') {
-          showStatus(tr('Uploading bundle (.zip): {file}', { file: file.name }) + ' · ' + tr('Upload bundle requirement'));
-        } else {
-          showStatus(tr('Uploading project: {file}', { file: file.name }));
-        }
+        let uploadOptions = {};
         try {
+          showStatus(tr('Validating project with QGIS…'));
           const submitUpload = async (options = null) => {
+            const effectiveOptions = { ...uploadOptions, ...(options || {}) };
             const form = new FormData();
             form.append('project', file, file.name);
-            if (options && typeof options === 'object') {
-              if (Object.prototype.hasOwnProperty.call(options, 'replaceExisting')) {
-                form.append('replaceExisting', options.replaceExisting ? '1' : '0');
-              }
-              if (Object.prototype.hasOwnProperty.call(options, 'keepExistingConfig')) {
-                form.append('keepExistingConfig', options.keepExistingConfig ? '1' : '0');
-              }
-              if (Object.prototype.hasOwnProperty.call(options, 'keepExistingCache')) {
-                form.append('keepExistingCache', options.keepExistingCache ? '1' : '0');
-              }
+            if (Object.prototype.hasOwnProperty.call(effectiveOptions, 'replaceExisting')) {
+              form.append('replaceExisting', effectiveOptions.replaceExisting ? '1' : '0');
+            }
+            if (Object.prototype.hasOwnProperty.call(effectiveOptions, 'keepExistingConfig')) {
+              form.append('keepExistingConfig', effectiveOptions.keepExistingConfig ? '1' : '0');
+            }
+            if (Object.prototype.hasOwnProperty.call(effectiveOptions, 'keepExistingCache')) {
+              form.append('keepExistingCache', effectiveOptions.keepExistingCache ? '1' : '0');
+            }
+            if (effectiveOptions.allowInvalidLayers) {
+              form.append('allowInvalidLayers', '1');
             }
             const response = await fetch('/projects', { method: 'POST', body: form });
             const payload = await response.json().catch(() => null);
@@ -5298,33 +5574,67 @@
 
           let { response: res, payload: data } = await submitUpload();
 
+          if (!res.ok && data?.error === 'project_invalid_layers' && data?.requiresConfirmation) {
+            const invalidLayers = Array.isArray(data?.summary?.invalidLayers) ? data.summary.invalidLayers : [];
+            const invalidLayerCount = Number(data?.summary?.invalidLayerCount || invalidLayers.length);
+            const layerNames = invalidLayers.slice(0, 10).map((layer) => layer.provider ? `${layer.name} (${layer.provider})` : layer.name).filter(Boolean).join(', ')
+              + (invalidLayerCount > 10 ? ` … (+${invalidLayerCount - 10})` : '');
+            const confirmed = window.confirm(tr('Some layers are invalid: {layers}. Continue anyway?', {
+              layers: layerNames || String(invalidLayerCount)
+            }));
+            if (!confirmed) {
+              showStatus(tr('Project upload cancelled because it contains invalid layers.'), true);
+              return;
+            }
+            uploadOptions = { ...uploadOptions, allowInvalidLayers: true };
+            ({ response: res, payload: data } = await submitUpload());
+          }
+
           if (!res.ok && res.status === 409 && (data?.code === 'PROJECT_ALREADY_EXISTS' || data?.error === 'project_already_exists')) {
             const decision = await showProjectReplaceDialog(data || {});
             if (!decision) {
               showStatus(tr('Upload cancelled by user.'));
               return;
             }
-
-            ({ response: res, payload: data } = await submitUpload(decision));
+            uploadOptions = { ...uploadOptions, ...decision };
+            ({ response: res, payload: data } = await submitUpload());
           }
 
           if (!res.ok) {
-            let detail = data?.error || data?.details || res.statusText;
+            let detail = data?.message || data?.error || data?.details || res.statusText;
             if (data?.error === 'zip_missing_project') {
-              detail = 'ZIP must contain exactly one QGIS project (.qgz or .qgs).';
+              detail = tr('ZIP must contain exactly one QGIS project (.qgz or .qgs).');
             } else if (data?.error === 'zip_multiple_projects') {
-              detail = 'ZIP contains multiple QGIS projects (.qgz/.qgs). Keep only one.';
+              detail = tr('ZIP contains multiple QGIS projects (.qgz/.qgs). Keep only one.');
+            } else if (data?.error === 'zip_too_many_entries') {
+              detail = tr('ZIP has too many files.');
+            } else if (data?.error === 'zip_extract_too_large') {
+              detail = tr('ZIP expands beyond the configured size limit.');
+            } else if (data?.error === 'zip_entry_too_large') {
+              detail = tr('A ZIP file entry exceeds the configured size limit.');
+            } else if (data?.error === 'zip_unsafe_entry_path') {
+              detail = tr('ZIP contains an unsafe path.');
+            } else if (data?.error === 'project_has_no_layers') {
+              detail = tr('QGIS found no layers or map themes in this project.');
+            } else if (data?.error === 'project_validation_failed') {
+              detail = tr('Project validation failed: {message}', { message: data?.message || data?.code || 'QGIS error' });
             } else if (data?.error === 'project_already_exists') {
               detail = data?.message || 'Project already exists.';
             }
-            showStatus(tr('Upload failed: {error}', { error: detail }), true);
+            showStatus(tr('Project validation failed: {message}', { message: detail }), true, 10000);
             return;
           }
+
           const projectId = data?.id || null;
           if (projectId) {
             extentStates.delete(projectId);
           }
-          showStatus(tr('Project uploaded: {project}', { project: projectId || file.name }));
+          const invalidCount = Number(data?.validation?.invalidLayerCount || 0);
+          if (invalidCount > 0) {
+            showStatus(tr('Project uploaded: {project}', { project: projectId || file.name }) + ` · ${invalidCount} invalid layer(s)`, true, 10000);
+          } else {
+            showStatus(tr('Project uploaded: {project}', { project: projectId || file.name }));
+          }
           try {
             if (projectId) {
               await ensureProjectBlock(projectId, {
@@ -5346,7 +5656,7 @@
             }
           }
         } catch (err) {
-          showStatus(tr('Network error: {error}', { error: err }), true);
+          showStatus(tr('Network error: {error}', { error: err?.message || err }), true);
         } finally {
           btn.disabled = originalDisabled;
           btn.textContent = originalText;

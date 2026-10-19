@@ -471,6 +471,7 @@ for layer in project.mapLayers().values():
     layer_payload = {
         "name": layer.name(),
         "id": layer.id(),
+        "valid": bool(layer.isValid()),
         "crs": layer_crs.authid(),
         "extent": extent_list,
         "extent_wgs84": [

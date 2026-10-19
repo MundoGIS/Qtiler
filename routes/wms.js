@@ -12,6 +12,7 @@ import express from "express";
 import proj4 from "proj4";
 import sharp from "sharp";
 import { normalizePublishedCrs } from '../lib/publishedCrs.js';
+import { incrementProjectDiagnosticCounter, recordProjectDiagnostic } from '../lib/projectDiagnostics.js';
 
 // Register proj4 presets from config if available so server-side reprojection works
 try {
@@ -49,7 +50,7 @@ const getQueryCI = (req, key) => {
 const getRequestParams = (req) => ({ ...(req?.body || {}), ...(req?.query || {}) });
 
 // Return an HTTP status code appropriate for a renderTile error.
-const renderErrStatus = (err) => err?.code === 'QUEUE_FULL' ? 503 : 500;
+const renderErrStatus = (err) => ['QUEUE_FULL', 'WMS_TILE_WAIT_TIMEOUT'].includes(err?.code) ? 503 : 500;
 
 // 1x1 transparent PNG used as instant placeholder while a real legend is
 // rendered in the background. Avoids freezing QWC2 LayerTree when many
@@ -62,6 +63,89 @@ const PLACEHOLDER_PNG = Buffer.from(
 // Tracks legend keys currently being rendered so duplicate concurrent
 // requests don't all enqueue the same job.
 const legendInFlight = new Set();
+const wmsTileInFlight = new Map();
+const WMS_TILE_LOCK_WAIT_MS = (() => {
+  const configured = Number.parseInt(process.env.QTILER_WMS_TILE_LOCK_WAIT_MS || '240000', 10);
+  return Number.isFinite(configured) ? Math.max(30000, Math.min(configured, 240000)) : 240000;
+})();
+const WMS_TILE_LOCK_STALE_MS = 5 * 60 * 1000;
+
+const fileExists = async (filePath) => fs.promises.access(filePath).then(() => true, () => false);
+const isValidWmsCacheFile = async (filePath) => {
+  let handle;
+  try {
+    handle = await fs.promises.open(filePath, 'r');
+    const stat = await handle.stat();
+    if (stat.size < 8) return false;
+    const header = Buffer.alloc(8);
+    const { bytesRead } = await handle.read(header, 0, header.length, 0);
+    if (bytesRead < 3) return false;
+    if (/\.png$/i.test(filePath)) return header.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  } catch {
+    return false;
+  } finally {
+    try { await handle?.close(); } catch {}
+  }
+};
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const runWithSharedWmsTileLock = async (cacheFilePath, render) => {
+  const lockPath = `${cacheFilePath}.lock`;
+  const deadline = Date.now() + WMS_TILE_LOCK_WAIT_MS;
+  let waited = false;
+  let lockHandle = null;
+  while (!lockHandle) {
+    if (await isValidWmsCacheFile(cacheFilePath)) return { rendered: false, coalesced: waited };
+    try {
+      lockHandle = await fs.promises.open(lockPath, 'wx');
+      await lockHandle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }), 'utf8');
+    } catch (error) {
+      if (lockHandle) {
+        await lockHandle.close().catch(() => {});
+        lockHandle = null;
+      }
+      if (error?.code !== 'EEXIST') throw error;
+      waited = true;
+      let stale = false;
+      try {
+        const [stat, raw] = await Promise.all([
+          fs.promises.stat(lockPath),
+          fs.promises.readFile(lockPath, 'utf8').catch(() => '')
+        ]);
+        let ownerPid = 0;
+        try { ownerPid = Number(JSON.parse(raw)?.pid) || 0; } catch {}
+        let ownerAlive = false;
+        if (ownerPid > 0) {
+          try { process.kill(ownerPid, 0); ownerAlive = true; }
+          catch (probeError) { ownerAlive = probeError?.code === 'EPERM'; }
+        }
+        stale = ownerPid > 0 ? !ownerAlive : Date.now() - stat.mtimeMs > WMS_TILE_LOCK_STALE_MS;
+      } catch (statError) {
+        if (statError?.code === 'ENOENT') continue;
+      }
+      if (stale) {
+        await fs.promises.rm(lockPath, { force: true }).catch(() => {});
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw Object.assign(new Error('WMS tile render wait timed out'), { code: 'WMS_TILE_WAIT_TIMEOUT' });
+      }
+      await delay(50);
+    }
+  }
+
+  try {
+    if (!(await isValidWmsCacheFile(cacheFilePath))) await render();
+    if (!(await isValidWmsCacheFile(cacheFilePath))) {
+      throw Object.assign(new Error('WMS renderer returned an invalid or incomplete image'), { code: 'WMS_TILE_INVALID_IMAGE' });
+    }
+    return { rendered: true, coalesced: waited };
+  } finally {
+    await lockHandle.close().catch(() => {});
+    await fs.promises.rm(lockPath, { force: true }).catch(() => {});
+  }
+};
 
 const toBool = (value, fallback = false) => {
   if (value == null) return fallback;
@@ -772,9 +856,10 @@ export const registerWmsRoutes = ({
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
   const renderWithRetry = async (params) => {
+    const task = params?.action ? params : { ...params, action: 'wms_render' };
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await tileRendererPool.renderTile(params);
+        return await tileRendererPool.renderTile(task);
       } catch (err) {
         if (err.code !== 'QUEUE_FULL' || attempt === 2) throw err;
         await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
@@ -1221,6 +1306,9 @@ export const registerWmsRoutes = ({
       const stylesRaw = String(getQueryCI(req, 'STYLES') || '').trim();
 
       const transparent = toBool(getQueryCI(req, "TRANSPARENT"), true);
+      const requestPriority = String(getQueryCI(req, 'QTILER_PRIORITY') || '').trim().toLowerCase() === 'background'
+        ? 'background'
+        : 'normal';
 
       let layers = parseCsv(getQueryCI(req, "LAYERS"));
       let mapTheme = String(getQueryCI(req, "MAP_THEME") || getQueryCI(req, "THEME") || "").trim();
@@ -1321,35 +1409,53 @@ export const registerWmsRoutes = ({
 
       if (cacheTarget) {
         try {
-          if (fs.existsSync(cacheTarget.filePath)) {
+          if (await isValidWmsCacheFile(cacheTarget.filePath)) {
+            incrementProjectDiagnosticCounter('wmsTileCacheHits');
             res.setHeader('Cache-Control', 'public, max-age=86400');
             res.type(cacheTarget.contentType);
             res.sendFile(cacheTarget.filePath);
             return;
           }
-
-          // Note: old WMS cache lived in cache/_wms_tiles/<project>/... with hashed filenames.
-          // We do not attempt to reuse those files automatically.
-
-          await fs.promises.mkdir(path.dirname(cacheTarget.filePath), { recursive: true });
-          const result = await renderWithRetry({
-            project_path: project.file,
-            output_file: cacheTarget.filePath,
-            bbox,
-            width,
-            height,
-            crs,
-            layers,
-            theme: mapTheme || undefined,
-            transparent,
-            format
-          });
-
-          if (!result || result.status !== 'success') {
-            const msg = result?.message || result?.error || 'render_failed';
-            res.status(500).type('application/xml').send(wmsExceptionXml(String(msg), { code: 'NoApplicableCode' }));
-            return;
+          if (await fileExists(cacheTarget.filePath)) {
+            recordProjectDiagnostic('warn', 'wms-cache', 'Invalid cached WMS image will be regenerated', {
+              projectId,
+              path: path.relative(cacheDir, cacheTarget.filePath)
+            });
           }
+
+          let renderPromise = wmsTileInFlight.get(cacheTarget.filePath);
+          if (renderPromise) {
+            incrementProjectDiagnosticCounter('wmsTileCacheCoalesced');
+          } else {
+            renderPromise = (async () => {
+              await fs.promises.mkdir(path.dirname(cacheTarget.filePath), { recursive: true });
+              const lockResult = await runWithSharedWmsTileLock(cacheTarget.filePath, async () => {
+                const result = await renderWithRetry({
+                  project_path: project.file,
+                  output_file: cacheTarget.filePath,
+                  bbox,
+                  width,
+                  height,
+                  crs,
+                  layers,
+                  theme: mapTheme || undefined,
+                  transparent,
+                  format,
+                  priority: requestPriority
+                });
+                if (!result || result.status !== 'success') {
+                  throw Object.assign(new Error(result?.message || result?.error || 'render_failed'), { code: result?.code || 'RENDER_FAILED' });
+                }
+              });
+              if (lockResult.rendered) incrementProjectDiagnosticCounter('wmsTileCacheMisses');
+              if (lockResult.coalesced) incrementProjectDiagnosticCounter('wmsTileCacheCoalesced');
+            })();
+            wmsTileInFlight.set(cacheTarget.filePath, renderPromise);
+            void renderPromise.finally(() => {
+              if (wmsTileInFlight.get(cacheTarget.filePath) === renderPromise) wmsTileInFlight.delete(cacheTarget.filePath);
+            }).catch(() => {});
+          }
+          await renderPromise;
 
           res.setHeader('Cache-Control', 'public, max-age=86400');
           res.type(cacheTarget.contentType);
@@ -1376,7 +1482,8 @@ export const registerWmsRoutes = ({
           layers,
           theme: mapTheme || undefined,
           transparent,
-          format
+          format,
+          priority: requestPriority
         };
 
         const result = await renderWithRetry(renderParams);

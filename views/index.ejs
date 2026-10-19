@@ -32,6 +32,11 @@
         </div>
         <div class="main-layout">
           <section class="content-panel">
+            <div class="project-admin-tabs" role="tablist" aria-label="Project administration">
+              <button id="project_upload_tab" class="project-admin-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="project_upload_panel" data-i18n="Projects">Projects</button>
+              <button id="project_diagnostics_tab" class="project-admin-tab" type="button" role="tab" aria-selected="false" aria-controls="project_diagnostics_panel" data-i18n="Live diagnostics" hidden>Live diagnostics</button>
+            </div>
+            <div id="project_upload_panel" class="project-admin-panel" role="tabpanel" aria-labelledby="project_upload_tab">
             <div id="project_upload_toolbar" class="project-upload-card" role="group" aria-label="Project actions">
               <div class="control-actions">
                 <button id="upload_project_btn" class="btn btn-primary" data-i18n="Upload project">Upload project</button>
@@ -74,6 +79,42 @@
                 </tbody>
               </table>
             </div>
+            </div>
+            <section id="project_diagnostics_panel" class="project-diagnostics-panel" role="tabpanel" aria-labelledby="project_diagnostics_tab" hidden>
+              <div class="project-diagnostics-heading">
+                <div>
+                  <h2 data-i18n="Live diagnostics">Live diagnostics</h2>
+                  <p class="meta" data-i18n="Live diagnostics hint">Host resources, QGIS worker queue and recent project errors.</p>
+                </div>
+                <button id="project_diagnostics_reconnect" class="btn btn-secondary" type="button" data-i18n="Reconnect">Reconnect</button>
+              </div>
+              <div id="project_diagnostics_connection" class="project-diagnostics-connection meta" aria-live="polite" data-i18n="Waiting for diagnostics">Waiting for diagnostics</div>
+              <section class="optimization-panel" aria-labelledby="optimization_heading">
+                <div class="optimization-heading">
+                  <div>
+                    <h3 id="optimization_heading" data-i18n="Server optimization">Server optimization</h3>
+                    <p class="meta" data-i18n="Optimization hint">Recommendations use this server’s CPU/RAM and keep a resource reserve.</p>
+                  </div>
+                  <label class="optimization-profile-field">
+                    <span data-i18n="Profile">Profile</span>
+                    <select id="optimization_profile">
+                      <option value="low" data-i18n="Low">Low</option>
+                      <option value="medium" data-i18n="Medium">Medium</option>
+                      <option value="aggressive" data-i18n="Aggressive">Aggressive</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="optimization_preview" class="optimization-preview meta" aria-live="polite"></div>
+                <div class="optimization-actions">
+                  <button id="optimization_apply" class="btn btn-primary" type="button" data-i18n="Apply profile">Apply profile</button>
+                  <button id="optimization_restart" class="btn btn-secondary" type="button" data-i18n="Restart Windows service" hidden>Restart Windows service</button>
+                </div>
+                <div id="optimization_status" class="optimization-status meta" aria-live="polite"></div>
+              </section>
+              <div id="project_diagnostics_metrics" class="project-diagnostics-metrics" aria-live="polite"></div>
+              <div id="project_diagnostics_processes" class="project-diagnostics-processes"></div>
+              <div id="project_diagnostics_events" class="project-diagnostics-events" role="log" aria-live="off" aria-relevant="additions"></div>
+            </section>
           </section>
         </div>
       </main>

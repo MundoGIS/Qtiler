@@ -418,6 +418,211 @@ a:focus {
   box-shadow: var(--shadow);
 }
 
+.project-admin-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.project-admin-tab {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-admin-tab.is-active {
+  border-bottom-color: var(--primary);
+  color: var(--text);
+}
+
+.project-admin-tab:focus-visible,
+.project-diagnostics-panel button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.project-admin-panel[hidden],
+.project-diagnostics-panel[hidden] {
+  display: none;
+}
+
+.project-diagnostics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.project-diagnostics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-diagnostics-heading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.project-diagnostics-heading p {
+  margin: 4px 0 0;
+}
+
+.project-diagnostics-connection {
+  min-height: 1.4em;
+}
+
+.optimization-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.optimization-heading,
+.optimization-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.optimization-heading h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.optimization-heading p { margin: 3px 0 0; }
+
+.optimization-profile-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.optimization-profile-field select {
+  min-width: 150px;
+  min-height: 38px;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  color: var(--fg);
+  background: var(--card);
+}
+
+.optimization-preview { line-height: 1.5; }
+.optimization-status { min-height: 1.2em; }
+
+.project-diagnostics-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 8px;
+}
+
+.project-diagnostics-metric {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.project-diagnostics-metric strong,
+.project-diagnostics-metric span {
+  display: block;
+}
+
+.project-diagnostics-metric strong {
+  margin-bottom: 3px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.project-diagnostics-processes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-diagnostics-processes h3 {
+  margin: 4px 0 2px;
+  font-size: 0.95rem;
+}
+
+.project-diagnostics-process-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.82rem;
+}
+
+.project-diagnostics-process-row span { overflow-wrap: anywhere; color: var(--muted); }
+
+.project-diagnostics-events {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: min(56vh, 620px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.project-diagnostic-event {
+  display: grid;
+  grid-template-columns: 148px minmax(100px, 0.7fr) minmax(180px, 2fr);
+  gap: 8px 12px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--border);
+  background: var(--bg);
+  font-size: 0.84rem;
+}
+
+.project-diagnostic-event[data-level="warn"] { border-left-color: #d89b22; }
+.project-diagnostic-event[data-level="error"] { border-left-color: var(--danger); }
+.project-diagnostic-event time,
+.project-diagnostic-event .diagnostic-area { color: var(--muted); }
+.project-diagnostic-event .diagnostic-message { overflow-wrap: anywhere; }
+.project-diagnostic-event { color: var(--fg); }
+.project-diagnostic-event pre {
+  grid-column: 1 / -1;
+  max-height: 150px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font: 0.78rem/1.4 Consolas, monospace;
+}
+
+@media (max-width: 640px) {
+  .project-diagnostics-heading { align-items: flex-start; }
+  .project-diagnostics-process-row { grid-template-columns: minmax(0, 1fr); }
+  .project-diagnostic-event { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .project-diagnostic-event pre { grid-column: 1; }
+}
+
 .project-settings-card {
   padding: 14px 16px;
   background: var(--card);

@@ -227,6 +227,127 @@ assert.ok(Math.abs(converted[0].labels[0].maxResolution - 14) < 1e-9);
 assert.ok(Math.abs(converted[0].maxResolution - 28) < 1e-9);
 console.log('Hajk per-rule label visibility, styling and round-trip checks passed.');
 
+class SymbolOption {
+  constructor(options) { this.options = options; }
+  getDeclutterMode() { return this.options.declutterMode; }
+  getSize() { return this.dimensions || null; }
+  setScale(scale) { this.options.scale = scale; }
+  listenImageChange(listener) { this.onLoad = listener; }
+}
+class SymbolStyle {
+  constructor(options) { this.options = options; }
+  getImage() { return this.options.image; }
+  getText() { return this.options.text; }
+  getStroke() { return this.options.stroke; }
+  setImage(image) { this.options.image = image; }
+  clone() { return new SymbolStyle({ ...this.options }); }
+}
+const symbolWindow = {
+  ol: { style: { Style: SymbolStyle, Fill: SymbolOption, Stroke: SymbolOption, Circle: SymbolOption, RegularShape: SymbolOption, Icon: SymbolOption, Text: SymbolOption } },
+  addEventListener() {}, setTimeout() {}
+};
+vm.runInNewContext(runtime, { window: symbolWindow, document: { body: null }, console });
+const realPointFeature = { ...labelFeature('any'), getGeometry: () => ({ getType: () => 'Point' }) };
+const legacyTriangle = new SymbolStyle({ image: new SymbolOption({ points: 3, radius: 8, declutterMode: 'none' }) });
+assert.equal(symbolWindow.qtilerHajkRuleLabels(realPointFeature, 1, [legacyTriangle], [{ hasStroke: true, strokeWidth: 0.5 }])[0], legacyTriangle, 'Old Hajk configs without regularShape metadata must not replace a point triangle with polygon stroke/fill');
+const nativeUntintedIcon = {
+  getScale: () => 0.05, getRotation: () => 0, getRotateWithView: () => false,
+  getSrc: () => '/native-marker.png', getOpacity: () => 1, getColor: () => null,
+  getAnchor: () => [240, 240], getSize: () => [480, 480], getOrigin: () => [0, 0]
+};
+const nativeIconResult = symbolWindow.qtilerHajkRuleLabels(realPointFeature, 1, [new SymbolStyle({ image: nativeUntintedIcon })], [{ icon: '/native-marker.png' }]);
+assert.equal(nativeIconResult[0].getImage().options.color, undefined, 'Cloning a native untinted Hajk icon must omit null color, which crashes OpenLayers color parsing');
+editorContext.currentLayerGeomFamily = 'point';
+for (const shape of [
+  { points: 3, radius: 9, angle: 0 },
+  { points: 4, radius: 9, angle: Math.PI / 4 },
+  { points: 5, radius: 9, radius2: 4, angle: 0 }
+]) {
+  const style = [[{ regularShape: { ...shape, fill: { color: '#22aa44' }, stroke: { color: '#112233', width: 0 } } }]];
+  const restored = editorContext.origoStyleToRules(style);
+  const saved = editorContext.rulesToOrigoStyle(restored);
+  assert.equal(saved[0][0].regularShape.points, shape.points, 'Designer shapes must not become circles when a rule is reopened');
+  assert.equal(saved[0][0].regularShape.radius2, shape.radius2);
+  assert.equal(saved[0][0].regularShape.angle, shape.angle);
+  assert.equal(saved[0][0].regularShape.stroke.width, 0);
+  const runtimeRule = conversionContext.convert(saved)[0];
+  assert.equal(runtimeRule.regularShape.points, shape.points);
+  const rendered = symbolWindow.qtilerHajkRuleLabels(labelFeature('any'), 1, [], [runtimeRule]);
+  assert.equal(rendered[0].getImage().options.points, shape.points);
+  assert.equal(rendered[0].getImage().options.radius2, shape.radius2);
+  assert.equal(rendered[0].getImage().options.radius, 9);
+  assert.equal(rendered[0].getImage().options.stroke.options.width, 0);
+}
+for (const dimensions of [[480, 480], [20000, 10000], [20, 2000]]) {
+  const iconOptions = { src: `test-${dimensions.join('x')}.svg`, scale: 1, pixelSize: 28, opacity: 0.4, anchor: [0.2, 0.9], color: '#ff0000' };
+  const rendered = symbolWindow.qtilerHajkRuleLabels(labelFeature('any'), 1, [], [{ iconOptions, labels: [] }]);
+  const image = rendered[0].getImage();
+  image.dimensions = dimensions;
+  image.onLoad();
+  assert.equal(Math.max(...dimensions) * image.options.scale, 28, 'SVG pixel size must not depend on its intrinsic dimensions');
+  assert.equal(image.options.opacity, 0.4);
+  assert.deepEqual(Array.from(image.options.anchor), [0.2, 0.9]);
+  assert.equal(image.options.color, '#ff0000');
+}
+const lineStyle = symbolWindow.qtilerHajkRuleLabels(labelFeature('any'), 1, [], [{ hasStroke: true, strokeColor: '#abcdef', strokeWidth: 0, lineDash: [8, 6] }])[0];
+const coloredIcon = symbolWindow.qtilerHajkRuleLabels(labelFeature('any'), 1, [], [{ iconOptions: { src: '/qgis-svg-colored/marker.svg?color=%23228855', color: '#228855', pixelSize: 24 } }])[0].getImage();
+assert.equal(coloredIcon.options.color, undefined, 'Already-colored QGIS SVGs must not be tinted again by OpenLayers');
+assert.equal(lineStyle.getStroke().options.width, 0);
+assert.deepEqual(Array.from(lineStyle.getStroke().options.lineDash), [8, 6]);
+
+const legendContext = { svgAttr: String, xmlEscape: String, toAbsoluteHajkIconSrc: source => source, inlineSvgIconForLegend: () => '<svg/>', legendDashAttr: () => '' };
+const legendStart = backend.indexOf('  const hajkLegendSymbolSvg =');
+const legendEnd = backend.indexOf('\n  const toHajkVectorRuleLegendIcon =', legendStart);
+vm.runInNewContext(backend.slice(legendStart, legendEnd) + '\nglobalThis.legend = hajkLegendSymbolSvg;', legendContext);
+for (const [shape, vertices] of [[{ points: 3, radius: 9 }, 3], [{ points: 4, radius: 9, angle: Math.PI / 4 }, 4], [{ points: 5, radius: 9, radius2: 4 }, 10]]) {
+  const symbol = legendContext.legend({ regularShape: { ...shape, fill: { color: '#22aa44' }, stroke: { color: '#112233', width: 0 } } });
+  assert.ok(symbol.body.includes('<polygon'));
+  assert.equal(symbol.body.match(/points="([^"]+)"/)[1].split(' ').length, vertices, 'Legend must draw the same shape as the map');
+  assert.ok(symbol.body.includes('stroke-width="0"'));
+}
+assert.ok(legendContext.legend({ icon: { src: 'marker.svg', opacity: 0.4 } }).body.includes('opacity="0.4"'), 'SVG legend must preserve the map opacity');
+const prepareStart = backend.indexOf('  const prepareInlineSvgContent =');
+const prepareEnd = backend.indexOf('\n  const remoteLegendSvgCache =', prepareStart);
+vm.runInNewContext(backend.slice(prepareStart, prepareEnd) + '\nglobalThis.prepare = prepareInlineSvgContent;', legendContext);
+const qgisSvg = '<svg width="4000" height="2000"><path fill="param(fill) #ff0000" stroke="param(outline) #123456" stroke-width="param(outline-width) 0.5" d="M0 0L4 4"/></svg>';
+assert.ok(!legendContext.prepare(qgisSvg).includes('param('), 'QGIS SVG defaults must render without QGIS parameter syntax');
+assert.ok(legendContext.prepare(qgisSvg, '#00ff00').includes('fill="#00ff00"'), 'Map and legend must use the same SVG color normalization');
+assert.ok(backend.includes("prepareInlineSvgContent(await fs.promises.readFile(filePath, 'utf8'), req.query.color)"), 'Map SVG endpoint must share the legend normalizer');
+console.log('Hajk point shape, SVG pixel sizing and legend parity checks passed.');
+
+const categoryPaints = [];
+let pendingCategoryPaint;
+let categoryImageReady = false;
+const categoryCanvasContext = { clearRect() {}, save() {}, restore() {}, translate() {}, rotate() {}, drawImage(...args) { categoryPaints.push(args); } };
+const categoryImage = {
+  getImageState: () => categoryImageReady ? 2 : 1,
+  getImage: () => ({ width: 40, height: 40 }),
+  getRotation: () => 0,
+  getOpacity: () => 0.6,
+  listenImageChange: listener => { pendingCategoryPaint = listener; },
+  unlistenImageChange() {}, load() {}
+};
+const categorySwatchContext = {
+  getOlStyleApi: () => ({}),
+  createPointStyle: rule => {
+    assert.equal(rule.regularShape.points, 3, 'Category swatches must receive the original regular shape');
+    return { getImage: () => categoryImage };
+  },
+  document: { createElement: tag => ({ tag, style: {}, setAttribute() {}, getContext: () => categoryCanvasContext }) }
+};
+const swatchStart = runtime.indexOf('  function createCategorySwatch(');
+const swatchEnd = runtime.indexOf('  function mountCategoryControls(', swatchStart);
+vm.runInNewContext(runtime.slice(swatchStart, swatchEnd), categorySwatchContext);
+const categoryCanvas = categorySwatchContext.createCategorySwatch({ regularShape: { points: 3, radius: 8 } });
+assert.equal(categoryCanvas.tag, 'canvas', 'Regular shape category symbols must not be replaced by empty spans');
+assert.equal(categoryPaints.length, 0, 'Pending icon images must not be drawn before decoding');
+categoryImageReady = true;
+pendingCategoryPaint();
+assert.equal(categoryPaints.length, 1, 'Category icon must paint when its image finishes loading');
+assert.equal(categoryCanvasContext.globalAlpha, 0.6, 'Category swatch opacity must match the rendered point symbol');
+assert.equal(categoryPaints[0][3], 40, 'Category image must fit inside the swatch without stretching');
+console.log('Hajk category symbol canvas and asynchronous image checks passed.');
+
 async function checkInstalledLabelPatch() {
   const assetRoot = 'data/Qtiler2Hajk/hajk/current/static';
   if (!fs.existsSync(assetRoot)) return;

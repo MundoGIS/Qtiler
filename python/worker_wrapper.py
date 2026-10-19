@@ -248,12 +248,21 @@ def _normalize_srs_name(value):
     return raw
 
 
-def _find_vector_layer_by_typename(project, type_name):
+def _find_vector_layer_by_typename(project, type_name, layer_id=None):
     """Resolve a requested typename to a vector layer.
 
     Supports both legacy (raw layer name) and sanitized typenames.
     """
-    if project is None or not type_name:
+    if project is None:
+        return None
+    if layer_id:
+        try:
+            layer = project.mapLayers().get(str(layer_id).strip())
+            if layer is not None and _is_vector_layer(layer):
+                return layer
+        except Exception:
+            pass
+    if not type_name:
         return None
     requested = str(type_name).strip()
     if not requested:
@@ -952,7 +961,7 @@ def process_task(params):
                 return { 'status': 'error', 'code': 'MissingParameterValue', 'message': 'Missing type_name' }
 
             requested_type = str(type_name).strip()
-            lyr = _find_vector_layer_by_typename(proj, requested_type)
+            lyr = _find_vector_layer_by_typename(proj, requested_type, params.get('layer_id'))
             if lyr is None:
                 return { 'status': 'error', 'code': 'NotFound', 'message': 'Layer not found' }
 

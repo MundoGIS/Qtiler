@@ -11,7 +11,8 @@ import yauzl from "yauzl";
 import AdmZip from "adm-zip";
 import archiver from "archiver";
 import { pipeline } from "stream/promises";
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
+import { aggregateProjectDiagnosticsSnapshots, getProjectDiagnosticsSnapshot, readProjectProcessSnapshots, readRecentProjectDiagnostics, recordProjectDiagnostic } from '../lib/projectDiagnostics.js';
 
 const redactSecrets = (value) => {
   const input = value == null ? "" : String(value);
@@ -94,6 +95,237 @@ export const registerProjectRoutes = ({
   filterPublicProjectLayersForRequest = (_req, _projectId, layers) => layers
 }) => {
 
+  let activeProjectExtractions = 0;
+  const adjustActiveProjectExtractions = (delta) => {
+    activeProjectExtractions = Math.max(0, activeProjectExtractions + delta);
+    app.locals.projectLayerExtractions = activeProjectExtractions;
+  };
+  app.locals.projectLayerExtractions = 0;
+
+  const inspectAndExtractProjectZip = async (zipPath, destination) => {
+    const maxEntriesRaw = Number.parseInt(process.env.ZIP_UPLOAD_MAX_ENTRIES || '20000', 10);
+    const maxTotalRaw = Number.parseInt(process.env.ZIP_EXTRACT_MAX_BYTES || String(10 * 1024 * 1024 * 1024), 10);
+    const maxEntryRaw = Number.parseInt(process.env.ZIP_EXTRACT_MAX_ENTRY_BYTES || String(10 * 1024 * 1024 * 1024), 10);
+    const maxEntries = Number.isFinite(maxEntriesRaw) && maxEntriesRaw > 0 ? maxEntriesRaw : 20000;
+    const maxTotalBytes = Number.isFinite(maxTotalRaw) && maxTotalRaw > 0 ? maxTotalRaw : 10 * 1024 * 1024 * 1024;
+    const maxEntryBytes = Number.isFinite(maxEntryRaw) && maxEntryRaw > 0 ? maxEntryRaw : 10 * 1024 * 1024 * 1024;
+    const zipfile = await new Promise((resolve, reject) => {
+      yauzl.open(zipPath, { lazyEntries: true, validateEntrySizes: true }, (error, archive) => {
+        if (error) reject(error);
+        else resolve(archive);
+      });
+    });
+
+    return new Promise((resolve, reject) => {
+      let entryCount = 0;
+      let totalBytes = 0;
+      let finished = false;
+      const projectEntries = [];
+      const fail = (error) => {
+        if (finished) return;
+        finished = true;
+        try { zipfile.close(); } catch {}
+        reject(error);
+      };
+      zipfile.on('error', fail);
+      zipfile.on('entry', (entry) => {
+        if (finished) return;
+        const rawName = String(entry.fileName || '');
+        const normalized = rawName.replace(/\\/g, '/').replace(/^\/+/, '');
+        const safeName = path.posix.normalize(normalized);
+        const isDirectory = normalized.endsWith('/');
+        entryCount += 1;
+        if (entryCount > maxEntries) return fail(Object.assign(new Error('zip_too_many_entries'), { code: 'ZIP_TOO_MANY_ENTRIES', entryCount, maxEntries }));
+        if (!normalized || path.posix.isAbsolute(safeName) || /^[A-Za-z]:/.test(safeName) || safeName === '..' || safeName.startsWith('../') || safeName.includes('/../')) {
+          return fail(Object.assign(new Error('zip_unsafe_entry_path'), { code: 'ZIP_UNSAFE_ENTRY_PATH', entry: rawName }));
+        }
+        const size = Number(entry.uncompressedSize);
+        const uncompressedSize = Number.isFinite(size) && size >= 0 ? size : 0;
+        if (!isDirectory) {
+          if (uncompressedSize > maxEntryBytes) return fail(Object.assign(new Error('zip_entry_too_large'), { code: 'ZIP_ENTRY_TOO_LARGE', entry: safeName, maxEntryBytes }));
+          totalBytes += uncompressedSize;
+          if (totalBytes > maxTotalBytes) return fail(Object.assign(new Error('zip_extract_too_large'), { code: 'ZIP_EXTRACT_TOO_LARGE', maxExtractBytes: maxTotalBytes }));
+          if (!safeName.startsWith('__MACOSX/') && /\.(qgs|qgz)$/i.test(safeName)) projectEntries.push(safeName);
+        }
+        if (safeName.startsWith('__MACOSX/')) {
+          zipfile.readEntry();
+          return;
+        }
+        const targetPath = path.resolve(destination, ...safeName.split('/').filter(Boolean));
+        if (!isPathInside(targetPath, destination)) return fail(Object.assign(new Error('zip_unsafe_entry_path'), { code: 'ZIP_UNSAFE_ENTRY_PATH', entry: rawName }));
+        if (isDirectory) {
+          fs.promises.mkdir(targetPath, { recursive: true })
+            .then(() => zipfile.readEntry())
+            .catch(fail);
+          return;
+        }
+        fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
+          .then(() => zipfile.openReadStream(entry, (error, stream) => {
+            if (error) return fail(error);
+            pipeline(stream, fs.createWriteStream(targetPath))
+              .then(() => zipfile.readEntry())
+              .catch(fail);
+          }))
+          .catch(fail);
+      });
+      zipfile.on('end', () => {
+        if (finished) return;
+        finished = true;
+        try { zipfile.close(); } catch {}
+        resolve({ projectEntries, totalBytes, entryCount });
+      });
+      zipfile.readEntry();
+    });
+  };
+
+  const runProjectLayerPreflight = async (file) => {
+    const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-project-preflight-'));
+    let retainWorkspace = false;
+    let extractedDir = null;
+    let projectRelativePath = null;
+    let archiveInfo = null;
+    try {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      let projectPath;
+      if (ext === '.zip') {
+        extractedDir = path.join(workspace, 'bundle');
+        await fs.promises.mkdir(extractedDir, { recursive: true });
+        archiveInfo = await inspectAndExtractProjectZip(file.path, extractedDir);
+        if (archiveInfo.projectEntries.length === 0) {
+          return { error: 'zip_missing_project', message: 'ZIP does not contain a QGIS project (.qgz or .qgs).' };
+        }
+        if (archiveInfo.projectEntries.length > 1) {
+          return { error: 'zip_multiple_projects', message: 'ZIP must contain exactly one QGIS project (.qgz or .qgs).', projects: archiveInfo.projectEntries.slice(0, 20) };
+        }
+        projectRelativePath = archiveInfo.projectEntries[0];
+        projectPath = path.resolve(extractedDir, ...projectRelativePath.split('/'));
+        if (!isPathInside(projectPath, extractedDir)) return { error: 'zip_unsafe_entry_path', message: 'ZIP contains an unsafe project path.' };
+      } else {
+        const safeName = path.basename(String(file.originalname || `project${ext}`));
+        projectPath = path.join(workspace, safeName);
+        await fs.promises.copyFile(file.path, projectPath);
+      }
+
+      const script = path.join(pythonDir, 'extract_info.py');
+      adjustActiveProjectExtractions(1);
+      let payload;
+      try {
+        payload = await new Promise((resolve, reject) => {
+        const child = runPythonViaOSGeo4W(script, ['--project', projectPath], { cwd: path.dirname(projectPath) });
+        let stdout = '';
+        let stderr = '';
+        let timedOut = false;
+        const timeout = setTimeout(() => {
+          timedOut = true;
+          try { child.kill(); } catch {}
+        }, 120000);
+        timeout.unref?.();
+        child.stdout.on('data', (chunk) => {
+          if (stdout.length < 32 * 1024 * 1024) stdout += chunk.toString();
+        });
+        child.stderr.on('data', (chunk) => {
+          if (stderr.length < 2 * 1024 * 1024) stderr += chunk.toString();
+        });
+        child.once('error', (error) => {
+          clearTimeout(timeout);
+          reject(Object.assign(new Error('project_extractor_spawn_failed'), { code: 'PROJECT_EXTRACTOR_SPAWN_FAILED', cause: error }));
+        });
+        child.once('close', (code) => {
+          clearTimeout(timeout);
+          if (timedOut) return reject(Object.assign(new Error('project_extractor_timeout'), { code: 'PROJECT_EXTRACTOR_TIMEOUT', stderr }));
+          const candidate = extractJsonLike(stdout.trim() || stderr.trim());
+          if (code !== 0 || !candidate) {
+            return reject(Object.assign(new Error('project_extraction_failed'), { code: 'PROJECT_EXTRACTION_FAILED', exitCode: code, stderr }));
+          }
+          try { resolve(JSON.parse(candidate)); }
+          catch (error) { reject(Object.assign(new Error('project_metadata_invalid'), { code: 'PROJECT_METADATA_INVALID', stderr, cause: error })); }
+        });
+        });
+      } finally {
+        adjustActiveProjectExtractions(-1);
+      }
+      const layers = Array.isArray(payload?.layers) ? payload.layers : [];
+      const themes = Array.isArray(payload?.themes) ? payload.themes : [];
+      if (layers.length === 0 && themes.length === 0) {
+        return { error: 'project_has_no_layers', message: 'QGIS did not find any usable layers or map themes in this project.' };
+      }
+      const invalidLayerCount = layers.filter((layer) => layer?.valid === false).length;
+      const invalidLayers = layers.filter((layer) => layer?.valid === false).map((layer) => ({
+        name: String(layer?.name || layer?.id || 'Unknown layer').slice(0, 160),
+        provider: String(layer?.provider || 'unknown').slice(0, 64)
+      })).slice(0, 100);
+      retainWorkspace = ext === '.zip';
+      return {
+        payload,
+        workspace: retainWorkspace ? workspace : null,
+        extractedDir,
+        projectRelativePath,
+        archiveInfo,
+        summary: {
+          projectName: String(payload?.project?.name || path.basename(projectPath)).slice(0, 160),
+          crs: String(payload?.project?.crs || '').slice(0, 64),
+          layerCount: layers.length,
+          validLayerCount: layers.length - invalidLayerCount,
+          invalidLayerCount,
+          themeCount: themes.length,
+          invalidLayers
+        }
+      };
+    } finally {
+      if (!retainWorkspace) {
+        try { await fs.promises.rm(workspace, { recursive: true, force: true }); } catch {}
+      }
+    }
+  };
+
+  const cleanupProjectPreflight = async (preflight) => {
+    if (!preflight?.workspace) return;
+    try { await fs.promises.rm(preflight.workspace, { recursive: true, force: true }); } catch {}
+    preflight.workspace = null;
+  };
+
+  app.get('/admin/project-diagnostics/stream', requireAdmin, (req, res) => {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    let closed = false;
+    let hasSentInitialEvents = false;
+    let sendingSnapshot = false;
+    const sentEventIds = new Set();
+    const sendSnapshot = async () => {
+      if (closed || res.writableEnded || sendingSnapshot) return;
+      sendingSnapshot = true;
+      try {
+        const recentEvents = await readRecentProjectDiagnostics(200);
+        const events = hasSentInitialEvents
+          ? recentEvents.filter((event) => !sentEventIds.has(event.id))
+          : recentEvents;
+        recentEvents.forEach((event) => sentEventIds.add(event.id));
+        while (sentEventIds.size > 400) sentEventIds.delete(sentEventIds.values().next().value);
+        let processSnapshots = await readProjectProcessSnapshots();
+        if (!processSnapshots.length) processSnapshots = [getProjectDiagnosticsSnapshot(tileRendererPool, activeProjectExtractions, cacheDir)];
+        const snapshot = aggregateProjectDiagnosticsSnapshots(processSnapshots) || processSnapshots[0];
+        res.write(`data: ${JSON.stringify({ events, snapshot, replaceEvents: !hasSentInitialEvents })}\n\n`);
+        res.flush?.();
+        hasSentInitialEvents = true;
+      } catch (error) {
+        recordProjectDiagnostic('error', 'diagnostics-stream', 'Could not build diagnostics snapshot', { message: error?.message || String(error) });
+      } finally {
+        sendingSnapshot = false;
+      }
+    };
+    void sendSnapshot();
+    const timer = setInterval(() => { void sendSnapshot(); }, 2000);
+    timer.unref?.();
+    res.on('close', () => {
+      closed = true;
+      clearInterval(timer);
+    });
+  });
+
   const parseBool = (value, fallback = false) => {
     if (value == null) return fallback;
     if (typeof value === 'boolean') return value;
@@ -103,6 +335,188 @@ export const registerProjectRoutes = ({
     if (['0', 'false', 'no', 'off'].includes(raw)) return false;
     return fallback;
   };
+
+  const optimizationEnvPath = path.resolve(projectsDir, '..', '.env');
+  const optimizationEnvKeys = ['WORKER_COUNT', 'PY_WORKER_POOL_SIZE', 'PY_WORKER_MAX_QUEUE', 'QTILER_MAX_CONCURRENT_TILE_JOBS'];
+  const readOptimizationEnv = async () => {
+    try { return await fs.promises.readFile(optimizationEnvPath, 'utf8'); }
+    catch (error) { if (error?.code === 'ENOENT') return ''; throw error; }
+  };
+  const getOptimizationPlan = (rawEnv) => {
+    const parsedEnv = Object.fromEntries(String(rawEnv || '').split(/\r?\n/)
+      .map((line) => line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/))
+      .filter(Boolean)
+      .map((match) => [match[1], match[2]]));
+    const cpuCores = Math.max(1, os.cpus().length);
+    const memoryTotalBytes = os.totalmem();
+    const memoryTotalGiB = memoryTotalBytes / (1024 ** 3);
+    const memoryReserveGiB = Math.max(2, memoryTotalGiB * 0.25);
+    const memoryWorkerCapacity = Math.max(1, Math.floor(Math.max(1, memoryTotalGiB - memoryReserveGiB) / 2));
+    const qgisWorkerCapacity = Math.max(1, Math.min(cpuCores, memoryWorkerCapacity, 12));
+    const specs = {
+      low: { nodeMax: 1, qgisMax: 2, queueFactor: 3, tileJobsMax: 1 },
+      medium: { nodeMax: 2, qgisMax: 4, queueFactor: 4, tileJobsMax: 2 },
+      aggressive: { nodeMax: 4, qgisMax: 8, queueFactor: 5, tileJobsMax: 3 }
+    };
+    const profiles = Object.fromEntries(Object.entries(specs).map(([id, spec]) => {
+      const totalTarget = Math.min(qgisWorkerCapacity, spec.qgisMax);
+      const workerCount = Math.max(1, Math.min(spec.nodeMax, Math.floor(cpuCores / 4) || 1, totalTarget));
+      const poolSize = Math.max(1, Math.min(4, Math.floor(totalTarget / workerCount), Math.floor(cpuCores / workerCount), Math.floor(memoryWorkerCapacity / workerCount)));
+      const maxQueue = Math.max(poolSize * 2, Math.min(128, poolSize * spec.queueFactor));
+      const tileJobs = Math.max(1, Math.min(spec.tileJobsMax, poolSize));
+      return [id, {
+        id,
+        workerCount,
+        poolSize,
+        totalQgisWorkers: workerCount * poolSize,
+        maxQueue,
+        concurrentTileJobs: tileJobs,
+        memoryBudgetPerQgisWorkerGiB: 2
+      }];
+    }));
+    const currentWorkerCount = Number.parseInt(parsedEnv.WORKER_COUNT || '0', 10) || cpuCores;
+    const currentPoolSize = Number.parseInt(parsedEnv.PY_WORKER_POOL_SIZE || '4', 10) || 4;
+    const currentQueue = Number.parseInt(parsedEnv.PY_WORKER_MAX_QUEUE || '', 10) || currentPoolSize * 8;
+    const currentTileJobs = Number.parseInt(parsedEnv.QTILER_MAX_CONCURRENT_TILE_JOBS || '2', 10) || 2;
+    return {
+      host: { cpuCores, memoryTotalBytes, memoryFreeBytes: os.freemem(), memoryReserveGiB, qgisWorkerCapacity },
+      current: {
+        workerCount: currentWorkerCount,
+        poolSize: currentPoolSize,
+        totalQgisWorkers: currentWorkerCount * currentPoolSize,
+        maxQueue: currentQueue,
+        concurrentTileJobs: currentTileJobs
+      },
+      profiles
+    };
+  };
+
+  const updateOptimizationEnv = async (updates) => {
+    const lockPath = `${optimizationEnvPath}.optimization.lock`;
+    let lockHandle;
+    try {
+      lockHandle = await fs.promises.open(lockPath, 'wx');
+    } catch (error) {
+      if (error?.code === 'EEXIST') throw Object.assign(new Error('optimization_update_in_progress'), { code: 'OPTIMIZATION_UPDATE_IN_PROGRESS' });
+      throw error;
+    }
+    try {
+      const original = await fs.promises.readFile(optimizationEnvPath, 'utf8');
+      const stat = await fs.promises.stat(optimizationEnvPath);
+      const hasBom = original.startsWith('\uFEFF');
+      const lineEnding = original.includes('\r\n') ? '\r\n' : '\n';
+      const lines = (hasBom ? original.slice(1) : original).split(/\r?\n/);
+      const updatedKeys = new Set();
+      const updatedLines = lines.map((line) => {
+        const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+        const key = match?.[1];
+        if (!key || !Object.prototype.hasOwnProperty.call(updates, key)) return line;
+        updatedKeys.add(key);
+        return `${key}=${updates[key]}`;
+      });
+      for (const key of Object.keys(updates)) {
+        if (!updatedKeys.has(key)) updatedLines.push(`${key}=${updates[key]}`);
+      }
+      const nextContent = `${hasBom ? '\uFEFF' : ''}${updatedLines.join(lineEnding).replace(/[\r\n]*$/, '')}${lineEnding}`;
+      const backupDir = path.resolve(projectsDir, '..', 'upgrade-backups');
+      await fs.promises.mkdir(backupDir, { recursive: true });
+      const backupPath = path.join(backupDir, `env-optimization-${Date.now()}-${process.pid}.bak`);
+      await fs.promises.copyFile(optimizationEnvPath, backupPath, fs.constants.COPYFILE_EXCL);
+      const tempPath = `${optimizationEnvPath}.optimization-${process.pid}.tmp`;
+      const previousPath = `${optimizationEnvPath}.optimization-${process.pid}.previous`;
+      await fs.promises.writeFile(tempPath, nextContent, { encoding: 'utf8', mode: stat.mode });
+      try {
+        await fs.promises.rename(optimizationEnvPath, previousPath);
+        try {
+          await fs.promises.rename(tempPath, optimizationEnvPath);
+        } catch (error) {
+          await fs.promises.rename(previousPath, optimizationEnvPath).catch(() => {});
+          throw error;
+        }
+      } finally {
+        await fs.promises.rm(previousPath, { force: true }).catch(() => {});
+        await fs.promises.rm(tempPath, { force: true }).catch(() => {});
+      }
+      return { backupPath, nextContent };
+    } finally {
+      await lockHandle?.close().catch(() => {});
+      await fs.promises.rm(lockPath, { force: true }).catch(() => {});
+    }
+  };
+
+  app.get('/admin/optimization/profiles', requireAdmin, async (_req, res) => {
+    try {
+      const env = await readOptimizationEnv();
+      return res.json(getOptimizationPlan(env));
+    } catch (error) {
+      recordProjectDiagnostic('error', 'optimization', 'Could not read optimization settings', { message: error?.message || String(error) });
+      return res.status(500).json({ error: 'optimization_preview_failed' });
+    }
+  });
+
+  app.post('/admin/optimization/apply', requireAdmin, async (req, res) => {
+    const profileId = String(req.body?.profile || '').trim().toLowerCase();
+    if (!['low', 'medium', 'aggressive'].includes(profileId)) return res.status(400).json({ error: 'invalid_optimization_profile' });
+    try {
+      const env = await readOptimizationEnv();
+      if (!env) return res.status(409).json({ error: 'env_file_missing' });
+      const plan = getOptimizationPlan(env).profiles[profileId];
+      const updates = {
+        WORKER_COUNT: plan.workerCount,
+        PY_WORKER_POOL_SIZE: plan.poolSize,
+        PY_WORKER_MAX_QUEUE: plan.maxQueue,
+        QTILER_MAX_CONCURRENT_TILE_JOBS: plan.concurrentTileJobs
+      };
+      const changed = Object.entries(updates).filter(([key, value]) => {
+        const current = env.match(new RegExp(`^\\s*${key}\\s*=\\s*([^\\r\\n]*)`, 'm'))?.[1]?.trim();
+        return current !== String(value);
+      }).map(([key, value]) => ({ key, value }));
+      if (!changed.length) {
+        return res.json({ ok: true, profile: profileId, settings: plan, changes: [], restartRequired: false });
+      }
+      const result = await updateOptimizationEnv(updates);
+      recordProjectDiagnostic('warn', 'optimization', 'Concurrency profile saved to .env', {
+        profile: profileId,
+        changes: changed,
+        restartRequired: changed.length > 0,
+        backupName: path.basename(result.backupPath)
+      });
+      return res.json({ ok: true, profile: profileId, settings: plan, changes: changed, restartRequired: changed.length > 0 });
+    } catch (error) {
+      if (error?.code === 'OPTIMIZATION_UPDATE_IN_PROGRESS') return res.status(409).json({ error: error.code });
+      recordProjectDiagnostic('error', 'optimization', 'Could not apply concurrency profile', { message: error?.message || String(error) });
+      return res.status(500).json({ error: 'optimization_apply_failed' });
+    }
+  });
+
+  app.post('/admin/optimization/restart-service', requireAdmin, (req, res) => {
+    if (process.platform !== 'win32') return res.status(501).json({ error: 'windows_service_restart_unavailable' });
+    const serviceScript = path.resolve(projectsDir, '..', 'tools', 'qtiler-service.ps1');
+    if (!fs.existsSync(serviceScript)) return res.status(404).json({ error: 'service_script_missing' });
+    const powershell = process.env.POWERSHELL_EXE || 'powershell.exe';
+    const findService = spawnSync(powershell, [
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript, '-Action', 'find'
+    ], { encoding: 'utf8', timeout: 10000, windowsHide: true });
+    const serviceName = String(findService.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
+    if (findService.error || findService.status !== 0 || !serviceName) {
+      return res.status(409).json({ error: 'service_not_found', message: 'No Qtiler Windows service was detected. Restart Qtiler manually.' });
+    }
+
+    const diagnostic = recordProjectDiagnostic('warn', 'optimization', 'Windows service restart requested by an administrator', { serviceName });
+    res.status(202).json({ ok: true, status: 'restart_scheduled', serviceName, diagnosticId: diagnostic.id });
+    const timer = setTimeout(() => {
+      try {
+        const child = spawn(powershell, [
+          '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript, '-Action', 'restart'
+        ], { cwd: path.resolve(projectsDir, '..'), detached: true, stdio: 'ignore', windowsHide: true });
+        child.once('error', (error) => recordProjectDiagnostic('error', 'optimization', 'Could not start Windows service restart', { message: error?.message || String(error), serviceName }));
+        child.unref();
+      } catch (error) {
+        recordProjectDiagnostic('error', 'optimization', 'Could not schedule Windows service restart', { message: error?.message || String(error), serviceName });
+      }
+    }, 1500);
+    timer.unref?.();
+  });
 
   const isPathInside = (candidatePath, basePath) => {
     const resolvedBase = path.resolve(basePath);
@@ -456,6 +870,10 @@ export const registerProjectRoutes = ({
   app.post("/projects", requireAdmin, (req, res) => {
     projectUpload.single("project")(req, res, async (err) => {
       if (err) {
+        recordProjectDiagnostic('error', 'project-upload', 'Project upload request was rejected', {
+          code: String(err.code || 'UPLOAD_FAILED'),
+          message: redactSecrets(err.message || String(err)).slice(0, 600)
+        });
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(413).json({ error: "file_too_large" });
         }
@@ -466,8 +884,14 @@ export const registerProjectRoutes = ({
       }
       const file = req.file;
       if (!file) {
+        recordProjectDiagnostic('warn', 'project-upload', 'Upload request did not include a project file');
         return res.status(400).json({ error: "project_file_required" });
       }
+      const uploadStartedAt = Date.now();
+      recordProjectDiagnostic('info', 'project-upload', 'Project upload preflight started', {
+        filename: path.basename(String(file.originalname || 'project')),
+        sizeBytes: Number(file.size) || 0
+      });
       const ext = path.extname(file.originalname || "").toLowerCase();
       const preferredIdRaw = req.body?.projectId || req.body?.name || path.basename(file.originalname || "project", ext);
       let projectId = sanitizeProjectId(preferredIdRaw);
@@ -479,10 +903,11 @@ export const registerProjectRoutes = ({
       const replaceExisting = parseBool(req.body?.replaceExisting ?? req.body?.overwrite, false);
       const keepExistingConfig = parseBool(req.body?.keepExistingConfig, true);
       const keepExistingCache = parseBool(req.body?.keepExistingCache, true);
-
       if (existingProject && !replaceExisting) {
         const lang = detectRequestLanguage(req);
         const text = conflictText(lang, projectId);
+        recordProjectDiagnostic('info', 'project-upload', 'Replacement confirmation required before preflight', { projectId });
+        try { await fs.promises.unlink(file.path); } catch {}
         return res.status(409).json({
           error: 'project_already_exists',
           code: 'PROJECT_ALREADY_EXISTS',
@@ -500,11 +925,86 @@ export const registerProjectRoutes = ({
         });
       }
 
+      let preflight;
+      try {
+        preflight = await runProjectLayerPreflight(file);
+      } catch (preflightError) {
+        const code = String(preflightError?.code || 'PROJECT_PREFLIGHT_FAILED');
+        const stderr = redactSecrets(preflightError?.stderr || preflightError?.cause?.message || '').slice(0, 1800);
+        const diagnostic = recordProjectDiagnostic('error', 'project-preflight', 'QGIS preflight failed', {
+          projectId,
+          filename: path.basename(String(file.originalname || 'project')),
+          code,
+          exitCode: preflightError?.exitCode ?? null,
+          message: preflightError?.message || String(preflightError),
+          stderr
+        });
+        try { await fs.promises.unlink(file.path); } catch {}
+        const zipErrors = {
+          ZIP_TOO_MANY_ENTRIES: { status: 413, error: 'zip_too_many_entries', maxEntries: preflightError?.maxEntries },
+          ZIP_EXTRACT_TOO_LARGE: { status: 413, error: 'zip_extract_too_large', maxExtractBytes: preflightError?.maxExtractBytes },
+          ZIP_ENTRY_TOO_LARGE: { status: 413, error: 'zip_entry_too_large', entry: preflightError?.entry, maxEntryBytes: preflightError?.maxEntryBytes },
+          ZIP_UNSAFE_ENTRY_PATH: { status: 400, error: 'zip_unsafe_entry_path', entry: preflightError?.entry }
+        };
+        if (zipErrors[code]) {
+          const zipError = zipErrors[code];
+          const { status, ...payload } = zipError;
+          return res.status(status).json({ ...payload, code, diagnosticId: diagnostic.id });
+        }
+        const status = code === 'PROJECT_EXTRACTOR_TIMEOUT' ? 504 : 422;
+        return res.status(status).json({
+          error: 'project_validation_failed',
+          code,
+          message: 'QGIS could not read this project. Nothing was added.',
+          diagnosticId: diagnostic.id
+        });
+      }
+      if (preflight?.error) {
+        recordProjectDiagnostic('warn', 'project-preflight', 'Project upload rejected by preflight', {
+          projectId,
+          error: preflight.error,
+          filename: path.basename(String(file.originalname || 'project'))
+        });
+        try { await fs.promises.unlink(file.path); } catch {}
+        const status = preflight.error.startsWith('zip_') ? 400 : 422;
+        return res.status(status).json(preflight);
+      }
+      const invalidLayers = Array.isArray(preflight?.summary?.invalidLayers) ? preflight.summary.invalidLayers : [];
+      const allowInvalidLayers = parseBool(req.body?.allowInvalidLayers, false);
+      if (invalidLayers.length && !allowInvalidLayers) {
+        const diagnostic = recordProjectDiagnostic('warn', 'project-preflight', 'Project contains layers that QGIS cannot load', {
+          projectId,
+          layerCount: preflight.summary.layerCount,
+          validLayerCount: preflight.summary.validLayerCount,
+          invalidLayerCount: preflight.summary.invalidLayerCount,
+          invalidLayers: invalidLayers.slice(0, 20)
+        });
+        try { await fs.promises.unlink(file.path); } catch {}
+        await cleanupProjectPreflight(preflight);
+        return res.status(422).json({
+          error: 'project_invalid_layers',
+          requiresConfirmation: true,
+          message: 'Some layers are invalid in QGIS. Review them before continuing.',
+          summary: preflight.summary,
+          diagnosticId: diagnostic.id
+        });
+      }
+      recordProjectDiagnostic(invalidLayers.length ? 'warn' : 'info', 'project-preflight', 'Project preflight completed', {
+        projectId,
+        layerCount: preflight.summary.layerCount,
+        validLayerCount: preflight.summary.validLayerCount,
+        invalidLayerCount: preflight.summary.invalidLayerCount,
+        invalidLayersConfirmed: invalidLayers.length > 0 && allowInvalidLayers,
+        elapsedMs: Date.now() - uploadStartedAt
+      });
+
       if (existingProject && replaceExisting) {
         try {
           await removeExistingProjectStorage(existingProject);
           await applyReplaceRetentionPolicy(projectId, { keepExistingConfig, keepExistingCache });
         } catch (replaceErr) {
+          try { await fs.promises.unlink(file.path); } catch {}
+          await cleanupProjectPreflight(preflight);
           return res.status(500).json({ error: 'replace_failed', details: redactSecrets(String(replaceErr?.message || replaceErr)) });
         }
       }
@@ -513,98 +1013,14 @@ export const registerProjectRoutes = ({
         const targetDir = path.join(projectsDir, projectId);
         let extractedProjectPath = null;
         try {
-          const maxZipEntries = Number.parseInt(process.env.ZIP_UPLOAD_MAX_ENTRIES || '20000', 10);
-          const maxZipTotalBytes = Number.parseInt(process.env.ZIP_EXTRACT_MAX_BYTES || String(10 * 1024 * 1024 * 1024), 10); // 10 GiB
-          const maxZipEntryBytes = Number.parseInt(process.env.ZIP_EXTRACT_MAX_ENTRY_BYTES || String(10 * 1024 * 1024 * 1024), 10); // 10 GiB
-          const zipEntriesLimit = Number.isFinite(maxZipEntries) && maxZipEntries > 0 ? maxZipEntries : 20000;
-          const zipTotalLimit = Number.isFinite(maxZipTotalBytes) && maxZipTotalBytes > 0 ? maxZipTotalBytes : (10 * 1024 * 1024 * 1024);
-          const zipEntryLimit = Number.isFinite(maxZipEntryBytes) && maxZipEntryBytes > 0 ? maxZipEntryBytes : (10 * 1024 * 1024 * 1024);
-
-          const openZip = (zipPath) => new Promise((resolve, reject) => {
-            yauzl.open(zipPath, { lazyEntries: true, validateEntrySizes: true }, (err, zipfile) => {
-              if (err) return reject(err);
-              return resolve(zipfile);
-            });
-          });
-
-          const inspectZip = async (zipPath) => {
-            const zipfile = await openZip(zipPath);
-            const entries = [];
-            return await new Promise((resolve, reject) => {
-              let totalUncompressed = 0;
-              let entryCount = 0;
-              zipfile.on('error', (e) => {
-                try { zipfile.close(); } catch {}
-                reject(e);
-              });
-              zipfile.on('entry', (entry) => {
-                try {
-                  entryCount += 1;
-                  if (entryCount > zipEntriesLimit) {
-                    try { zipfile.close(); } catch {}
-                    return reject(Object.assign(new Error('zip_too_many_entries'), { code: 'ZIP_TOO_MANY_ENTRIES', entryCount, maxEntries: zipEntriesLimit }));
-                  }
-
-                  const nameRaw = String(entry.fileName || '');
-                  const normalized = nameRaw.replace(/\\/g, '/');
-                  const isDirectory = normalized.endsWith('/');
-                  if (!isDirectory && normalized && !normalized.startsWith('__MACOSX/')) {
-                    const uncompressedSize = Number(entry.uncompressedSize);
-                    const safeSize = Number.isFinite(uncompressedSize) && uncompressedSize >= 0 ? uncompressedSize : 0;
-                    if (safeSize > zipEntryLimit) {
-                      try { zipfile.close(); } catch {}
-                      return reject(Object.assign(new Error('zip_entry_too_large'), { code: 'ZIP_ENTRY_TOO_LARGE', name: normalized, maxEntryBytes: zipEntryLimit }));
-                    }
-                    totalUncompressed += safeSize;
-                    if (totalUncompressed > zipTotalLimit) {
-                      try { zipfile.close(); } catch {}
-                      return reject(Object.assign(new Error('zip_extract_too_large'), { code: 'ZIP_EXTRACT_TOO_LARGE', maxExtractBytes: zipTotalLimit }));
-                    }
-                  }
-
-                  entries.push({ name: normalized, isDirectory, uncompressedSize: Number(entry.uncompressedSize) || 0 });
-                  zipfile.readEntry();
-                } catch (e) {
-                  try { zipfile.close(); } catch {}
-                  reject(e);
-                }
-              });
-              zipfile.on('end', () => {
-                try { zipfile.close(); } catch {}
-                resolve({ entries, totalUncompressed });
-              });
-              zipfile.readEntry();
-            });
-          };
-
-          const { entries } = await inspectZip(file.path);
-          const projectEntries = entries
-            .filter((e) => e && !e.isDirectory)
-            .filter((e) => {
-              const name = String(e.name || '');
-              if (!name) return false;
-              if (name.startsWith('__MACOSX/')) return false;
-              const lower = name.toLowerCase();
-              return lower.endsWith('.qgz') || lower.endsWith('.qgs');
-            });
-
-          if (projectEntries.length === 0) {
+          const projectEntryName = String(preflight?.projectRelativePath || '');
+          if (!projectEntryName) {
             return res.status(400).json({
               error: 'zip_missing_project',
               message: 'Your Zip file does not have any QGIS project.'
             });
           }
-          if (projectEntries.length > 1) {
-            return res.status(400).json({
-              error: 'zip_multiple_projects',
-              message: 'Zip archive must contain exactly one QGIS project (.qgz or .qgs). Multiple found.',
-              projects: projectEntries.map((e) => String(e.name || ''))
-            });
-          }
-
-          const projectEntry = projectEntries[0];
-          const relProjectPosix = path.posix.normalize(String(projectEntry.name || '').replace(/^\/+/, ''));
-          const projectParts = relProjectPosix.split('/').filter(Boolean);
+          const projectParts = projectEntryName.split('/').filter(Boolean);
 
           // Ensure we never extract on top of stale leftovers from a partial/locked delete.
           // This prevents mixed old/new data (e.g. lingering .dbf/.shp) and upload conflicts.
@@ -613,6 +1029,10 @@ export const registerProjectRoutes = ({
               await clearZipTargetDirectory(projectId, targetDir);
             }
           } catch (cleanupErr) {
+            recordProjectDiagnostic('error', 'project-upload', 'Could not clear the project target before installing the validated ZIP', {
+              projectId,
+              message: redactSecrets(cleanupErr?.message || String(cleanupErr))
+            });
             return res.status(423).json({
               error: 'project_target_locked',
               message: 'Project upload target is locked by another process. Retry in a few seconds.',
@@ -620,96 +1040,18 @@ export const registerProjectRoutes = ({
             });
           }
 
-          await fs.promises.mkdir(targetDir, { recursive: true });
-          const targetRootResolved = path.resolve(targetDir);
-          const targetRootLower = targetRootResolved.toLowerCase();
-
-          const extractZip = async (zipPath) => {
-            const zipfile = await openZip(zipPath);
-            return await new Promise((resolve, reject) => {
-              zipfile.on('error', (e) => {
-                try { zipfile.close(); } catch {}
-                reject(e);
-              });
-              zipfile.on('entry', (entry) => {
-                const rawName = String(entry.fileName || '');
-                const normalized = rawName.replace(/\\/g, '/').replace(/^\/+/, '');
-                const posixSafe = path.posix.normalize(normalized);
-                const isDirectory = posixSafe.endsWith('/') || /\/$/.test(normalized);
-                if (!posixSafe || posixSafe === '.' || posixSafe === '..') {
-                  zipfile.readEntry();
-                  return;
-                }
-                if (path.posix.isAbsolute(posixSafe) || posixSafe.startsWith('../') || posixSafe.includes('/../')) {
-                  try { zipfile.close(); } catch {}
-                  reject(new Error(`Unsafe zip entry path: ${rawName}`));
-                  return;
-                }
-                if (posixSafe.startsWith('__MACOSX/')) {
-                  zipfile.readEntry();
-                  return;
-                }
-
-                const parts = posixSafe.split('/').filter(Boolean);
-                const outPath = path.join(targetDir, ...parts);
-                const outResolved = path.resolve(outPath);
-                const outLower = outResolved.toLowerCase();
-                if (!outLower.startsWith(targetRootLower + path.sep) && outLower !== targetRootLower) {
-                  try { zipfile.close(); } catch {}
-                  reject(new Error(`Zip entry escapes target directory: ${rawName}`));
-                  return;
-                }
-
-                const uncompressedSize = Number(entry.uncompressedSize);
-                const safeSize = Number.isFinite(uncompressedSize) && uncompressedSize >= 0 ? uncompressedSize : 0;
-                if (!isDirectory && safeSize > zipEntryLimit) {
-                  try { zipfile.close(); } catch {}
-                  reject(new Error(`Zip entry exceeds max size (${zipEntryLimit}): ${rawName}`));
-                  return;
-                }
-
-                if (isDirectory) {
-                  fs.promises.mkdir(outResolved, { recursive: true })
-                    .then(() => zipfile.readEntry())
-                    .catch((e) => {
-                      try { zipfile.close(); } catch {}
-                      reject(e);
-                    });
-                  return;
-                }
-
-                fs.promises.mkdir(path.dirname(outResolved), { recursive: true })
-                  .then(() => {
-                    zipfile.openReadStream(entry, async (err, readStream) => {
-                      if (err) {
-                        try { zipfile.close(); } catch {}
-                        reject(err);
-                        return;
-                      }
-                      try {
-                        const writeStream = fs.createWriteStream(outResolved);
-                        await pipeline(readStream, writeStream);
-                        zipfile.readEntry();
-                      } catch (e) {
-                        try { zipfile.close(); } catch {}
-                        reject(e);
-                      }
-                    });
-                  })
-                  .catch((e) => {
-                    try { zipfile.close(); } catch {}
-                    reject(e);
-                  });
-              });
-              zipfile.on('end', () => {
-                try { zipfile.close(); } catch {}
-                resolve();
-              });
-              zipfile.readEntry();
-            });
-          };
-
-          await extractZip(file.path);
+          await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
+          if (preflight?.extractedDir && fs.existsSync(preflight.extractedDir)) {
+            try {
+              await fs.promises.rename(preflight.extractedDir, targetDir);
+            } catch (renameError) {
+              if (renameError?.code !== 'EXDEV') throw renameError;
+              await fs.promises.cp(preflight.extractedDir, targetDir, { recursive: true, errorOnExist: true });
+              await fs.promises.rm(preflight.extractedDir, { recursive: true, force: true });
+            }
+          } else {
+            throw Object.assign(new Error('validated_zip_staging_missing'), { code: 'ZIP_STAGING_MISSING' });
+          }
 
           extractedProjectPath = path.join(targetDir, ...projectParts);
           if (!fs.existsSync(extractedProjectPath)) {
@@ -720,11 +1062,25 @@ export const registerProjectRoutes = ({
           }
 
           try {
-            await bootstrapProjectCacheIndex(projectId, extractedProjectPath);
+            const bootstrapPayload = {
+              ...preflight.payload,
+              project: { ...(preflight.payload?.project || {}), path: extractedProjectPath }
+            };
+            await bootstrapProjectCacheIndex(projectId, extractedProjectPath, false, bootstrapPayload);
           } catch (bootstrapErr) {
             console.warn(`[bootstrap] Initialization failed for ${projectId}:`, bootstrapErr?.message || bootstrapErr);
+            recordProjectDiagnostic('error', 'project-upload', 'Cache index bootstrap failed after validated upload', {
+              projectId,
+              message: bootstrapErr?.message || String(bootstrapErr)
+            });
           }
 
+          recordProjectDiagnostic('info', 'project-upload', 'Project uploaded successfully', {
+            projectId,
+            kind: 'bundle',
+            elapsedMs: Date.now() - uploadStartedAt,
+            invalidLayersConfirmed: invalidLayers.length > 0 && allowInvalidLayers
+          });
           return res.status(201).json({
             status: 'uploaded',
             id: projectId,
@@ -733,7 +1089,8 @@ export const registerProjectRoutes = ({
             projectFile: path.relative(projectsDir, extractedProjectPath).replace(/\\/g, '/'),
             replaced: Boolean(existingProject && replaceExisting),
             keepExistingConfig,
-            keepExistingCache
+            keepExistingCache,
+            validation: preflight.summary
           });
         } catch (zipErr) {
           const code = String(zipErr?.code || '');
@@ -747,10 +1104,16 @@ export const registerProjectRoutes = ({
             return res.status(413).json({ error: 'zip_entry_too_large', entry: zipErr.name, maxEntryBytes: zipErr.maxEntryBytes });
           }
           console.error('Bundle upload failed', zipErr);
+          recordProjectDiagnostic('error', 'project-upload', 'Validated ZIP installation failed', {
+            projectId,
+            code,
+            message: redactSecrets(zipErr?.message || String(zipErr)).slice(0, 1200)
+          });
           try { await fs.promises.rm(targetDir, { recursive: true, force: true }); } catch {}
           return res.status(500).json({ error: 'zip_upload_failed', details: redactSecrets(String(zipErr?.message || zipErr)) });
         } finally {
           try { if (file.path) await fs.promises.unlink(file.path); } catch {}
+          await cleanupProjectPreflight(preflight);
         }
       }
 
@@ -762,6 +1125,10 @@ export const registerProjectRoutes = ({
         }
         await fs.promises.copyFile(file.path, targetPath);
       } catch (writeErr) {
+        recordProjectDiagnostic('error', 'project-upload', 'Could not write the validated QGIS project file', {
+          projectId,
+          message: redactSecrets(writeErr?.message || String(writeErr)).slice(0, 1200)
+        });
         return res.status(500).json({ error: "write_failed", details: String(writeErr) });
       } finally {
         if (file.path) {
@@ -771,20 +1138,36 @@ export const registerProjectRoutes = ({
             // ignore cleanup errors
           }
         }
+        await cleanupProjectPreflight(preflight);
       }
       const finalId = targetName.replace(/\.(qgz|qgs)$/i, "");
       try {
-        await bootstrapProjectCacheIndex(finalId, targetPath);
+        const bootstrapPayload = {
+          ...preflight.payload,
+          project: { ...(preflight.payload?.project || {}), path: targetPath }
+        };
+        await bootstrapProjectCacheIndex(finalId, targetPath, false, bootstrapPayload);
       } catch (bootstrapErr) {
         console.warn(`[bootstrap] Initialization failed for ${finalId}:`, bootstrapErr?.message || bootstrapErr);
+        recordProjectDiagnostic('error', 'project-upload', 'Cache index bootstrap failed after validated upload', {
+          projectId: finalId,
+          message: bootstrapErr?.message || String(bootstrapErr)
+        });
       }
+      recordProjectDiagnostic('info', 'project-upload', 'Project uploaded successfully', {
+        projectId: finalId,
+        kind: 'project-file',
+        elapsedMs: Date.now() - uploadStartedAt,
+        invalidLayersConfirmed: invalidLayers.length > 0 && allowInvalidLayers
+      });
       return res.status(201).json({
         status: "uploaded",
         id: finalId,
         filename: targetName,
         replaced: Boolean(existingProject && replaceExisting),
         keepExistingConfig,
-        keepExistingCache
+        keepExistingCache,
+        validation: preflight.summary
       });
     });
   });
@@ -1672,9 +2055,29 @@ export const registerProjectRoutes = ({
     const proj = findProjectById(req.params.id);
     if (!proj) return res.status(404).json({ error: "project_not_found" });
     const script = path.join(pythonDir, "extract_info.py");
-    const proc = runPythonViaOSGeo4W(script, ["--project", proj.file], {
-      cwd: path.dirname(proj.file)
-    });
+    const startedAt = Date.now();
+    adjustActiveProjectExtractions(1);
+    let diagnosticFinished = false;
+    const finishDiagnostic = (level, message, details = {}) => {
+      if (diagnosticFinished) return;
+      diagnosticFinished = true;
+      adjustActiveProjectExtractions(-1);
+      recordProjectDiagnostic(level, 'project-layers', message, {
+        projectId: req.params.id,
+        elapsedMs: Date.now() - startedAt,
+        ...details
+      });
+    };
+    recordProjectDiagnostic('info', 'project-layers', 'Layer extraction started', { projectId: req.params.id });
+    let proc;
+    try {
+      proc = runPythonViaOSGeo4W(script, ["--project", proj.file], {
+        cwd: path.dirname(proj.file)
+      });
+    } catch (error) {
+      finishDiagnostic('error', 'Could not start layer extraction', { message: error?.message || String(error) });
+      return res.status(500).json({ error: 'spawn_error' });
+    }
 
     let stdout = "", stderr = "";
     proc.stdout.on("data", (d) => {
@@ -1690,11 +2093,23 @@ export const registerProjectRoutes = ({
       if (line) console.error("[py stderr]", redactSecrets(line));
     });
     let sent = false;
+    const extractionTimeout = setTimeout(() => {
+      finishDiagnostic('error', 'Layer extraction timed out', { timeoutMs: 120000 });
+      try { proc.kill(); } catch {}
+      if (!sent) {
+        sent = true;
+        res.status(504).json({ error: 'extract_info_timeout', timeoutMs: 120000 });
+      }
+    }, 120000);
+    extractionTimeout.unref?.();
     proc.on("error", (err) => {
+      clearTimeout(extractionTimeout);
+      finishDiagnostic('error', 'Could not start layer extraction', { message: err?.message || String(err) });
       console.error("Failed to spawn python:", err);
       if (!sent) { sent = true; res.status(500).json({ error: "spawn_error", details: String(err) }); }
     });
     proc.on("close", (code) => {
+      clearTimeout(extractionTimeout);
       if (sent) return;
       sent = true;
       let raw = (stdout && stdout.trim()) || (stderr && stderr.trim()) || "";
@@ -1704,6 +2119,14 @@ export const registerProjectRoutes = ({
           try {
             const parsed = JSON.parse(candidate);
             if (code === 0) {
+              const layers = Array.isArray(parsed?.layers) ? parsed.layers : [];
+              const invalidLayerCount = layers.filter((layer) => layer?.valid === false).length;
+              const invalidLayers = layers.filter((layer) => layer?.valid === false).map((layer) => String(layer?.name || layer?.id || 'Unknown layer')).slice(0, 100);
+              finishDiagnostic(invalidLayers.length ? 'warn' : 'info', invalidLayers.length ? 'Project layers include invalid providers' : 'Layer extraction completed', {
+                layerCount: layers.length,
+                invalidLayerCount,
+                invalidLayers: invalidLayers.slice(0, 20)
+              });
               if (parsed && typeof parsed === 'object' && Array.isArray(parsed.layers) && Array.isArray(parsed.themes)) {
                 const existingLayerNames = new Set(parsed.layers.map((layer) => String(layer?.name || layer?.id || '').trim()).filter(Boolean));
                 for (const theme of parsed.themes) {
@@ -1730,21 +2153,30 @@ export const registerProjectRoutes = ({
               return res.status(200).json(stripProjectPathsAndSecrets(parsed));
             }
             // Never echo raw stderr/stdout back to clients on failure.
+            finishDiagnostic('error', 'Layer extraction process failed', { exitCode: code, stderr: redactSecrets(stderr).slice(0, 1800) });
             return res.status(500).json({ error: "extract_info_failed", code });
           } catch (e) {
             if (code === 0) {
+              finishDiagnostic('warn', 'Layer extraction returned invalid JSON', { message: e?.message || String(e) });
               return res.status(200).json({ ok: true });
             }
+            finishDiagnostic('error', 'Layer extraction process failed', { exitCode: code, stderr: redactSecrets(stderr).slice(0, 1800) });
             return res.status(500).json({ error: "extract_info_failed", code });
           }
         }
         if (code === 0) {
           // Unexpected non-JSON output; avoid returning it.
+          finishDiagnostic('warn', 'Layer extraction returned no JSON payload', { stdoutLength: stdout.length, stderr: redactSecrets(stderr).slice(0, 1200) });
           return res.status(200).json({ ok: true });
         }
+        finishDiagnostic('error', 'Layer extraction process failed', { exitCode: code, stderr: redactSecrets(stderr).slice(0, 1800) });
         return res.status(500).json({ error: "extract_info_failed", code });
       }
-      if (code === 0) return res.status(200).json({ ok: true });
+      if (code === 0) {
+        finishDiagnostic('warn', 'Layer extraction returned empty output');
+        return res.status(200).json({ ok: true });
+      }
+      finishDiagnostic('error', 'Layer extraction process failed', { exitCode: code, stderr: redactSecrets(stderr).slice(0, 1800) });
       return res.status(500).json({ error: "extract_info_failed", code });
     });
   });

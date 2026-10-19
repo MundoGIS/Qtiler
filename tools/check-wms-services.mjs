@@ -12,10 +12,15 @@ function fixture(config = {}, options = {}) {
   const calls = [];
   const app = Object.fromEntries(['get', 'post'].map((method) => [method, (url, ...handlers) => routes.set(`${method} ${url}`, handlers)]));
   registerWmsRoutes({
-    app, cacheDir: 'unused', tileGridDir: 'unused',
+    app, cacheDir: options.cacheDir || 'unused', tileGridDir: options.tileGridDir || 'unused',
     tileRendererPool: { renderTile: async (params) => {
       calls.push(params);
       if (options.failFirst && calls.length === 1) throw Object.assign(new Error('queue_full'), { code: 'QUEUE_FULL' });
+      if (params.action === 'wms_render') {
+        if (options.renderDelayMs) await new Promise((resolve) => setTimeout(resolve, options.renderDelayMs));
+        await fs.promises.writeFile(params.output_file, Buffer.from('tile-fixture'));
+        return { status: 'success' };
+      }
       if (params.action === 'wfs_list') return { status: 'success', featureTypes: [
         { rawName: 'parks', title: 'Parks', crs: 'EPSG:3006', bboxWgs84: [12, 58, 16, 60] },
         { rawName: 'private', title: 'Private', crs: 'EPSG:3006' }
@@ -37,6 +42,7 @@ function fixture(config = {}, options = {}) {
         type(value) { this.contentType = value; return this; },
         setHeader() {},
         send(value) { this.body = value; return this; },
+        sendFile(filePath, callback) { this.body = fs.readFileSync(filePath); callback?.(); return this; },
         json(value) { this.body = value; return this; }
       };
       await routes.get('get /wms').at(-1)({ method: 'GET', path: '/wms', query, originalUrl: '/wms', protocol: 'http', headers: { host: 'localhost' }, get: (name) => name.toLowerCase() === 'host' ? 'localhost' : '' }, response);
