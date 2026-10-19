@@ -189,3 +189,4 @@ tools/build-plugins.mjs
 /tools/package-*-plugin.mjs
 data/licenses.json.36108.tmp
 data/qtilerauth-machine-entitlement.json
+data/plugin-reset-backups
