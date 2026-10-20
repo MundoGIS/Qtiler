@@ -5900,6 +5900,7 @@ ${mapIcon}
                serverType: "qgis",
                  visibleAtStart,
                  crossOrigin: 'use-credentials',
+                 hidpi: l.kind === 'external' ? null : false,
                    singleTile: false,
                  imageFormat: 'image/png',
                  version: '1.1.1',

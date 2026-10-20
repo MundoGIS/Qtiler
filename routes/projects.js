@@ -494,8 +494,10 @@ export const registerProjectRoutes = ({
     const serviceScript = path.resolve(projectsDir, '..', 'tools', 'qtiler-service.ps1');
     if (!fs.existsSync(serviceScript)) return res.status(404).json({ error: 'service_script_missing' });
     const powershell = process.env.POWERSHELL_EXE || 'powershell.exe';
+    const configuredServiceName = String(process.env.QTILER_SERVICE_NAME || 'QTiler').trim() || 'QTiler';
     const findService = spawnSync(powershell, [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript, '-Action', 'find'
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript,
+      '-Action', 'find', '-ServiceName', configuredServiceName
     ], { encoding: 'utf8', timeout: 10000, windowsHide: true });
     const serviceName = String(findService.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
     if (findService.error || findService.status !== 0 || !serviceName) {
@@ -507,7 +509,8 @@ export const registerProjectRoutes = ({
     const timer = setTimeout(() => {
       try {
         const child = spawn(powershell, [
-          '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript, '-Action', 'restart'
+          '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', serviceScript,
+          '-Action', 'restart', '-ServiceName', serviceName
         ], { cwd: path.resolve(projectsDir, '..'), detached: true, stdio: 'ignore', windowsHide: true });
         child.once('error', (error) => recordProjectDiagnostic('error', 'optimization', 'Could not start Windows service restart', { message: error?.message || String(error), serviceName }));
         child.unref();

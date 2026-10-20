@@ -190,3 +190,4 @@ tools/build-plugins.mjs
 data/licenses.json.36108.tmp
 data/qtilerauth-machine-entitlement.json
 data/plugin-reset-backups
+tools/serve-3d-eye-preview.mjs

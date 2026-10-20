@@ -8,9 +8,18 @@ $ErrorActionPreference = 'Stop'
 
 function Get-QtilerServiceInfo {
   $desired = [string]$ServiceName
-  Get-CimInstance Win32_Service -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -eq $desired -or $_.DisplayName -eq $desired -or $_.Name -eq 'QTiler' -or $_.Name -eq 'qtiler.exe' -or $_.DisplayName -eq 'QTiler' } |
+  $services = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue)
+  $exact = $services |
+    Where-Object { $_.Name -eq $desired -or $_.DisplayName -eq $desired } |
     Select-Object -First 1
+  if ($exact) { return $exact }
+
+  if ($desired -eq 'QTiler') {
+    return $services |
+      Where-Object { $_.Name -eq 'qtiler.exe' -or $_.DisplayName -eq 'QTiler' } |
+      Select-Object -First 1
+  }
+  return $null
 }
 
 $svcInfo = Get-QtilerServiceInfo
