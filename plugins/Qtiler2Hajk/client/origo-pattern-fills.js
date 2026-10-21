@@ -6,6 +6,14 @@
   const categoryLayers = new Map();
   const categoryControlStates = new WeakMap();
   const runtimeLabelStyles = new WeakMap();
+  const rasterCancellationMaps = new WeakMap();
+  const wfsCellStates = new WeakMap();
+  const wfsCellQueue = [];
+  const wfsCellCache = new Map();
+  const wfsCellMetrics = { requests: 0, reusedCells: 0, cancelled: 0, evictions: 0 };
+  let wfsCellRunning = 0;
+  let wfsCellBytes = 0;
+  let wfsCellPreviousOwner = null;
 
   function normalizeColorSignature(value) {
     return String(value || '').replace(/\s+/g, '').toLowerCase();
@@ -855,6 +863,378 @@
     return null;
   }
 
+  function wfsCellEnabled(model) {
+    if (window.QTILER_WFS_CELLS_DISABLED === true || model.config?.loadingStrategy === 'all') return false;
+    try {
+      const url = new URL(model.config.url, window.location.href);
+      return url.origin === window.location.origin && /^\/wfs\/?$/i.test(url.pathname) && url.searchParams.has('project');
+    } catch { return false; }
+  }
+
+  function pumpWfsCells() {
+    while (wfsCellRunning < 2) {
+      let index = wfsCellQueue.findIndex(function (job) { return !job.owner.moving && job.owner !== wfsCellPreviousOwner; });
+      if (index < 0) index = wfsCellQueue.findIndex(function (job) { return !job.owner.moving; });
+      if (index < 0) return;
+      const job = wfsCellQueue.splice(index, 1)[0];
+      job.signal.removeEventListener('abort', job.abort);
+      if (job.signal.aborted) { job.reject(job.signal.reason); continue; }
+      wfsCellPreviousOwner = job.owner;
+      wfsCellRunning++;
+      Promise.resolve().then(job.run).then(job.resolve, job.reject).finally(function () { wfsCellRunning--; pumpWfsCells(); });
+    }
+  }
+
+  function queueWfsCell(owner, signal, run) {
+    return new Promise(function (resolve, reject) {
+      if (signal.aborted) { reject(signal.reason); return; }
+      if (wfsCellQueue.length >= 128) { reject(Object.assign(new Error('WFS client queue full'), { status: 503 })); return; }
+      const job = { owner, signal, run, resolve, reject };
+      job.abort = function () {
+        const index = wfsCellQueue.indexOf(job);
+        if (index >= 0) wfsCellQueue.splice(index, 1);
+        signal.removeEventListener('abort', job.abort);
+        reject(signal.reason);
+      };
+      signal.addEventListener('abort', job.abort, { once: true });
+      wfsCellQueue.push(job);
+      pumpWfsCells();
+    });
+  }
+
+  function discardWfsCell(state, key, clearSource) {
+    const cell = state.cells.get(key);
+    if (!cell) return;
+    state.cells.delete(key);
+    wfsCellCache.delete(cell);
+    wfsCellBytes -= cell.bytes;
+    state.model.vectorSource.removeLoadedExtent(cell.extent);
+    cell.features.forEach(function (feature) {
+      const id = feature.getId();
+      const reference = state.features.get(id);
+      if (!reference) return;
+      reference.count--;
+      if (reference.count <= 0) {
+        state.features.delete(id);
+        if (clearSource) {
+          const existing = state.model.vectorSource.getFeatureById(id);
+          if (existing) state.model.vectorSource.removeFeature(existing);
+        }
+      }
+    });
+    state.model.allFeatures = Array.from(state.features.values(), function (entry) { return entry.feature; });
+  }
+
+  function getWfsCellState(model) {
+    let state = wfsCellStates.get(model);
+    if (state) return state;
+    state = { model, moving: false, cells: new Map(), features: new Map(), pending: new Map(), needed: new Set(), bound: false };
+    wfsCellStates.set(model, state);
+    const prune = function () {
+      const map = model.map;
+      const size = map.getSize?.();
+      if (!size) return;
+      const view = map.getView();
+      const extent = view.calculateExtent(size);
+      const visible = !model.layer || typeof model.layer.isVisible !== 'function' || model.layer.isVisible(view);
+      if (!visible) state.needed.clear();
+      state.pending.forEach(function (entry) {
+        const cell = entry.extent;
+        if (!visible || cell[2] <= extent[0] || cell[0] >= extent[2] || cell[3] <= extent[1] || cell[1] >= extent[3]) entry.controller.abort();
+      });
+    };
+    state.prune = prune;
+    model.map?.on?.('movestart', function () { state.moving = true; });
+    model.map?.on?.('moveend', function () { state.moving = false; prune(); pumpWfsCells(); });
+    const view = model.map?.getView?.();
+    view?.on?.('change:center', prune);
+    view?.on?.('change:resolution', prune);
+    return state;
+  }
+
+  function subtractWfsCoverage(extent, covered) {
+    const left = Math.max(extent[0], covered[0]), right = Math.min(extent[2], covered[2]);
+    const bottom = Math.max(extent[1], covered[1]), top = Math.min(extent[3], covered[3]);
+    if (left >= right || bottom >= top) return [extent];
+    const remaining = [];
+    if (extent[0] < left) remaining.push([extent[0], extent[1], left, extent[3]]);
+    if (right < extent[2]) remaining.push([right, extent[1], extent[2], extent[3]]);
+    if (extent[1] < bottom) remaining.push([left, extent[1], right, bottom]);
+    if (top < extent[3]) remaining.push([left, top, right, extent[3]]);
+    return remaining;
+  }
+
+  function wfsCellStrategy(model) {
+    return function (extent, resolution) {
+      if (!wfsCellEnabled(model) || !extent.every(Number.isFinite) || !(resolution > 0)) return [extent];
+      const state = getWfsCellState(model);
+      state.cells.forEach(function (cell, key) {
+        if (Date.now() - cell.at > 120000) discardWfsCell(state, key, true);
+      });
+      if (!state.cells.size && !state.pending.size) {
+        state.needed = new Set([extent.join(',')]);
+        return [extent];
+      }
+      const size = model.map.getSize?.();
+      const visible = size ? model.map.getView().calculateExtent(size) : extent;
+      const target = [Math.max(extent[0], visible[0]), Math.max(extent[1], visible[1]), Math.min(extent[2], visible[2]), Math.min(extent[3], visible[3])];
+      if (target[0] >= target[2] || target[1] >= target[3]) return [];
+      const intersects = function (cell) { return cell[2] > target[0] && cell[0] < target[2] && cell[3] > target[1] && cell[1] < target[3]; };
+      state.needed = new Set();
+      state.pending.forEach(function (entry, key) {
+        if (!intersects(entry.extent)) entry.controller.abort();
+        else state.needed.add(key);
+      });
+      state.cells.forEach(function (cell, key) {
+        if (intersects(cell.extent)) {
+          state.needed.add(key);
+          wfsCellMetrics.reusedCells++;
+          wfsCellCache.delete(cell); wfsCellCache.set(cell, state);
+        }
+      });
+      let span = 512 * Math.pow(2, Math.ceil(Math.log2(resolution)));
+      let left, right, bottom, top;
+      for (;;) {
+        left = Math.floor(target[0] / span); right = Math.ceil(target[2] / span);
+        bottom = Math.floor(target[1] / span); top = Math.ceil(target[3] / span);
+        if ((right - left) * (top - bottom) <= 9) break;
+        span *= 2;
+      }
+      const cells = [];
+      for (let column = left; column < right; column++) {
+        for (let row = bottom; row < top; row++) {
+          const cell = [Math.max(column * span, target[0]), Math.max(row * span, target[1]), Math.min((column + 1) * span, target[2]), Math.min((row + 1) * span, target[3])];
+          let missing = [cell];
+          const covered = [...Array.from(state.cells.values(), function (entry) { return entry.extent; }), ...Array.from(state.pending.values()).filter(function (entry) { return !entry.controller.signal.aborted; }).map(function (entry) { return entry.extent; })];
+          for (const area of covered) {
+            missing = missing.flatMap(function (part) { return subtractWfsCoverage(part, area); });
+            if (missing.length > 32) { missing = [cell]; break; }
+            if (!missing.length) break;
+          }
+          cells.push(...missing);
+        }
+      }
+      cells.forEach(function (cell) { state.needed.add(cell.join(',')); });
+      const center = [(target[0] + target[2]) / 2, (target[1] + target[3]) / 2];
+      cells.sort(function (first, second) {
+        const distance = function (cell) { return Math.hypot((cell[0] + cell[2]) / 2 - center[0], (cell[1] + cell[3]) / 2 - center[1]); };
+        return distance(first) - distance(second);
+      });
+      return cells;
+    };
+  }
+
+  function loadWfsCell(model, url, extent, success, failure, nativeFetch) {
+    const state = getWfsCellState(model);
+    const source = model.vectorSource;
+    const key = extent.join(',');
+    const controller = new AbortController();
+    const signal = controller.signal;
+    if (!state.bound) {
+      state.bound = true;
+      source.on('clear', function () {
+        const previousFeatures = model.allFeatures;
+        state.pending.forEach(function (entry) { entry.controller.abort(); });
+        Array.from(state.cells.keys()).forEach(function (cellKey) { discardWfsCell(state, cellKey, false); });
+        model.allFeatures = previousFeatures;
+      });
+      model.layer?.on?.('change:visible', state.prune);
+    }
+    const entry = { extent: extent.slice(), controller };
+    state.pending.set(key, entry);
+    const pause = function (delay) {
+      return new Promise(function (resolve, reject) {
+        if (signal.aborted) { reject(signal.reason); return; }
+        const abort = function () { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
+        const timer = setTimeout(function () { signal.removeEventListener('abort', abort); resolve(); }, delay);
+        signal.addEventListener('abort', abort, { once: true });
+      });
+    };
+    const run = async function () {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        signal.throwIfAborted();
+        const result = await queueWfsCell(state, signal, async function () {
+          signal.throwIfAborted();
+          wfsCellMetrics.requests++;
+          const response = await nativeFetch(model.proxyUrl + url, { signal });
+          if (response.ok) return { response, text: await response.text() };
+          try { await response.body?.cancel(); } catch {}
+          return { response };
+        });
+        signal.throwIfAborted();
+        if (result.response.status === 503 && attempt < 3) {
+          const header = result.response.headers.get('Retry-After');
+          const seconds = header && header.trim() ? Number(header) : NaN;
+          const date = header ? Date.parse(header) : NaN;
+          const delay = Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1000 * Math.pow(2, attempt);
+          if (delay <= 10000) { await pause(delay + Math.floor(Math.random() * 250)); continue; }
+        }
+        if (!result.response.ok) throw Object.assign(new Error('WFS HTTP ' + result.response.status), { status: result.response.status });
+        if (/^\s*</.test(result.text) && model.config.params.outputFormat === 'application/json') throw new Error('WFS response is not GeoJSON');
+        const features = model.getAllFeatures(result.text);
+        signal.throwIfAborted();
+        if (features.some(function (feature) { return feature.getId() == null; })) throw new Error('WFS cells require stable feature IDs');
+        const unique = Array.from(new Map(features.map(function (feature) { return [feature.getId(), feature]; })).values());
+        unique.forEach(function (feature) {
+          const id = feature.getId();
+          const reference = state.features.get(id);
+          if (reference) reference.count++;
+          else state.features.set(id, { feature, count: 1 });
+        });
+        const sharedFeatures = unique.map(function (feature) { return state.features.get(feature.getId()).feature; });
+        const cell = { extent: extent.slice(), features: sharedFeatures, bytes: result.text.length * 2, at: Date.now(), key };
+        state.cells.set(key, cell); wfsCellCache.set(cell, state); wfsCellBytes += cell.bytes;
+        model.allFeatures = Array.from(state.features.values(), function (reference) { return reference.feature; });
+        source.addFeatures(model.getFilteredFeatures(unique));
+        for (const [cached, owner] of wfsCellCache) {
+          if (wfsCellBytes <= 16 * 1024 * 1024 && wfsCellCache.size <= 64) break;
+          if (!owner.needed.has(cached.key)) { discardWfsCell(owner, cached.key, true); wfsCellMetrics.evictions++; }
+        }
+        model.layer?.set?.('qtilerWfsLoadStatus', 'loaded', true);
+        success?.(unique);
+        return;
+      }
+    };
+    return run().catch(function (error) {
+      if (state.pending.get(key) === entry) source.removeLoadedExtent(extent);
+      if (signal.aborted) wfsCellMetrics.cancelled++;
+      else {
+        model.layer?.set?.('qtilerWfsLoadStatus', 'error', true);
+        model.layer?.set?.('qtilerWfsHttpStatus', error.status || null, true);
+        console.warn('Hajk WFS cell could not be loaded', { layer: model.config.name, status: error.status || null });
+      }
+      failure?.();
+    }).finally(function () { if (state.pending.get(key) === entry) state.pending.delete(key); });
+  }
+
+  window.qtilerHajkWfsCellStrategy = wfsCellStrategy;
+  window.qtilerHajkWfsCellLoad = loadWfsCell;
+  window.qtilerHajkWfsCellEnabled = wfsCellEnabled;
+  window.qtilerHajkWfsCellStats = function () {
+    return Object.assign({}, wfsCellMetrics, { queued: wfsCellQueue.length, running: wfsCellRunning, cachedCells: wfsCellCache.size, estimatedBytes: wfsCellBytes });
+  };
+
+  function installVectorScaleLimits() {
+    const map = getRealHajkMap();
+    const config = window.__QTILER2HAJK_CONFIG;
+    const definitions = config && config.layersConfig && config.layersConfig.vectorlayers;
+    if (!map || !Array.isArray(definitions)) return;
+    const projection = map.getView().getProjection();
+    const metersPerUnit = typeof projection.getMetersPerUnit === 'function' ? projection.getMetersPerUnit() : 1;
+    if (!Number.isFinite(metersPerUnit) || metersPerUnit <= 0) return;
+    eachLayer(map.getLayers(), function (layer) {
+      if (!layer || typeof layer.get !== 'function' || typeof layer.setMaxResolution !== 'function') return;
+      const definition = definitions.find(function (entry) { return String(entry.id) === String(layer.get('name')); });
+      if (!definition) return;
+      const styles = definition.styles;
+      const entries = Array.isArray(styles) && styles.length === 1 ? (Array.isArray(styles[0]) ? styles[0] : [styles[0]]) : [];
+      const rule = entries.length === 1 && !entries[0]?.text ? entries[0] : null;
+      const farScale = Number(rule?.maxScale) > 0 ? Number(rule.maxScale) : (Number(rule?.minZoom) > 40 ? Number(rule.minZoom) : null);
+      const nearScale = Number(rule?.minScale) > 0 ? Number(rule.minScale) : (Number(rule?.maxZoom) > 40 ? Number(rule.maxZoom) : null);
+      const maximum = Number(definition.maxResolution) > 0 ? Number(definition.maxResolution) : (farScale ? farScale * 0.00028 / metersPerUnit : null);
+      const minimum = Number(definition.minResolution) > 0 ? Number(definition.minResolution) : (nearScale ? nearScale * 0.00028 / metersPerUnit : null);
+      if (maximum !== null) {
+        const inclusiveMaximum = maximum * (1 + 1e-10);
+        if (layer.getMaxResolution() !== inclusiveMaximum) layer.setMaxResolution(inclusiveMaximum);
+        if (rule && !(Number(rule.minZoom) >= 0 && Number(rule.minZoom) <= 40 && rule.minZoom !== null && rule.minZoom !== '')) {
+          if (layer.getMinZoom() !== -Infinity) layer.setMinZoom(-Infinity);
+        }
+      }
+      if (minimum !== null) {
+        if (layer.getMinResolution() !== minimum) layer.setMinResolution(minimum);
+        if (rule && !(Number(rule.maxZoom) >= 0 && Number(rule.maxZoom) <= 40 && rule.maxZoom !== null && rule.maxZoom !== '')) {
+          if (layer.getMaxZoom() !== Infinity) layer.setMaxZoom(Infinity);
+        }
+      }
+    });
+  }
+
+  function installWmsCancellation() {
+    const map = getRealHajkMap();
+    if (!map || typeof map.on !== 'function' || typeof map.getLayers !== 'function') return;
+    let state = rasterCancellationMaps.get(map);
+    if (!state) {
+      state = { moving: false, sources: new WeakSet(), pending: new Set(), cancelled: new Map() };
+      rasterCancellationMaps.set(map, state);
+      map.on('movestart', function () {
+        state.moving = true;
+        state.pending.forEach(function (request) { request.controller.abort(); });
+      });
+      map.on('moveend', function () {
+        state.moving = false;
+        const sources = new Set();
+        state.cancelled.forEach(function (source, tile) {
+          if (tile.getState() === 3) tile.setState(0);
+          sources.add(source);
+        });
+        state.cancelled.clear();
+        sources.forEach(function (source) { source.changed(); });
+      });
+    }
+    eachLayer(map.getLayers(), function (layer) {
+      const source = layer && typeof layer.getSource === 'function' ? layer.getSource() : null;
+      if (!source || state.sources.has(source) || typeof source.setTileLoadFunction !== 'function' || typeof source.getParams !== 'function') return;
+      const urls = typeof source.getUrls === 'function' ? source.getUrls() : [];
+      if (!urls || !urls.length || !urls.every(function (value) {
+        try {
+          const url = new URL(value, window.location.href);
+          return url.origin === window.location.origin && /\/wms\/?$/i.test(url.pathname);
+        } catch { return false; }
+      })) return;
+      state.sources.add(source);
+      source.setTileLoadFunction(function (tile, url) {
+        function markCancelled() {
+          tile.setState(3);
+          if (state.moving) state.cancelled.set(tile, source);
+          else {
+            tile.setState(0);
+            source.changed();
+          }
+        }
+        if (state.moving) { markCancelled(); return; }
+        const controller = new AbortController();
+        const request = { controller };
+        state.pending.add(request);
+        fetch(url, { credentials: 'same-origin', signal: controller.signal }).then(function (response) {
+          if (!response.ok) throw new Error('WMS HTTP ' + response.status);
+          return response.blob();
+        }).then(function (blob) {
+          controller.signal.throwIfAborted();
+          return new Promise(function (resolve, reject) {
+            const reader = new FileReader();
+            function abort() { reader.abort(); }
+            function cleanup() {
+              controller.signal.removeEventListener('abort', abort);
+              reader.onload = reader.onerror = reader.onabort = null;
+            }
+            reader.onload = function () {
+              cleanup();
+              try {
+                controller.signal.throwIfAborted();
+                tile.getImage().src = reader.result;
+                resolve();
+              } catch (error) { reject(error); }
+            };
+            reader.onerror = function () {
+              cleanup();
+              reject(reader.error || new Error('WMS image could not be read'));
+            };
+            reader.onabort = function () {
+              cleanup();
+              reject(controller.signal.reason || new Error('WMS image was cancelled'));
+            };
+            controller.signal.addEventListener('abort', abort, { once: true });
+            try { reader.readAsDataURL(blob); }
+            catch (error) { cleanup(); reject(error); }
+          });
+        }).catch(function () {
+          if (controller.signal.aborted) markCancelled();
+          else tile.setState(3);
+        }).finally(function () { state.pending.delete(request); });
+      });
+    });
+  }
+
   // The Lantmäteriet search control was built against Origo's control
   // registry (window.Origo.controls) and is only ever activated inside
   // bootOrigo(), which real Hajk never calls (Hajk boots its own React app).
@@ -899,6 +1279,12 @@
       } catch (err) {}
       try {
         mountLantmateriForRealHajk();
+      } catch (err) {}
+      try {
+        installWmsCancellation();
+      } catch (err) {}
+      try {
+        installVectorScaleLimits();
       } catch (err) {}
       if (attempts < 80) window.setTimeout(tick, 250);
     };

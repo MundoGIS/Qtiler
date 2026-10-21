@@ -1374,7 +1374,7 @@ def process_task(params):
             if default_max > hard_limit:
                 default_max = hard_limit
             if max_features is None or str(max_features).strip() == '':
-                max_features = None
+                max_features = default_max
             else:
                 try:
                     max_features = int(max_features)
@@ -1511,6 +1511,11 @@ def process_task(params):
                         'properties': props
                     })
                 fc = { 'type': 'FeatureCollection', 'features': features }
+                if requested_srs and requested_srs.upper().startswith('EPSG:'):
+                    fc['crs'] = {
+                        'type': 'name',
+                        'properties': { 'name': 'urn:ogc:def:crs:EPSG::' + requested_srs[5:] }
+                    }
                 os.makedirs(os.path.dirname(output_file), exist_ok=True)
                 with open(output_file, 'w', encoding='utf-8') as f:
                     json.dump(fc, f)

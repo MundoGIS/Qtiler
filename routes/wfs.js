@@ -81,19 +81,34 @@ const wfsExceptionXml = (message, { code = 'NoApplicableCode' } = {}) => {
   );
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const cancelledTaskError = () => Object.assign(new Error('WFS request was cancelled'), { code: 'TASK_ABORTED' });
+
+const sleep = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(cancelledTaskError());
+  const onAbort = () => {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', onAbort);
+    reject(cancelledTaskError());
+  };
+  const timer = setTimeout(() => {
+    signal?.removeEventListener('abort', onAbort);
+    resolve();
+  }, ms);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
 
 const isQueueFullCode = (code) => String(code || '').trim().toLowerCase() === 'queue_full';
 
-const renderTileWithQueueRetry = async (tileRendererPool, params, { attempts = 3, baseDelayMs = 75 } = {}) => {
+const renderTileWithQueueRetry = async (tileRendererPool, params, { attempts = 3, baseDelayMs = 75, signal } = {}) => {
   let lastErr;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await tileRendererPool.renderTile(params);
+      if (signal?.aborted) throw cancelledTaskError();
+      return await tileRendererPool.renderTile(params, { signal });
     } catch (err) {
       lastErr = err;
       if (!isQueueFullCode(err?.code) || attempt >= attempts - 1) throw err;
-      await sleep(baseDelayMs * (attempt + 1));
+      await sleep(baseDelayMs * (attempt + 1), signal);
     }
   }
   throw lastErr;
@@ -271,6 +286,7 @@ const httpStatusForWorkerCode = (code) => {
   if (c === 'invalidparametervalue') return 400;
   if (c === 'operationnotsupported') return 400;
   if (c === 'queue_full') return 503;
+  if (c === 'worker_timeout') return 504;
   return 500;
 };
 
@@ -932,6 +948,13 @@ export const registerWfsRoutes = ({
       const contentType = asJson ? 'application/json' : 'application/xml';
       const ext = asJson ? 'json' : 'xml';
 
+      const requestController = new AbortController();
+      const abortDisconnectedRequest = () => {
+        if (!res.writableFinished) requestController.abort();
+      };
+      req.once('aborted', abortDisconnectedRequest);
+      res.once('close', abortDisconnectedRequest);
+      if (req.aborted || res.destroyed) requestController.abort();
       let tmpDir;
       try {
         tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'qtiler-wfs-feature-'));
@@ -952,7 +975,7 @@ export const registerWfsRoutes = ({
           hard_limit_override: hasExplicitCount ? effectiveHardLimit : null,
           start_index: startIndex,
           output_format: asJson ? 'application/json' : 'application/gml+xml'
-        });
+        }, { signal: requestController.signal });
 
         if (!result || result.status !== 'success') {
           const msg = result?.message || result?.error || 'get_feature_failed';
@@ -965,36 +988,20 @@ export const registerWfsRoutes = ({
 
         res.setHeader('Cache-Control', 'no-store');
         res.type(contentType);
-        if (asJson) {
-           fs.promises.readFile(outFile, 'utf8').then(raw => {
-             try {
-               const parsed = JSON.parse(raw);
-               if (srsName && srsName.toUpperCase().startsWith('EPSG:')) {
-                 if (!parsed.crs) {
-                   parsed.crs = {
-                     type: 'name',
-                     properties: { name: `urn:ogc:def:crs:EPSG::${srsName.substring(5)}` }
-                   };
-                 }
-               }
-               res.send(JSON.stringify(parsed));
-             } catch(err) {
-               res.send(raw);
-             } finally {
-               try { fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-             }
-           });
-        } else {
-          res.sendFile(outFile, async () => {
-            try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
-          });
-        }
+        res.sendFile(outFile, async (sendError) => {
+          try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
+          if (sendError && !res.headersSent && !res.destroyed) res.status(500).end();
+        });
       } catch (err) {
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch {}
+        if (requestController.signal.aborted || res.destroyed) return;
         const status = httpStatusForWorkerCode(err?.code);
         const code = owsCodeForWorkerCode(err?.code);
         applyRetryAfterHeader(res, status);
         res.status(status).type('application/xml').send(wfsExceptionXml(redactSecrets(String(err?.message || err)), { code }));
+      } finally {
+        req.off('aborted', abortDisconnectedRequest);
+        res.off('close', abortDisconnectedRequest);
       }
       return;
     }

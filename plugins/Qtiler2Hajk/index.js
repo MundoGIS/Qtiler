@@ -974,6 +974,53 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
     const editRefreshReplacementV3 = editRefreshReplacement
       .replace('qtilerRefreshV2', 'qtilerRefreshV3')
       .replace('return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r)', 'const service=this.editSource||this.source||{},layerId=String(service.id||"").replace(/_edit$/,"");return [s.get("name"),s.get("id"),s.get("layer"),s.get("caption")].some(a=>String(a||"").split(":").pop()===r||(service.caption&&String(a)===String(service.caption))||(layerId&&String(a)===layerId))');
+    const vectorLoaderAnchor = 'loader:(i,o,s)=>{this.loadData(this.createUrl(i,s.getCode()))}';
+    const vectorLoaderReplacement = 'loader:(extent,resolution,projection,success,failure)=>{this.loadData(this.createUrl(extent,projection.getCode()),extent,success,failure)}';
+    const vectorLoadPattern = /loadData\(e\)\{e=this\.proxyUrl\+e,([\w$]+)\(e\)\.then\(n=>\{n\.text\(\)\.then\(r=>\{this\.allFeatures=this\.getAllFeatures\(r\),this\.vectorSource\.addFeatures\(this\.getFilteredFeatures\(this\.allFeatures\)\)\}\)\}\)\}/;
+    const vectorCellStrategyAnchor = 'strategy:this.config?.loadingStrategy==="all"?KG:jge';
+    const vectorCellStrategyReplacement = 'strategy:this.config?.loadingStrategy==="all"?KG:(typeof window.qtilerHajkWfsCellStrategy==="function"?window.qtilerHajkWfsCellStrategy(this):jge)';
+    const vectorLoadUpgradePattern = /loadData\(url,extent,success,failure\)\{\/\*qtilerWfsRetryV[12]\*\/[\s\S]*?const response=await ([\w$]+)\(this\.proxyUrl\+url(?:,\{signal\})?\)[\s\S]*?(?=createStyle\()/;
+    const vectorLoadReplacement = (fetchName) => `loadData(url,extent,success,failure){/*qtilerWfsRetryV3*/
+      if(typeof window!=="undefined"&&typeof window.qtilerHajkWfsCellLoad==="function"&&window.qtilerHajkWfsCellEnabled?.(this)&&Array.isArray(extent)&&extent.length===4&&extent.every(Number.isFinite))return window.qtilerHajkWfsCellLoad(this,url,extent,success,failure,${fetchName});
+      const source=this.vectorSource,controller=new AbortController(),signal=controller.signal;
+      const spatial=Array.isArray(extent)&&extent.length===4&&extent.every(Number.isFinite);
+      const requests=this.qtilerWfsRequests||(this.qtilerWfsRequests=new Set());
+      if(spatial)for(const pending of requests)if(pending.spatial)pending.controller.abort();
+      const request={controller,spatial};requests.add(request);
+      const cancel=()=>controller.abort();
+      if(spatial)this.map?.on?.("movestart",cancel);
+      const pause=delay=>new Promise((resolve,reject)=>{
+        if(signal.aborted){reject(signal.reason);return}
+        const abort=()=>{clearTimeout(timer);signal.removeEventListener("abort",abort);reject(signal.reason)};
+        const timer=setTimeout(()=>{signal.removeEventListener("abort",abort);resolve()},delay);
+        signal.addEventListener("abort",abort,{once:true});
+      });
+      const run=async()=>{for(let attempt=0;attempt<4;attempt++){
+        signal.throwIfAborted();
+        const response=await ${fetchName}(this.proxyUrl+url,{signal});
+        signal.throwIfAborted();
+        if(response.status===503&&attempt<3){
+          const header=response.headers.get("Retry-After"),seconds=header!==null&&header.trim()!==""?Number(header):NaN,date=header?Date.parse(header):NaN;
+          const delay=Number.isFinite(seconds)?Math.max(0,seconds*1000):Number.isFinite(date)?Math.max(0,date-Date.now()):1000*2**attempt;
+          if(delay<=10000){try{await response.body?.cancel()}catch{}await pause(delay+Math.floor(Math.random()*250));continue}
+        }
+        if(!response.ok)throw Object.assign(new Error("WFS HTTP "+response.status),{status:response.status});
+        const text=await response.text();signal.throwIfAborted();
+        if(this.config.params.outputFormat==="application/json"&&/^\\s*</.test(text))throw new Error("WFS response is not GeoJSON");
+        const features=this.getAllFeatures(text);signal.throwIfAborted();
+        this.allFeatures=features;source.addFeatures(this.getFilteredFeatures(features));
+        this.layer?.set?.("qtilerWfsLoadStatus","loaded",true);success?.(features);return;
+      }};
+      return run().catch(error=>{
+        if(extent)source.removeLoadedExtent?.(extent);
+        if(!signal.aborted){
+          this.layer?.set?.("qtilerWfsLoadStatus","error",true);
+          this.layer?.set?.("qtilerWfsHttpStatus",error.status||null,true);
+          console.warn("Hajk WFS layer could not be loaded",{layer:this.layer?.get?.("caption")||this.config.name,status:error.status||null});
+        }
+        failure?.();
+      }).finally(()=>{requests.delete(request);if(spatial)this.map?.un?.("movestart",cancel)});
+    }`;
     for (const filePath of candidates) {
       let raw;
       try {
@@ -982,6 +1029,19 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
         continue;
       }
       let next = raw;
+      if (next.includes(vectorCellStrategyAnchor)) {
+        next = next.split(vectorCellStrategyAnchor).join(vectorCellStrategyReplacement);
+        patched++;
+      }
+      if (vectorLoadUpgradePattern.test(next)) {
+        next = next.replace(vectorLoadUpgradePattern, (_match, fetchName) => vectorLoadReplacement(fetchName));
+        patched++;
+      }
+      if (next.includes(vectorLoaderAnchor) && vectorLoadPattern.test(next)) {
+        next = next.replace(vectorLoadPattern, (_match, fetchName) => vectorLoadReplacement(fetchName));
+        next = next.split(vectorLoaderAnchor).join(vectorLoaderReplacement);
+        patched++;
+      }
       const infoclickImageAnchor = 'this.components={...RO,p:';
       const infoclickImageReplacement = 'this.components={...RO,img:({node:e,...n})=>x.jsx("img",{...n,style:{maxWidth:"100%",height:"auto",objectFit:"contain",...n.style}}),p:';
       if (next.includes(infoclickImageAnchor)) {
@@ -4329,7 +4389,7 @@ ${mapIcon}
     if (!Array.isArray(resolutions) || !Number.isFinite(targetResolution) || targetResolution <= 0) return null;
     for (let index = 0; index < resolutions.length; index++) {
       const resolution = Number(resolutions[index]);
-      if (Number.isFinite(resolution) && resolution <= targetResolution) return index;
+      if (Number.isFinite(resolution) && resolution <= targetResolution + Math.max(1, targetResolution) * 1e-10) return index;
     }
     return resolutions.length ? resolutions.length - 1 : null;
   };
@@ -4339,7 +4399,7 @@ ${mapIcon}
     let found = null;
     for (let index = 0; index < resolutions.length; index++) {
       const resolution = Number(resolutions[index]);
-      if (Number.isFinite(resolution) && resolution >= targetResolution) found = index;
+      if (Number.isFinite(resolution) && resolution >= targetResolution - Math.max(1, targetResolution) * 1e-10) found = index;
     }
     return found;
   };
@@ -4348,8 +4408,12 @@ ${mapIcon}
     const rule = unwrapPrimaryStyleRule(styleDef);
     const out = {};
     if (Array.isArray(styleDef) && (styleDef.length > 1 || styleDef.some(group => (Array.isArray(group) ? group : [group]).some(entry => entry?.text)))) return out;
-    const maxScaleResolution = scaleDenominatorToResolution(rule?.maxScale, projCode);
-    const minScaleResolution = scaleDenominatorToResolution(rule?.minScale, projCode);
+    const maxScale = Number(rule?.maxScale) > 0 ? rule.maxScale : (Number(rule?.minZoom) > 40 ? rule.minZoom : null);
+    const minScale = Number(rule?.minScale) > 0 ? rule.minScale : (Number(rule?.maxZoom) > 40 ? rule.maxZoom : null);
+    const maxScaleResolution = scaleDenominatorToResolution(maxScale, projCode);
+    const minScaleResolution = scaleDenominatorToResolution(minScale, projCode);
+    if (maxScaleResolution !== null) out.maxResolution = maxScaleResolution;
+    if (minScaleResolution !== null) out.minResolution = minScaleResolution;
     const minZoom = firstZoomAtOrBelowResolution(resolutions, maxScaleResolution);
     const maxZoom = lastZoomAtOrAboveResolution(resolutions, minScaleResolution);
     if (minZoom !== null) out.minZoom = minZoom;

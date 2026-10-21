@@ -11,6 +11,7 @@ import { getRequestBaseUrl } from "../lib/requestBaseUrl.js";
 import express from "express";
 import proj4 from "proj4";
 import sharp from "sharp";
+import { setTimeout as delay } from 'node:timers/promises';
 import { normalizePublishedCrs } from '../lib/publishedCrs.js';
 import { incrementProjectDiagnosticCounter, recordProjectDiagnostic } from '../lib/projectDiagnostics.js';
 
@@ -50,7 +51,8 @@ const getQueryCI = (req, key) => {
 const getRequestParams = (req) => ({ ...(req?.body || {}), ...(req?.query || {}) });
 
 // Return an HTTP status code appropriate for a renderTile error.
-const renderErrStatus = (err) => ['QUEUE_FULL', 'WMS_TILE_WAIT_TIMEOUT'].includes(err?.code) ? 503 : 500;
+const renderErrStatus = (err) => err?.code === 'WORKER_TIMEOUT'
+  ? 504 : ['QUEUE_FULL', 'WMS_TILE_WAIT_TIMEOUT'].includes(err?.code) ? 503 : 500;
 
 // 1x1 transparent PNG used as instant placeholder while a real legend is
 // rendered in the background. Avoids freezing QWC2 LayerTree when many
@@ -88,7 +90,6 @@ const isValidWmsCacheFile = async (filePath) => {
     try { await handle?.close(); } catch {}
   }
 };
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const runWithSharedWmsTileLock = async (cacheFilePath, render) => {
   const lockPath = `${cacheFilePath}.lock`;
@@ -855,14 +856,15 @@ export const registerWmsRoutes = ({
   isPublicLayerExcludedForRequest = () => false
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
-  const renderWithRetry = async (params) => {
+  const renderWithRetry = async (params, { signal } = {}) => {
     const task = params?.action ? params : { ...params, action: 'wms_render' };
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await tileRendererPool.renderTile(task);
+        if (signal?.aborted) throw Object.assign(new Error('WMS request was cancelled'), { code: 'TASK_ABORTED' });
+        return await tileRendererPool.renderTile(task, { signal });
       } catch (err) {
         if (err.code !== 'QUEUE_FULL' || attempt === 2) throw err;
-        await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
+        await delay(75 * (attempt + 1), undefined, { signal });
       }
     }
   };
@@ -1457,15 +1459,24 @@ export const registerWmsRoutes = ({
           }
           await renderPromise;
 
+          if (res.destroyed) return;
           res.setHeader('Cache-Control', 'public, max-age=86400');
           res.type(cacheTarget.contentType);
           res.sendFile(cacheTarget.filePath);
         } catch (err) {
+          if (res.destroyed) return;
           res.status(renderErrStatus(err)).type('application/xml').send(wmsExceptionXml(String(err?.message || err), { code: 'NoApplicableCode' }));
         }
         return;
       }
 
+      const requestController = new AbortController();
+      const abortDisconnectedRequest = () => {
+        if (!res.writableFinished) requestController.abort();
+      };
+      req.once?.('aborted', abortDisconnectedRequest);
+      res.once?.('close', abortDisconnectedRequest);
+      if (req.aborted || res.destroyed) requestController.abort();
       let tmpDir;
       try {
         tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-wms-"));
@@ -1486,7 +1497,7 @@ export const registerWmsRoutes = ({
           priority: requestPriority
         };
 
-        const result = await renderWithRetry(renderParams);
+        const result = await renderWithRetry(renderParams, { signal: requestController.signal });
         if (!result || result.status !== "success") {
           const msg = result?.message || result?.error || "render_failed";
           res.status(500).type("application/xml").send(wmsExceptionXml(String(msg), { code: "NoApplicableCode" }));
@@ -1512,7 +1523,11 @@ export const registerWmsRoutes = ({
         });
       } catch (err) {
         try { if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { }
+        if (requestController.signal.aborted || res.destroyed) return;
         res.status(renderErrStatus(err)).type("application/xml").send(wmsExceptionXml(String(err?.message || err), { code: "NoApplicableCode" }));
+      } finally {
+        req.off?.('aborted', abortDisconnectedRequest);
+        res.off?.('close', abortDisconnectedRequest);
       }
     };
 

@@ -15,7 +15,7 @@ import { execFile, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { PythonPool } from './lib/PythonPool.js';
-import { getProjectDiagnosticsSnapshot, startProjectDiagnosticsHeartbeat } from './lib/projectDiagnostics.js';
+import { getProjectDiagnosticsSnapshot, startProjectDiagnosticsHeartbeat, incrementProjectDiagnosticCounter } from './lib/projectDiagnostics.js';
 import { sanitizeProjectId, sanitizePluginName } from "./lib/sanitize.js";
 import { resolvePluginRoot, detectPluginName } from "./lib/pluginArchiveUtils.js";
 import { copyRecursive, removeRecursive } from "./lib/fsRecursive.js";
@@ -9015,6 +9015,10 @@ const sendOnDemandTileError = (res, err, fallbackMessage = 'Tile generation fail
     res.status(503).send('Tile rendering busy');
     return true;
   }
+  if (err?.code === 'WORKER_TIMEOUT') {
+    res.status(504).send('Tile rendering timed out');
+    return true;
+  }
   res.status(500).send(fallbackMessage);
   return true;
 };
@@ -9389,7 +9393,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     if (deleteTileFileIfInvalid(file)) {
       logProjectEvent(project, `Tile invalid (deleted): ${file}`);
     } else {
-    logProjectEvent(project, `Tile hit: ${file}`);
+    incrementProjectDiagnosticCounter('wmtsTileCacheHits');
     return res.sendFile(file);
     }
   }
@@ -9421,7 +9425,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
       if (deleteTileFileIfInvalid(fallbackFile)) {
         logProjectEvent(project, `Tile invalid (deleted) (fallback): ${fallbackFile}`);
       } else {
-        logProjectEvent(project, `Tile hit (fallback): ${fallbackFile}`);
+        incrementProjectDiagnosticCounter('wmtsTileCacheHits');
         return res.sendFile(fallbackFile);
       }
     }
@@ -9536,7 +9540,7 @@ app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.p
     if (deleteTileFileIfInvalid(file)) {
       logProjectEvent(project, `Tile invalid (deleted): ${file}`);
     } else {
-      logProjectEvent(project, `Tile hit: ${file}`);
+      incrementProjectDiagnosticCounter('wmtsTileCacheHits');
       setWmtsTileCacheHeaders(res);
       return res.sendFile(file);
     }
@@ -9569,7 +9573,7 @@ app.get("/wmts/:layer/:z/:x/:y.png", requireAdmin, (req, res) => {
     if (deleteTileFileIfInvalid(file)) {
       logProjectEvent('nogo', `Tile invalid (deleted): ${file}`);
     } else {
-      logProjectEvent('nogo', `Tile hit: ${file}`);
+      incrementProjectDiagnosticCounter('wmtsTileCacheHits');
       return res.sendFile(file);
     }
   }
