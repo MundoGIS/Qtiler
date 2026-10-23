@@ -95,6 +95,7 @@
         <button type="button" role="tab" data-layer-tab="backgrounds" aria-selected="false">Backgrounds</button>
         <button type="button" role="tab" data-layer-tab="terrains" data-3d-only aria-selected="false">Terrains</button>
       </nav>
+      <section id="layerGroupManager" class="layer-group-manager" aria-label="Organize layer groups" hidden></section>
       <div id="layerList"></div>
       <button id="saveViewBtn" class="viewer-button" type="button">Save view</button>
     </aside>
@@ -160,6 +161,11 @@
       <button id="tiltUpButton" type="button" title="Tilt toward horizon" aria-label="Tilt toward horizon"><i class="bx bx-chevron-up"></i></button>
       <button id="tiltDownButton" type="button" title="Tilt toward ground" aria-label="Tilt toward ground"><i class="bx bx-chevron-down"></i></button>
     </nav>
+    <nav id="mapModeControl" class="map-mode-control" role="group" data-qtiler3d-mode-view aria-label="Map view" hidden>
+      <button type="button" data-map-mode="2d" data-qtiler3d-mode="2d" aria-pressed="false"><span>2D</span></button>
+      <button type="button" data-map-mode="3d" data-qtiler3d-mode="3d" aria-pressed="true"><span>3D</span></button>
+      <button type="button" data-map-mode="split" data-qtiler3d-mode="split" aria-pressed="false"><i class="bx bx-columns" aria-hidden="true"></i><span>Both</span></button>
+    </nav>
     <section id="compactClock" class="compact-clock" hidden aria-label="Scene time">
       <input id="sceneTime" type="datetime-local" aria-label="Scene date and time">
       <button id="clockPlay" type="button" title="Play or pause" aria-label="Play or pause"><i class="bx bx-play"></i></button>
@@ -167,10 +173,10 @@
       <button id="clockNow" type="button" title="Current time" aria-label="Current time"><i class="bx bx-reset"></i></button>
     </section>
   </div>
-  <link rel="stylesheet" href="/plugins/Qtiler-3D-eye/view/viewer.css?v=20261011-model-print">
+  <link rel="stylesheet" href="/plugins/Qtiler-3D-eye/view/viewer.css?v=20261023-layer-tree">
   <script src="/lang-support.js"></script>
-  <script src="/plugins/Qtiler-3D-eye/view/i18n.js?v=20261011-model-print"></script>
-  <script src="/plugins/Qtiler-3D-eye/view/sketch-editor.js?v=20261011-model-print"></script>
+  <script src="/plugins/Qtiler-3D-eye/view/i18n.js?v=20261023-layer-tree"></script>
+  <script src="/plugins/Qtiler-3D-eye/view/sketch-editor.js?v=20261023-layer-tree"></script>
   <link rel="stylesheet" href="/Thirdparty/ol/ol.css">
   <script src="/Thirdparty/ol/ol.js"></script>
   <script>
@@ -200,10 +206,10 @@
             return;
           }
           addCss(base);
-          var mesh = await import('/plugins/Qtiler-3D-eye/view/geometry-mesh.js?v=20261012-wfs-z');
+          var mesh = await import('/plugins/Qtiler-3D-eye/view/geometry-mesh.js?v=20261023-layer-tree');
           window.qtilerProjectSurfaceRings = mesh.projectSurfaceRings;
           var viewer = document.createElement('script');
-          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20261012-thumbnail';
+          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20261023-layer-tree';
           document.body.appendChild(viewer);
         };
         script.onerror = function() {

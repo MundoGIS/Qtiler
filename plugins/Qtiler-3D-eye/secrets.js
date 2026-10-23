@@ -19,7 +19,6 @@ function getEncryptionKey() {
 export function encryptIonToken(value) {
     const token = String(value || '').trim();
     if (!token) return '';
-    if (token.startsWith(SECRET_PREFIX)) return token;
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
     const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);

@@ -31,6 +31,12 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 
+try {
+  localStorage.removeItem('qtiler3d_ion_token');
+} catch (error) {
+  console.warn('[Qtiler-3D-eye] Could not clear the legacy browser Ion token.', error);
+}
+
 async function api(path, options = {}) {
   const normalized = { credentials: 'include', ...options };
   if (normalized.body && typeof normalized.body === 'object' && !(normalized.body instanceof FormData) && !(normalized.body instanceof Blob)) {
@@ -43,7 +49,7 @@ async function api(path, options = {}) {
     const rejected = Array.isArray(payload?.rejected)
       ? payload.rejected.map((item) => `${item.name}: ${item.error}`).join(' · ')
       : '';
-    throw new Error([payload?.error || payload?.details || `HTTP ${response.status}`, rejected].filter(Boolean).join(' — '));
+    throw new Error([payload?.error || `HTTP ${response.status}`, payload?.details, rejected].filter(Boolean).join(' — '));
   }
   return payload;
 }
@@ -56,6 +62,18 @@ function escapeHtml(value) {
     "'": '&#39;',
     '"': '&quot;'
   }[ch]));
+}
+
+function updateAssetFileAccept() {
+  const type = $('#assetTypeSelect')?.value || 'model';
+  const accepts = {
+    model: '.glb,.gltf,.czml,.kml,.kmz,.geojson',
+    czml: '.czml',
+    '3dtiles': '.zip',
+    terrain: '.zip'
+  };
+  const input = $('#assetFilesInput');
+  if (input) input.accept = accepts[type] || '';
 }
 
 function projectLabel(projectId) {
@@ -1302,12 +1320,15 @@ function renderIonAssetChecks(selected = []) {
 async function loadIonAssets() {
   const status = $('#ionAssetsStatus');
   const button = $('#loadIonAssetsBtn');
+  const currentSelection = selectedCheckboxValues($('#sceneIonAssetsList')).map((id) =>
+    state.ionAssets.find((asset) => String(asset.id) === id) || state.editing?.ionAssets?.find((asset) => String(asset.id) === id)
+  ).filter(Boolean);
   if (button) button.disabled = true;
   if (status) status.textContent = 'Loading Cesium Ion assets...';
   try {
     const payload = await api(`${API_BASE}/api/ion/assets`);
     state.ionAssets = Array.isArray(payload.assets) ? payload.assets : [];
-    renderIonAssetChecks(state.editing?.ionAssets || []);
+    renderIonAssetChecks([...(state.editing?.ionAssets || []), ...currentSelection]);
     if (status) status.textContent = `${state.ionAssets.length} 3D Tiles assets available.`;
   } catch (error) {
     if (status) status.textContent = error.message;
@@ -1672,17 +1693,6 @@ async function uploadAssets(event) {
     return;
   }
 
-  function updateAssetFileAccept() {
-    const type = $('#assetTypeSelect')?.value || 'model';
-    const accepts = {
-      model: '.glb,.gltf,.czml,.kml,.kmz,.geojson',
-      czml: '.czml',
-      '3dtiles': '.zip',
-      terrain: '.zip'
-    };
-    const input = $('#assetFilesInput');
-    if (input) input.accept = accepts[type] || '';
-  }
   const form = new FormData();
   form.append('assetType', $('#assetTypeSelect').value);
   files.forEach((file) => form.append('files', file));

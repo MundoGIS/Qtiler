@@ -19,3 +19,9 @@ The map editor uses OpenStreetMap as the opening background by default. Selectin
 ## Model uploads
 
 GLB is recommended because it can package geometry and textures in one file. A `.gltf` upload must be self-contained (for example, use embedded data URIs); external buffer and texture files are not uploaded as a linked folder.
+
+## Viewer layer controls
+
+The published viewer keeps the layer launcher at the top of the left tool rail and places the 2D, 3D and side-by-side view selector below the camera controls on the right. Operational layers show a legend, a transparency slider and a zoom-to-layer action. Editors can create shared layer groups and one level of subgroups from the Layers panel, assign layers to them, and save that structure to the published map for all visitors.
+
+If an asset upload fails, the admin status now includes the server's safe diagnostic message. Catalog conflicts, full storage and storage permission failures are reported distinctly; check the Qtiler server log for the underlying cause of other processing errors.

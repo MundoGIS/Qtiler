@@ -43,6 +43,22 @@
       messages: { tilesTerrainMismatch: '3D Tiles ”{layer}” luotiin eri maastolle. Korkeutta korjataan vertailupisteen avulla; luo ne uudelleen aktiivisella maastolla tarkan sovituksen saamiseksi.', tilesLegacyTerrain: '3D Tiles ”{layer}” luotiin DEM-aineistosta, jonka vertailupistettä ei ole tallennettu. Korjaa sijainti luomalla ne uudelleen aktiivisella maastolla.' }
     }
   };
+  locales.en.modes.both = 'Both';
+  locales.es.modes.both = 'Ambos';
+  locales.en.layerManager = {
+    organize: 'Organize layers', groupName: 'New group name', addGroup: 'Add group',
+    parentGroup: 'Choose parent group', subgroupName: 'Subgroup name', addSubgroup: 'Add subgroup',
+    remove: 'Remove', removeGroup: 'Remove "{name}"? Layers in it will become ungrouped.',
+    ungrouped: 'Ungrouped', opacity: 'Opacity', zoom: 'Zoom to layer', place: 'Place model',
+    noExtent: 'No map extent is available for {name}.', empty: 'No layers in this group.', saved: 'Saved to this map.'
+  };
+  locales.es.layerManager = {
+    organize: 'Organizar capas', groupName: 'Nombre del grupo', addGroup: 'Añadir grupo',
+    parentGroup: 'Elegir grupo principal', subgroupName: 'Nombre del subgrupo', addSubgroup: 'Añadir subgrupo',
+    remove: 'Eliminar', removeGroup: '¿Eliminar «{name}»? Las capas quedarán sin agrupar.',
+    ungrouped: 'Sin grupo', opacity: 'Opacidad', zoom: 'Acercar a la capa', place: 'Colocar modelo',
+    noExtent: 'No hay extensión disponible para {name}.', empty: 'No hay capas en este grupo.', saved: 'Guardado en este mapa.'
+  };
   const extras = {
     en: {
       tools: { select: 'Select', point: 'Point', polyline: 'Polyline', polygon: 'Polygon', freehand: 'Freehand', text: 'Text label', placeModel: 'Place model', selectModify: 'Select / modify', addPoint: 'Add point', addLine: 'Add line', addPolygon: 'Add polygon', deleteFeature: 'Delete selected' },

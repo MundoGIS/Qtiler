@@ -13,7 +13,7 @@ export function createDualMap(options) {
   const viewer = options.viewer;
   const homeCamera = { destination: Cesium.Cartesian3.clone(viewer.camera.positionWC), orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: viewer.camera.roll } };
   document.body.dataset.mapMode = '3d';
-  document.querySelector('.map-mode-control').hidden = false;
+  document.getElementById('mapModeControl').hidden = false;
   const view = new ol.View({ center: [0, 0], zoom: 3, minZoom: 0, maxZoom: 24 });
   const map = new ol.Map({ target: 'olContainer', view, controls: [new ol.control.Attribution({ collapsible: false })] });
   const layers = new Map();
@@ -159,6 +159,7 @@ export function createDualMap(options) {
         layers.set(key, layer); map.addLayer(layer);
       }
       layer.setVisible(item.category === 'background' || vectorAsset ? item.object?.show === true : item.layer?.visible !== false && options.zoomInRange(item.layer || {}, options.styleZoom()));
+      if (item.type === 'wms' || ['osm', 'xyz'].includes(item.type)) layer.setOpacity(item.opacity ?? 1);
       if (vectorAsset && item.object && (item.type === 'czml' || layer.get('loadedAsset') !== item.object)) {
         layer.getSource().clear(); layer.getSource().addFeatures(format.readFeatures(assetFeatures(item), { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' })); layer.set('loadedAsset', item.object);
       }
@@ -277,6 +278,11 @@ export function createDualMap(options) {
     if (mode === '3d') setMode('2d');
     activeMap = '2d';
   }
+  function zoomToExtent(bounds) {
+    if (!Array.isArray(bounds) || bounds.length !== 4 || !bounds.every(Number.isFinite)) return;
+    const extent = ol.proj.transformExtent(bounds, 'EPSG:4326', view.getProjection());
+    view.fit(extent, { size: map.getSize(), padding: [48, 48, 48, 48], maxZoom: 17, duration: 700 });
+  }
   document.querySelectorAll('[data-map-mode]').forEach((button) => { button.onclick = () => setMode(button.dataset.mapMode); });
   const resize = new ResizeObserver(() => { map.updateSize(); viewer.resize(); });
   resize.observe(document.getElementById('olContainer'));
@@ -317,7 +323,7 @@ export function createDualMap(options) {
     });
     map.addInteraction(toolInteraction);
   }
-  return { map, get mode() { return mode; }, get activeMap() { return mode === 'split' ? activeMap : mode; }, setMode, focus2d, syncLayers, syncSketch, drawSketch, modifySketch, cancelSketch, measure,
+  return { map, get mode() { return mode; }, get activeMap() { return mode === 'split' ? activeMap : mode; }, setMode, focus2d, zoomToExtent, syncLayers, syncSketch, drawSketch, modifySketch, cancelSketch, measure,
     finishDrawing() { toolInteraction?.finishDrawing?.(); },
     pick(callback) { picking = callback; suspendFeatureInfo(true); }, suspendFeatureInfo, fromCesium, fromOl,
     home() { options.cancelTools(); viewer.camera.setView(homeCamera); fromCesium(true); syncLayers(); },

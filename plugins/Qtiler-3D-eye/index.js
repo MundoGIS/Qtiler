@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'node:crypto';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
@@ -245,6 +246,27 @@ const normalizeLayerStyle = (item = {}) => ({
     , styleRules: Array.isArray(item.styleRules) ? item.styleRules.map(normalizeStyleRule) : []
 });
 
+const normalizeLayerGroups = (input) => {
+    if (!Array.isArray(input)) return [];
+    const groups = input.slice(0, 50).map((group) => ({
+        id: sanitizeFileToken(group?.id || ''),
+        name: String(group?.name || '').trim().slice(0, 80),
+        parentId: sanitizeFileToken(group?.parentId || '') || null
+    })).filter((group, index, all) => group.id && group.name && all.findIndex((item) => item.id === group.id) === index);
+    const byId = new Map(groups.map((group) => [group.id, group]));
+    return groups.map((group) => ({
+        ...group,
+        parentId: group.parentId && byId.get(group.parentId)?.parentId === null ? group.parentId : null
+    }));
+};
+
+const normalizeLayerAssignments = (input, groups) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+    const groupIds = new Set(groups.map((group) => group.id));
+    return Object.fromEntries(Object.entries(input)
+        .filter(([key, groupId]) => key && key.length <= 512 && !['__proto__', 'constructor', 'prototype'].includes(key) && groupIds.has(groupId)));
+};
+
 const normalizeSceneProfile = (input = {}) => {
     const mainProjectId = normalizeProjectId(input.mainProjectId || input.qgisProject || input.projectId || '');
     const id = sanitizeFileToken(input.id || (mainProjectId ? `${mainProjectId}_3d` : `scene_${Date.now()}`));
@@ -252,6 +274,7 @@ const normalizeSceneProfile = (input = {}) => {
     const terrainProjects = uniqueStrings(input.terrainProjects || (input.terrainProjectId ? [input.terrainProjectId] : []));
     const finalTerrainProjects = terrainProjects.length ? terrainProjects : (input.enableTerrain === false || !mainProjectId ? [] : [mainProjectId]);
 
+    const layerGroups = normalizeLayerGroups(input.layerGroups);
     return {
         id,
         title: String(input.title || input.name || mainProjectId || id).trim(),
@@ -265,6 +288,8 @@ const normalizeSceneProfile = (input = {}) => {
         terrainProjects: finalTerrainProjects,
         mainLayers: Array.isArray(input.mainLayers) ? input.mainLayers : [],
         externalLayers: Array.isArray(input.externalLayers) ? input.externalLayers : [],
+        layerGroups,
+        layerAssignments: normalizeLayerAssignments(input.layerAssignments, layerGroups),
         backgroundLayers: normalizeBackgroundLayers(input.backgroundLayers, input.defaultBackgroundKey),
         defaultBackgroundKey: resolveDefaultBackgroundKey(input.backgroundLayers, input.defaultBackgroundKey),
         includeProjectView3d: input.includeProjectView3d === true,
@@ -395,8 +420,13 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         return { ...settings, ionToken: decryptIonToken(settings.ionToken) };
     };
     const settingsForEditor = (settings) => {
-        const { ionToken, ...safeSettings } = settings;
-        return { ...safeSettings, ionTokenConfigured: !!ionToken };
+        return {
+            logoUrl: settings.logoUrl,
+            headerTitle: settings.headerTitle,
+            headerSubtitle: settings.headerSubtitle,
+            galleryTitle: settings.galleryTitle,
+            ionTokenConfigured: !!settings.ionToken
+        };
     };
     const sceneForEditor = (scene) => {
         const { ionToken, ...safeScene } = scene;
@@ -1014,6 +1044,7 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
                     layerName: name,
                     url: `/wms?project=${encodeURIComponent(projectId)}`,
                     visible: item.visible !== false,
+                    projectBounds: projectWgs84Bounds(projectId),
                     isBaseLayer: false,
                     legendIcon: item.legendIcon || item.legendUrl || null
                 });
@@ -1205,7 +1236,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
                     galleryTitle: settings.galleryTitle || '3D Maps Gallery'
                 },
                 modules: profile.modules,
-                layers: layers.filter((layer) => !layer.projectId || userCanAccessProject(req, layer.projectId)),
+                layers: layers.filter((layer) => !layer.projectId || userCanAccessProject(req, layer.projectId))
+                    .map((layer) => ({ ...layer, groupId: profile.layerAssignments[layer.key] || null })),
+                layerGroups: profile.layerGroups,
+                canManageLayerGroups: !security?.isEnabled?.() || req.user?.role === 'admin'
+                    || (!!req.user && !!security.canEditPortal?.(req.user, pluginSlug) && userCanAccessProject(req, profile.mainProjectId)),
                 terrains: allTerrains,
                 assets: sceneAssets,
                 warnings: allTerrains.length ? [] : ['no_terrain_scene_will_be_flat'],
@@ -1353,7 +1388,12 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     
     // 1. Admin UI endpoints
     // Servimos los estáticos en /admin-ui
-    app.use(`/plugins/${pluginSlug}/admin-ui`, editorOnly, express.static(path.join(baseDir, 'admin-ui')));
+    app.use(`/plugins/${pluginSlug}/admin-ui`, editorOnly, express.static(path.join(baseDir, 'admin-ui'), {
+        setHeaders: (res, filePath) => {
+            if (/\.css$/i.test(filePath)) res.setHeader('Content-Type', 'text/css; charset=utf-8');
+            if (/\.js$/i.test(filePath)) res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        }
+    }));
 
     // Servir el cache local de quantized-mesh (terreno Cesium) para nuestro plugin
     const quantizedMeshCacheRoot = path.join(process.cwd(), 'cache', 'quantized-mesh');
@@ -1405,7 +1445,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     const assetUpload = multer({
         storage: multer.diskStorage({
             destination: (_req, _file, cb) => cb(null, assetUploadTmp),
-            filename: (_req, file, cb) => cb(null, `${Date.now()}_${sanitizeFileToken(file.originalname || 'asset')}`)
+            filename: (_req, file, cb) => {
+                const name = sanitizeFileToken(path.basename(file.originalname || 'asset')).slice(0, 140) || 'asset';
+                cb(null, `${Date.now()}_${crypto.randomUUID()}_${name}`);
+            }
         }),
         limits: { fileSize: 2 * 1024 * 1024 * 1024 }
     });
@@ -1704,8 +1747,13 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         const current = readSettings();
         const requestedToken = String(req.body?.ionToken || '').trim();
         const ionToken = req.body?.clearIonToken === true ? '' : (requestedToken || current.ionToken);
-        const next = writeSettings({ ...current, ...(req.body || {}), ionToken });
-        res.json({ status: 'saved', settings: settingsForEditor(next) });
+        try {
+            const next = writeSettings({ ...current, ...(req.body || {}), ionToken });
+            res.json({ status: 'saved', settings: settingsForEditor(next) });
+        } catch (error) {
+            console.error(`[${pluginSlug}] Settings save failed`, error);
+            res.status(500).json({ error: 'settings_save_failed', details: String(error?.message || error) });
+        }
     });
 
     router.get('/api/ion/assets', requireAdmin, async (_req, res) => {
@@ -1720,9 +1768,9 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
             const items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
             res.json({
                 assets: items.map((asset) => ({
-                    id: String(asset.id || ''),
-                    name: String(asset.name || `Asset ${asset.id || ''}`),
-                    type: String(asset.type || '')
+                    id: String(asset?.id || ''),
+                    name: String(asset?.name || `Asset ${asset?.id || ''}`),
+                    type: String(asset?.type || '')
                 })).filter((asset) => /^\d+$/.test(asset.id) && /3d\s*tiles|3dtiles/i.test(asset.type))
             });
         } catch (error) {
@@ -2194,70 +2242,105 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         }
     });
 
-    router.post('/api/assets/upload', requireAdmin, assetUpload.array('files', 20), async (req, res) => {
-        const requestedType = String(req.body?.assetType || req.body?.type || '').trim().toLowerCase();
-        const files = Array.isArray(req.files) ? req.files : [];
-        if (!files.length) return res.status(400).json({ error: 'files_required' });
-        const assets = readAssets().map(normalizeAssetRecord);
+    router.post('/api/assets/upload', requireAdmin, (req, res, next) => {
+        assetUpload.array('files', 20)(req, res, (error) => {
+            if (!error) return next();
+            console.error(`[${pluginSlug}] Asset upload middleware failed`, error);
+            const status = error.code === 'LIMIT_FILE_SIZE' ? 413
+                : error.code === 'LIMIT_FILE_COUNT' || error.code === 'LIMIT_UNEXPECTED_FILE' ? 400
+                    : Number(error.status || error.statusCode) || 500;
+            const details = error.code === 'LIMIT_FILE_SIZE' ? 'File exceeds the 2 GiB per-file upload limit.'
+                : error.code === 'LIMIT_FILE_COUNT' || error.code === 'LIMIT_UNEXPECTED_FILE' ? 'Upload at most 20 files using the files field.'
+                    : 'The server could not receive the uploaded file. Check the server log and temporary storage permissions.';
+            return res.status(status).json({ error: 'asset_upload_failed', details });
+        });
+    }, async (req, res) => {
         const uploaded = [];
-        const rejected = [];
+        try {
+            const requestedType = String(req.body?.assetType || req.body?.type || '').trim().toLowerCase();
+            const files = Array.isArray(req.files) ? req.files : [];
+            if (!files.length) return res.status(400).json({ error: 'files_required' });
+            const assets = readAssets().map(normalizeAssetRecord);
+            const rejected = [];
 
-        for (const file of files) {
-            const originalName = file.originalname || file.filename;
-            const ext = path.extname(originalName).toLowerCase();
-            const baseName = sanitizeFileToken(path.basename(originalName, ext)) || `asset_${Date.now()}`;
-            const assetId = sanitizeFileToken(`${Date.now()}_${baseName}_${Math.random().toString(36).slice(2, 6)}`);
-            try {
-                let record = null;
-                if (['.gltf', '.glb', '.czml', '.kml', '.kmz', '.geojson'].includes(ext) && (!requestedType || requestedType === 'model' || requestedType === '3d' || requestedType === 'czml' && ext === '.czml')) {
-                    const targetName = `${assetId}${ext}`;
-                    const targetPath = path.join(modelsRoot, targetName);
-                    await fs.promises.rename(file.path, targetPath);
-                    record = normalizeAssetRecord({
-                        id: assetId,
-                        name: path.basename(originalName, ext),
-                        type: ext === '.czml' ? 'czml' : (ext === '.geojson' ? 'geojson' : (ext === '.kml' || ext === '.kmz' ? 'kml' : 'model')),
-                        url: `/plugins/${pluginSlug}/assets/models/${targetName}`,
-                        originalName,
-                        fileName: targetName
-                    });
-                } else if (ext === '.zip' && (requestedType === '3dtiles' || requestedType === 'tiles' || requestedType === 'terrain')) {
-                    const targetRoot = requestedType === 'terrain' ? externalTerrainRoot : tiles3dRoot;
-                    const targetDir = path.join(targetRoot, assetId);
-                    await fs.promises.mkdir(targetDir, { recursive: true });
-                    const extractDir = path.join(assetUploadTmp, `${assetId}_extract`);
-                    await fs.promises.mkdir(extractDir, { recursive: true });
-                    const zip = new AdmZip(file.path);
-                    zip.extractAllTo(extractDir, true);
-                    const requiredName = requestedType === 'terrain' ? 'layer.json' : 'tileset.json';
-                    const requiredFile = await findFileRecursive(extractDir, requiredName);
-                    if (!requiredFile) throw new Error(`${requiredName}_missing`);
-                    await moveDirectoryContents(path.dirname(requiredFile), targetDir);
-                    await fs.promises.rm(extractDir, { recursive: true, force: true });
-                    await fs.promises.rm(file.path, { force: true });
-                    record = normalizeAssetRecord({
-                        id: assetId,
-                        name: path.basename(originalName, ext),
-                        type: requestedType === 'terrain' ? 'terrain' : '3dtiles',
-                        url: requestedType === 'terrain'
-                            ? `/plugins/${pluginSlug}/assets/terrain/${assetId}/`
-                            : `/plugins/${pluginSlug}/assets/3dtiles/${assetId}/${requiredName}`,
-                        originalName,
-                        folderName: assetId
-                    });
-                } else {
-                    throw new Error(`unsupported_${ext || 'file'}`);
+            for (const file of files) {
+                const originalName = file.originalname || file.filename;
+                const ext = path.extname(originalName).toLowerCase();
+                const baseName = (sanitizeFileToken(path.basename(originalName, ext)).slice(0, 80) || `asset_${Date.now()}`);
+                const assetId = `${Date.now()}_${crypto.randomUUID()}_${baseName}`;
+                try {
+                    let record = null;
+                    if (['.gltf', '.glb', '.czml', '.kml', '.kmz', '.geojson'].includes(ext) && (!requestedType || requestedType === 'model' || requestedType === '3d' || requestedType === 'czml' && ext === '.czml')) {
+                        const targetName = `${assetId}${ext}`;
+                        const targetPath = path.join(modelsRoot, targetName);
+                        await fs.promises.rename(file.path, targetPath);
+                        record = normalizeAssetRecord({
+                            id: assetId,
+                            name: path.basename(originalName, ext),
+                            type: ext === '.czml' ? 'czml' : (ext === '.geojson' ? 'geojson' : (ext === '.kml' || ext === '.kmz' ? 'kml' : 'model')),
+                            url: `/plugins/${pluginSlug}/assets/models/${targetName}`,
+                            originalName,
+                            fileName: targetName
+                        });
+                    } else if (ext === '.zip' && (requestedType === '3dtiles' || requestedType === 'tiles' || requestedType === 'terrain')) {
+                        const targetRoot = requestedType === 'terrain' ? externalTerrainRoot : tiles3dRoot;
+                        const targetDir = path.join(targetRoot, assetId);
+                        await fs.promises.mkdir(targetDir, { recursive: true });
+                        const extractDir = path.join(assetUploadTmp, `${assetId}_extract`);
+                        await fs.promises.mkdir(extractDir, { recursive: true });
+                        const zip = new AdmZip(file.path);
+                        zip.extractAllTo(extractDir, true);
+                        const requiredName = requestedType === 'terrain' ? 'layer.json' : 'tileset.json';
+                        const requiredFile = await findFileRecursive(extractDir, requiredName);
+                        if (!requiredFile) throw new Error(`${requiredName}_missing`);
+                        await moveDirectoryContents(path.dirname(requiredFile), targetDir);
+                        await fs.promises.rm(extractDir, { recursive: true, force: true });
+                        await fs.promises.rm(file.path, { force: true });
+                        record = normalizeAssetRecord({
+                            id: assetId,
+                            name: path.basename(originalName, ext),
+                            type: requestedType === 'terrain' ? 'terrain' : '3dtiles',
+                            url: requestedType === 'terrain'
+                                ? `/plugins/${pluginSlug}/assets/terrain/${assetId}/`
+                                : `/plugins/${pluginSlug}/assets/3dtiles/${assetId}/${requiredName}`,
+                            originalName,
+                            folderName: assetId
+                        });
+                    } else {
+                        throw new Error(`unsupported_${ext || 'file'}`);
+                    }
+                    assets.push(record);
+                    uploaded.push(record);
+                } catch (err) {
+                    rejected.push({ name: originalName, error: String(err?.message || err) });
+                    await Promise.all([
+                        fs.promises.rm(file.path, { force: true }),
+                        fs.promises.rm(path.join(assetUploadTmp, `${assetId}_extract`), { recursive: true, force: true }),
+                        fs.promises.rm(path.join(tiles3dRoot, assetId), { recursive: true, force: true }),
+                        fs.promises.rm(path.join(externalTerrainRoot, assetId), { recursive: true, force: true })
+                    ].map(cleanup => cleanup.catch(cleanupError => console.error(`[${pluginSlug}] Could not clean up rejected upload`, cleanupError))));
                 }
-                assets.push(record);
-                uploaded.push(record);
-            } catch (err) {
-                rejected.push({ name: originalName, error: String(err?.message || err) });
-                try { await fs.promises.rm(file.path, { force: true }); } catch {}
             }
-        }
 
-        writeAssets(assets);
-        res.status(uploaded.length ? 200 : 400).json({ uploaded, rejected, assets });
+            writeAssets(assets);
+            res.status(uploaded.length ? 200 : 400).json({ uploaded, rejected, assets });
+        } catch (error) {
+            console.error(`[${pluginSlug}] Asset upload processing failed`, error);
+            for (const asset of uploaded) {
+                if (asset.fileName) await fs.promises.rm(path.join(modelsRoot, asset.fileName), { force: true }).catch(cleanupError => console.error(`[${pluginSlug}] Could not clean up failed model upload`, cleanupError));
+                if (asset.folderName && asset.type === '3dtiles') await fs.promises.rm(path.join(tiles3dRoot, asset.folderName), { recursive: true, force: true }).catch(cleanupError => console.error(`[${pluginSlug}] Could not clean up failed tiles upload`, cleanupError));
+                if (asset.folderName && asset.type === 'terrain') await fs.promises.rm(path.join(externalTerrainRoot, asset.folderName), { recursive: true, force: true }).catch(cleanupError => console.error(`[${pluginSlug}] Could not clean up failed terrain upload`, cleanupError));
+            }
+            const status = Number(error?.status || error?.statusCode) || (error?.code === 'ENOSPC' ? 507 : 500);
+            const details = status === 409 ? 'The asset catalog changed during this upload. Refresh the asset list and retry.'
+                : error?.code === 'ENOSPC' ? 'The server storage is full. Free disk space and retry.'
+                    : error?.code === 'EACCES' || error?.code === 'EPERM' ? 'The server cannot write to the asset storage directory. Check its permissions.'
+                        : 'The server could not save the asset catalog. Check the Qtiler server log for the recorded cause.';
+            if (!res.headersSent) res.status(status).json({
+                error: status === 409 ? 'asset_catalog_conflict' : status === 507 ? 'asset_storage_full' : 'asset_upload_processing_failed',
+                details
+            });
+        }
     });
 
     router.post('/api/assets/link', requireAdmin, express.json({ limit: '256kb' }), async (req, res) => {
@@ -2463,8 +2546,8 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     router.post('/api/preview-config', editorOnly, express.json({ limit: '2mb' }), (req, res) => {
         if (!userCanAccessProject(req, req.body?.mainProjectId)) return res.status(403).json({ error: 'forbidden' });
         if (!hasCesiumInstall()) return res.status(409).json({ error: 'cesium_runtime_required' });
-        const input = { ...(req.body || {}) };
-        const existing = input.id ? readScene(input.id) : null;
+        const existing = req.body?.id ? readScene(req.body.id) : null;
+        const input = { ...(existing || {}), ...(req.body || {}) };
         if (!String(input.ionToken || '').trim() && input.clearIonToken !== true) input.ionToken = existing?.ionToken || '';
         res.json(buildViewerConfig(normalizeSceneProfile(input), req));
     });
@@ -2480,6 +2563,41 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         if (req.body.initial === true) scene.initialView = view;
         writeMaps(maps);
         res.json({ savedViews: scene.savedViews, initialView: scene.initialView });
+    });
+
+    router.post('/api/scenes/:sceneId/layer-groups', editorOnly, express.json({ limit: '64kb' }), (req, res) => {
+        const maps = readMaps();
+        const scene = maps.find((item) => item.id === req.params.sceneId);
+        if (!scene) return res.status(404).json({ error: 'scene_not_found' });
+        if (!Array.isArray(req.body?.groups) || !req.body?.assignments || typeof req.body.assignments !== 'object' || Array.isArray(req.body.assignments)) {
+            return res.status(400).json({ error: 'invalid_layer_group_layout' });
+        }
+
+        const groups = normalizeLayerGroups(req.body.groups);
+        const normalizedById = new Map(groups.map((group) => [group.id, group]));
+        const invalidGroup = req.body.groups.some((input) => {
+            const id = sanitizeFileToken(input?.id || '');
+            const parentId = sanitizeFileToken(input?.parentId || '') || null;
+            const group = normalizedById.get(id);
+            return !group || !group.name || group.parentId !== parentId
+                || (parentId && normalizedById.get(parentId)?.parentId !== null);
+        });
+        if (groups.length !== req.body.groups.length || invalidGroup) {
+            return res.status(400).json({ error: 'invalid_layer_groups' });
+        }
+        const knownLayerKeys = new Set(buildViewerConfig(scene, req).config.layers.map((layer) => layer.key));
+        const groupIds = new Set(groups.map((group) => group.id));
+        const assignments = {};
+        for (const [key, groupId] of Object.entries(req.body.assignments)) {
+            if (!knownLayerKeys.has(key) || (groupId && !groupIds.has(groupId))) return res.status(400).json({ error: 'invalid_layer_assignment' });
+            if (groupId) assignments[key] = groupId;
+        }
+
+        scene.layerGroups = groups;
+        scene.layerAssignments = assignments;
+        try { writeMaps(maps); }
+        catch (error) { return res.status(Number(error?.status) || 500).json({ error: error?.status === 409 ? 'scene_changed_retry' : 'layer_group_save_failed' }); }
+        res.json({ groups, assignments });
     });
 
     router.get('/api/publish/:sceneId', editorOnly, (req, res) => {
@@ -2574,6 +2692,10 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         if (idx >= 0) {
             profile.createdAt = maps[idx].createdAt || profile.createdAt;
             profile.thumbnail = maps[idx].thumbnail || profile.thumbnail;
+            if (!Array.isArray(req.body?.layerGroups)) {
+                profile.layerGroups = maps[idx].layerGroups;
+                profile.layerAssignments = maps[idx].layerAssignments;
+            }
             maps[idx] = profile;
         } else {
             maps.push(profile);

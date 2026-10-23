@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QTWC Admin</title>
+    <link rel="stylesheet" href="/Thirdparty/bulmaswatch-spacelab.min.css" />
+    <link rel="stylesheet" href="/plugins/Qtiler2qwc/admin-ui/style.css" />
+    <style>
+      .hiw-actions { margin-top: 0.75rem; }
+      .hiw-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid #b8c2d1; background: #fff; color: #1f2a44; font-size: 0.85rem; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .hiw-btn:hover { background: #f4f6fb; }
+      .hiw-modal[hidden] { display: none; }
+      .hiw-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+      .hiw-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+      .hiw-card { position: relative; background: #fff; max-width: 760px; width: 100%; max-height: 88vh; overflow: hidden; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,0.35); display: flex; flex-direction: column; }
+      .hiw-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #e3e8f0; }
+      .hiw-head h2 { margin: 0; font-size: 1.15rem; color: #1f2a44; }
+      .hiw-close { background: transparent; border: 0; font-size: 1.4rem; line-height: 1; cursor: pointer; color: #64748b; }
+      .hiw-close:hover { color: #1f2a44; }
+      .hiw-body { padding: 1rem 1.25rem; overflow: auto; color: #334155; line-height: 1.5; }
+      .hiw-body h3 { margin: 1.1rem 0 0.4rem; font-size: 1rem; color: #1f2a44; }
+      .hiw-body h3:first-child { margin-top: 0; }
+      .hiw-body ul { margin: 0.25rem 0 0.75rem 1.1rem; padding: 0; }
+      .hiw-body li { margin: 0.2rem 0; }
+      .hiw-lead { font-size: 0.95rem; color: #1f2a44; margin-bottom: 0.5rem; }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">QTWC</p>
+        <h1 data-i18n="Qtiler2qwc.title">QWC2 Bridge for Qtiler</h1>
+        <p class="subtitle" data-i18n="Qtiler2qwc.subtitle">Install QWC2 from GitHub and sync project visibility from QtilerAuth.</p>
+        <div class="hiw-actions">
+          <button type="button" id="qtwc-open-hiw" class="hiw-btn" data-i18n="Qtiler2qwc.hiw.button">How it works &amp; Security</button>
+        </div>
+      </header>
+
+      <!-- ═══════════ Tab bar ═══════════ -->
+      <nav class="tab-bar">
+        <button class="tab-btn tab-btn--active" data-tab="maps">
+          <span class="tab-btn__icon">🗺</span>
+          <span data-i18n="Qtiler2qwc.tab_maps">Maps</span>
+          <span id="tabMapsBadge" class="tab-badge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="setup">
+          <span class="tab-btn__icon">⚙</span>
+          <span data-i18n="Qtiler2qwc.tab_setup">Setup</span>
+        </button>
+        <button class="tab-btn" data-tab="log">
+          <span class="tab-btn__icon">📋</span>
+          <span data-i18n="Qtiler2qwc.tab_log">Log</span>
+        </button>
+      </nav>
+
+      <!-- ════════════════════════════════════
+           TAB: Maps (default)
+           ════════════════════════════════════ -->
+      <div class="tab-panel tab-panel--active" data-panel="maps">
+
+        <section id="publishSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.profiles_section">Published profiles</h2>
+            <span id="profilesBadge" class="badge badge--muted">0</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2qwc.profiles_desc">Manage generated profiles and launch links for QWC2 (webmap).</p>
+          <div class="actions">
+            <button id="openPublishModalBtn" class="button primary" data-i18n="Qtiler2qwc.publish_new">New profile</button>
+            <a id="catalogLink" class="button ghost is-disabled" href="#" target="_blank" rel="noreferrer" data-i18n="Qtiler2qwc.open_viewer">Open QWC2 viewer</a>
+          </div>
+          <div id="publishedProfilesList" class="published-list"></div>
+        </section>
+
+      </div>
+
+      <!-- ════════════════════════════════════
+           TAB: Setup
+           ════════════════════════════════════ -->
+      <div class="tab-panel" data-panel="setup">
+
+        <!-- ── Installation ── -->
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.installation">Installation</h2>
+            <span id="installBadge" class="badge badge--muted" data-i18n="Qtiler2qwc.checking">Checking…</span>
+          </div>
+          <div id="installInfo" class="info-box info-box--muted">
+            <span data-i18n="Qtiler2qwc.loading">Loading...</span>
+          </div>
+          <div class="grid">
+            <label>
+              <span data-i18n="Qtiler2qwc.github_repo">GitHub repo</span>
+              <input id="repo" type="text" placeholder="qgis/qwc2" />
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.version_tag">Version</span>
+              <div style="display:flex;gap:.35rem;align-items:center">
+                <select id="version" style="flex:1"></select>
+                <button id="refreshReleasesBtn" class="button small" title="Refresh" style="white-space:nowrap" data-i18n="Qtiler2qwc.refresh">↻</button>
+              </div>
+              <label style="font-size:.82rem;margin-top:.25rem;display:flex;align-items:center;gap:.35rem;cursor:pointer">
+                <input id="includePrerelease" type="checkbox" /> <span data-i18n="Qtiler2qwc.include_prerelease">Include pre-releases</span>
+              </label>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="installBtn" class="button primary" data-i18n="Qtiler2qwc.install_qwc2">Install QWC2</button>
+            <button id="uninstallBtn" class="button danger" disabled data-i18n="Qtiler2qwc.uninstall_qwc2">Uninstall QWC2</button>
+          </div>
+        </section>
+
+        <!-- Link to webmap (same-origin) -->
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.webmap_link">Open webmap</h2>
+          </div>
+          <div class="actions">
+            <a id="openWebmapBtn" class="button primary" href="/plugins/Qtiler2qwc/qwc2/" target="_blank" rel="noreferrer">Open webmap</a>
+            <button id="removeDemoBtn" class="button" style="margin-left:.5rem">Remove demo theme</button>
+          </div>
+        </section>
+
+        <!-- ── Logo ── -->
+        <section id="logoSection" class="card card--disabled">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.logo_section">Webmap logo</h2>
+            <span id="logoBadge" class="badge badge--muted" data-i18n="Qtiler2qwc.no_logo">No logo</span>
+          </div>
+          <p class="help" data-i18n="Qtiler2qwc.logo_desc">Upload a logo for the QWC2 TopBar. Allowed formats: PNG, JPG, SVG, WEBP.</p>
+          <div class="grid grid--logo">
+            <label>
+              <span data-i18n="Qtiler2qwc.logo_file">Logo file</span>
+              <input id="logoFileInput" type="file" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" />
+            </label>
+            <div class="logo-preview-box">
+              <img id="logoPreview" alt="" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="uploadLogoBtn" class="button primary" data-i18n="Qtiler2qwc.upload_logo">Upload logo</button>
+            <button id="removeLogoBtn" class="button" disabled data-i18n="Qtiler2qwc.remove_logo">Remove logo</button>
+          </div>
+        </section>
+
+        <!-- ── Catalog page texts (moved inside Setup) ── -->
+        <section id="catalogTextsSection" class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.catalog_texts_section">Catalog page texts</h2>
+          </div>
+          <p class="help" data-i18n="Qtiler2qwc.catalog_texts_desc">Customize the heading, description, header and footer shown on the /Qtiler2qwc/webmap/ catalog page.</p>
+          <div class="grid grid--form">
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_title_label">Page title</span>
+              <input id="catalogTitleInput" type="text" maxlength="200" placeholder="Available webmaps" />
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_desc_public_label">Description for public / unauthenticated visitors</span>
+              <textarea id="catalogDescPublicInput" rows="3" maxlength="1000" placeholder="Open the published maps available for your current session..."></textarea>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_desc_auth_label">Description for authenticated users (leave empty to reuse the public text)</span>
+              <textarea id="catalogDescAuthInput" rows="3" maxlength="1000" placeholder="Same as the public description, or enter different text for signed-in users."></textarea>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_header_label">Header HTML (shown above the title)</span>
+              <textarea id="catalogHeaderInput" rows="4" maxlength="4000" placeholder="&lt;div&gt;Welcome to our portal&lt;/div&gt;"></textarea>
+              <small class="help" data-i18n="Qtiler2qwc.catalog_html_help">HTML allowed. Leave empty to hide.</small>
+            </label>
+            <label>
+              <span data-i18n="Qtiler2qwc.catalog_footer_label">Footer HTML (shown below the map cards)</span>
+              <textarea id="catalogFooterInput" rows="4" maxlength="4000" placeholder="&lt;p&gt;© 2025 My organization · &lt;a href=&quot;mailto:info@org.com&quot;&gt;Contact&lt;/a&gt;&lt;/p&gt;"></textarea>
+              <small class="help" data-i18n="Qtiler2qwc.catalog_html_help">HTML allowed. Leave empty to hide.</small>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="saveCatalogTextsBtn" class="button primary" data-i18n="Qtiler2qwc.catalog_texts_save">Save</button>
+          </div>
+        </section>
+
+      </div>
+
+
+      <!-- ════════════════════════════════════
+           TAB: Log
+           ════════════════════════════════════ -->
+      <div class="tab-panel" data-panel="log">
+
+        <section class="card">
+          <div class="card-header-row">
+            <h2 data-i18n="Qtiler2qwc.activity_log">Activity log</h2>
+            <button id="clearLogBtn" class="button ghost small" data-i18n="Qtiler2qwc.clear">Clear</button>
+          </div>
+          <div id="logContainer" class="log-container">
+            <p class="log-empty" data-i18n="Qtiler2qwc.no_activity">No activity yet.</p>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <!-- ═══════════ How it works modal ═══════════ -->
+    <div id="qtwc-hiw-modal" class="hiw-modal" role="dialog" aria-modal="true" aria-labelledby="qtwc-hiw-title" aria-hidden="true" hidden>
+      <div class="hiw-backdrop" data-hiw-close></div>
+      <div class="hiw-card">
+        <div class="hiw-head">
+          <h2 id="qtwc-hiw-title" data-i18n="Qtiler2qwc.hiw.title">How QTWC works &amp; security</h2>
+          <button type="button" class="hiw-close" data-hiw-close aria-label="Close">×</button>
+        </div>
+        <div class="hiw-body">
+          <p class="hiw-lead" data-i18n="Qtiler2qwc.hiw.lead"></p>
+          <h3 data-i18n="Qtiler2qwc.hiw.arch.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.arch.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.arch.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.arch.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.flow.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.flow.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.3"></li>
+            <li data-i18n="Qtiler2qwc.hiw.flow.4"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.themes.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.themes.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.themes.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.themes.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.print.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.print.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.print.2"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.auth.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.auth.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.auth.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.auth.3"></li>
+          </ul>
+          <h3 data-i18n="Qtiler2qwc.hiw.security.title"></h3>
+          <ul>
+            <li data-i18n="Qtiler2qwc.hiw.security.1"></li>
+            <li data-i18n="Qtiler2qwc.hiw.security.2"></li>
+            <li data-i18n="Qtiler2qwc.hiw.security.3"></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ Publish / Edit modal ═══════════ -->
+    <div id="publishModal" class="modal">
+      <div class="modal-background"></div>
+      <div class="modal-card Qtiler2qwc-modal-card">
+        <header class="modal-card-head">
+          <p id="modalTitle" class="modal-card-title" data-i18n="Qtiler2qwc.modal_title">Publish project in QWC2</p>
+          <div class="Qtiler2qwc-modal-head-actions">
+            <button id="publishModalToggleFullscreen" class="button is-small is-light" type="button" title="Fullscreen" data-i18n="Qtiler2qwc.fullscreen">Fullscreen</button>
+            <button id="closePublishModalTop" class="delete" aria-label="close"></button>
+          </div>
+        </header>
+        <section class="modal-card-body">
+
+          <!-- ── Map name & description ── -->
+          <div class="Qtiler2qwc-modal-header-fields">
+            <div class="field">
+              <label class="label" data-i18n="Qtiler2qwc.map_name">Map name</label>
+              <div class="control">
+                <input id="publishName" class="input" type="text" maxlength="120" placeholder="" data-i18n-placeholder="Qtiler2qwc.map_name_placeholder" />
+              </div>
+              <p id="publishNameError" class="help is-danger" style="display:none"></p>
+            </div>
+            <div class="field">
+              <label class="label" data-i18n="Qtiler2qwc.map_description">Description</label>
+              <div class="control">
+                <textarea id="publishDescription" class="textarea" rows="2" maxlength="500" placeholder="" data-i18n-placeholder="Qtiler2qwc.map_desc_placeholder"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Step 1: Projects & layers ── -->
+          <fieldset class="modal-step">
+            <legend class="modal-step__legend" data-i18n="Qtiler2qwc.step_layers">1. Layers</legend>
+            <div class="Qtiler2qwc-layers-grid">
+              <div class="Qtiler2qwc-layers-grid__col">
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2qwc.main_project">Main project</label>
+                  <div class="control"><div class="select is-fullwidth"><select id="publishProjectSelect"></select></div></div>
+                </div>
+                <div class="field">
+                  <div class="Qtiler2qwc-layers-head">
+                    <label class="label" style="margin:0" data-i18n="Qtiler2qwc.project_layers">Project layers</label>
+                    <small class="help" data-i18n="Qtiler2qwc.layers_legend">Include = published · Visible = on at start</small>
+                  </div>
+                  <div id="projectLayersList" class="Qtiler2qwc-layer-table"></div>
+                </div>
+
+                <!-- ── Extra projects (cross-CRS) ── -->
+                <div class="field Qtiler2qwc-extra-sources-field">
+                  <div class="Qtiler2qwc-layers-head">
+                    <label class="label" style="margin:0" data-i18n="Qtiler2qwc.extra_sources">Layers from other projects</label>
+                    <button id="addExtraSourceBtn" type="button" class="button is-small is-info is-light" data-i18n="Qtiler2qwc.add_extra_source">+ Add project</button>
+                  </div>
+                  <p class="help" data-i18n="Qtiler2qwc.extra_sources_help">Optional. Add layers from any other project — they will be served as external WMS layers and will work even if their CRS differs.</p>
+                  <div id="extraSourcesList" class="Qtiler2qwc-extra-sources"></div>
+                </div>
+              </div>
+              <div class="Qtiler2qwc-layers-grid__col">
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2qwc.bg_project">Background project (optional)</label>
+                  <div class="control"><div class="select is-fullwidth"><select id="backgroundProjectSelect"></select></div></div>
+                </div>
+                <div class="field">
+                  <label class="label" data-i18n="Qtiler2qwc.bg_layers">Background layers</label>
+                  <div id="backgroundLayersList" class="Qtiler2qwc-checklist"></div>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- ── Step 2: Background maps with default selector ── -->
+          <fieldset class="modal-step">
+            <legend class="modal-step__legend" data-i18n="Qtiler2qwc.step_backgrounds">2. Background maps</legend>
+            <p class="help" style="margin-bottom:.6rem" data-i18n="Qtiler2qwc.default_bg_help">OSM and No background are always available. Choose one as default.</p>
+            <div id="defaultBackgroundList" class="Qtiler2qwc-bg-list"></div>
+          </fieldset>
+
+          <!-- ── Step 3: QWC2 tools ── -->
+          <fieldset class="modal-step">
+            <legend class="modal-step__legend" data-i18n="Qtiler2qwc.step_tools">3. Tools</legend>
+            <div class="Qtiler2qwc-tools-grid">
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureSearch" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_search">Search</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_search_desc">Full-text search across map layers</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureSearchGlobal" />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_search_global">Global Search</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_search_global_desc">Enable Coordinates and Nominatim OSM</span>
+                </div>
+              </label>
+              <div class="help" data-i18n="Qtiler2qwc.feat_search_help">Local search uses your searchable layers through /Qtiler2qwc/search. Global Search adds coordinates and Nominatim results on top.</div>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureIdentify" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_identify">Identify</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_identify_desc">Click map to query feature attributes</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureLayerTree" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_layer_tree">Layer tree</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_layer_tree_desc">Show/hide layers and groups</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureLegend" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_legend">Legend</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_legend_desc">Display layer symbology and legend</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureEditing" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_editing">Editing</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_editing_desc">Create, update, and delete features</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featurePrint" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_print">Print</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_print_desc">Export map to PDF using QGIS layouts</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureMapTip" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_maptip">MapTip</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_maptip_desc">Hover tooltips with feature info</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureMeasurement" />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_measurement">Measurement</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_measurement_desc">Measure distances and areas on the map</span>
+                </div>
+              </label>
+              <div class="Qtiler2qwc-tool-card-wrapper">
+                <label class="Qtiler2qwc-tool-card">
+                  <input type="checkbox" id="featureShare" />
+                  <div class="Qtiler2qwc-tool-card__body">
+                    <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_share">Share</span>
+                    <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_share_desc">Share current map view via URL</span>
+                  </div>
+                </label>
+                <div class="Qtiler2qwc-tool-config" data-config-for="featureShare">
+                  <label class="Qtiler2qwc-tool-config__label" data-i18n="Qtiler2qwc.cfg_share_url">Share service URL</label>
+                  <input class="input is-small" type="url" id="cfgShareUrl" placeholder="" data-i18n-placeholder="Qtiler2qwc.cfg_share_url_ph" />
+                </div>
+              </div>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureRedlining" />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_redlining">Sketching</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_redlining_desc">Draw temporary shapes and annotations</span>
+                </div>
+              </label>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureBookmark" />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_bookmark">Bookmarks</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_bookmark_desc">Save and restore map extents</span>
+                </div>
+              </label>
+              <div class="Qtiler2qwc-tool-card-wrapper">
+                <label class="Qtiler2qwc-tool-card">
+                  <input type="checkbox" id="featureHeightProfile" />
+                  <div class="Qtiler2qwc-tool-card__body">
+                    <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_height_profile">Height profile</span>
+                    <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_height_profile_desc">Elevation cross-section along a path</span>
+                  </div>
+                </label>
+                <div class="Qtiler2qwc-tool-config" data-config-for="featureHeightProfile">
+                  <label class="Qtiler2qwc-tool-config__label" data-i18n="Qtiler2qwc.cfg_elevation_url">Elevation service URL</label>
+                  <input class="input is-small" type="url" id="cfgElevationUrl" placeholder="" data-i18n-placeholder="Qtiler2qwc.cfg_elevation_url_ph" />
+                </div>
+              </div>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureView3D" checked />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_view3d">3D Viewer</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_view3d_desc">Enable the QWC2 View3D module for terrain and 3D layers</span>
+                </div>
+              </label>
+              <div class="Qtiler2qwc-tool-card-wrapper">
+                <label class="Qtiler2qwc-tool-card">
+                  <input type="checkbox" id="featureDxfExport" />
+                  <div class="Qtiler2qwc-tool-card__body">
+                    <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_dxf_export">DXF Export</span>
+                    <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_dxf_export_desc">Download layers as AutoCAD DXF</span>
+                  </div>
+                </label>
+                <div class="Qtiler2qwc-tool-config" data-config-for="featureDxfExport">
+                  <label class="Qtiler2qwc-tool-config__label" data-i18n="Qtiler2qwc.cfg_dxf_url">DXF export service URL</label>
+                  <input class="input is-small" type="url" id="cfgDxfUrl" placeholder="" data-i18n-placeholder="Qtiler2qwc.cfg_dxf_url_ph" />
+                </div>
+              </div>
+              <label class="Qtiler2qwc-tool-card">
+                <input type="checkbox" id="featureAttributeTable" />
+                <div class="Qtiler2qwc-tool-card__body">
+                  <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_attribute_table">Attribute table</span>
+                  <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_attribute_table_desc">Tabular view of feature attributes</span>
+                </div>
+              </label>
+              <div class="Qtiler2qwc-tool-card-wrapper">
+                <label class="Qtiler2qwc-tool-card">
+                  <input type="checkbox" id="featureRouting" />
+                  <div class="Qtiler2qwc-tool-card__body">
+                    <span class="Qtiler2qwc-tool-card__name" data-i18n="Qtiler2qwc.feat_routing">Routing</span>
+                    <span class="Qtiler2qwc-tool-card__desc" data-i18n="Qtiler2qwc.feat_routing_desc">Calculate routes between points</span>
+                  </div>
+                </label>
+                <div class="Qtiler2qwc-tool-config" data-config-for="featureRouting">
+                  <label class="Qtiler2qwc-tool-config__label" data-i18n="Qtiler2qwc.cfg_routing_url">Routing service URL (OSRM/Valhalla)</label>
+                  <input class="input is-small" type="url" id="cfgRoutingUrl" placeholder="" data-i18n-placeholder="Qtiler2qwc.cfg_routing_url_ph" />
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+        </section>
+        <footer class="modal-card-foot">
+          <button id="publishNowBtn" class="button is-primary" data-i18n="Qtiler2qwc.publish_now">Publish</button>
+          <button id="closePublishModalBottom" class="button" data-i18n="Qtiler2qwc.cancel">Cancel</button>
+        </footer>
+      </div>
+    </div>
+
+    <script src="/lang-support.js"></script>
+    <script src="/plugins/Qtiler2qwc/admin-ui/app.js"></script>
+  </body>
+</html>

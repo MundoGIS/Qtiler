@@ -279,6 +279,47 @@ test('rolling replacement requires Auth, other active plugins and the installed 
   assert.equal(retiredWorkers, 0, 'A rejected replacement must leave the previous healthy worker serving requests');
 });
 
+test('failed plugin installation rolls back and restarts workers to remove stale plugin routes', async () => {
+  const serverSource = await fs.readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const start = serverSource.indexOf("  // Listen for worker requests to restart the cluster");
+  const end = serverSource.indexOf('\n  setInterval(() =>', start);
+  assert.ok(start >= 0 && end > start);
+
+  const calls = [];
+  const cluster = new EventEmitter();
+  const scope = {
+    cluster,
+    workerPluginRevisions: new Map(),
+    workerPluginNames: new Map(),
+    uninstallOperationsInProgress: new Set(),
+    workerRestartQueue: Promise.resolve(),
+    restartAllWorkersRolling: async (revision) => {
+      calls.push(revision || 'rollback-restart');
+      if (revision) throw new Error('replacement worker failed readiness');
+    },
+    completeInstallation: async (_dataDir, revision, _revisions, options) => {
+      calls.push('rollback');
+      assert.equal(revision, '12345678-1234-1234-1234-123456789abc');
+      assert.equal(options.failureReason, 'replacement worker failed readiness');
+    },
+    console,
+    dataDir: '',
+    pluginsDir: '',
+    pluginManager: {},
+    removeRecursive: async () => {},
+    finalizeUninstallation: async () => {}
+  };
+
+  vm.runInNewContext(serverSource.slice(start, end), scope);
+  cluster.emit('message', {}, { cmd: 'restartAllWorkers', revision: '12345678-1234-1234-1234-123456789abc' });
+  await scope.workerRestartQueue;
+  assert.deepEqual(calls, [
+    '12345678-1234-1234-1234-123456789abc',
+    'rollback',
+    'rollback-restart'
+  ]);
+});
+
 test('concurrent workers preserve unrelated enabled plugins', async (context) => {
   const { manager, pluginsDir, dataDir } = await fixture(context);
   const other = new PluginManager({ app: {}, baseDir: pluginsDir, dataDir, security: {} });
@@ -563,6 +604,8 @@ test('3D Eye uses the shared commercial catalog and generator pricing at 700 EUR
   const block = source.match(/const pricing = (\{[\s\S]*?\n\s*\});/);
   assert.ok(block);
   const pricing = vm.runInNewContext('(' + block[1] + ')');
+  const manifest = JSON.parse(await fs.readFile(new URL('../plugins/Qtiler-3D-eye/plugin.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.showWhenInactive, true, 'An inactive 3D Eye package must remain visible so an administrator can restore its license or installation');
   assert.equal(pricing['Qtiler-3D-eye'].price, 700);
   assert.equal(pricing['Qtiler-3D-eye'].currency, 'EUR');
   assert.equal(pricing['Qtiler-3D-eye'].period, 'year');

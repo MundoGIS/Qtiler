@@ -6,7 +6,7 @@ Copyright (C) 2025 MundoGIS.
 
 # Qtiler
 
-Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches and Vector Tiles from QGIS projects on Windows. Qtiler also produces WMS and WFS-T endpoints, supporting full OGC workflows (read and transactional vector editing). The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose `/portal`, `/wmts`, and `/admin` under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
+Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/XYZ caches from QGIS projects on Windows. Qtiler also produces WMS and WFS endpoints, including WFS-T transactional editing for vector layers. VectorTiles integration is in development and is not yet a released, supported plugin. The platform is designed to run on Windows Server behind IIS, Apache HTTPD, or another reverse proxy using URL Rewrite so you can expose Qtiler under your organization’s domain. Contact MundoGIS if you need help designing or hardening that deployment.
 
 ![Qtiler](https://github.com/MundoGIS/Qtiler/blob/master/public/css/images/Qtiler.png)
 
@@ -16,26 +16,24 @@ Tile cache orchestration by **MundoGIS** to generate, inspect, and publish WMTS/
 - Persist project zoom presets, extent, and scheduled recache windows.
 - Serve cached tiles and expose a WMTS GetCapabilities endpoint (OGC WMTS 1.0.0, layers and themes) ready for GIS clients.
 - Expose WMS 1.3.0 (GetCapabilities, tiled GetMap) and WFS 1.1.0 endpoints, including WFS-T (transactional editing for vector layers).
-- Vector tiles support through the commercial VectorTiles plugin (MBTiles generation + TileJSON/Style endpoints).
-- Built-in OpenLayers viewer with CRS awareness, WMTS/WMS/WFS modes, and VectorTiles mode.
-- Origo Map integration via Qrigo plugin (Origo Map: https://github.com/origo-map/origo).
+- Built-in OpenLayers viewer with CRS awareness and WMTS/WMS/WFS modes.
+- Optional Hajk, Origo, and QWC2 web-map integrations.
+- Cesium-based 3D map publishing with the Qtiler-3D-eye plugin.
 - Windows service helpers and reverse-proxy guidance for unattended production hosting.
 
-## Commercial plugin support
-Qtiler ships with an optional plugin ecosystem. Most plugins are now open source under MPL-2.0; only **QtilerAuth** is sold under a commercial licence (machine-bound, RSA-verified). Bundled versions:
+## Plugins and licensing
+The repository currently contains five plugin packages. **QtilerAuth** and **Qtiler-3D-eye** require commercial licenses to activate. The other released plugins are open source under MPL-2.0. Qtiler-3D-eye's published source files carry the MPL-2.0 license; that source-code license is separate from the commercial license required to activate the product.
 
-| Plugin | Version | Licence | Purpose |
+| Plugin | Version | License / status | Purpose |
 |---|---|---|---|
-| QtilerAuth | `0.2.0` | Commercial | Multi-user auth, project ACLs, API keys |
-| Qrigo | `0.1.0` | MPL-2.0 | Origo Map integration helpers |
-| Qtiler2qwc | `0.1.0` | MPL-2.0 | QWC2 webmap bridge |
-| Qtiler2Origo | `0.1.0` | MPL-2.0 | Origo webmap bridge |
-| Qtiler2Hajk | `0.1.0` | MPL-2.0 | Hajk webmap bridge and CMS portal |
-| VectorTiles | `0.2.0` | MPL-2.0 | MBTiles + TileJSON/Style endpoints |
-| ProjectSearch | `0.1.0` | MPL-2.0 | Cross-project attribute search |
-| QuantizedMesh | `0.1.0` | MPL-2.0 | Quantized-mesh terrain endpoints |
+| QtilerAuth | `0.3.4` | Commercial license | Authentication, project access control, and API keys |
+| Qtiler-3D-eye | `0.1.0` | Commercial activation; published source is MPL-2.0 | Cesium-based 3D maps, terrain, and reusable assets |
+| Qtiler2Hajk | `0.1.0` | MPL-2.0 | Hajk web-map integration and public portal |
+| Qtiler2Origo | `0.1.0` | MPL-2.0 | Origo web-map integration |
+| Qtiler2qwc | `0.1.0` | MPL-2.0 | QWC2 web-map integration |
+| VectorTiles | In development | Not yet released or supported | Vector tile generation and serving |
 
-Fresh installations use `config/plugin-defaults.json` to enable the shipped QtilerAuth, Qtiler2Origo, Qtiler2Hajk and Qtiler2qwc packages, subject to the licence policy. Existing local activation is preserved in `data/plugins.json`; this private file is not published. Qtiler-3D-eye is excluded from factory activation.
+Fresh installations use `config/plugin-defaults.json` to enable QtilerAuth, Qtiler2Origo, Qtiler2Hajk, and Qtiler2qwc, subject to licensing. Qtiler-3D-eye is not enabled by default. Existing local activation is preserved in `data/plugins.json`; this private file is not published. VectorTiles is under development and is not included as a released plugin.
 
 Admin shows upload progress and blocks configuration while installing a plugin package. Success is shown only after all server workers confirm the uploaded revision. The Origo, Hajk and QWC2 viewer installers also block configuration until setup and installation-status verification finish.
 
@@ -70,7 +68,7 @@ external SaaS providers.
 
 - **Multi-user with project ACLs.** Mark each QGIS project as *public*,
   *authenticated* or *private*, and assign private projects to specific users.
-  ACLs are enforced on every WMTS, WMS, WFS, WFS-T and Vector-Tiles call.
+  ACLs are enforced on Qtiler's WMTS, WMS, WFS and WFS-T services.
 - **Layer-level public services and search.** For public projects, choose
   whether each layer is available through WMS, WFS or WMTS. Configure map
   search to match any of several selected attribute columns on a vector layer.
@@ -219,12 +217,7 @@ Edit this file directly to add or remove toolbar tools (e.g. Share, Measure, etc
 
 **Qtiler2Origo** is an open-source (MPL-2.0) bridge plugin that embeds the [Origo](https://github.com/origo-map/origo) web map viewer inside Qtiler. It complements Qtiler2qwc by offering a lightweight, mobile-friendly viewer for users who don't need the full QWC2 stack.
 
-### Qrigo vs Qtiler2Origo
-
-Both plugins integrate with the [Origo](https://github.com/origo-map/origo) viewer, but they serve very different audiences:
-
-- **Qrigo** is for users who already run a **standard Origo-map installation on their own server**. It only generates ready-to-paste JSON snippets (source + layer entries) that you copy into your existing Origo `index.json` to add Qtiler WMS/WMTS/WFS layers. It does not host a viewer.
-- **Qtiler2Origo** is the plugin that **installs Origo on top of Qtiler itself**. It downloads a pinned Origo build, lets you create and configure each map graphically using the QGIS library, and reuses Qtiler's cache and the WMS/WFS layers from projects published in Qtiler. Choose this if you want a complete, in-Qtiler Origo experience without maintaining a separate Origo server.
+Qtiler2Origo installs and serves the Origo viewer from Qtiler. The repository does not include a separate Qrigo plugin.
 
 ### What it provides
 
@@ -265,23 +258,6 @@ data/Qtiler2Origo/state.json                # Plugin state (installed Origo vers
 data/Qtiler2Origo/maps/<map-name>.json      # One file per published Origo map
 plugins/Qtiler2Origo/Origo/                 # Downloaded Origo build (filled by the installer)
 ```
-
-## VectorTiles auth in QGIS (protected projects)
-If your project is protected by QtilerAuth, avoid shared URLs and use user-based credentials.
-
-1. API key (recommended for service-style access)
-   - In QGIS, add a Vector Tile layer using:
-   - `/plugins/VectorTiles/style/<project>.json?api_key=<YOUR_API_KEY>`
-   - Layer-specific style example:
-   - `/plugins/VectorTiles/style/<project>/<layer>.json?layers=<layer>&api_key=<YOUR_API_KEY>`
-2. Username/password (HTTP Basic auth)
-   - Configure credentials in QGIS Authentication Manager.
-   - Use style URL without key:
-   - `/plugins/VectorTiles/style/<project>.json`
-
-Notes:
-- `?token=...` URLs are best for short-lived sharing, not as a common credential for all users.
-- QtilerAuth also accepts API key in header `x-api-key`, but query `api_key` is usually simpler in GIS clients.
 
 ## System Requirements
 - Windows 10/11 or Windows Server 2019+ (64-bit).
@@ -350,7 +326,7 @@ Do this from the backend admin interface (`/admin`) in the authentication/user m
 ## Updating an existing Windows installation
 When `install.bat` detects an existing `QTiler` Windows service, it asks whether to update the existing installation or perform a new/replacement install.
 
-Choose **Update** when the customer already has users, projects, published maps, caches, plugin settings or a paid QtilerAuth license. Update mode stops the service, preserves runtime state, reinstalls dependencies/service files, and starts Qtiler again.
+Choose **Update** when the customer already has users, projects, published maps, caches, plugin settings, or a paid QtilerAuth/Qtiler-3D-eye license. Update mode stops the service, preserves runtime state, reinstalls dependencies/service files, and starts Qtiler again.
 
 Preserved state includes:
 
@@ -367,7 +343,7 @@ If updating from a fresh GitHub checkout in a new folder, the installer copies t
 Qtil
    qgisprojects/     # Uploaded .qgs/.qgz files (includes a demo project in qgisprojects/demo2)
    cache/            # Generated tiles and index metadata
-   plugins/          # Optional plugins (Qrigo, ProjectSearch, custom modules)
+   plugins/          # QtilerAuth, Qtiler-3D-eye, Qtiler2Hajk, Qtiler2Origo, Qtiler2qwc
    logs/             # Runtime logs
    service/          # Windows service helpers
    temp_uploads/     # Multer workspace for uploads
@@ -521,22 +497,22 @@ PROJECT_UPLOAD_MAX_BYTES=209715200
 
 ## Portal
 The public portal at `/portal` lists all projects the current user can access. Each project card provides:
-- Copy buttons for WMTS, WMS, WFS, VectorTiles Style-URL and Source-URL.
-- Viewer links (WMTS, WMS, WFS, VectorTiles) grouped under a "Viewers" box.
+- Copy buttons for available WMTS, WMS, and WFS service URLs.
+- Viewer links for the available WMTS, WMS, and WFS modes.
 - Per-layer XYZ copy and viewer links for cached layers and themes.
 
 Public projects are visible without login. Protected projects require the user to be authenticated via QtilerAuth.
 
 ## API key authentication
 When QtilerAuth is installed and a project is protected:
-- All copied URLs from the dashboard, portal, and VectorTiles plugin automatically include `?api_key=<key>`.
+- Protected service URLs can use `?api_key=<key>`; API keys are also accepted through the `x-api-key` header.
 - WMTS GetCapabilities embeds the `api_key` in KVP URLs and REST `ResourceURL` templates.
 - WMS GetCapabilities embeds the `api_key` in `OnlineResource` hrefs.
 - This ensures GIS clients (QGIS, ArcGIS, etc.) carry the key on every subsequent tile/map/feature request.
 - API keys are also accepted via `x-api-key` HTTP header.
 
 ## Multi-language UI
-The admin console, portal, guide, and VectorTiles dashboard support four languages:
+The admin console, portal, and guide support four languages:
 - **English** (default)
 - **Spanish** (Español)
 - **Swedish** (Svenska)
@@ -548,8 +524,7 @@ Switch language from the selector in the navigation bar. The preference is persi
 See `THIRD-PARTY-LICENSES.txt` for a complete list of third-party software and their licenses.
 
 ## License
-Qtiler is licensed under the **Mozilla Public License, v. 2.0** (MPL-2.0).
-Commercial plugins (QtilerAuth, VectorTiles, Qrigo, ProjectSearch) are separately licensed by MundoGIS.
+Qtiler core and the open-source plugin packages are licensed under the **Mozilla Public License, v. 2.0** (MPL-2.0). QtilerAuth and Qtiler-3D-eye require commercial licenses to activate. Qtiler-3D-eye's published source is MPL-2.0; its product activation requirement is separate from that source license. VectorTiles remains in development and is not a released plugin.
 
 ---
 Questions or need a tailored deployment? Reach out to MundoGIS for support, private builds, or hands-on assistance with IIS/Apache URL Rewrite configurations.

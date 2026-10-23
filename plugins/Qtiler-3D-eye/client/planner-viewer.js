@@ -1,5 +1,11 @@
 const API_BASE = '/plugins/Qtiler-3D-eye';
 
+try {
+  localStorage.removeItem('qtiler3d_ion_token');
+} catch (error) {
+  console.warn('[Qtiler-3D-eye] Could not clear the legacy browser Ion token.', error);
+}
+
 // --- Estado Global de Medición (Adaptado de mgis-3d-planer) ---
 let measureHandler = null;
 let measurePoints = [];       // Puntos Cartesian3 de la medida actual
@@ -23,6 +29,7 @@ const subtitleEl = document.getElementById('viewerSubtitle');
 const logoEl = document.getElementById('viewerLogo');
 const modulesEl = document.getElementById('moduleBar');
 const toolButtons = document.getElementById('toolButtons');
+const mapModeControl = document.getElementById('mapModeControl');
 const layerPanel = document.getElementById('layerPanel');
 const layerList = document.getElementById('layerList');
 const terrainWarning = document.getElementById('terrainWarning');
@@ -1434,9 +1441,9 @@ async function addWmsLayers(config) {
     if (!provider) continue;
     const imagery = viewer.imageryLayers.addImageryProvider(provider);
     imagery.show = layer.isBaseLayer ? layer.key === defaultBackground?.key : layer.visible !== false;
-    imagery.alpha = layer.isBaseLayer ? 1 : 0.9;
+    imagery.alpha = layer.isBaseLayer ? 1 : (layer.opacity ?? 0.9);
     if (layer.isBaseLayer) try { viewer.imageryLayers.raiseToTop(imagery); } catch { }
-    runtimeItems.set(layer.key, { label: layer.name, category: layer.isBaseLayer ? 'background' : 'layer', type: layer.type, object: imagery, legendIcon: layer.legendIcon, layer });
+    runtimeItems.set(layer.key, { label: layer.name, category: layer.isBaseLayer ? 'background' : 'layer', type: layer.type, object: imagery, opacity: layer.isBaseLayer ? 1 : (layer.opacity ?? 0.9), legendIcon: layer.legendIcon, layer });
   }
 }
 
@@ -1757,8 +1764,9 @@ function applyWfsStyle(dataSource, layer) {
     const heightOffset = Number(style.heightOffset || 0);
     const heightMode = entityHeightMode(entity, style);
     const heightReference = heightMode === 'absolute' ? Cesium.HeightReference.NONE : (heightMode === 'relative' || heightOffset ? Cesium.HeightReference.RELATIVE_TO_GROUND : Cesium.HeightReference.CLAMP_TO_GROUND);
-    const fillOpacity = styleNumber(style.fillOpacity, 0.55);
-    const strokeOpacity = styleNumber(style.strokeOpacity, 1);
+    const layerOpacity = styleNumber(layer.opacity, 1);
+    const fillOpacity = styleNumber(style.fillOpacity, 0.55) * layerOpacity;
+    const strokeOpacity = styleNumber(style.strokeOpacity, 1) * layerOpacity;
     const fillColor = Cesium.Color.fromCssColorString(style.color || '#2f80ed').withAlpha(fillOpacity);
     const strokeColor = Cesium.Color.fromCssColorString(style.strokeColor || '#ffffff').withAlpha(strokeOpacity);
     const pointSize = Number(style.pointSize || 18);
@@ -1849,7 +1857,7 @@ function applyExtrusionStyle(dataSource, layer) {
     const style = effectiveStyleForEntity(entity, layer);
     const extrusionHeight = Number(style.extrusionHeight ?? baseExtrusionHeight);
     if (!Number.isFinite(extrusionHeight) || extrusionHeight <= 0) continue;
-    const color = Cesium.Color.fromCssColorString(style.color || layer.color || '#b2b2b2').withAlpha(styleNumber(style.fillOpacity, 0.72));
+    const color = Cesium.Color.fromCssColorString(style.color || layer.color || '#b2b2b2').withAlpha(styleNumber(style.fillOpacity, 0.72) * styleNumber(layer.opacity, 1));
     const mode = entityHeightMode(entity, style);
     if (mode === 'ground') {
       entity.polygon.height = Number(style.heightOffset) || 0;
@@ -2394,6 +2402,40 @@ function updateZoomDependentItems() {
   }
 }
 
+function setRuntimeOpacity(item, opacity) {
+  const value = Math.max(0, Math.min(1, Number(opacity)));
+  if (!Number.isFinite(value)) return;
+  item.opacity = value;
+  if (item.layer) item.layer.opacity = value;
+  if (item.object && 'alpha' in item.object) item.object.alpha = value;
+  if (item.type === 'wfs' && item.object) {
+    applyWfsStyle(item.object, item.layer);
+    applyExtrusionStyle(item.object, item.layer);
+  }
+  dualMap?.syncLayers();
+}
+
+async function zoomToLayer(item) {
+  const bounds = item?.layer?.projectBounds;
+  if (dualMap && (dualMap.mode === '2d' || dualMap.activeMap === '2d') && bounds?.length === 4) {
+    dualMap.zoomToExtent(bounds);
+    return;
+  }
+  if (item?.type === 'wfs' && item.object) {
+    const sphere = new Cesium.BoundingSphere();
+    const result = await viewer.dataSources.getBoundingSphere(item.object, false, sphere);
+    if (result === Cesium.BoundingSphereState.DONE && sphere.radius > 0) {
+      viewer.camera.flyToBoundingSphere(sphere, { duration: 0.8 });
+      return;
+    }
+  }
+  if (bounds?.length === 4) {
+    viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(...bounds), duration: 0.8 });
+    return;
+  }
+  setStatus(window.qtiler3dI18n?.t('layerManager', 'noExtent', { name: item?.label || 'this layer' }) || `No map extent is available for ${item?.label || 'this layer'}.`, 'error');
+}
+
 function setBackgroundVisible(key) {
   for (const [itemKey, item] of runtimeItems.entries()) {
     if (item.category !== 'background') continue;
@@ -2407,37 +2449,90 @@ function setBackgroundVisible(key) {
 function renderLayerPanel(config) {
   const modules = config.config?.modules || {};
   if (modules.layers === false && modules.models === false) return;
+  const layerGroups = Array.isArray(config.config?.layerGroups) ? config.config.layerGroups : [];
+  const canManageGroups = config.config?.canManageLayerGroups === true && !!sceneId && params.get('editor') !== '1';
+  const manager = document.getElementById('layerGroupManager');
+  const rootGroups = layerGroups.filter((group) => !group.parentId);
+  const groupOptions = (selected = '') => [
+    `<option value="">${viewerText(window.qtiler3dI18n?.t('layerManager', 'ungrouped') || 'Ungrouped')}</option>`,
+    ...rootGroups.flatMap((group) => [
+      `<option value="${viewerText(group.id)}" ${selected === group.id ? 'selected' : ''}>${viewerText(group.name)}</option>`,
+      ...layerGroups.filter((child) => child.parentId === group.id).map((child) => `<option value="${viewerText(child.id)}" ${selected === child.id ? 'selected' : ''}>— ${viewerText(child.name)}</option>`)
+    ])
+  ].join('');
+  if (manager) {
+    manager.hidden = !canManageGroups || layerTab !== 'layers';
+    manager.innerHTML = canManageGroups && layerTab === 'layers' ? `
+      <h3>${viewerText(window.qtiler3dI18n?.t('layerManager', 'organize') || 'Organize layers')}</h3>
+      <div class="layer-group-manager-row">
+        <input type="text" maxlength="80" data-new-layer-group placeholder="${viewerText(window.qtiler3dI18n?.t('layerManager', 'groupName') || 'New group name')}" aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'groupName') || 'New group name')}">
+        <button type="button" data-add-layer-group>${viewerText(window.qtiler3dI18n?.t('layerManager', 'addGroup') || 'Add group')}</button>
+      </div>
+      <div class="layer-group-manager-row layer-group-manager-row--subgroup">
+        <select data-subgroup-parent aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'parentGroup') || 'Choose parent group')}"><option value="">${viewerText(window.qtiler3dI18n?.t('layerManager', 'parentGroup') || 'Choose parent group')}</option>${rootGroups.map((group) => `<option value="${viewerText(group.id)}">${viewerText(group.name)}</option>`).join('')}</select>
+        <input type="text" maxlength="80" data-new-layer-subgroup placeholder="${viewerText(window.qtiler3dI18n?.t('layerManager', 'subgroupName') || 'Subgroup name')}" aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'subgroupName') || 'Subgroup name')}">
+        <button type="button" data-add-layer-subgroup>${viewerText(window.qtiler3dI18n?.t('layerManager', 'addSubgroup') || 'Add subgroup')}</button>
+      </div>
+      ${layerGroups.length ? `<div class="layer-group-delete"><select data-delete-layer-group aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'remove') || 'Remove')}">${layerGroups.map((group) => `<option value="${viewerText(group.id)}">${group.parentId ? '— ' : ''}${viewerText(group.name)}</option>`).join('')}</select><button type="button" data-remove-layer-group>${viewerText(window.qtiler3dI18n?.t('layerManager', 'remove') || 'Remove')}</button></div>` : ''}
+      <output data-layer-group-status role="status" aria-live="polite"></output>
+    ` : '';
+  }
   const groups = [
     ...(layerTab === 'backgrounds' ? [['background', 'Backgrounds']] : []),
     ...(layerTab === 'terrains' ? [['terrain', 'Terrains']] : []),
     ...(layerTab === 'layers' ? [['layer', 'Layers'], ['asset', 'Models / 3D Tiles']] : [])
   ];
+  const renderEntry = ([key, item]) => {
+    const checked = item.category === 'terrain' ? item.selected !== false : item.object?.show !== false;
+    const inputType = item.category === 'background' || item.category === 'terrain' ? 'radio' : 'checkbox';
+    const inputName = item.category === 'background' ? 'backgroundLayer' : (item.category === 'terrain' ? 'terrainLayer' : 'runtimeLayer');
+    const legendUrl = item.legendIcon || item.layer?.legendUrl || (item.type === 'wms' && item.layer?.layerName ? `/wms?project=${encodeURIComponent(item.layer.projectId || '')}&SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=${encodeURIComponent(item.layer.layerName)}` : '');
+    const geometryType = String(item.layer?.geometryType || '').toLowerCase();
+    const styles = item.type === 'wfs' ? (Array.isArray(item.layer.styleRules) && item.layer.styleRules.length ? item.layer.styleRules : [item.layer]) : [];
+    const fallbackLegend = styles.length ? `<span class="legend-swatches" aria-label="Layer symbology">${styles.map((style) => {
+      const colorValue = style.color || '#2f80ed'; const fillValue = style.fillColor || colorValue; const strokeValue = style.strokeColor || '#ffffff';
+      const color = CSS.supports('color', colorValue) ? colorValue : '#2f80ed'; const fill = CSS.supports('color', fillValue) ? fillValue : color; const stroke = CSS.supports('color', strokeValue) ? strokeValue : '#ffffff';
+      const shape = geometryType.includes('point') ? `<circle cx="12" cy="12" r="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>` : geometryType.includes('line') ? `<path d="M2 18L22 6" fill="none" stroke="${color}" stroke-width="3" ${style.dash === 'dashed' ? 'stroke-dasharray="4 3"' : ''}/>` : `<path d="M4 5H20V19H4Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">${shape}</svg>`;
+      return `<img src="data:image/svg+xml,${encodeURIComponent(svg)}" alt="${viewerText(style.label || item.label)}" title="${viewerText(style.label || item.label)}">`;
+    }).join('')}</span>` : '<span class="legend-fallback" aria-label="Layer legend"><i class="bx bx-layer" aria-hidden="true"></i></span>';
+    const operationalLayer = item.category === 'layer';
+    return `
+      <article class="layer-row">
+        <div class="layer-row-main">
+          <input type="${inputType}" name="${inputName}" data-runtime-key="${viewerText(key)}" ${checked ? 'checked' : ''} aria-label="Toggle ${viewerText(item.label)}">
+          <span class="layer-row-name" title="${viewerText(item.label)}">${viewerText(item.label)}</span>
+          <span class="layer-row-actions">
+            ${operationalLayer ? `<button type="button" data-zoom-key="${viewerText(key)}" title="${viewerText(window.qtiler3dI18n?.t('layerManager', 'zoom') || 'Zoom to layer')}" aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'zoom') || 'Zoom to layer')} ${viewerText(item.label)}"><i class="bx bx-zoom-in" aria-hidden="true"></i></button>` : ''}
+            ${item.asset && !item.asset.readonly && (item.type === 'model' || item.type === '3dtiles') ? `<button type="button" data-place-key="${viewerText(key)}" title="${viewerText(window.qtiler3dI18n?.t('layerManager', 'place') || 'Place model')}" aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'place') || 'Place model')} ${viewerText(item.label)}"><i class="bx bx-map-pin" aria-hidden="true"></i></button>` : ''}
+          </span>
+        </div>
+        <div class="layer-row-detail">
+          <span class="layer-legend">${legendUrl ? `<img src="${viewerText(legendUrl)}" alt="" class="legend-icon" loading="lazy"><span class="legend-fallback" hidden><i class="bx bx-layer" aria-hidden="true"></i></span>` : fallbackLegend}</span>
+          ${operationalLayer ? `<label class="layer-opacity" title="${viewerText(window.qtiler3dI18n?.t('layerManager', 'opacity') || 'Opacity')}"><span>${viewerText(window.qtiler3dI18n?.t('layerManager', 'opacity') || 'Opacity')}</span><input type="range" min="0" max="100" value="${Math.round((item.opacity ?? 1) * 100)}" data-opacity-key="${viewerText(key)}" aria-label="${viewerText(window.qtiler3dI18n?.t('layerManager', 'opacity') || 'Opacity')} ${viewerText(item.label)}"></label>${canManageGroups ? `<select class="layer-group-select" data-group-layer-key="${viewerText(key)}" aria-label="Group for ${viewerText(item.label)}">${groupOptions(item.layer?.groupId || '')}</select>` : '<span></span>'}` : ''}
+        </div>
+      </article>`;
+  };
+  const renderGroupedLayers = (entries) => {
+    const renderGroup = (group) => {
+      const ownEntries = entries.filter(([, item]) => item.layer?.groupId === group.id);
+      const children = layerGroups.filter((candidate) => candidate.parentId === group.id);
+      const content = [
+        ...ownEntries.map(renderEntry),
+        ...children.map(renderGroup)
+      ].join('');
+      return `<details class="layer-nested-group" open><summary>${viewerText(group.name)}</summary>${content || `<p class="layer-group-empty">${viewerText(window.qtiler3dI18n?.t('layerManager', 'empty') || 'No layers in this group.')}</p>`}</details>`;
+    };
+    const groupedIds = new Set(layerGroups.map((group) => group.id));
+    const ungrouped = entries.filter(([, item]) => !groupedIds.has(item.layer?.groupId));
+    return `${rootGroups.map(renderGroup).join('')}${ungrouped.map(renderEntry).join('')}`;
+  };
   layerList.innerHTML = groups.map(([category, title]) => {
     const entries = Array.from(runtimeItems.entries()).filter(([, item]) => item.category === category);
     if (!entries.length) return '';
-    return `<section class="layer-group"><h3>${title}</h3>${entries.map(([key, item]) => {
-      const checked = item.category === 'terrain' ? item.selected !== false : item.object?.show !== false;
-      const inputType = item.category === 'background' || item.category === 'terrain' ? 'radio' : 'checkbox';
-      const inputName = item.category === 'background' ? 'backgroundLayer' : (item.category === 'terrain' ? 'terrainLayer' : 'runtimeLayer');
-      const legendUrl = item.legendIcon || item.layer?.legendUrl || (item.type === 'wms' && item.layer?.layerName ? `/wms?project=${encodeURIComponent(item.layer.projectId || '')}&SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=${encodeURIComponent(item.layer.layerName)}` : '');
-      const geometryType = String(item.layer?.geometryType || '').toLowerCase();
-      const styles = item.type === 'wfs' ? (Array.isArray(item.layer.styleRules) && item.layer.styleRules.length ? item.layer.styleRules : [item.layer]) : [];
-      const fallbackLegend = styles.length ? `<span class="legend-swatches" aria-label="Layer symbology">${styles.map((style) => {
-        const colorValue = style.color || '#2f80ed'; const fillValue = style.fillColor || colorValue; const strokeValue = style.strokeColor || '#ffffff';
-        const color = CSS.supports('color', colorValue) ? colorValue : '#2f80ed'; const fill = CSS.supports('color', fillValue) ? fillValue : color; const stroke = CSS.supports('color', strokeValue) ? strokeValue : '#ffffff';
-        const shape = geometryType.includes('point') ? `<circle cx="12" cy="12" r="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>` : geometryType.includes('line') ? `<path d="M2 18L22 6" fill="none" stroke="${color}" stroke-width="3" ${style.dash === 'dashed' ? 'stroke-dasharray="4 3"' : ''}/>` : `<path d="M4 5H20V19H4Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">${shape}</svg>`;
-        return `<img src="data:image/svg+xml,${encodeURIComponent(svg)}" alt="${viewerText(style.label || item.label)}" title="${viewerText(style.label || item.label)}">`;
-      }).join('')}</span>` : '<span class="legend-empty" aria-hidden="true"></span>';
-      return `
-        <label class="layer-row">
-          <input type="${inputType}" name="${inputName}" data-runtime-key="${viewerText(key)}" ${checked ? 'checked' : ''}>
-          <span>${viewerText(item.label)}</span>${item.asset && !item.asset.readonly && (item.type === 'model' || item.type === '3dtiles') ? `<button class="viewer-button" type="button" data-place-key="${viewerText(key)}">Posicionar</button>` : ''}
-          <span class="layer-legend">${legendUrl ? `<img src="${viewerText(legendUrl)}" alt="" class="legend-icon" loading="lazy">` : ''}${item.type === 'wfs' ? `<span class="legend-fallback" ${legendUrl ? 'hidden' : ''}>${fallbackLegend}</span>` : ''}</span>
-        </label>`;
-    }).join('')}</section>`;
+    return `<section class="layer-group"><h3>${title}</h3>${category === 'layer' ? renderGroupedLayers(entries) : entries.map(renderEntry).join('')}</section>`;
   }).join('') || '<p>No layers or assets loaded.</p>';
-  layerList.querySelectorAll('.legend-icon').forEach((image) => image.addEventListener('error', () => { image.hidden = true; image.parentElement.querySelector('.legend-fallback')?.removeAttribute('hidden'); }));
+  layerList.querySelectorAll('.legend-icon').forEach((image) => image.addEventListener('error', () => { image.hidden = true; image.nextElementSibling?.removeAttribute('hidden'); }));
   layerList.querySelectorAll('[data-runtime-key]').forEach((input) => {
     input.addEventListener('change', () => {
       const item = runtimeItems.get(input.dataset.runtimeKey);
@@ -2449,8 +2544,71 @@ function renderLayerPanel(config) {
   layerList.querySelectorAll('[data-place-key]').forEach((button) => {
     button.addEventListener('click', () => startPlacement(runtimeItems.get(button.dataset.placeKey)));
   });
+  layerList.querySelectorAll('[data-zoom-key]').forEach((button) => {
+    button.addEventListener('click', () => zoomToLayer(runtimeItems.get(button.dataset.zoomKey)).catch(reportViewerError));
+  });
+  layerList.querySelectorAll('[data-opacity-key]').forEach((input) => {
+    input.addEventListener('input', () => setRuntimeOpacity(runtimeItems.get(input.dataset.opacityKey), Number(input.value) / 100));
+  });
+  layerList.querySelectorAll('[data-group-layer-key]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const item = runtimeItems.get(select.dataset.groupLayerKey);
+      if (!item?.layer) return;
+      item.layer.groupId = select.value || null;
+      saveLayerGroupLayout(config).catch((error) => {
+        const output = manager?.querySelector('[data-layer-group-status]');
+        if (output) output.textContent = error.message;
+      });
+    });
+  });
+  manager?.querySelector('[data-add-layer-group]')?.addEventListener('click', () => {
+    const name = manager.querySelector('[data-new-layer-group]').value.trim();
+    if (!name) return;
+    saveLayerGroupLayout(config, [...layerGroups, { id: `group_${crypto.randomUUID()}`, name, parentId: null }]).catch((error) => {
+      manager.querySelector('[data-layer-group-status]').textContent = error.message;
+    });
+  });
+  manager?.querySelector('[data-add-layer-subgroup]')?.addEventListener('click', () => {
+    const parentId = manager.querySelector('[data-subgroup-parent]').value;
+    const name = manager.querySelector('[data-new-layer-subgroup]').value.trim();
+    if (!parentId || !name) return;
+    saveLayerGroupLayout(config, [...layerGroups, { id: `group_${crypto.randomUUID()}`, name, parentId }]).catch((error) => {
+      manager.querySelector('[data-layer-group-status]').textContent = error.message;
+    });
+  });
+  manager?.querySelector('[data-remove-layer-group]')?.addEventListener('click', () => {
+    const id = manager.querySelector('[data-delete-layer-group]').value;
+    const group = layerGroups.find((item) => item.id === id);
+    if (!group || !confirm(window.qtiler3dI18n?.t('layerManager', 'removeGroup', { name: group.name }) || `Remove "${group.name}"? Layers in it will become ungrouped.`)) return;
+    const nextGroups = layerGroups.filter((item) => item.id !== id).map((item) => item.parentId === id ? { ...item, parentId: null } : item);
+    for (const item of runtimeItems.values()) if (item.layer?.groupId === id) item.layer.groupId = null;
+    saveLayerGroupLayout(config, nextGroups).catch((error) => {
+      manager.querySelector('[data-layer-group-status]').textContent = error.message;
+    });
+  });
   saveViewBtn.hidden = modules.bookmarks === false;
   saveViewBtn.onclick = () => saveNamedView().catch(reportViewerError);
+}
+
+async function saveLayerGroupLayout(config, groups = config.config?.layerGroups || []) {
+  const assignments = Object.fromEntries(Array.from(runtimeItems.entries())
+    .filter(([, item]) => item.category === 'layer' && item.layer?.groupId)
+    .map(([key, item]) => [key, item.layer.groupId]));
+  const result = await fetch(`${API_BASE}/api/scenes/${encodeURIComponent(sceneId)}/layer-groups`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups, assignments })
+  });
+  const payload = await result.json().catch(() => null);
+  if (!result.ok) throw new Error([payload?.error || `HTTP ${result.status}`, payload?.details].filter(Boolean).join(' — '));
+  config.config.layerGroups = payload.groups;
+  config.scene.layerGroups = payload.groups;
+  config.scene.layerAssignments = payload.assignments;
+  for (const [key, item] of runtimeItems) if (item.category === 'layer' && item.layer) item.layer.groupId = payload.assignments[key] || null;
+  renderLayerPanel(config);
+  const status = document.querySelector('[data-layer-group-status]');
+  if (status) status.textContent = window.qtiler3dI18n?.t('layerManager', 'saved') || 'Saved to this map.';
 }
 
 function toggleLayerDialog(config) {
@@ -2601,11 +2759,13 @@ function renderModules(config) {
   const toolboxKeys = {
     analysis: ['measurement', 'simulation', 'bookmarks', 'print'],
     edition: ['edit', 'redline'],
-    visual: ['layers', 'models', 'placeModel', 'shadows', 'skybox', 'timeline']
+    visual: ['models', 'placeModel', 'shadows', 'skybox', 'timeline']
   };
   const toolboxIcons = { analysis: 'bx-line-chart', edition: 'bx-edit', visual: 'bx-show-alt' };
   const toolboxItems = Object.fromEntries(Object.entries(toolboxKeys).map(([group, keys]) => [group, keys.filter((key) => modules.includes(key))]));
   const t = (group, key) => window.qtiler3dI18n?.t(group, key) || key;
+  const splitLabel = mapModeControl?.querySelector('[data-map-mode="split"] span');
+  if (splitLabel) splitLabel.textContent = t('modes', 'both');
   const toolboxMarkup = Object.entries(toolboxItems).filter(([, keys]) => keys.length).map(([group, keys]) => `
     <details class="toolbox">
       <summary class="toolbox-heading" data-qtiler3d-i18n="toolboxes:${group}"><i class="bx ${toolboxIcons[group]}"></i><span>${t('toolboxes', group)}</span></summary>
@@ -2614,12 +2774,10 @@ function renderModules(config) {
       </div>
     </details>
   `).join('');
-  toolButtons.innerHTML = `
-    <div class="map-mode-control" role="group" data-qtiler3d-mode-view aria-label="Map view">
-      <button type="button" class="button is-small" data-map-mode="2d" data-qtiler3d-mode="2d" aria-pressed="false">2D</button>
-      <button type="button" class="button is-small" data-map-mode="3d" data-qtiler3d-mode="3d" aria-pressed="true">3D</button>
-      <button type="button" class="button is-small" data-map-mode="split" data-qtiler3d-mode="split" aria-pressed="false"><i class="bx bx-columns" aria-hidden="true"></i></button>
-    </div>${toolboxMarkup}`;
+  const layerButton = modules.includes('layers') || modules.includes('models')
+    ? `<button type="button" class="tool-launcher" data-tool="layers" data-qtiler3d-tool="layers" aria-label="${t('tools', 'layers')}" title="${t('tools', 'layers')}"><i class="bx bx-layer" aria-hidden="true"></i><span>${t('tools', 'layers')}</span></button>`
+    : '';
+  toolButtons.innerHTML = `${layerButton}${toolboxMarkup}`;
 
   toolButtons.querySelectorAll('.toolbox').forEach((toolbox) => toolbox.querySelector('summary').addEventListener('click', () => {
     if (toolbox.open) return;
@@ -2634,6 +2792,7 @@ function renderModules(config) {
     document.getElementById('printPanel').hidden = true;
   }));
   window.qtiler3dI18n?.apply(toolButtons);
+  window.qtiler3dI18n?.apply(mapModeControl);
 
   toolButtons.querySelectorAll('[data-tool]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -2852,7 +3011,7 @@ async function boot(previewConfig = null) {
   if (!isTerrainPreview) renderLayerPanel(config);
   if (!isAssetPreview) await flyToScene(config);
   if (!isTerrainPreview && !isAssetPreview) {
-    const { createDualMap } = await import('./dual-map.js?v=20261011-model-print');
+    const { createDualMap } = await import('./dual-map.js?v=20261023-layer-tree');
     dualMap = createDualMap({ viewer, runtimeItems, effectiveStyle: effectiveStyleForEntity, styleZoom: currentApproxZoom, zoomInRange, featureInfo: featureInfoHtml, onCameraChange: () => scheduleVisibleWfsUpdate(180),
       cancelTools: () => { clearActiveTool(); sketchEditor.close(); routeSimulation.close(); wfsEditor?.close(); hideToolPopup(); },
       selectSketch: (index) => sketchEditor.select(index), error: reportViewerError, sketchFeatures: () => sketchEditor.features()

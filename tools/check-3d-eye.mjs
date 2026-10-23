@@ -50,7 +50,26 @@ test('3D Eye registers Admin and drawing routes without touching live data', asy
   const admin = await fetch(`${base}/admin`, { redirect: 'manual' });
   assert.equal(admin.status, 302);
   assert.equal(admin.headers.get('location'), '/plugins/Qtiler-3D-eye/admin-ui/');
-  assert.equal((await fetch(`${base}/admin-ui/`)).status, 200);
+  const adminPage = await fetch(`${base}/admin-ui/`);
+  assert.equal(adminPage.status, 200);
+  const adminPageHtml = await adminPage.text();
+  assert.match(adminPageHtml, /20261023-tooling-fix/);
+  assert.match(adminPageHtml, /app\.js\?v=20261023-layer-tree/);
+  const adminStylesheet = await fetch(`${base}/admin-ui/style.css`);
+  assert.equal(adminStylesheet.status, 200);
+  assert.match(adminStylesheet.headers.get('content-type'), /text\/css/i);
+  assert.match(await adminStylesheet.text(), /layer-config-row--operational/);
+  const adminScript = await fetch(`${base}/admin-ui/app.js`);
+  assert.equal(adminScript.status, 200);
+  assert.match(adminScript.headers.get('content-type'), /javascript/i);
+  assert.match(await adminScript.text(), /function updateAssetFileAccept\(\)/);
+  const viewerPage = await fetch(`${base}/view/`);
+  assert.equal(viewerPage.status, 200);
+  const viewerPageHtml = await viewerPage.text();
+  assert.match(viewerPageHtml, /planner-viewer\.js\?v=20261023-layer-tree/);
+  assert.match(viewerPageHtml, /id="mapModeControl"/);
+  assert.match(await (await fetch(`${base}/view/viewer.css`)).text(), /\.layer-opacity/);
+  assert.match(await (await fetch(`${base}/view/planner-viewer.js`)).text(), /data-add-layer-subgroup/);
   const logo = new FormData(); logo.append('logo', new Blob(['<svg onload="alert(1)"></svg>'], { type: 'image/svg+xml' }), 'logo.svg');
   assert.equal((await fetch(`${base}/admin/api/upload-logo`, { method: 'POST', body: logo })).status, 400);
   const legacy = await fetch(`${base}/admin/api/maps`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify([{ id: 'legacy', mainProjectId: 'fixture' }]) });
@@ -66,6 +85,21 @@ test('3D Eye registers Admin and drawing routes without touching live data', asy
   await fs.writeFile(path.join(dataDir, 'assets.json'), JSON.stringify([{ id: 'unselected', type: 'model', url: '/unselected.glb' }]));
   const config = await (await fetch(`${base}/api/view-config/fixture`)).json();
   assert.deepEqual(config.config.assets, []);
+  assert.equal(config.config.canManageLayerGroups, true);
+  const managedLayer = config.config.layers.find((layer) => layer.type === 'wfs');
+  assert.ok(managedLayer);
+  const groupLayout = await fetch(`${base}/api/scenes/fixture/layer-groups`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      groups: [{ id: 'transport', name: 'Transport', parentId: null }, { id: 'roads', name: 'Roads', parentId: 'transport' }],
+      assignments: { [managedLayer.key]: 'roads' }
+    })
+  });
+  assert.equal(groupLayout.status, 200);
+  const groupedConfig = await (await fetch(`${base}/api/view-config/fixture`)).json();
+  assert.deepEqual(groupedConfig.config.layerGroups.map((group) => group.id), ['transport', 'roads']);
+  assert.equal(groupedConfig.config.layers.find((layer) => layer.key === managedLayer.key).groupId, 'roads');
   const baseLayers = config.config.layers.filter((item) => item.isBaseLayer);
   assert.equal(baseLayers.filter((item) => item.isDefault).length, 1);
   assert.equal(baseLayers.find((item) => item.isDefault).key, 'system-background:osm');
@@ -90,9 +124,62 @@ test('3D Eye registers Admin and drawing routes without touching live data', asy
   const safeSettings = await (await fetch(`${base}/api/settings`)).json();
   assert.equal(safeSettings.settings.ionToken, undefined);
   assert.equal(safeSettings.settings.ionTokenConfigured, true);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options) => {
+    if (String(input).startsWith('https://api.cesium.com/')) {
+      assert.equal(options.headers.Authorization, `Bearer ${token}`);
+      return new Response(JSON.stringify({ items: [
+        { id: 12345, name: 'Ion buildings', type: '3DTILES' },
+        { id: 67890, name: 'Imagery', type: 'IMAGERY' }
+      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return originalFetch(input, options);
+  };
+  try {
+    const ionAssetsResponse = await fetch(`${base}/api/ion/assets`);
+    assert.equal(ionAssetsResponse.status, 200);
+    const ionAssets = await ionAssetsResponse.json();
+    assert.deepEqual(ionAssets.assets, [{ id: '12345', name: 'Ion buildings', type: '3DTILES' }]);
+    assert.equal(JSON.stringify(ionAssets).includes(token), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
   const tokenConfig = await (await fetch(`${base}/api/view-config/fixture`)).json();
   assert.equal(tokenConfig.scene.ionToken, '');
   assert.equal(tokenConfig.config.cesiumToken, token);
+  const cesiumBuild = path.join(dataDir, 'cesium', 'current');
+  await fs.mkdir(path.join(cesiumBuild, 'Widgets'), { recursive: true });
+  await fs.writeFile(path.join(cesiumBuild, 'Cesium.js'), 'window.Cesium = {};');
+  const previewResponse = await fetch(`${base}/api/preview-config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      id: 'preview',
+      mainProjectId: 'fixture',
+      backgroundLayers: [],
+      defaultBackgroundKey: 'system-background:osm',
+      ionAssets: [{ id: '12345', name: 'Ion buildings', type: '3DTILES' }]
+    })
+  });
+  assert.equal(previewResponse.status, 200);
+  const previewConfig = await previewResponse.json();
+  assert.equal(previewConfig.config.layers.find((item) => item.key === 'system-background:osm').isDefault, true);
+  assert.deepEqual(previewConfig.config.assets.map((asset) => [asset.type, asset.ionAssetId]), [['ion-3dtiles', 12345]]);
+  const customPreviewResponse = await fetch(`${base}/api/preview-config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      id: 'preview',
+      mainProjectId: 'fixture',
+      backgroundLayers: [{ projectId: 'fixture', name: 'roads', included: true }],
+      defaultBackgroundKey: 'background:fixture:roads'
+    })
+  });
+  assert.equal(customPreviewResponse.status, 200);
+  const customPreviewConfig = await customPreviewResponse.json();
+  const previewBaseLayers = customPreviewConfig.config.layers.filter((item) => item.isBaseLayer);
+  assert.equal(previewBaseLayers.find((item) => item.isDefault).key, 'background:fixture:roads');
+  assert.equal(previewBaseLayers.find((item) => item.key === 'system-background:osm').isDefault, false);
   const layer = config.config.layers.find((item) => item.layerName === 'points');
   assert.equal(layer.fillOpacity, null);
   assert.equal(layer.strokeOpacity, null);
@@ -185,6 +272,32 @@ test('3D Eye registers Admin and drawing routes without touching live data', asy
       assert.deepEqual((await (await fetch(`${base}/api/load-drawings?name=placed-model`)).json()).geojson, modelDrawing);
     }
   }
+  const glbForm = new FormData();
+  glbForm.append('assetType', 'model');
+  glbForm.append('files', new Blob([Buffer.from('glTF\0\0\0\0', 'binary')], { type: 'model/gltf-binary' }), 'test.glb');
+  const glbResponse = await fetch(`${base}/api/assets/upload`, { method: 'POST', body: glbForm });
+  assert.equal(glbResponse.status, 200);
+  const glbAsset = (await glbResponse.json()).uploaded[0];
+  assert.equal(glbAsset.type, 'model');
+  assert.match(glbAsset.url, /\.glb$/);
+  const uploadedGlb = await fetch(new URL(glbAsset.url, base));
+  assert.equal(uploadedGlb.status, 200);
+  assert.match(uploadedGlb.headers.get('content-type'), /model\/gltf-binary/i);
+  const unsupportedForm = new FormData();
+  unsupportedForm.append('assetType', 'model');
+  unsupportedForm.append('files', new Blob(['bad format']), 'not-a-model.txt');
+  const unsupportedResponse = await fetch(`${base}/api/assets/upload`, { method: 'POST', body: unsupportedForm });
+  assert.equal(unsupportedResponse.status, 400);
+  assert.equal((await unsupportedResponse.json()).rejected[0].error, 'unsupported_.txt');
+  const assetLock = path.join(dataDir, 'assets.json.lock');
+  await fs.writeFile(assetLock, String(process.pid));
+  const lockedUpload = new FormData();
+  lockedUpload.append('assetType', 'model');
+  lockedUpload.append('files', new Blob([Buffer.from('glTF\0\0\0\0', 'binary')]), 'locked.glb');
+  const lockResponse = await fetch(`${base}/api/assets/upload`, { method: 'POST', body: lockedUpload });
+  assert.equal(lockResponse.status, 409);
+  assert.equal((await lockResponse.json()).error, 'asset_catalog_conflict');
+  await fs.rm(assetLock);
 });
 
 test('route playback advances in metres per second independent of frame rate and resumes from pause', () => {

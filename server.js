@@ -10374,6 +10374,7 @@ if (cluster.isPrimary || cluster.isMaster) {
       workerRestartQueue = workerRestartQueue
         .then(async () => {
           let revisions = [];
+          let restartError = null;
           try {
             await restartAllWorkersRolling(msg.revision);
             revisions = Object.values(cluster.workers).filter(Boolean).map((entry) => workerPluginRevisions.get(entry.id));
@@ -10397,8 +10398,20 @@ if (cluster.isPrimary || cluster.isMaster) {
                 await fs.promises.rm(path.join(dataDir, PENDING_UNINSTALLATION), { force: true }).catch(() => {});
               }
             }
+          } catch (error) {
+            if (msg.uninstall || !msg.revision) throw error;
+            restartError = error;
+            console.error(`[plugins] Plugin installation worker restart failed for revision ${msg.revision}`, error);
           } finally {
-            await completeInstallation(dataDir, msg.revision, revisions, { pluginsDir, pluginManager });
+            await completeInstallation(dataDir, msg.revision, revisions, { pluginsDir, pluginManager, failureReason: restartError?.message });
+          }
+
+          if (restartError) {
+            try {
+              await restartAllWorkersRolling();
+            } catch (recoveryError) {
+              console.error(`[plugins] Worker restart after installation rollback failed for revision ${msg.revision}`, recoveryError);
+            }
           }
           if (msg.uninstall?.id) uninstallOperationsInProgress.delete(msg.uninstall.id);
         })
