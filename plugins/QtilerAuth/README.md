@@ -11,9 +11,12 @@ QtilerAuth is proprietary software. Use is governed by [LICENSE_QtilerAuth.txt](
 - Manages users, roles, account status, passwords, API keys, and project access rules.
 - Supports browser sessions, bearer tokens, HTTP Basic authentication, and API keys.
 - Protects Qtiler WMS, WFS, WMTS, project, and portal resources.
+- Lets administrators configure layer-level search fields and independently allow or block public WMS, WFS, and WMTS access for anonymous visitors to public projects. Search matches any selected field; authenticated users with project access are unaffected by the public-service switches.
 - Adds login rate limiting, audit records, token revocation, and optional proof-of-work CAPTCHA.
 - Provides a secure HTTPS database gateway for PostGIS and Microsoft SQL Server.
 - Lets QGIS users browse authorized schemas and layers and open stored QGIS projects without a VPN or direct database connection.
+
+In **QtilerAuth Administration > Layer permissions**, enable **Search** on a vector layer, choose the first search attribute from its dropdown, and use **+** to add more. A result is included when any selected attribute matches. The same per-layer panel provides **Public WMS**, **Public WFS**, and **Public WMTS** switches; disabled services are rejected and omitted from capabilities for anonymous users of public projects. If any layer is restricted, public access to composite themes is also blocked to prevent those layers from being exposed indirectly. Existing configurations default to allowing all three services.
 
 ## Security Model
 
@@ -120,7 +123,7 @@ Use a reverse proxy with a valid TLS certificate. Preserve the original host and
 6. Configure PostGIS role switching or SQL Server Row-Level Security where user-level data restrictions are required.
 7. Assign project access and **Database gateway** permissions in QtilerAuth.
 8. Set a finite API-key rate limit and disable plaintext API-key storage.
-9. Back up `data/auth.db` and database project storage using your normal backup policy.
+9. Back up `data/auth.db` and database project storage using your normal backup policy. The plugin installer’s **Backup** action includes a consistent SQLite snapshot of the shared `data/auth.db` in the QtilerAuth ZIP, as well as QtilerAuth-specific files.
 10. Test with a non-administrator account before granting broad access.
 
 ## Operational Notes

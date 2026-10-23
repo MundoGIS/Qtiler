@@ -13,7 +13,8 @@ import crypto from "crypto";
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { INSTALL_RECEIPT, PENDING_INSTALLATION, PENDING_UNINSTALLATION, clearPendingInstallation, readInstallationStatus, readUninstallationStatus } from '../lib/pluginInstallation.js';
-import { getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
+import Database from 'better-sqlite3';
+import { closeAuthDb, getAuthDb, getPluginTrial, upsertPluginTrial, setPluginLicense } from "../lib/authDb.js";
 import { getMachineFingerprint, describeMachineFingerprint } from "../lib/machineFingerprint.js";
 
 // Hard-coded MundoGIS RSA-2048 license verification public key. This ships
@@ -888,9 +889,12 @@ export const registerPluginRoutes = ({
       return res.status(400).json({ error: "plugin_name_required" });
     }
     const pluginDataPath = path.join(dataDir, pluginName);
-    if (!fs.existsSync(pluginDataPath)) {
+    const authDbPath = path.join(dataDir, 'auth.db');
+    const isAuthPlugin = pluginName === 'QtilerAuth';
+    if (!fs.existsSync(pluginDataPath) && !(isAuthPlugin && fs.existsSync(authDbPath))) {
       return res.status(404).json({ error: "plugin_data_not_found" });
     }
+    let snapshotDir = null;
     try {
       const zip = new AdmZip();
       zip.addFile(BACKUP_MANIFEST_NAME, Buffer.from(JSON.stringify({
@@ -898,7 +902,15 @@ export const registerPluginRoutes = ({
         plugin: pluginName,
         createdAt: new Date().toISOString()
       }, null, 2), "utf8"));
-      zip.addLocalFolder(pluginDataPath, "data", isBackupPathAllowed);
+      if (fs.existsSync(pluginDataPath)) {
+        zip.addLocalFolder(pluginDataPath, "data", isBackupPathAllowed);
+      }
+      if (isAuthPlugin && fs.existsSync(authDbPath)) {
+        snapshotDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "qtiler-auth-backup-"));
+        const snapshotPath = path.join(snapshotDir, 'auth.db');
+        await getAuthDb(dataDir).backup(snapshotPath);
+        zip.addLocalFile(snapshotPath, "shared", "auth.db");
+      }
       const buffer = zip.toBuffer();
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       res.setHeader("Content-Type", "application/zip");
@@ -907,6 +919,8 @@ export const registerPluginRoutes = ({
       res.end(buffer);
     } catch (backupErr) {
       res.status(500).json({ error: "plugin_backup_failed", details: String(backupErr?.message || backupErr) });
+    } finally {
+      if (snapshotDir) await fs.promises.rm(snapshotDir, { recursive: true, force: true });
     }
   });
 
@@ -959,8 +973,13 @@ export const registerPluginRoutes = ({
         const dataRootResolved = path.resolve(pluginDataPath);
 
         let restoredFiles = 0;
+        let authDbEntry = null;
         for (const entry of entries) {
           if (entry.isDirectory) continue;
+          if (pluginName === 'QtilerAuth' && entry.entryName === 'shared/auth.db') {
+            authDbEntry = entry;
+            continue;
+          }
           if (!entry.entryName.startsWith("data/")) continue;
           const relative = entry.entryName.slice("data/".length);
           if (!relative || !isBackupPathAllowed(relative)) continue;
@@ -970,6 +989,51 @@ export const registerPluginRoutes = ({
           await fs.promises.mkdir(path.dirname(target), { recursive: true });
           await fs.promises.writeFile(target, entry.getData());
           restoredFiles += 1;
+        }
+
+        if (authDbEntry) {
+          const authDbPath = path.join(dataDir, 'auth.db');
+          const stagedAuthDbPath = path.join(dataDir, `.auth-restore-${crypto.randomUUID()}.db`);
+          const previousAuthDbPath = path.join(dataDir, `.auth-restore-previous-${crypto.randomUUID()}.db`);
+          let movedPreviousAuthDb = false;
+          try {
+            await fs.promises.writeFile(stagedAuthDbPath, authDbEntry.getData(), { flag: 'wx' });
+            const validationDb = new Database(stagedAuthDbPath, { readonly: true, fileMustExist: true });
+            try {
+              const integrity = validationDb.pragma('integrity_check');
+              const requiredTables = validationDb.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
+              if (integrity.length !== 1 || integrity[0].integrity_check !== 'ok' ||
+                  !['users', 'projects', 'config'].every(table => requiredTables.includes(table))) {
+                throw Object.assign(new Error('The QtilerAuth database in this backup is invalid.'), { code: 'invalid_auth_database_backup' });
+              }
+            } finally {
+              validationDb.close();
+            }
+
+            if (fs.existsSync(authDbPath)) {
+              const currentDb = getAuthDb(dataDir);
+              const checkpoint = currentDb.pragma('wal_checkpoint(TRUNCATE)')[0];
+              if (checkpoint?.busy) {
+                throw Object.assign(new Error('QtilerAuth is busy; retry the restore when there are no active database operations.'), { code: 'auth_database_busy' });
+              }
+            }
+            closeAuthDb();
+            if (fs.existsSync(authDbPath)) {
+              await fs.promises.rename(authDbPath, previousAuthDbPath);
+              movedPreviousAuthDb = true;
+            }
+            await fs.promises.rm(`${authDbPath}-wal`, { force: true });
+            await fs.promises.rm(`${authDbPath}-shm`, { force: true });
+            await fs.promises.rename(stagedAuthDbPath, authDbPath);
+            restoredFiles += 1;
+            if (movedPreviousAuthDb) await fs.promises.rm(previousAuthDbPath, { force: true });
+          } catch (authRestoreErr) {
+            await fs.promises.rm(stagedAuthDbPath, { force: true }).catch(() => {});
+            if (movedPreviousAuthDb && !fs.existsSync(authDbPath)) {
+              await fs.promises.rename(previousAuthDbPath, authDbPath).catch(() => {});
+            }
+            throw authRestoreErr;
+          }
         }
 
         await cleanup();

@@ -963,8 +963,11 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         wfsEditable: row.wfsEditable === true,
         wfsSearchable: row.wfsSearchable === true,
         wmsQueryable: row.wmsQueryable !== false,
+        publicWms: row.publicWms !== false,
+        publicWfs: row.publicWfs !== false,
+        publicWmts: row.publicWmts !== false,
         publicExcluded: row.publicExcluded === true || row.excluded === true,
-        search: searchEntry
+        search: searchEntry || row.searchConfig || null
       };
     });
   };
@@ -974,6 +977,21 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
     const currentLayers = nextCfg.layers && typeof nextCfg.layers === 'object' ? nextCfg.layers : {};
     const nextLayers = { ...currentLayers };
     const searchableRows = [];
+    const normalizeSearchConfig = (name, search) => {
+      const searchFields = Array.isArray(search.fields)
+        ? Array.from(new Set(search.fields.map((field) => String(field || '').trim()).filter(Boolean)))
+        : [];
+      const searchAttribute = String(search.searchAttribute || searchFields[0] || '').trim();
+      return {
+        name,
+        idAttribute: String(search.idAttribute || '').trim(),
+        searchAttribute,
+        geometryAttribute: String(search.geometryAttribute || '').trim(),
+        hintText: String(search.hintText || '').trim(),
+        fields: searchFields.length ? searchFields : (searchAttribute ? [searchAttribute] : []),
+        titleField: String(search.titleField || searchAttribute).trim()
+      };
+    };
     for (const row of Array.isArray(rows) ? rows : []) {
       const name = String(row?.name || '').trim();
       if (!name) continue;
@@ -983,10 +1001,19 @@ export const register = async ({ app, security, dataDir, baseDir }) => {
         wfsEditable: row.wfsEditable === true,
         wfsSearchable: row.wfsSearchable === true,
         wmsQueryable: typeof row.wmsQueryable === 'boolean' ? row.wmsQueryable : previous.wmsQueryable !== false,
+        publicWms: typeof row.publicWms === 'boolean' ? row.publicWms : previous.publicWms !== false,
+        publicWfs: typeof row.publicWfs === 'boolean' ? row.publicWfs : previous.publicWfs !== false,
+        publicWmts: typeof row.publicWmts === 'boolean' ? row.publicWmts : previous.publicWmts !== false,
         publicExcluded: row.publicExcluded === true || row.excluded === true
       };
-      if (row.wfsSearchable === true && row.search && typeof row.search === 'object') {
-        searchableRows.push({ ...row.search, name });
+      const hasSearchPayload = Object.prototype.hasOwnProperty.call(row, 'search');
+      const searchConfig = row.search && typeof row.search === 'object'
+        ? normalizeSearchConfig(name, row.search)
+        : (hasSearchPayload ? null : previous.searchConfig || null);
+      if (searchConfig) nextLayers[name].searchConfig = searchConfig;
+      else delete nextLayers[name].searchConfig;
+      if (row.wfsSearchable === true && searchConfig) {
+        searchableRows.push(searchConfig);
       }
     }
     nextCfg.layers = nextLayers;

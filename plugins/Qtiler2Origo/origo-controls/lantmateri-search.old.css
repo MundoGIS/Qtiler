@@ -1,0 +1,138 @@
+/* Lantmäteriet Search Control Styles */
+
+.lantmateri-search-control {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+}
+
+.lantmateri-search-box {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.lantmateri-search-input {
+  flex: 1;
+  border: none;
+  padding: 8px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.lantmateri-search-input:focus {
+  outline: none;
+}
+
+.lantmateri-search-button {
+  background: #0969da;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+
+.lantmateri-search-button:hover {
+  background: #0860ca;
+}
+
+.lantmateri-results-container {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 10000;
+}
+
+.lantmateri-results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lantmateri-result-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f6f8fa;
+  transition: background 0.15s;
+}
+
+.lantmateri-result-item:last-child {
+  border-bottom: none;
+}
+
+.lantmateri-result-item:hover {
+  background: #f6f8fa;
+}
+
+.lantmateri-result-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #24292f;
+  margin-bottom: 4px;
+}
+
+.lantmateri-result-subtitle {
+  font-size: 12px;
+  color: #57606a;
+}
+
+.lantmateri-no-results,
+.lantmateri-error {
+  padding: 16px;
+  text-align: center;
+  color: #57606a;
+  font-size: 13px;
+}
+
+.lantmateri-error {
+  color: #cf222e;
+}
+
+.lantmateri-popup {
+  font-size: 13px;
+}
+
+.lantmateri-popup-row {
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.lantmateri-popup-row:last-child {
+  border-bottom: none;
+}
+
+.lantmateri-popup-row strong {
+  color: #24292f;
+  margin-right: 8px;
+}
+
+/* Integration with Origo toolbar */
+.o-map .o-control.lantmateri-search-control {
+  margin: 8px;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .lantmateri-search-control {
+    max-width: 100%;
+  }
+  
+  .lantmateri-results-container {
+    max-height: 300px;
+  }
+}

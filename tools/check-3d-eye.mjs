@@ -35,6 +35,12 @@ test('dual-map scale conversion remains finite at polar latitudes and empty view
 test('3D Eye registers Admin and drawing routes without touching live data', async (context) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'qtiler-eye-test-'));
   context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const originalIonKey = process.env.QTILER3DEYE_ION_TOKEN_KEY;
+  process.env.QTILER3DEYE_ION_TOKEN_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  context.after(() => {
+    if (originalIonKey === undefined) delete process.env.QTILER3DEYE_ION_TOKEN_KEY;
+    else process.env.QTILER3DEYE_ION_TOKEN_KEY = originalIonKey;
+  });
   const app = express();
   await register({ app, security: { isEnabled: () => false, requireAdmin: (_req, _res, next) => next() }, dataDir: path.join(root, 'data', 'Qtiler-3D-eye'), baseDir: path.resolve('plugins/Qtiler-3D-eye') });
   const server = app.listen(0, '127.0.0.1');
@@ -60,6 +66,33 @@ test('3D Eye registers Admin and drawing routes without touching live data', asy
   await fs.writeFile(path.join(dataDir, 'assets.json'), JSON.stringify([{ id: 'unselected', type: 'model', url: '/unselected.glb' }]));
   const config = await (await fetch(`${base}/api/view-config/fixture`)).json();
   assert.deepEqual(config.config.assets, []);
+  const baseLayers = config.config.layers.filter((item) => item.isBaseLayer);
+  assert.equal(baseLayers.filter((item) => item.isDefault).length, 1);
+  assert.equal(baseLayers.find((item) => item.isDefault).key, 'system-background:osm');
+  const mapsPath = path.join(dataDir, 'maps.json');
+  const originalMaps = await fs.readFile(mapsPath, 'utf8');
+  const customMaps = JSON.parse(originalMaps);
+  customMaps[0].backgroundLayers = [{ projectId: 'fixture', name: 'roads', included: true }];
+  customMaps[0].defaultBackgroundKey = 'background:fixture:roads';
+  await fs.writeFile(mapsPath, JSON.stringify(customMaps));
+  const customBackgroundConfig = await (await fetch(`${base}/api/view-config/fixture`)).json();
+  const customBaseLayers = customBackgroundConfig.config.layers.filter((item) => item.isBaseLayer);
+  assert.equal(customBaseLayers.filter((item) => item.isDefault).length, 1);
+  assert.equal(customBaseLayers.find((item) => item.isDefault).key, 'background:fixture:roads');
+  assert.equal(customBaseLayers.find((item) => item.key === 'system-background:osm').isDefault, false);
+  await fs.writeFile(mapsPath, originalMaps);
+  const token = 'test-ion-token-not-for-response';
+  const tokenSave = await fetch(`${base}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ionToken: token }) });
+  assert.equal(tokenSave.status, 200);
+  assert.equal(JSON.stringify(await tokenSave.json()).includes(token), false);
+  const storedSettings = JSON.parse(await fs.readFile(path.join(dataDir, 'settings.json'), 'utf8'));
+  assert.match(storedSettings.ionToken, /^qtiler3d:v1:/);
+  const safeSettings = await (await fetch(`${base}/api/settings`)).json();
+  assert.equal(safeSettings.settings.ionToken, undefined);
+  assert.equal(safeSettings.settings.ionTokenConfigured, true);
+  const tokenConfig = await (await fetch(`${base}/api/view-config/fixture`)).json();
+  assert.equal(tokenConfig.scene.ionToken, '');
+  assert.equal(tokenConfig.config.cesiumToken, token);
   const layer = config.config.layers.find((item) => item.layerName === 'points');
   assert.equal(layer.fillOpacity, null);
   assert.equal(layer.strokeOpacity, null);

@@ -18,6 +18,7 @@ const state = {
   pluginMaps: [],
   layersByProject: {},
   layerAttributesByProject: {},
+  layerAttributePromises: new Map(),
   databases: [],
   // userId -> plaintext API key revealed only once (regenerate/create response)
   recentlyIssuedKeys: new Map()
@@ -89,19 +90,29 @@ const PLUGIN_MAP_PERMISSION_PREFIX = 'plugin-map:';
 const initTabs = () => {
   const buttons = Array.from(document.querySelectorAll('.tab-button[data-tab]'));
   const panels = Array.from(document.querySelectorAll('.tab-panel[data-tab-panel]'));
+  let navigationRequest = 0;
   buttons.forEach((button) => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       const target = button.dataset.tab;
+      const requestId = ++navigationRequest;
+      if (target === 'layers' && !state.layerCatalogLoaded) {
+        button.disabled = true;
+        try {
+          await ensureLayerCatalogLoaded();
+        } catch (err) {
+          showMessage('error', parseError(err, 'Failed to load layer permissions.'));
+          return;
+        } finally {
+          button.disabled = false;
+        }
+        if (requestId !== navigationRequest) return;
+        renderLayerPermissions();
+      }
       buttons.forEach((btn) => btn.classList.toggle('active', btn === button));
       panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.tabPanel === target));
       if (target === 'plugins' && state.pluginAccessNeedsRender) {
         renderPluginAccess();
         state.pluginAccessNeedsRender = false;
-      }
-      if (target === 'layers') {
-        ensureLayerCatalogLoaded().then(renderLayerPermissions).catch((err) => {
-          showMessage('error', parseError(err, 'Failed to load layer permissions.'));
-        });
       }
     });
   });
@@ -221,13 +232,13 @@ const extractAttributeMetadata = (attributes) => {
   const nonGeometry = normalized.filter((attr) => {
     const n = attr.name.toLowerCase();
     const t = attr.type.toLowerCase();
-    return !(/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+    return !(/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|linestring|multilinestring|polygon|multipolygon|wkb|wkt)/.test(t));
   });
 
   const geometry = normalized.filter((attr) => {
     const n = attr.name.toLowerCase();
     const t = attr.type.toLowerCase();
-    return (/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|line|string|polygon|multipolygon|multiline|wkb|wkt)/.test(t));
+    return (/^(geom|the_geom|geometry|wkb_geometry)$/.test(n) || /(geometry|point|linestring|multilinestring|polygon|multipolygon|wkb|wkt)/.test(t));
   });
 
   const unique = (arr) => Array.from(new Set(arr.filter(Boolean)));
@@ -265,15 +276,24 @@ const detectGeometryAttribute = (layer, layerMeta, configuredGeometry = '') => {
 
 async function fetchLayerAttributes(projectId, layerName) {
   const candidates = Array.from(new Set([String(layerName || '').trim(), safeXmlName(layerName)])).filter(Boolean);
+  let lastError = null;
+  let emptyMetadata = null;
   for (const candidate of candidates) {
     try {
       const payload = await api(`/origo/wfs-attributes?project=${encodeURIComponent(projectId)}&layer=${encodeURIComponent(candidate)}`);
-      return extractAttributeMetadata(payload?.attributes);
-    } catch (_err) {
-      // Try next candidate
+      if (payload?.ok === false) {
+        lastError = new Error(payload.warning || 'Layer attributes are unavailable.');
+        continue;
+      }
+      const metadata = extractAttributeMetadata(payload?.attributes);
+      if (metadata.all.length) return metadata;
+      emptyMetadata = metadata;
+    } catch (err) {
+      lastError = err;
     }
   }
-  return { all: [], nonGeometry: [], geometry: [] };
+  if (lastError) throw lastError;
+  return emptyMetadata || { all: [], nonGeometry: [], geometry: [] };
 }
 
 function setSelectOptions(select, columns, selectedValue, fallbackLabel = 'No attributes detected') {
@@ -293,31 +313,99 @@ function setSelectOptions(select, columns, selectedValue, fallbackLabel = 'No at
   if (selected && safeColumns.includes(selected)) select.value = selected;
 }
 
+function getSelectedSearchFields(config, columns) {
+  const configured = Array.isArray(config?.fields) ? config.fields : [];
+  const legacy = [config?.searchAttribute, config?.titleField].filter(Boolean);
+  const available = new Set(Array.isArray(columns) ? columns : []);
+  const selected = Array.from(new Set([...configured, ...legacy].map((value) => String(value || '').trim()).filter(Boolean)));
+  const matching = selected.filter((field) => available.has(field));
+  return matching.length ? matching : (available.size ? [available.values().next().value] : []);
+}
+
+function setSearchColumnOptions(container, columns, selectedValues) {
+  if (!container) return;
+  const safeColumns = Array.from(new Set((Array.isArray(columns) ? columns : []).map((col) => String(col || '').trim()).filter(Boolean)));
+  const rawSelections = Array.isArray(selectedValues) ? selectedValues : [];
+  const selected = Array.from(new Set(rawSelections
+    .map((value) => String(value || '').trim())
+    .filter((value) => value && safeColumns.includes(value))));
+  const values = selected.length ? selected : (safeColumns.length ? [safeColumns[0]] : ['']);
+  if (rawSelections.some((value) => !String(value || '').trim()) && selected.length < safeColumns.length) {
+    values.push('');
+  }
+  const options = (selectedValue) => [
+    `<option value="">${safeColumns.length ? 'Select an attribute' : 'No attributes detected'}</option>`,
+    ...safeColumns.map((column) => {
+      const escaped = escapeHtml(column);
+      const chosen = selectedValue === column ? ' selected' : '';
+      return `<option value="${escaped}"${chosen}>${escaped}</option>`;
+    })
+  ].join('');
+  container.innerHTML = values.map((value, index) => {
+    const removeButton = index > 0
+      ? '<button type="button" class="search-column-remove" aria-label="Remove search attribute">Remove</button>'
+      : '';
+    return `<div class="search-column-row"><select class="search-column-select" aria-label="Search attribute ${index + 1}">${options(value)}</select>${removeButton}</div>`;
+  }).join('') + '<button type="button" class="search-column-add" aria-label="Add search attribute">+</button>';
+  syncSearchColumnOptions(container);
+}
+
+function syncSearchColumnOptions(container) {
+  const selects = Array.from(container?.querySelectorAll('.search-column-select') || []);
+  const selectedValues = selects.map((select) => String(select.value || '').trim()).filter(Boolean);
+  selects.forEach((select) => {
+    Array.from(select.options || []).forEach((option) => {
+      option.disabled = !!option.value && selectedValues.includes(option.value) && select.value !== option.value;
+    });
+  });
+  const addButton = container?.querySelector('.search-column-add');
+  if (addButton) addButton.disabled = selectedValues.length >= (selects[0]?.options?.length || 1) - 1;
+}
+
+function getSelectedSearchColumnValues(container) {
+  return Array.from(new Set(Array.from(container?.querySelectorAll('.search-column-select') || [])
+    .map((select) => String(select.value || '').trim())
+    .filter(Boolean)));
+}
+
+function getAvailableLayerColumns(projectId, layerName, fallbackColumns) {
+  const metadata = state.layerAttributesByProject?.[projectId]?.[layerName];
+  const columns = Array.isArray(metadata?.nonGeometry) && metadata.nonGeometry.length
+    ? metadata.nonGeometry
+    : (Array.isArray(metadata?.all) ? metadata.all : []);
+  return columns.length ? columns : fallbackColumns;
+}
+
 function applyLayerAttributeMetadata(projectId, layerName, row, metadata) {
   if (!row) return;
   const projectKey = String(projectId || '').trim();
   const layerKey = String(layerName || '').trim();
   if (!state.layerAttributesByProject[projectKey]) state.layerAttributesByProject[projectKey] = {};
   state.layerAttributesByProject[projectKey][layerKey] = metadata;
+  if (typeof row.isConnected === 'boolean' && !row.isConnected) return;
 
   const permission = state.layerPermissionsByProject?.[projectKey]?.get(layerKey) || {};
   const config = permission.search || {};
+  const searchColumns = row.querySelector('.search-columns');
   const availableColumns = Array.isArray(metadata?.nonGeometry) && metadata.nonGeometry.length
     ? metadata.nonGeometry
     : (Array.isArray(metadata?.all) ? metadata.all : []);
-  const selectedSearch = pickPreferredAttribute(
-    [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
-    availableColumns
-  );
-  const selectedId = pickPreferredAttribute(
-    [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
-    availableColumns
-  );
   const layer = state.layersByProject?.[projectKey]?.find((entry) => String(entry?.name || '') === layerKey) || {};
   const selectedGeom = detectGeometryAttribute(layer, metadata, config.geometryAttribute);
   row.dataset.geometryAttribute = selectedGeom;
-  setSelectOptions(row.querySelector('.search-select'), availableColumns, selectedSearch);
-  setSelectOptions(row.querySelector('.id-select'), availableColumns, selectedId);
+  const updateControls = () => {
+    const currentSelection = getSelectedSearchColumnValues(searchColumns);
+    const selectedSearch = currentSelection.length
+      ? currentSelection
+      : getSelectedSearchFields(config, availableColumns);
+    const selectedId = pickPreferredAttribute(
+      [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
+      availableColumns
+    );
+    setSearchColumnOptions(searchColumns, availableColumns, selectedSearch);
+    setSelectOptions(row.querySelector('.id-select'), availableColumns, selectedId);
+  };
+  updateControls();
 }
 
 async function ensureLayerAttributes(projectId, layerName, row) {
@@ -326,16 +414,29 @@ async function ensureLayerAttributes(projectId, layerName, row) {
   if (!projectKey || !layerKey || !row) return;
   const existing = state.layerAttributesByProject?.[projectKey]?.[layerKey];
   if (existing && Array.isArray(existing.all) && existing.all.length) return;
+  const requestKey = `${projectKey}\u0000${layerKey}`;
+  let pending = state.layerAttributePromises.get(requestKey);
+  if (!pending) {
+    pending = fetchLayerAttributes(projectKey, layerKey);
+    state.layerAttributePromises.set(requestKey, pending);
+  }
+  const controls = Array.from(row.querySelectorAll('.search-column-select, .search-column-add, .id-select'));
+  controls.forEach((control) => { control.disabled = true; });
   row.classList.add('is-loading-attributes');
   try {
-    const metadata = await fetchLayerAttributes(projectKey, layerKey);
+    const metadata = await pending;
     applyLayerAttributeMetadata(projectKey, layerKey, row, metadata);
   } finally {
+    if (state.layerAttributePromises.get(requestKey) === pending) {
+      state.layerAttributePromises.delete(requestKey);
+    }
     row.classList.remove('is-loading-attributes');
+    controls.forEach((control) => { control.disabled = false; });
   }
 }
 
 async function loadSearchableCatalog() {
+  const cachedAttributes = state.layerAttributesByProject || {};
   const projects = Array.isArray(state.projects) ? state.projects : [];
   const results = await Promise.all(projects.map(async (project) => {
     const projectId = String(project?.id || '').trim();
@@ -385,7 +486,10 @@ async function loadSearchableCatalog() {
       ...layer,
       ...(entry.permissionByName?.get(String(layer.name || '')) || {})
     }));
-    layerAttributesByProject[entry.projectId] = entry.attributes;
+    layerAttributesByProject[entry.projectId] = {
+      ...(cachedAttributes[entry.projectId] || {}),
+      ...entry.attributes
+    };
     projectServicesByProject[entry.projectId] = entry.services || {};
     projectCrsByProject[entry.projectId] = entry.originalCrs || '';
   });
@@ -1010,6 +1114,14 @@ function renderLayerPermissions() {
   if (!container) return;
 
   container.innerHTML = '';
+  if (!state.layerCatalogLoaded) {
+    const loading = document.createElement('p');
+    loading.className = 'layer-permissions-loading';
+    loading.setAttribute('role', 'status');
+    loading.textContent = 'Loading layer permissions…';
+    container.appendChild(loading);
+    return;
+  }
   const projectList = state.projects || [];
   if (!projectList.length) {
     container.textContent = 'No projects available.';
@@ -1159,10 +1271,7 @@ function renderLayerPermissions() {
         const searchableEnabled = permission.wfsSearchable === true;
         const editableEnabled = permission.wfsEditable === true;
         const publicExcludedEnabled = permission.publicExcluded === true || permission.excluded === true;
-        const selectedSearch = pickPreferredAttribute(
-          [config.searchAttribute, config.titleField, (Array.isArray(config.fields) ? config.fields[0] : '')],
-          availableColumns
-        );
+        const selectedSearch = getSelectedSearchFields(config, availableColumns);
         const selectedId = pickPreferredAttribute(
           [config.idAttribute, 'GID', 'gid', 'id', 'ID', 'fid', 'FID'],
           availableColumns
@@ -1172,11 +1281,13 @@ function renderLayerPermissions() {
 
         const row = document.createElement('div');
         row.className = 'layer-permission-row';
+        if (!isVectorLayer) row.classList.add('layer-permission-row--raster');
         row.dataset.layerName = layer.name;
         row.dataset.geometryAttribute = selectedGeom;
         row.dataset.vectorLayer = isVectorLayer ? '1' : '0';
 
         const layerName = document.createElement('div');
+        layerName.className = 'permission-layer-name';
         const strong = document.createElement('strong');
         strong.textContent = layer.title || layer.name;
         const small = document.createElement('small');
@@ -1217,28 +1328,57 @@ function renderLayerPermissions() {
         infoInput.checked = isVectorLayer && permission.wmsQueryable !== false;
         infoToggle.append(infoInput, document.createTextNode('WMS infoclick'));
 
+        const publicServiceToggle = (label, className, enabled, disabled = false) => {
+          const toggle = document.createElement('label');
+          toggle.className = 'permission-chip';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = className;
+          input.checked = enabled;
+          input.disabled = disabled;
+          toggle.append(input, document.createTextNode(label));
+          return toggle;
+        };
+        const publicWmsToggle = publicServiceToggle('Public WMS', 'public-wms-check', permission.publicWms !== false);
+        const publicWfsToggle = publicServiceToggle('Public WFS', 'public-wfs-check', isVectorLayer && permission.publicWfs !== false, !isVectorLayer);
+        const publicWmtsToggle = publicServiceToggle('Public WMTS', 'public-wmts-check', permission.publicWmts !== false);
+
+        const publicControls = document.createElement('div');
+        publicControls.className = 'permission-control-group';
+        const publicHeading = document.createElement('strong');
+        publicHeading.textContent = 'Public services';
+        publicControls.append(publicHeading, excludeToggle, publicWmsToggle, publicWfsToggle, publicWmtsToggle);
+
+        const layerControls = document.createElement('div');
+        layerControls.className = 'permission-control-group';
+        const layerHeading = document.createElement('strong');
+        layerHeading.textContent = 'Layer permissions';
+        layerControls.append(layerHeading);
+        if (isVectorLayer) layerControls.append(infoToggle, editToggle, searchToggle);
+
         const searchControls = document.createElement('div');
         searchControls.className = `search-config-row${isVectorLayer && searchableEnabled ? '' : ' is-hidden'}`;
 
-        const columnOptions = availableColumns.length ? availableColumns : [''];
-        const searchField = document.createElement('label');
+        const searchField = document.createElement('div');
         searchField.className = 'mini-field';
-        searchField.innerHTML = '<span>searchAttribute</span>';
-        const searchSelect = document.createElement('select');
-        searchSelect.className = 'search-select';
-        searchSelect.innerHTML = columnOptions.map((col) => {
-          const escaped = escapeHtml(col || '');
-          const sel = selectedSearch === col ? ' selected' : '';
-          return `<option value="${escaped}"${sel}>${escapeHtml(col || 'No attributes detected')}</option>`;
-        }).join('');
-        searchField.appendChild(searchSelect);
+        const searchFieldLabel = document.createElement('span');
+        searchFieldLabel.textContent = 'Searchable attributes';
+        searchField.appendChild(searchFieldLabel);
+        const searchColumns = document.createElement('div');
+        searchColumns.className = 'search-columns';
+        setSearchColumnOptions(searchColumns, availableColumns, selectedSearch);
+        searchField.appendChild(searchColumns);
+        const searchHelp = document.createElement('small');
+        searchHelp.className = 'help';
+        searchHelp.textContent = 'Search matches any selected attribute. Use + to add another.';
+        searchField.appendChild(searchHelp);
 
         const idField = document.createElement('label');
         idField.className = 'mini-field';
         idField.innerHTML = '<span>idAttribute</span>';
         const idSelect = document.createElement('select');
         idSelect.className = 'id-select';
-        idSelect.innerHTML = columnOptions.map((col) => {
+        idSelect.innerHTML = (availableColumns.length ? availableColumns : ['']).map((col) => {
           const escaped = escapeHtml(col || '');
           const sel = selectedId === col ? ' selected' : '';
           return `<option value="${escaped}"${sel}>${escapeHtml(col || 'No attributes detected')}</option>`;
@@ -1262,20 +1402,59 @@ function renderLayerPermissions() {
           if (searchInput.checked) {
             ensureLayerAttributes(projectId, layer.name, row).then(() => {
               scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
+            }).catch((err) => {
+              searchHelp.textContent = `Could not load layer attributes: ${parseError(err, 'request failed')}`;
             });
           }
           scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
         });
 
+        searchColumns.addEventListener('focusin', () => {
+          const current = state.layerAttributesByProject?.[projectId]?.[layer.name];
+          if (!Array.isArray(current?.all) || !current.all.length) {
+            ensureLayerAttributes(projectId, layer.name, row).catch((err) => {
+              searchHelp.textContent = `Could not load layer attributes: ${parseError(err, 'request failed')}`;
+            });
+          }
+        });
+
+        searchColumns.addEventListener('change', (event) => {
+          if (!event.target.matches('.search-column-select')) return;
+          syncSearchColumnOptions(searchColumns);
+          scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
+        });
+        searchColumns.addEventListener('click', (event) => {
+          const button = event.target.closest('.search-column-add, .search-column-remove');
+          if (!button) return;
+          event.preventDefault();
+          const currentAvailableColumns = getAvailableLayerColumns(projectId, layer.name, availableColumns);
+          const selectedValues = getSelectedSearchColumnValues(searchColumns);
+          if (button.classList.contains('search-column-add')) {
+            if (selectedValues.length >= currentAvailableColumns.length) return;
+            setSearchColumnOptions(searchColumns, currentAvailableColumns, [...selectedValues, '']);
+          } else {
+            const searchRow = button.closest('.search-column-row');
+            const index = Array.from(searchColumns.querySelectorAll('.search-column-row')).indexOf(searchRow);
+            if (index >= 0) selectedValues.splice(index, 1);
+            setSearchColumnOptions(searchColumns, currentAvailableColumns, selectedValues);
+          }
+          scheduleLayerPermissionAutosave(projectId, project.name || projectId, list);
+        });
+
         searchControls.append(searchField, idField, hintField);
-        row.append(layerName, excludeToggle);
-        if (isVectorLayer) row.append(infoToggle, editToggle, searchToggle, searchControls);
+        row.append(layerName, publicControls);
+        if (isVectorLayer) row.append(layerControls, searchControls);
         row.querySelectorAll('input, select').forEach((control) => {
           if (control === searchInput || control === editInput) return;
           control.addEventListener('change', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
         });
         hintInput.addEventListener('input', () => scheduleLayerPermissionAutosave(projectId, project.name || projectId, list));
         list.appendChild(row);
+        if (isVectorLayer && searchableEnabled) {
+          ensureLayerAttributes(projectId, layer.name, row).catch((err) => {
+            searchHelp.textContent = `Could not load layer attributes: ${parseError(err, 'request failed')}`;
+          });
+        }
       });
     }
 
@@ -1296,7 +1475,8 @@ function collectLayerPermissionPayload(list) {
     const publicExcluded = !!row.querySelector('.exclude-check')?.checked;
     const wfsEditable = isVectorLayer && !!row.querySelector('.edit-check')?.checked;
     const wfsSearchable = isVectorLayer && !!row.querySelector('.search-check')?.checked;
-    const searchAttribute = String(row.querySelector('.search-select')?.value || '').trim();
+    const searchFields = getSelectedSearchColumnValues(row.querySelector('.search-columns'));
+    const searchAttribute = searchFields[0] || '';
     const idAttribute = String(row.querySelector('.id-select')?.value || '').trim();
     const hint = String(row.querySelector('.hint-input')?.value || '').trim() || 'Search...';
     const geometryAttribute = String(row.dataset.geometryAttribute || '').trim();
@@ -1305,15 +1485,18 @@ function collectLayerPermissionPayload(list) {
       publicExcluded,
       wfsEditable,
       wfsSearchable,
+      publicWms: !!row.querySelector('.public-wms-check')?.checked,
+      publicWfs: isVectorLayer && !!row.querySelector('.public-wfs-check')?.checked,
+      publicWmts: !!row.querySelector('.public-wmts-check')?.checked,
       wmsQueryable: isVectorLayer && !!row.querySelector('.info-check')?.checked,
-      search: wfsSearchable && searchAttribute && idAttribute
+      search: searchFields.length && idAttribute
         ? {
           name: layerName,
           idAttribute,
           searchAttribute,
           geometryAttribute,
           hintText: hint,
-          fields: [searchAttribute],
+          fields: searchFields,
           titleField: searchAttribute
         }
         : null

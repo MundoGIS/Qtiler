@@ -750,10 +750,14 @@
           }
           const rangeInfo = deriveCachedZoomRange(cachedEntry);
           const coverageLabel = formatZoomRangeLabel(rangeInfo.coverageMin, rangeInfo.coverageMax);
+          const configuredRange = String(targetType).toLowerCase() === 'theme'
+            ? getThemeZoomRange(projectId, layerName)
+            : getLayerZoomRange(projectId, layerName);
+          const projectRange = getProjectZoomRange(projectId);
           const controlMin = parseZoomNumber(zoomMinInput ? zoomMinInput.value : null);
           const controlMax = parseZoomNumber(zoomMaxInput ? zoomMaxInput.value : null);
-          const defaultMin = rangeInfo.min != null ? rangeInfo.min : (controlMin != null ? controlMin : 0);
-          let defaultMax = rangeInfo.max != null ? rangeInfo.max : (controlMax != null ? controlMax : defaultMin);
+          const defaultMin = configuredRange?.min ?? projectRange?.min ?? (controlMin != null ? controlMin : (rangeInfo.min ?? 0));
+          let defaultMax = configuredRange?.max ?? projectRange?.max ?? (controlMax != null ? controlMax : (rangeInfo.max ?? defaultMin));
           if (defaultMax == null) defaultMax = defaultMin;
 
           const heading = document.createElement('h2');
@@ -769,7 +773,7 @@
 
           const desc = document.createElement('div');
           desc.className = 'dialog-description';
-          desc.textContent = tr('Choose zoom levels for this recache run.');
+          desc.textContent = tr('Choose the zoom levels for the replacement. The saved extent map will be used.');
           recacheDialogContainer.appendChild(desc);
 
           if (coverageLabel) {
@@ -781,7 +785,7 @@
 
           const note = document.createElement('div');
           note.className = 'dialog-note';
-          note.textContent = tr('Values only apply to this recache operation.');
+          note.textContent = tr('Replacing removes the existing tiles first. These zoom levels apply only to this replacement.');
           recacheDialogContainer.appendChild(note);
 
           const form = document.createElement('form');
@@ -847,7 +851,7 @@
           const submitBtn = document.createElement('button');
           submitBtn.type = 'submit';
           submitBtn.className = 'btn btn-primary';
-          submitBtn.textContent = tr('Start recache');
+          submitBtn.textContent = tr('Replace and generate');
           actions.appendChild(submitBtn);
 
           const clearError = () => {
@@ -1770,7 +1774,7 @@
         }
         const configuredTargetZoom = targetType === 'layer'
           ? getLayerZoomRange(projectId, targetName)
-          : getProjectZoomRange(projectId);
+          : getThemeZoomRange(projectId, targetName) || getProjectZoomRange(projectId);
 
         scheduleDialogContainer.innerHTML = '';
 
@@ -1827,13 +1831,13 @@
         zoomRow.appendChild(zoomMaxLabel);
         form.appendChild(zoomRow);
 
-        if (targetType === 'layer') {
-          const targetMapHint = document.createElement('div');
-          targetMapHint.className = 'meta';
-          targetMapHint.style.marginTop = '8px';
-          targetMapHint.textContent = tr('Automatic cache uses the extent saved in this layer map. Leave zoom empty to use that layer map zoom range.');
-          form.appendChild(targetMapHint);
-        }
+        const targetMapHint = document.createElement('div');
+        targetMapHint.className = 'meta';
+        targetMapHint.style.marginTop = '8px';
+        targetMapHint.textContent = targetType === 'theme'
+          ? tr('Automatic cache uses the saved theme extent. Leave zoom empty to use the zoom range saved in its extent map.')
+          : tr('Automatic cache uses the extent saved in this layer map. Leave zoom empty to use that layer map zoom range.');
+        form.appendChild(targetMapHint);
 
         const enableRow = document.createElement('label');
         enableRow.style.display = 'flex';
@@ -3417,6 +3421,11 @@
         return { layers: { [layerName]: entryPatch } };
       };
 
+      const buildThemeExtentPatch = (projectId, themeName, extentList, themeCrs) => {
+        const layerPatch = buildLayerExtentPatch(projectId, themeName, extentList, themeCrs);
+        return { themes: layerPatch.layers };
+      };
+
       const getLayerProjectedExtentPayload = (projectId, layerName, fallbackLayerCrs = null) => {
         const projectState = getProjectState(projectId);
         const livePanel = projectState?.layerExtentPanels?.get?.(layerName) || null;
@@ -3491,6 +3500,64 @@
         return { min, max };
       };
 
+      const getThemeProjectedExtentPayload = (projectId, themeName, fallbackThemeCrs = null) => {
+        const projectState = getProjectState(projectId);
+        const livePanel = projectState?.themeExtentPanels?.get?.(themeName) || null;
+        if (livePanel && Object.prototype.hasOwnProperty.call(livePanel, 'extent')) {
+          if (Array.isArray(livePanel.extent) && livePanel.extent.length === 4) {
+            const livePatch = buildThemeExtentPatch(projectId, themeName, livePanel.extent, livePanel.layerCrs || fallbackThemeCrs);
+            const liveExtent = livePatch?.themes?.[themeName]?.extent || null;
+            const bbox = Array.isArray(liveExtent?.bbox) ? normalizeExtentList(liveExtent.bbox) : null;
+            const crs = liveExtent?.crs || livePanel.layerCrs || fallbackThemeCrs || null;
+            if (bbox) {
+              const resolvedCrs = crs || 'EPSG:4326';
+              const fixed = normalizeAxisOrderForCrs(bbox, resolvedCrs) || bbox;
+              return { bbox: fixed, extentString: fixed.join(','), crs: resolvedCrs };
+            }
+          }
+          return null;
+        }
+        const themeCfg = projectConfigs.get(projectId)?.themes?.[themeName];
+        if (!themeCfg) return null;
+        let bbox = null;
+        let crs = fallbackThemeCrs || null;
+        if (Array.isArray(themeCfg.extent?.bbox)) {
+          bbox = normalizeExtentList(themeCfg.extent.bbox);
+          crs = themeCfg.extent.crs || crs;
+        }
+        if (!bbox && Array.isArray(themeCfg.extentWgs84?.bbox)) {
+          const wgs = normalizeExtentList(themeCfg.extentWgs84.bbox);
+          if (wgs) {
+            const converted = transformExtentToProjectCrs(wgs, fallbackThemeCrs || crs || null);
+            if (converted && Array.isArray(converted.bbox)) {
+              bbox = normalizeExtentList(converted.bbox);
+              crs = converted.crs || fallbackThemeCrs || crs;
+            }
+          }
+        }
+        if (!bbox) return null;
+        const resolvedCrs = crs || fallbackThemeCrs || 'EPSG:4326';
+        const fixed = normalizeAxisOrderForCrs(bbox, resolvedCrs) || bbox;
+        return { bbox: fixed, extentString: fixed.join(','), crs: resolvedCrs };
+      };
+
+      const getThemeZoomRange = (projectId, themeName) => {
+        const projectState = getProjectState(projectId);
+        const livePanel = projectState?.themeExtentPanels?.get?.(themeName) || null;
+        if (livePanel) {
+          const inputMin = parseZoomNumber(livePanel.minInputEl?.value);
+          const inputMax = parseZoomNumber(livePanel.maxInputEl?.value);
+          if (inputMin != null && inputMax != null) return { min: inputMin, max: inputMax };
+          const liveMin = parseZoomNumber(livePanel.zoomMin);
+          const liveMax = parseZoomNumber(livePanel.zoomMax);
+          if (liveMin != null && liveMax != null) return { min: liveMin, max: liveMax };
+        }
+        const zoom = projectConfigs.get(projectId)?.themes?.[themeName]?.zoom;
+        const min = parseZoomNumber(zoom?.min);
+        const max = parseZoomNumber(zoom?.max);
+        return min != null && max != null ? { min, max } : null;
+      };
+
       const getProjectZoomRange = (projectId) => {
         const cfg = projectConfigs.get(projectId);
         const zoomCfg = cfg && cfg.zoom ? cfg.zoom : null;
@@ -3499,6 +3566,14 @@
         const max = parseZoomNumber(zoomCfg.max);
         if (min == null || max == null) return null;
         return { min, max };
+      };
+
+      const getSavedRunExtent = (configEntry) => {
+        const params = configEntry?.lastParams;
+        if (typeof params?.project_extent !== 'string') return null;
+        const values = params.project_extent.split(',').map((value) => Number(value.trim()));
+        if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) return null;
+        return { extentString: values.join(','), crs: params.extent_crs || null };
       };
 
       const getProjectedExtentPayload = (projectId) => {
@@ -3599,12 +3674,15 @@
         }
       };
 
-      async function toggleLayerExtentPanel(project, layer, configLayer, container, toggleBtn){
+      async function toggleLayerExtentPanel(project, layer, configLayer, container, toggleBtn, targetType = 'layer'){
         const state = getProjectState(project.id);
         const panelKey = String(layer?.name || '');
         if (!panelKey) return;
-        if (!state.layerExtentPanels) state.layerExtentPanels = new Map();
-        const existing = state.layerExtentPanels.get(panelKey) || {
+        const isTheme = targetType === 'theme';
+        const panelMapKey = isTheme ? 'themeExtentPanels' : 'layerExtentPanels';
+        if (!state[panelMapKey]) state[panelMapKey] = new Map();
+        const extentPanels = state[panelMapKey];
+        const existing = extentPanels.get(panelKey) || {
           open: false,
           map: null,
           extent: null,
@@ -3614,7 +3692,7 @@
           mapResizeObserver: null,
           mapResizeTimer: null
         };
-        state.layerExtentPanels.set(panelKey, existing);
+        extentPanels.set(panelKey, existing);
 
         const updateToggleLabel = () => {
           if (!toggleBtn) return;
@@ -3652,10 +3730,10 @@
         wrapper.className = 'layer-extent-panel';
         const title = document.createElement('div');
         title.className = 'panel-title';
-        title.textContent = tr('Layer extent map') + ' · ' + (layer.name || 'layer');
+        title.textContent = tr(isTheme ? 'Theme extent map' : 'Layer extent map') + ' · ' + (layer.name || 'layer');
         wrapper.appendChild(title);
 
-        const mapId = `layer-extent-map-${toDomId(project.id)}-${toDomId(layer.name)}-${Date.now()}`;
+        const mapId = `${isTheme ? 'theme' : 'layer'}-extent-map-${toDomId(project.id)}-${toDomId(layer.name)}-${Date.now()}`;
         const mapHolder = document.createElement('div');
         mapHolder.id = mapId;
         mapHolder.style.height = '260px';
@@ -3669,7 +3747,7 @@
         settings.className = 'control-grid project-settings-grid';
         settings.style.marginTop = '10px';
 
-        const layerZoom = getLayerZoomRange(project.id, layer.name);
+        const layerZoom = isTheme ? getThemeZoomRange(project.id, layer.name) : getLayerZoomRange(project.id, layer.name);
         const defaultMin = layerZoom ? layerZoom.min : (Number.parseInt(zoomMinInput?.value || '0', 10) || 0);
         const defaultMax = layerZoom ? layerZoom.max : (Number.parseInt(zoomMaxInput?.value || '0', 10) || 0);
         existing.zoomMin = defaultMin;
@@ -3744,11 +3822,14 @@
           existing.extent = Array.isArray(extentList) ? extentList.slice() : null;
           minInput.value = String(finalMin);
           maxInput.value = String(finalMax);
-          const patch = buildLayerExtentPatch(project.id, layer.name, extentList, existing.layerCrs) || { layers: {} };
-          patch.layers[layer.name] = patch.layers[layer.name] || {};
-          patch.layers[layer.name].zoom = { min: finalMin, max: finalMax, updatedAt: new Date().toISOString() };
+          const patch = isTheme
+            ? buildThemeExtentPatch(project.id, layer.name, extentList, existing.layerCrs)
+            : buildLayerExtentPatch(project.id, layer.name, extentList, existing.layerCrs);
+          const targetEntries = isTheme ? patch.themes : patch.layers;
+          targetEntries[layer.name] = targetEntries[layer.name] || {};
+          targetEntries[layer.name].zoom = { min: finalMin, max: finalMax, updatedAt: new Date().toISOString() };
           queueProjectConfigSave(project.id, patch, { immediate: true });
-          showLocalStatus(tr('Layer settings saved: z{min}-{max}', { min: finalMin, max: finalMax }));
+          showLocalStatus(tr(isTheme ? 'Theme settings saved: z{min}-{max}' : 'Layer settings saved: z{min}-{max}', { min: finalMin, max: finalMax }));
         };
 
         container.appendChild(wrapper);
@@ -3785,7 +3866,8 @@
         const configuredWgsExtent = normalizeExtentList(configLayer?.extentWgs84?.bbox)
           || normalizeExtentList(configLayer?.extent_wgs84?.bbox)
           || normalizeExtentList(layer.extent_wgs84)
-          || normalizeExtentList(layer.extent);
+          || normalizeExtentList(layer.extent)
+          || normalizeExtentList(state.themeExtents?.get?.(layer.name));
         if (configuredWgsExtent) {
           existing.extent = configuredWgsExtent.slice();
           applyRect(existing.extent);
@@ -5441,15 +5523,20 @@
         });
       }
 
-      function showPartialCacheResumeDialog({ targetName, cachedEntry = null } = {}) {
+      function showExistingCacheDialog({ targetName, cachedEntry = null, targetType = 'layer', partial = false } = {}) {
         const progress = cachedEntry && typeof cachedEntry === 'object' ? (cachedEntry.progress || null) : null;
         const savedMin = Number.isFinite(Number(progress?.zoom_min)) ? Number(progress.zoom_min)
           : (Number.isFinite(Number(cachedEntry?.last_zoom_min)) ? Number(cachedEntry.last_zoom_min) : null);
         const savedMax = Number.isFinite(Number(progress?.zoom_max)) ? Number(progress.zoom_max)
           : (Number.isFinite(Number(cachedEntry?.last_zoom_max)) ? Number(cachedEntry.last_zoom_max) : null);
-        const zoomHint = savedMin != null && savedMax != null
-          ? tr('Saved progress covers zoom {min}-{max}.', { min: savedMin, max: savedMax })
-          : tr('Saved progress from the aborted cache run is available.');
+        const range = deriveCachedZoomRange(cachedEntry);
+        const zoomHint = partial
+          ? (savedMin != null && savedMax != null
+            ? tr('Saved progress covers zoom {min}-{max}.', { min: savedMin, max: savedMax })
+            : tr('Saved progress from the interrupted cache run is available.'))
+          : (range.coverageMin != null && range.coverageMax != null
+            ? tr('The existing cache covers zoom {min}-{max}.', { min: range.coverageMin, max: range.coverageMax })
+            : tr('An existing cache was found.'));
 
         return new Promise((resolve) => {
           const overlay = document.createElement('div');
@@ -5473,12 +5560,14 @@
           overlay.appendChild(card);
 
           const title = document.createElement('h3');
-          title.textContent = tr('Partial cache detected');
+          title.textContent = partial ? tr('Partial cache detected') : tr('Existing cache detected');
           title.style.margin = '0 0 8px 0';
           card.appendChild(title);
 
           const message = document.createElement('p');
-          message.textContent = tr('Cache for {target} was not finished. Do you want to continue from the saved progress or replace it and start over?', { target: targetName || '' });
+          message.textContent = partial
+            ? tr('The cache for {target} was interrupted. Continue using its saved area and zoom levels, or replace it and choose new zoom levels?', { target: targetName || '' })
+            : tr('A cache already exists for {target}. Continue with the current extent map and keep existing tiles, replace it and choose new zoom levels, or cancel?', { target: targetName || '' });
           message.style.margin = '0 0 6px 0';
           message.style.lineHeight = '1.45';
           card.appendChild(message);
@@ -5502,12 +5591,12 @@
 
           const resumeBtn = document.createElement('button');
           resumeBtn.type = 'button';
-          resumeBtn.textContent = tr('Continue existing cache');
+          resumeBtn.textContent = partial ? tr('Continue saved progress') : tr('Continue and keep existing tiles');
           resumeBtn.className = 'secondary';
 
           const replaceBtn = document.createElement('button');
           replaceBtn.type = 'button';
-          replaceBtn.textContent = tr('Replace existing cache');
+          replaceBtn.textContent = tr('Replace and choose zoom levels');
           replaceBtn.className = 'primary';
 
           const cleanup = () => {
@@ -6839,32 +6928,38 @@
 
           // Always show the manual cache button so operators can trigger caching.
           const genBtn = makeIconButton((hasCachedTiles || hasPartialCache) ? tr('Recache layer') : tr('Generate Tiles'), 'play', null, 'btn-primary');
-          if (hasPartialCache) {
+          if (hasPartialCache || hasCachedTiles) {
             genBtn.title = tr('Recache layer');
             genBtn.addEventListener('click', async () => {
-              const decision = await showPartialCacheResumeDialog({ targetName: l.name, cachedEntry });
+              const decision = await showExistingCacheDialog({
+                targetName: l.name,
+                cachedEntry,
+                targetType: 'layer',
+                partial: hasPartialCache
+              });
               if (!decision) return;
-              const resumeRange = decision === 'resume' ? deriveCachedZoomRange(cachedEntry) : null;
               try {
+                if (decision === 'replace') {
+                  const selection = await openRecacheDialog({ projectId: project.id, layerName: l.name, cachedEntry });
+                  if (!selection) return;
+                  await generateCache(genBtn, project.id, l.name, l, {
+                    cachedEntry,
+                    zoomOverride: selection,
+                    forcePurgeBeforeStart: true
+                  });
+                  return;
+                }
+                const resumeRange = hasPartialCache
+                  ? deriveCachedZoomRange(cachedEntry)
+                  : (getLayerZoomRange(project.id, l.name) || getProjectZoomRange(project.id) || deriveCachedZoomRange(cachedEntry));
                 await generateCache(genBtn, project.id, l.name, l, {
-                  recache: false,
                   cachedEntry,
-                  zoomOverride: decision === 'resume' ? resumeRange : null,
-                  forcePurgeBeforeStart: decision === 'replace'
+                  zoomOverride: resumeRange,
+                  resumeExisting: true,
+                  extentOverride: hasPartialCache ? getSavedRunExtent(configLayer) : null
                 });
               } catch (err) {
-                console.error('Partial cache restart failed', err);
-              }
-            });
-          } else if (hasCachedTiles) {
-            genBtn.title = tr('Recache layer');
-            genBtn.addEventListener('click', async () => {
-              const selection = await openRecacheDialog({ projectId: project.id, layerName: l.name, cachedEntry });
-              if (!selection) return;
-              try {
-                await generateCache(genBtn, project.id, l.name, l, { recache: true, cachedEntry, zoomOverride: selection });
-              } catch (err) {
-                console.error('Recache request failed', err);
+                console.error('Cache continuation failed', err);
               }
             });
           } else {
@@ -7083,40 +7178,64 @@
             rowView.className = 'layer-actions-row';
             rowView.dataset.row = 'view';
 
-            const themeObj = { name: theme.name, layers: sources };
+            const themeObj = { name: theme.name, layers: sources, extent_wgs84: themeExtent };
 
             const reloadThemeBtn = makeIconButton(tr('Reload layer'), 'reload', () => reloadThemeRow(reloadThemeBtn, project, theme.name), 'btn-secondary');
             rowMap.appendChild(reloadThemeBtn);
+
+            const themeExtentContainer = document.createElement('div');
+            themeExtentContainer.className = 'layer-extent-container';
+            themeExtentContainer.style.display = 'none';
+            const showThemeExtentBtn = document.createElement('button');
+            showThemeExtentBtn.type = 'button';
+            showThemeExtentBtn.className = 'btn btn-secondary';
+            showThemeExtentBtn.textContent = tr('Show extent map');
+            showThemeExtentBtn.addEventListener('click', () => {
+              toggleLayerExtentPanel(project, themeObj, configTheme || null, themeExtentContainer, showThemeExtentBtn, 'theme')
+                .catch((err) => {
+                  console.error('Theme extent panel error', err);
+                  showStatus(tr('Copy failed: {error}', { error: String(err) }), true);
+                });
+            });
+            rowMap.appendChild(showThemeExtentBtn);
+            infoBox.appendChild(themeExtentContainer);
             
             if (isAdmin) {
               const cacheBtn = makeIconButton((hasCachedThemeTiles || hasPartialThemeCache) ? tr('Recache theme') : tr('Generate theme cache'), 'play', null, 'btn-primary');
-              if (hasPartialThemeCache) {
+              if (hasPartialThemeCache || hasCachedThemeTiles) {
                 cacheBtn.title = tr('Recache theme');
                 cacheBtn.addEventListener('click', async () => {
-                  const decision = await showPartialCacheResumeDialog({ targetName: theme.name, cachedEntry: cachedTheme });
+                  const decision = await showExistingCacheDialog({
+                    targetName: theme.name,
+                    cachedEntry: cachedTheme,
+                    targetType: 'theme',
+                    partial: hasPartialThemeCache
+                  });
                   if (!decision) return;
-                  const resumeRange = decision === 'resume' ? deriveCachedZoomRange(cachedTheme) : null;
                   try {
+                    if (decision === 'replace') {
+                      const selection = await openRecacheDialog({ projectId: project.id, layerName: theme.name, cachedEntry: cachedTheme, targetType: 'theme' });
+                      if (!selection) return;
+                      await generateCache(cacheBtn, project.id, theme.name, themeObj, {
+                        kind: 'theme',
+                        cachedEntry: cachedTheme,
+                        zoomOverride: selection,
+                        forcePurgeBeforeStart: true
+                      });
+                      return;
+                    }
+                    const resumeRange = hasPartialThemeCache
+                      ? deriveCachedZoomRange(cachedTheme)
+                      : (getThemeZoomRange(project.id, theme.name) || getProjectZoomRange(project.id) || deriveCachedZoomRange(cachedTheme));
                     await generateCache(cacheBtn, project.id, theme.name, themeObj, {
                       kind: 'theme',
-                      recache: false,
                       cachedEntry: cachedTheme,
-                      zoomOverride: decision === 'resume' ? resumeRange : null,
-                      forcePurgeBeforeStart: decision === 'replace'
+                      zoomOverride: resumeRange,
+                      resumeExisting: true,
+                      extentOverride: hasPartialThemeCache ? getSavedRunExtent(configTheme) : null
                     });
                   } catch (err) {
-                    console.error('Partial theme cache restart failed', err);
-                  }
-                });
-              } else if (hasCachedThemeTiles) {
-                cacheBtn.title = tr('Recache theme');
-                cacheBtn.addEventListener('click', async () => {
-                  const selection = await openRecacheDialog({ projectId: project.id, layerName: theme.name, cachedEntry: cachedTheme, targetType: 'theme' });
-                  if (!selection) return;
-                  try {
-                    await generateCache(cacheBtn, project.id, theme.name, themeObj, { kind: 'theme', recache: true, cachedEntry: cachedTheme, zoomOverride: selection });
-                  } catch (err) {
-                    console.error('Theme recache request failed', err);
+                    console.error('Theme cache continuation failed', err);
                   }
                 });
               } else {
@@ -7270,7 +7389,7 @@
       function escapeHtml(s){ return (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
       async function generateCache(btn, projectId, layerName, layerObj, options = {}) {
-        const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null, forcePurgeBeforeStart = false } = options || {};
+        const { recache = false, cachedEntry = null, kind = 'layer', zoomOverride = null, forcePurgeBeforeStart = false, resumeExisting = false, extentOverride = null } = options || {};
         const isTheme = kind === 'theme';
         const targetLabel = isTheme ? `theme "${layerName}"` : layerName;
         // IMPORTANT: don't call setActiveProject() here; it rewrites the left-panel
@@ -7304,7 +7423,9 @@
             }
           }
           if (zoom_min == null || zoom_max == null) {
-            const layerZoom = !isTheme ? getLayerZoomRange(projectId, layerName) : null;
+            const layerZoom = isTheme
+              ? getThemeZoomRange(projectId, layerName)
+              : getLayerZoomRange(projectId, layerName);
             if (layerZoom) {
               zoom_min = layerZoom.min;
               zoom_max = layerZoom.max;
@@ -7338,7 +7459,14 @@
             body.layer = layerName;
           }
           let recacheMode = null;
-          if (recache && cachedEntry) {
+          if (resumeExisting && cachedEntry) {
+            const resumeRange = deriveCachedZoomRange(cachedEntry);
+            body.recache = {
+              mode: 'resume',
+              previous_zoom_min: resumeRange.min,
+              previous_zoom_max: resumeRange.max
+            };
+          } else if (recache && cachedEntry) {
             const lastRunMinVal = Number(cachedEntry.last_zoom_min);
             const lastRunMaxVal = Number(cachedEntry.last_zoom_max);
             const coverageMinVal = Number(cachedEntry.zoom_min);
@@ -7377,8 +7505,10 @@
           body.wmts = true;
           // agregar extent capturado por proyecto (si existe) como project_extent transformable luego
           const state = extentStates.get(projectId);
-          const layerExtentPayload = !isTheme ? getLayerProjectedExtentPayload(projectId, layerName, layerObj?.tile_crs || layerObj?.crs || null) : null;
-          const extentPayload = layerExtentPayload || getProjectedExtentPayload(projectId);
+          const layerExtentPayload = isTheme
+            ? getThemeProjectedExtentPayload(projectId, layerName, layerObj?.tile_crs || layerObj?.crs || null)
+            : getLayerProjectedExtentPayload(projectId, layerName, layerObj?.tile_crs || layerObj?.crs || null);
+          const extentPayload = extentOverride || layerExtentPayload || getProjectedExtentPayload(projectId);
           if (extentPayload) {
             body.project_extent = extentPayload.extentString;
             body.extent_crs = extentPayload.crs;
@@ -7414,11 +7544,6 @@
           queueProjectConfigSave(projectId, projectPatch);
 
           if (forcePurgeBeforeStart) {
-            if (isTheme) {
-              showStatus(tr('Replacing partial theme cache is not supported yet.'), true);
-              restoreButton();
-              return;
-            }
             try {
               const delRes = await fetch('/cache/' + encodeURIComponent(projectId) + '/' + encodeURIComponent(layerName) + '?force=1', { method: 'DELETE' });
               if (!delRes.ok && delRes.status !== 404) {
@@ -7433,11 +7558,6 @@
           }
 
           if (recache) {
-            if (isTheme) {
-              showStatus('Recache for themes is not supported yet.', true);
-              restoreButton();
-              return;
-            }
             const needsFullPurge = !body.recache || body.recache.mode !== 'incremental';
             try {
               if (needsFullPurge) {

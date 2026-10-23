@@ -7,8 +7,10 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import vm from 'node:vm';
 import AdmZip from 'adm-zip';
+import Database from 'better-sqlite3';
+import express from 'express';
 import { PluginManager } from '../lib/pluginManager.js';
-import { closeAuthDb } from '../lib/authDb.js';
+import { closeAuthDb, getAuthDb } from '../lib/authDb.js';
 import { registerPluginRoutes } from '../routes/plugins.js';
 import { INSTALL_RECEIPT, PENDING_INSTALLATION, PENDING_UNINSTALLATION, readInstallationStatus, readUninstallationStatus, finalizeUninstallation, recoverInterruptedUninstallation, completeInstallation } from '../lib/pluginInstallation.js';
 import { waitForPluginInstallation, waitForPluginUninstallation, uploadPluginArchive, pluginInstallationText } from '../public/js/plugin-installation.js';
@@ -48,6 +50,99 @@ async function fixture(context) {
 async function assertAuthFilesUnchanged(authFiles) {
   for (const [file, content] of authFiles) assert.equal(await fs.readFile(file, 'utf8'), content, `Unrelated plugin operations must not change ${path.basename(file)}`);
 }
+
+test('QtilerAuth backup includes a consistent snapshot of the shared auth database', async (context) => {
+  const { root, pluginsDir, dataDir, manager } = await fixture(context);
+  closeAuthDb();
+  const authDb = getAuthDb(dataDir);
+  authDb.prepare('INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run('user-1', 'backup-user', 'hashed-password', '2026-10-23T00:00:00.000Z', '2026-10-23T00:00:00.000Z');
+
+  const routes = new Map();
+  const app = Object.fromEntries(['get', 'post', 'delete'].map((method) => [method, (url, ...handlers) => routes.set(`${method} ${url}`, handlers)]));
+  registerPluginRoutes({
+    app, pluginManager: manager, security: { isEnabled: () => true }, pluginsDir, dataDir,
+    requireAdmin() {}, requireAdminIfEnabled() {}, applySecurityDefaults() {},
+    sanitizePluginName: (name) => name
+  });
+
+  const response = new EventEmitter();
+  response.setHeader = (name, value) => { (response.headers ||= {})[name] = value; };
+  response.status = (code) => { response.statusCode = code; return response; };
+  response.json = (payload) => { response.payload = payload; return response; };
+  response.end = (body) => { response.body = body; };
+  await routes.get('get /plugins/:name/backup').at(-1)({ params: { name: 'QtilerAuth' } }, response);
+
+  assert.equal(response.statusCode, undefined);
+  assert.match(response.headers['Content-Type'], /application\/zip/);
+  const archivePath = path.join(root, 'auth-backup.zip');
+  await fs.writeFile(archivePath, response.body);
+  const archive = new AdmZip(archivePath);
+  const authEntry = archive.getEntry('shared/auth.db');
+  assert.ok(authEntry, 'the backup must contain the shared Auth database');
+
+  const snapshotPath = path.join(root, 'auth-snapshot.db');
+  await fs.writeFile(snapshotPath, authEntry.getData());
+  const snapshot = new Database(snapshotPath, { readonly: true, fileMustExist: true });
+  try {
+    assert.equal(snapshot.prepare('SELECT username FROM users WHERE id = ?').get('user-1').username, 'backup-user');
+    assert.equal(snapshot.pragma('integrity_check')[0].integrity_check, 'ok');
+  } finally {
+    snapshot.close();
+  }
+});
+
+test('QtilerAuth restore replaces the shared database from a backup and restarts workers', async (context) => {
+  const { root, pluginsDir, dataDir, manager } = await fixture(context);
+  closeAuthDb();
+  const authDb = getAuthDb(dataDir);
+  authDb.prepare('INSERT INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run('restored-user', 'before-restore', 'hashed-password', '2026-10-23T00:00:00.000Z', '2026-10-23T00:00:00.000Z');
+  const snapshotPath = path.join(root, 'restore-snapshot.db');
+  await authDb.backup(snapshotPath);
+
+  const zip = new AdmZip();
+  zip.addFile('qtiler-backup.json', Buffer.from(JSON.stringify({
+    schema: 'qtiler.plugin-data-backup.v1',
+    plugin: 'QtilerAuth',
+    createdAt: '2026-10-23T00:00:00.000Z'
+  })));
+  zip.addLocalFile(snapshotPath, 'shared', 'auth.db');
+  const backupPath = path.join(root, 'restore-backup.zip');
+  zip.writeZip(backupPath);
+  authDb.prepare('UPDATE users SET username = ? WHERE id = ?').run('after-restore', 'restored-user');
+
+  const app = express();
+  registerPluginRoutes({
+    app, pluginManager: manager, security: { isEnabled: () => true }, pluginsDir, dataDir,
+    requireAdmin(_req, _res, next) { next(); }, requireAdminIfEnabled(_req, _res, next) { next(); },
+    applySecurityDefaults() {}, sanitizePluginName: (name) => name
+  });
+  const originalSend = process.send;
+  process.send = () => {};
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+
+  try {
+    const form = new FormData();
+    form.append('backup', new Blob([await fs.readFile(backupPath)]), 'QtilerAuth-backup.zip');
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/plugins/QtilerAuth/restore`, {
+      method: 'POST',
+      body: form
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.status, 'restored');
+    assert.equal(payload.plugin.restoredFiles, 1);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(getAuthDb(dataDir).prepare('SELECT username FROM users WHERE id = ?').get('restored-user').username, 'before-restore');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    if (originalSend === undefined) delete process.send;
+    else process.send = originalSend;
+  }
+});
 
 test('persisted updates never mark unloaded plugins as active in another worker', async (context) => {
   const { manager } = await fixture(context);

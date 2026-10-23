@@ -315,7 +315,7 @@ export const registerWfsRoutes = ({
   readProjectConfig,
   getServiceMetadata = () => ({}),
   logProjectEvent,
-  isPublicLayerExcludedForRequest = () => false
+  isPublicLayerUnavailableForService = () => false
 }) => {
   const pickBestWfsVersion = (version, acceptVersions) => {
     const v = String(version || '').trim();
@@ -759,8 +759,9 @@ export const registerWfsRoutes = ({
     }
   };
 
-  const handleWfsKvp = async (req, res) => {
-    const service = String(getQueryCI(req, 'SERVICE') || 'WFS').toUpperCase();
+  const handleWfsKvp = async (req, res, { query = req.query, scopedBaseUrl = req.qtilerWfsScopedBaseUrl } = {}) => {
+    const queryReq = { query };
+    const service = String(getQueryCI(queryReq, 'SERVICE') || 'WFS').toUpperCase();
     if (service !== 'WFS') {
       if (service === 'WMS') {
         const qMarkIdx = req.originalUrl.indexOf('?');
@@ -773,11 +774,11 @@ export const registerWfsRoutes = ({
       return;
     }
 
-    const request = String(getQueryCI(req, 'REQUEST') || 'GetCapabilities').trim();
-    const requestedVersion = String(getQueryCI(req, 'VERSION') || getQueryCI(req, 'version') || '').trim();
+    const request = String(getQueryCI(queryReq, 'REQUEST') || 'GetCapabilities').trim();
+    const requestedVersion = String(getQueryCI(queryReq, 'VERSION') || getQueryCI(queryReq, 'version') || '').trim();
     const requestUpper = request.toUpperCase();
 
-    const projectId = String(getQueryCI(req, 'project') || '').trim();
+    const projectId = String(getQueryCI(queryReq, 'project') || '').trim();
     if (!projectId) {
       res.status(400).type('application/xml').send(wfsExceptionXml('project is required', { code: 'MissingParameterValue' }));
       return;
@@ -796,33 +797,39 @@ export const registerWfsRoutes = ({
           project_path: project.file
         });
         let featureTypes = Array.isArray(list?.featureTypes) ? list.featureTypes : [];
-        featureTypes = featureTypes.filter((ft) => !isPublicLayerExcludedForRequest(req, projectId, ft?.rawName || ft?.title || ft?.name, [ft?.name, ft?.rawName, ft?.title]));
+        featureTypes = featureTypes.filter((ft) => !isPublicLayerUnavailableForService(
+          req,
+          projectId,
+          ft?.rawName || ft?.title || ft?.name,
+          'wfs',
+          [ft?.name, ft?.rawName, ft?.title]
+        ));
 
         // Optional: allow filtering capabilities to a single typename.
         const requestedType = normalizeTypeName(
-          getQueryCI(req, 'TYPENAME') ||
-          getQueryCI(req, 'TYPENAMES') ||
-          getQueryCI(req, 'typename') ||
-          getQueryCI(req, 'layer') ||
-          getQueryCI(req, 'LAYER')
+          getQueryCI(queryReq, 'TYPENAME') ||
+          getQueryCI(queryReq, 'TYPENAMES') ||
+          getQueryCI(queryReq, 'typename') ||
+          getQueryCI(queryReq, 'layer') ||
+          getQueryCI(queryReq, 'LAYER')
         );
         if (requestedType) {
           featureTypes = featureTypes.filter((ft) => wfsTypeMatches(ft, requestedType));
         }
 
         const version = pickBestWfsVersion(
-          getQueryCI(req, 'VERSION') || getQueryCI(req, 'version'),
-          getQueryCI(req, 'ACCEPTVERSIONS') || getQueryCI(req, 'acceptversions')
+          getQueryCI(queryReq, 'VERSION') || getQueryCI(queryReq, 'version'),
+          getQueryCI(queryReq, 'ACCEPTVERSIONS') || getQueryCI(queryReq, 'acceptversions')
         );
         const reqApiKey = String(
-          getQueryCI(req, 'api_key') ||
-          getQueryCI(req, 'apikey') ||
-          getQueryCI(req, 'apiKey') ||
-          getQueryCI(req, 'API_KEY') ||
+          getQueryCI(queryReq, 'api_key') ||
+          getQueryCI(queryReq, 'apikey') ||
+          getQueryCI(queryReq, 'apiKey') ||
+          getQueryCI(queryReq, 'API_KEY') ||
           ''
         ).trim();
-        let serviceUrl = req.qtilerWfsScopedBaseUrl
-          ? `${req.qtilerWfsScopedBaseUrl}?SERVICE=WFS`
+        let serviceUrl = scopedBaseUrl
+          ? `${scopedBaseUrl}?SERVICE=WFS`
           : `${getRequestBaseUrl(req)}/wfs?SERVICE=WFS&project=${encodeURIComponent(projectId)}`;
         if (requestedType) {
           serviceUrl += `&TYPENAME=${encodeURIComponent(requestedType)}`;
@@ -856,12 +863,12 @@ export const registerWfsRoutes = ({
     }
 
     if (requestUpper === 'DESCRIBEFEATURETYPE') {
-      const typeName = normalizeTypeName(getQueryCI(req, 'TYPENAME') || getQueryCI(req, 'TYPENAMES'));
+      const typeName = normalizeTypeName(getQueryCI(queryReq, 'TYPENAME') || getQueryCI(queryReq, 'TYPENAMES'));
       if (!typeName) {
         res.status(400).type('application/xml').send(wfsExceptionXml('TYPENAME is required', { code: 'MissingParameterValue' }));
         return;
       }
-      if (isPublicLayerExcludedForRequest(req, projectId, typeName)) {
+      if (isPublicLayerUnavailableForService(req, projectId, typeName, 'wfs')) {
         res.status(403).type('application/xml').send(wfsExceptionXml('Layer is not publicly available', { code: 'SecurityError' }));
         return;
       }
@@ -900,26 +907,26 @@ export const registerWfsRoutes = ({
     }
 
     if (requestUpper === 'GETFEATURE') {
-      const typeName = normalizeTypeName(getQueryCI(req, 'TYPENAME') || getQueryCI(req, 'TYPENAMES'));
+      const typeName = normalizeTypeName(getQueryCI(queryReq, 'TYPENAME') || getQueryCI(queryReq, 'TYPENAMES'));
       if (!typeName) {
         res.status(400).type('application/xml').send(wfsExceptionXml('TYPENAME is required', { code: 'MissingParameterValue' }));
         return;
       }
-      if (isPublicLayerExcludedForRequest(req, projectId, typeName)) {
+      if (isPublicLayerUnavailableForService(req, projectId, typeName, 'wfs')) {
         res.status(403).type('application/xml').send(wfsExceptionXml('Layer is not publicly available', { code: 'SecurityError' }));
         return;
       }
 
-      const bboxParsed = parseBbox(getQueryCI(req, 'BBOX'));
+      const bboxParsed = parseBbox(getQueryCI(queryReq, 'BBOX'));
       const bbox = bboxParsed?.bbox || null;
       const bboxCrs = normalizeSrsName(bboxParsed?.crs) || null;
       const serviceConfig = readProjectConfig(projectId, { useCache: false }) || {};
       const publishedCrs = normalizePublishedCrs(serviceConfig.services?.publishedCrs || []);
-      const srsName = normalizeSrsName(getQueryCI(req, 'SRSNAME')) || normalizeSrsName(getQueryCI(req, 'CRS')) || bboxCrs || publishedCrs[0] || 'EPSG:3857';
+      const srsName = normalizeSrsName(getQueryCI(queryReq, 'SRSNAME')) || normalizeSrsName(getQueryCI(queryReq, 'CRS')) || bboxCrs || publishedCrs[0] || 'EPSG:3857';
       if (publishedCrs.length && !publishedCrs.includes(srsName)) {
         return res.status(400).type('application/xml').send(wfsExceptionXml(`CRS ${srsName} is not published for this project`, { code: 'InvalidParameterValue' }));
       }
-      const requestedCountRaw = getQueryCI(req, 'MAXFEATURES') ?? getQueryCI(req, 'COUNT');
+      const requestedCountRaw = getQueryCI(queryReq, 'MAXFEATURES') ?? getQueryCI(queryReq, 'COUNT');
       const hasExplicitCount = requestedCountRaw != null && String(requestedCountRaw).trim() !== '';
       const requestedCount = clampInt(requestedCountRaw, { min: 1, max: 10_000_000, fallback: null });
       const wfsMaxHardLimit = Number.parseInt(process.env.WFS_MAX_FEATURES_LIMIT || '5000000', 10);
@@ -933,15 +940,15 @@ export const registerWfsRoutes = ({
       const maxFeatures = hasExplicitCount
         ? clampInt(requestedCountRaw, { min: 1, max: effectiveHardLimit, fallback: effectiveHardLimit })
         : null;
-      const startIndex = clampInt(getQueryCI(req, 'STARTINDEX'), { min: 0, max: 10_000_000, fallback: 0 });
-      const featureIdRaw = getQueryCI(req, 'FEATUREID') || getQueryCI(req, 'featureId');
-      const outputFormatRaw = String(getQueryCI(req, 'OUTPUTFORMAT') || '').trim();
+      const startIndex = clampInt(getQueryCI(queryReq, 'STARTINDEX'), { min: 0, max: 10_000_000, fallback: 0 });
+      const featureIdRaw = getQueryCI(queryReq, 'FEATUREID') || getQueryCI(queryReq, 'featureId');
+      const outputFormatRaw = String(getQueryCI(queryReq, 'OUTPUTFORMAT') || '').trim();
       const outputFormat = outputFormatRaw ? outputFormatRaw.split(';')[0].trim().toLowerCase() : '';
       // Precomputed by parseWfsXmlToQuery from a POST ogc:Filter, or (as a
       // fallback for direct KVP GET/POST calls) translated here from a raw
       // FILTER=<xml> KVP param.
-      const filterExprFromXmlBody = getQueryCI(req, 'QTILER_FILTER_EXPR');
-      const filterKvpXml = getQueryCI(req, 'FILTER');
+      const filterExprFromXmlBody = getQueryCI(queryReq, 'QTILER_FILTER_EXPR');
+      const filterKvpXml = getQueryCI(queryReq, 'FILTER');
       const filterExpr = filterExprFromXmlBody || (filterKvpXml ? ogcFilterXmlToQgisExpression(String(filterKvpXml)) : null);
 
       const asJson = outputFormat.includes('json') || outputFormat === 'application/json' || outputFormat === 'geojson';
@@ -964,7 +971,7 @@ export const registerWfsRoutes = ({
           action: 'wfs_get_feature',
           project_path: project.file,
           type_name: typeName,
-          layer_id: getQueryCI(req, 'LAYERID') || getQueryCI(req, 'LAYER_ID') || null,
+          layer_id: getQueryCI(queryReq, 'LAYERID') || getQueryCI(queryReq, 'LAYER_ID') || null,
           output_file: outFile,
           version: requestedVersion || null,
           filter_expression: filterExpr || null,
@@ -1356,15 +1363,12 @@ export const registerWfsRoutes = ({
 
   app.get('/wfs/:dataset/', async (req, res) => {
     console.log('[DEBUG-GET-WFS]', req.originalUrl);
-    const mergedReq = {
-      ...req,
-      query: buildCompatWfsQuery(req, req.params.dataset)
-    };
-    if (!mergedReq.query) {
+    const query = buildCompatWfsQuery(req, req.params.dataset);
+    if (!query) {
       res.status(400).type('application/xml').send(wfsExceptionXml('Invalid dataset reference', { code: 'InvalidParameterValue' }));
       return;
     }
-    return handleWfsKvp(mergedReq, res);
+    return handleWfsKvp(req, res, { query });
   });
 
   app.get('/wfs/:dataset/:featureId', async (req, res) => {
@@ -1373,12 +1377,9 @@ export const registerWfsRoutes = ({
     const featureId = String(req.params.featureId || '').trim();
     const requestUpper = String(req.query?.REQUEST || req.query?.request || '').trim().toUpperCase();
     if (resolved?.projectId && !resolved.layerName && featureId && (!requestUpper || ['GETCAPABILITIES', 'DESCRIBEFEATURETYPE', 'GETFEATURE'].includes(requestUpper))) {
-      const mergedReq = {
-        ...req,
-        qtilerWfsScopedBaseUrl: `${getRequestBaseUrl(req)}/wfs/${encodeURIComponent(resolved.projectId)}/${encodeURIComponent(featureId)}`,
-        query: buildLayerScopedWfsQuery(req, resolved.projectId, featureId)
-      };
-      return handleWfsKvp(mergedReq, res);
+      const query = buildLayerScopedWfsQuery(req, resolved.projectId, featureId);
+      const scopedBaseUrl = `${getRequestBaseUrl(req)}/wfs/${encodeURIComponent(resolved.projectId)}/${encodeURIComponent(featureId)}`;
+      return handleWfsKvp(req, res, { query, scopedBaseUrl });
     }
     if (!resolved || !resolved.projectId || !resolved.layerName) {
       res.status(400).type('application/xml').send(wfsExceptionXml('Invalid dataset reference', { code: 'InvalidParameterValue' }));
@@ -1392,6 +1393,10 @@ export const registerWfsRoutes = ({
     const project = findProjectById(resolved.projectId);
     if (!project || !project.file) {
       res.status(404).type('application/xml').send(wfsExceptionXml('Project not found', { code: 'NotFound' }));
+      return;
+    }
+    if (isPublicLayerUnavailableForService(req, resolved.projectId, resolved.layerName, 'wfs')) {
+      res.status(403).type('application/xml').send(wfsExceptionXml('Layer is not publicly available', { code: 'SecurityError' }));
       return;
     }
 
@@ -1577,11 +1582,8 @@ export const registerWfsRoutes = ({
     // CASO B: ES UNA PETICIÓN XML NORMAL (GetFeature via POST)
     // =======================================================================
     if (parsedXml?.query) {
-      const mergedReq = {
-        ...req,
-        query: { ...(req.query || {}), ...(parsedXml.query || {}) }
-      };
-      return handleWfsKvp(mergedReq, res);
+      const query = { ...(req.query || {}), ...(parsedXml.query || {}) };
+      return handleWfsKvp(req, res, { query });
     }
 
     // =======================================================================
@@ -1589,11 +1591,8 @@ export const registerWfsRoutes = ({
     // =======================================================================
     const bodyParams = parseKvpBody(trimmed);
     if (Object.keys(bodyParams).length) {
-      const mergedReq = {
-        ...req,
-        query: { ...(req.query || {}), ...bodyParams }
-      };
-      return handleWfsKvp(mergedReq, res);
+      const query = { ...(req.query || {}), ...bodyParams };
+      return handleWfsKvp(req, res, { query });
     }
 
     // Si no es nada de lo anterior, intentar tratar como GET con query params

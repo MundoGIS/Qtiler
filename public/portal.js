@@ -469,6 +469,9 @@ const renderLayerGroup = (titleKey, items, isPublic) => {
     actions.className = 'portal-layer-actions';
 
     const isTheme = item && item.kind === 'theme';
+    const canUseWmts = item.publicWmts !== false;
+    const canUseWms = item.publicWms !== false;
+    const canUseWfs = item.publicWfs !== false;
     const isWfsCapable = !isTheme && (() => {
       if (!item) return false;
       const typeToken = String(item.type || '').toUpperCase();
@@ -518,16 +521,18 @@ const renderLayerGroup = (titleKey, items, isPublic) => {
       return a;
     };
 
-    viewersInner.appendChild(mkLayerViewer(viewerBase, 'WMTS'));
-    viewersInner.appendChild(mkLayerViewer(viewerWms, 'WMS'));
-    if (isWfsCapable) {
+    if (canUseWmts) viewersInner.appendChild(mkLayerViewer(viewerBase, 'WMTS'));
+    if (canUseWms) viewersInner.appendChild(mkLayerViewer(viewerWms, 'WMS'));
+    if (isWfsCapable && canUseWfs) {
       viewersInner.appendChild(mkLayerViewer(viewerWfs, 'WFS'));
     }
-    viewersFieldset.appendChild(viewersInner);
-    actions.appendChild(viewersFieldset);
+    if (viewersInner.childElementCount) {
+      viewersFieldset.appendChild(viewersInner);
+      actions.appendChild(viewersFieldset);
+    }
 
     // --- Copy URL buttons ---
-    if (!sessionUser && xyzEnabled) {
+    if (canUseWmts && !sessionUser && xyzEnabled) {
       const copyXyzBtn = document.createElement('button');
       copyXyzBtn.type = 'button';
       copyXyzBtn.className = 'portal-action-button';
@@ -539,27 +544,31 @@ const renderLayerGroup = (titleKey, items, isPublic) => {
       actions.appendChild(copyXyzBtn);
     }
 
-    const copyWmtsBtn = document.createElement('button');
-    copyWmtsBtn.type = 'button';
-    copyWmtsBtn.className = 'portal-action-button';
-    copyWmtsBtn.textContent = tr('portal.layer.copy.wmts');
-    copyWmtsBtn.addEventListener('click', async () => {
-      const ok = await copyToClipboard(wmtsCapabilitiesUrl);
-      flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMTS' }), { tone: ok ? 'info' : 'error' });
-    });
-    actions.appendChild(copyWmtsBtn);
+    if (canUseWmts) {
+      const copyWmtsBtn = document.createElement('button');
+      copyWmtsBtn.type = 'button';
+      copyWmtsBtn.className = 'portal-action-button';
+      copyWmtsBtn.textContent = tr('portal.layer.copy.wmts');
+      copyWmtsBtn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(wmtsCapabilitiesUrl);
+        flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMTS' }), { tone: ok ? 'info' : 'error' });
+      });
+      actions.appendChild(copyWmtsBtn);
+    }
 
-    const copyWmsBtn = document.createElement('button');
-    copyWmsBtn.type = 'button';
-    copyWmsBtn.className = 'portal-action-button';
-    copyWmsBtn.textContent = tr('portal.layer.copy.wms');
-    copyWmsBtn.addEventListener('click', async () => {
-      const ok = await copyToClipboard(wmsCapabilitiesUrl);
-      flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMS' }), { tone: ok ? 'info' : 'error' });
-    });
-    actions.appendChild(copyWmsBtn);
+    if (canUseWms) {
+      const copyWmsBtn = document.createElement('button');
+      copyWmsBtn.type = 'button';
+      copyWmsBtn.className = 'portal-action-button';
+      copyWmsBtn.textContent = tr('portal.layer.copy.wms');
+      copyWmsBtn.addEventListener('click', async () => {
+        const ok = await copyToClipboard(wmsCapabilitiesUrl);
+        flashStatusText(tr(ok ? 'portal.layer.copy.copied' : 'portal.layer.copy.failed', { label: 'WMS' }), { tone: ok ? 'info' : 'error' });
+      });
+      actions.appendChild(copyWmsBtn);
+    }
 
-    if (isWfsCapable) {
+    if (isWfsCapable && canUseWfs) {
       const copyWfsBtn = document.createElement('button');
       copyWfsBtn.type = 'button';
       copyWfsBtn.className = 'portal-action-button';
@@ -724,6 +733,10 @@ const renderProjects = (projects) => {
     };
     const projectIdEnc = encodeURIComponent(project.id);
     const isPublicProject = !!(accessInfo.public);
+    const publicServices = project.publicServices || {};
+    const canUseWmtsForProject = publicServices.wmts !== false;
+    const canUseWmsForProject = publicServices.wms !== false;
+    const canUseWfsForProject = publicServices.wfs !== false;
     const projectWmtsUrl = withApiKey(toAbsoluteUrl(project.wmtsUrl) || `${window.location.origin}/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
     const projectWmsUrl = withApiKey(toAbsoluteUrl(project.wmsUrl) || `${window.location.origin}/wms?SERVICE=WMS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
     const projectWfsUrl = withApiKey(toAbsoluteUrl(project.wfsUrl) || `${window.location.origin}/wfs?SERVICE=WFS&REQUEST=GetCapabilities&project=${projectIdEnc}`, isPublicProject);
@@ -751,9 +764,9 @@ const renderProjects = (projects) => {
     };
 
     // --- Copy URLs ---
-    links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
-    links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
-    if (projectHasVector || !!project.wfsUrl) {
+    if (canUseWmtsForProject) links.appendChild(copyProjectBtn('portal.layer.copy.wmts', projectWmtsUrl, 'WMTS'));
+    if (canUseWmsForProject) links.appendChild(copyProjectBtn('portal.layer.copy.wms', projectWmsUrl, 'WMS'));
+    if (canUseWfsForProject && (projectHasVector || !!project.wfsUrl)) {
       links.appendChild(copyProjectBtn('portal.layer.copy.wfs', projectWfsUrl, 'WFS'));
     }
     if (projectHasVector) {

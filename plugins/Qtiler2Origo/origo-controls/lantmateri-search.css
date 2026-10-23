@@ -1,0 +1,57 @@
+/**
+ * Lantmäteriet Info Control Styles
+ * Minimal styles - most styling is inline for better portability
+ */
+
+/* Toolbar button active state */
+.lantmateri-tool-button.active {
+  background-color: #4a90e2 !important;
+  color: white !important;
+}
+
+.lantmateri-tool-button.active svg {
+  fill: white !important;
+}
+
+/* Info link in popup */
+.lantmateri-info-link:hover {
+  text-decoration: underline !important;
+  color: #3a7bc8 !important;
+}
+
+/* Modal overlay animation */
+.lantmateri-modal-overlay {
+  animation: fadeIn 0.2s ease-in;
+}
+
+.lantmateri-modal {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .lantmateri-modal {
+    width: 95% !important;
+    max-height: 90vh !important;
+  }
+}

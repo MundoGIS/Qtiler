@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+  <title>Qtiler 3D Eye</title>
+  <link rel="stylesheet" href="/Thirdparty/bulmaswatch-spacelab.min.css">
+  <link href="https://unpkg.com/boxicons@latest/css/boxicons.min.css" rel="stylesheet">
+  
+  <style>
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #05070a; color: #fff; }
+    #cesiumContainer { position: absolute; inset: 0; }
+    .viewer-shell { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+    .top-panel {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      min-width: min(420px, calc(100vw - 24px));
+      max-width: 520px;
+      background: rgba(12, 18, 28, .86);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 8px;
+      padding: 12px 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  pointer-events: auto;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.05rem; }
+    .viewer-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    #viewerLogo { width: 38px; height: 38px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,.08); padding: 4px; flex: 0 0 auto; }
+    #viewerLogo[hidden] { display: none; }
+    #viewerStatus { margin: 0; color: #d7e3f4; font-size: .9rem; }
+    #viewerStatus[data-tone="error"] { color: #ffb4ab; }
+    #moduleBar { display: none; }
+    #moduleBar span { background: rgba(12,18,28,.82); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 5px 9px; font-size: .78rem; pointer-events: auto; }
+    .sidebar-buttons { position: absolute; left: 18px; top: 108px; display: flex; flex-direction: column; gap: 6px; z-index: 30; pointer-events: auto; }
+    .sidebar-buttons button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.18); border-radius: 6px; background: rgba(42,42,42,.86); color: #fff; display: grid; place-items: center; cursor: pointer; font-size: 20px; }
+    .sidebar-buttons button.active, .sidebar-buttons button:hover { background: rgba(255,255,255,.18); }
+    .tool-panel { position: absolute; right: 12px; top: 12px; width: 340px; max-width: calc(100vw - 104px); max-height: calc(100vh - 24px); box-sizing: border-box; overflow: auto; background: rgba(12,18,28,.9); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 12px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .tool-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .tool-panel h2 { margin: 0; font-size: .95rem; }
+    .panel-close { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+    .tool-popup { position: absolute; left: 58px; top: 108px; width: 260px; background: rgba(12,18,28,.92); border: 1px solid rgba(255,255,255,.16); border-radius: 8px; padding: 10px; pointer-events: auto; box-shadow: 0 10px 28px rgba(0,0,0,.36); }
+    .tool-popup[hidden] { display: none; }
+    .tool-popup header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .tool-popup header button { border: 0; background: transparent; color: #fff; cursor: pointer; font-size: 18px; line-height: 1; }
+    .tool-popup-actions { display: grid; gap: 6px; }
+    .tool-popup-actions .viewer-button { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+    .tool-popup-actions .viewer-button i { font-size: 18px; }
+    .layer-group { margin: 0 0 12px; }
+    .layer-group h3 { margin: 0; padding: 7px 8px; background: rgba(255,255,255,.09); border-radius: 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: 0; color: #dbe7f7; }
+    .layer-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px 2px; border-top: 1px solid rgba(255,255,255,.11); font-size: .86rem; user-select: none; }
+    .layer-row input { margin: 0; }
+    .layer-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .legend-icon { width: 22px; height: 22px; object-fit: contain; border-radius: 3px; background: rgba(255,255,255,.08); }
+    .warning { color: #ffd6a5; margin: 8px 0 0; font-size: .86rem; }
+    .viewer-button { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+    body.terrain-preview-mode .top-panel,
+    body.terrain-preview-mode #moduleBar,
+    body.terrain-preview-mode #toolButtons,
+    body.terrain-preview-mode #toolPopup,
+    body.terrain-preview-mode #layerPanel { display: none !important; }
+    @media (max-width: 760px) {
+      .top-panel { min-width: 0; width: calc(100vw - 24px); box-sizing: border-box; }
+      .tool-panel { left: auto; right: 8px; width: min(300px, calc(100vw - 84px)); max-width: none; max-height: calc(100vh - 16px); }
+      .tool-popup { left: 54px; top: 128px; width: min(250px, calc(100vw - 72px)); }
+      .sidebar-buttons { left: 12px; top: 128px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="olContainer" aria-label="2D map"></div>
+  <div id="mapDivider" role="separator" aria-label="Resize maps" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0" title="Resize maps"></div>
+  <section id="mapInfo2d" class="map-info-2d" role="dialog" aria-label="Feature information" aria-live="polite" hidden><button type="button" aria-label="Close">x</button><div data-info-content></div></section>
+  <div class="viewer-shell">
+    <section class="top-panel">
+      <div class="viewer-brand">
+        <img id="viewerLogo" alt="" hidden>
+        <div>
+          <h1 id="viewerTitle">Qtiler 3D Eye</h1>
+          <p id="viewerSubtitle" class="viewer-subtitle" hidden></p>
+        </div>
+      </div>
+      <p id="viewerStatus">Initializing...</p>
+      <p id="terrainWarning" class="warning" hidden></p>
+    </section>
+    <aside id="layerPanel" class="tool-panel" hidden>
+      <div class="tool-panel-head">
+        <h2>Layer dialog</h2>
+        <button class="panel-close" type="button" aria-label="Close" onclick="document.getElementById('layerPanel').hidden = true">x</button>
+      </div>
+      <nav class="layer-tabs" role="tablist" aria-label="Map contents">
+        <button type="button" role="tab" data-layer-tab="layers" aria-selected="true">Layers</button>
+        <button type="button" role="tab" data-layer-tab="backgrounds" aria-selected="false">Backgrounds</button>
+        <button type="button" role="tab" data-layer-tab="terrains" data-3d-only aria-selected="false">Terrains</button>
+      </nav>
+      <div id="layerList"></div>
+      <button id="saveViewBtn" class="viewer-button" type="button">Save view</button>
+    </aside>
+    <div class="sidebar-stack">
+      <nav id="toolButtons" class="sidebar-buttons" data-qtiler3d-navigation="tools" aria-label="Map tools"></nav>
+    </div>
+    <aside id="wfsEditPanel" class="tool-panel wfs-edit-panel" aria-label="Edit WFS layer" hidden>
+      <div class="tool-panel-head"><h2>Edit WFS</h2><button type="button" class="panel-close" data-edit-close aria-label="Close">x</button></div>
+      <label class="wfs-edit-layer">Layer<select data-edit-layer></select></label>
+      <nav class="wfs-edit-tools" aria-label="WFS editing tools">
+        <button type="button" data-edit-modify title="Select / modify" aria-label="Select / modify"><i class="bx bx-pointer"></i></button>
+        <button type="button" data-edit-draw="Point" title="Add point" aria-label="Add point"><i class="bx bx-map-pin"></i></button>
+        <button type="button" data-edit-draw="LineString" title="Add line" aria-label="Add line"><i class="bx bx-minus"></i></button>
+        <button type="button" data-edit-draw="Polygon" title="Add polygon" aria-label="Add polygon"><i class="bx bx-shape-polygon"></i></button>
+        <button type="button" data-edit-delete title="Delete selected" aria-label="Delete selected"><i class="bx bx-trash"></i></button>
+      </nav>
+      <div class="wfs-edit-fields" data-edit-fields></div>
+      <div class="wfs-edit-actions"><button type="button" class="viewer-button" data-edit-save>Save</button><button type="button" class="viewer-button" data-edit-cancel>Discard</button></div>
+      <output data-edit-status role="status" aria-live="polite">Select a WFS layer</output>
+    </aside>
+    <aside id="modelPlacementPanel" class="tool-panel model-placement-panel" aria-label="Place a 3D model" data-3d-only hidden>
+      <div class="tool-panel-head"><h2 data-qtiler3d-i18n="ui:modelPlacement">Place model</h2><button type="button" class="panel-close" id="modelPlacementClose" data-qtiler3d-i18n-title="ui:close">x</button></div>
+      <label><span data-qtiler3d-i18n="ui:model">Model</span><select id="placementModelSelect"></select></label>
+      <div id="placementModelPreview" class="model-placement-preview" aria-live="polite"></div>
+      <div class="model-placement-fields">
+        <label><span data-qtiler3d-i18n="ui:heightMode">Height mode</span><select id="placementHeightMode"><option value="relative" data-qtiler3d-i18n="ui:aboveTerrain">Above terrain</option><option value="ground" data-qtiler3d-i18n="ui:onTerrain">On terrain</option><option value="absolute" data-qtiler3d-i18n="ui:absoluteAltitude">Absolute altitude</option></select></label>
+        <label><span data-qtiler3d-i18n="ui:height">Height (m)</span><input id="placementHeight" type="number" min="-10000" max="100000" step="0.1" value="0"></label>
+        <label><span data-qtiler3d-i18n="ui:modelScale">Scale</span><input id="placementScale" type="number" min="0.01" max="10000" step="0.1" value="1"></label>
+        <label><span data-qtiler3d-i18n="ui:heading">Heading (deg)</span><input id="placementHeading" type="number" min="-360" max="360" step="1" value="0"></label>
+        <label><span data-qtiler3d-i18n="ui:pitch">Pitch (deg)</span><input id="placementPitch" type="number" min="-360" max="360" step="1" value="0"></label>
+        <label><span data-qtiler3d-i18n="ui:roll">Roll (deg)</span><input id="placementRoll" type="number" min="-360" max="360" step="1" value="0"></label>
+      </div>
+      <div class="model-placement-actions"><button type="button" class="button is-primary is-small" id="beginModelPlacement" data-qtiler3d-i18n="ui:startPlacement">Place on map</button><button type="button" class="button is-small" id="finishModelPlacement" data-qtiler3d-i18n="ui:finishPlacement">Finish</button></div>
+      <div class="model-placement-actions"><input id="modelDrawingName" class="input is-small" maxlength="100" placeholder="Drawing name"><button type="button" class="button is-small" id="saveModelDrawing" data-qtiler3d-i18n="ui:saveDrawing">Save GeoJSON</button></div>
+      <div class="model-placement-actions"><button type="button" class="button is-small" id="exportModelGeoJSON" data-qtiler3d-i18n="ui:exportGeoJSON">Export GeoJSON</button><button type="button" class="button is-small" id="openSketchLibrary" data-qtiler3d-i18n="ui:openSketchLibrary">Saved drawings</button></div>
+      <output id="modelPlacementStatus" role="status" aria-live="polite"></output>
+    </aside>
+    <aside id="printPanel" class="tool-panel print-panel" aria-label="Print map" hidden>
+      <div class="tool-panel-head"><h2 data-qtiler3d-i18n="ui:printMap">Print map</h2><button type="button" class="panel-close" id="printPanelClose" data-qtiler3d-i18n-title="ui:close">x</button></div>
+      <label><span data-qtiler3d-i18n="ui:printTitle">Title</span><input id="printTitle" class="input is-small" maxlength="160"></label>
+      <label><span data-qtiler3d-i18n="ui:printDescription">Description</span><textarea id="printDescription" class="textarea is-small" rows="2" maxlength="600"></textarea></label>
+      <div class="print-options">
+        <label><span data-qtiler3d-i18n="ui:paper">Paper</span><select id="printPaper"><option value="a4">A4</option><option value="letter">Letter</option><option value="a3">A3</option></select></label>
+        <label><span data-qtiler3d-i18n="ui:orientation">Orientation</span><select id="printOrientation"><option value="portrait" data-qtiler3d-i18n="ui:portrait">Portrait</option><option value="landscape" data-qtiler3d-i18n="ui:landscape">Landscape</option></select></label>
+      </div>
+      <div class="print-options print-toggles">
+        <label><input type="checkbox" id="printShowDate" checked><span data-qtiler3d-i18n="ui:includeDate">Date</span></label>
+        <label><input type="checkbox" id="printShowScale" checked><span data-qtiler3d-i18n="ui:includeScale">Scale</span></label>
+        <label><input type="checkbox" id="printShowLegend" checked><span data-qtiler3d-i18n="ui:includeLegend">Legend</span></label>
+      </div>
+      <button type="button" class="button is-primary is-small" id="printMapButton" data-qtiler3d-i18n="ui:printPdf">Print / Save PDF</button>
+      <button type="button" class="button is-small" id="exportMapPng" data-qtiler3d-i18n="ui:exportPng">Export PNG</button>
+      <output id="printStatus" role="status" aria-live="polite"></output>
+    </aside>
+    <aside id="toolPopup" class="tool-popup" hidden></aside>
+    <div id="moduleBar"></div>
+    <nav class="map-navigation" aria-label="Camera navigation">
+      <button id="northButton" class="compass-button" type="button" title="Face north" aria-label="Face north"><span>N</span><i class="bx bx-navigation" id="compassNeedle"></i></button>
+      <button id="zoomInButton" type="button" title="Zoom in" aria-label="Zoom in"><i class="bx bx-plus"></i></button>
+      <button id="zoomOutButton" type="button" title="Zoom out" aria-label="Zoom out"><i class="bx bx-minus"></i></button>
+      <button id="homeViewButton" type="button" data-dual-only title="Initial view" aria-label="Initial view"><i class="bx bx-home-alt"></i></button>
+      <button id="fullscreenViewButton" type="button" data-dual-only title="Full screen" aria-label="Full screen"><i class="bx bx-fullscreen"></i></button>
+      <button id="tiltUpButton" type="button" title="Tilt toward horizon" aria-label="Tilt toward horizon"><i class="bx bx-chevron-up"></i></button>
+      <button id="tiltDownButton" type="button" title="Tilt toward ground" aria-label="Tilt toward ground"><i class="bx bx-chevron-down"></i></button>
+    </nav>
+    <section id="compactClock" class="compact-clock" hidden aria-label="Scene time">
+      <input id="sceneTime" type="datetime-local" aria-label="Scene date and time">
+      <button id="clockPlay" type="button" title="Play or pause" aria-label="Play or pause"><i class="bx bx-play"></i></button>
+      <select id="clockSpeed" aria-label="Clock speed"><option value="1">1x</option><option value="60">60x</option><option value="3600">3600x</option></select>
+      <button id="clockNow" type="button" title="Current time" aria-label="Current time"><i class="bx bx-reset"></i></button>
+    </section>
+  </div>
+  <link rel="stylesheet" href="/plugins/Qtiler-3D-eye/view/viewer.css?v=20261011-model-print">
+  <script src="/lang-support.js"></script>
+  <script src="/plugins/Qtiler-3D-eye/view/i18n.js?v=20261011-model-print"></script>
+  <script src="/plugins/Qtiler-3D-eye/view/sketch-editor.js?v=20261011-model-print"></script>
+  <link rel="stylesheet" href="/Thirdparty/ol/ol.css">
+  <script src="/Thirdparty/ol/ol.js"></script>
+  <script>
+    (function loadCesiumRuntime() {
+      var localBase = '/plugins/Qtiler-3D-eye/cesium/';
+      function showRuntimeRequired(message) {
+        var status = document.getElementById('viewerStatus');
+        if (status) {
+          status.textContent = message || 'Error: Cesium runtime is not installed. Install Cesium from the Qtiler 3D Eye admin before opening 3D maps.';
+          status.dataset.tone = 'error';
+        }
+      }
+      function addCss(base) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = base + 'Widgets/widgets.css';
+        document.head.appendChild(css);
+      }
+      function addScript(base) {
+        window.CESIUM_BASE_URL = base;
+        var script = document.createElement('script');
+        script.src = base + 'Cesium.js';
+        script.onload = async function() {
+          if (!window.Cesium) {
+            try { script.remove(); } catch (e) {}
+            showRuntimeRequired('Error: Cesium runtime loaded but did not initialize. Reinstall Cesium from the Qtiler 3D Eye admin.');
+            return;
+          }
+          addCss(base);
+          var mesh = await import('/plugins/Qtiler-3D-eye/view/geometry-mesh.js?v=20261012-wfs-z');
+          window.qtilerProjectSurfaceRings = mesh.projectSurfaceRings;
+          var viewer = document.createElement('script');
+          viewer.src = '/plugins/Qtiler-3D-eye/view/planner-viewer.js?v=20261012-thumbnail';
+          document.body.appendChild(viewer);
+        };
+        script.onerror = function() {
+          try { script.remove(); } catch (e) {}
+          showRuntimeRequired();
+        };
+        document.head.appendChild(script);
+      }
+      addScript(localBase);
+    })();
+  </script>
+  <!-- Cargar Turf.js para cálculo de áreas y distancias -->
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+</body>
+</html>

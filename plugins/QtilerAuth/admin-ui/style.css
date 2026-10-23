@@ -436,6 +436,14 @@ label {
   min-width: 0;
 }
 
+.layer-permissions-loading {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+}
+
 .layer-permission-project {
   border: 0;
   border-radius: 0;
@@ -454,34 +462,110 @@ label {
 
 .layer-permission-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) repeat(4, auto);
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
+  grid-template-columns: minmax(200px, 0.8fr) repeat(2, minmax(0, 1.4fr));
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--card);
 }
 
-.layer-permission-row strong {
+.layer-permission-row--raster {
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 2.8fr);
+}
+
+.permission-layer-name {
+  min-width: 0;
+  padding-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.permission-layer-name strong {
   display: block;
   font-size: 0.95rem;
 }
 
-.layer-permission-row small {
+.permission-layer-name small {
   color: var(--muted);
+}
+
+.permission-control-group {
+  display: flex;
+  align-items: center;
+  align-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 94%, var(--primary) 6%);
+}
+
+.permission-control-group > strong {
+  flex: 0 0 100%;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .search-config-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding-top: 8px;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(180px, 1fr));
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 97%, var(--primary) 3%);
 }
 
 .search-config-row.is-hidden {
   display: none;
+}
+
+.search-columns {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.search-column-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-column-row select {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.search-column-add,
+.search-column-remove {
+  flex: 0 0 auto;
+  min-width: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.search-column-remove {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.search-column-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .plugin-access-options {
@@ -523,6 +607,10 @@ label {
   }
 
   .layer-permission-row {
+    grid-template-columns: 1fr;
+  }
+
+  .search-config-row {
     grid-template-columns: 1fr;
   }
 }

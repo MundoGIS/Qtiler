@@ -71,6 +71,9 @@ external SaaS providers.
 - **Multi-user with project ACLs.** Mark each QGIS project as *public*,
   *authenticated* or *private*, and assign private projects to specific users.
   ACLs are enforced on every WMTS, WMS, WFS, WFS-T and Vector-Tiles call.
+- **Layer-level public services and search.** For public projects, choose
+  whether each layer is available through WMS, WFS or WMTS. Configure map
+  search to match any of several selected attribute columns on a vector layer.
 - **Multiple authentication methods on the same server.** Cookie sessions for
   the dashboard, JWT bearer tokens for SPAs, HTTP Basic for QGIS Desktop, and
   per-user **API keys** (query string `?api_key=` or `X-API-Key` header) for
@@ -550,4 +553,3 @@ Commercial plugins (QtilerAuth, VectorTiles, Qrigo, ProjectSearch) are separatel
 
 ---
 Questions or need a tailored deployment? Reach out to MundoGIS for support, private builds, or hands-on assistance with IIS/Apache URL Rewrite configurations.
-

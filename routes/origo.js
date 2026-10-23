@@ -76,7 +76,9 @@ export const registerOrigoRoutes = ({ app, publicDir, requireAdmin, tileRenderer
         return res.json({ ok: false, attributes: [], warning: 'attributes_unavailable' });
       }
       const attributes = Array.isArray(result.attributes) ? result.attributes : [];
-      wfsAttributesCache.set(cacheKey, { ts: Date.now(), attributes });
+      if (attributes.length) {
+        wfsAttributesCache.set(cacheKey, { ts: Date.now(), attributes });
+      }
       return res.json({ ok: true, attributes });
     } catch (err) {
       console.warn('[Origo] wfs-attributes exception', { error: String(err?.message || err) });

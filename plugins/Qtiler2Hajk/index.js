@@ -2162,6 +2162,12 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
             addIssue('layer_attribute_not_found', `Layer "${name}" uses ${attrName} "${attr}", but that field was not found in the cached layer metadata.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name, attribute: attr });
           }
         }
+        for (const attr of Array.isArray(rule?.searchFields) ? rule.searchFields : []) {
+          const field = normalizeComparable(attr);
+          if (field && !fields.has(field)) {
+            addIssue('layer_attribute_not_found', `Layer "${name}" uses search field "${field}", but that field was not found in the cached layer metadata.`, { projectId: entry?.sourceProjectId || mainProjectId, layerName: name, attribute: field });
+          }
+        }
       }
     }
 
@@ -2263,11 +2269,11 @@ export const register = async ({ app, security, dataDir, baseDir, registerStore 
   };
 
   /**
-   * Read per-layer search config (searchAttribute/idAttribute/hintText) saved
+   * Read per-layer search config (search fields/id/label/hint) saved
    * by QtilerAuth's "Layer permissions" editor at
    * data/searchable-layers/<projectId>.json. This is the ONLY place that
-   * carries the actual chosen search attribute - the wfsSearchable boolean
-   * alone (from readProjectLayerFlags) doesn't say which field to search.
+   * carries the actual chosen search fields - the wfsSearchable boolean alone
+   * (from readProjectLayerFlags) doesn't say which fields to search.
    */
   const readSearchableLayerConfig = async (projectId) => {
     const safeName = sanitizeFileToken(projectId);
@@ -5342,6 +5348,9 @@ ${mapIcon}
           visible: layer.visible !== false,
           searchable: layer.searchable === true,
           searchAttribute: String(layer.searchAttribute || '').trim() || null,
+          searchFields: Array.isArray(layer.searchFields) && layer.searchFields.length
+            ? layer.searchFields
+            : (layer.searchAttribute ? [String(layer.searchAttribute).trim()] : []),
           idAttribute: String(layer.idAttribute || '').trim() || null,
           hintText: String(layer.hintText || '').trim() || null,
           style: styleName,
@@ -5836,10 +5845,15 @@ ${mapIcon}
            // explicitly marked it searchable (l.searchable) - previously
            // EVERY WFS/vector layer was added unconditionally, so Search
            // matched layers the admin never enabled search for. Restrict
-           // searchFields to the admin-picked l.searchAttribute (e.g. "name")
-           // when set, instead of matching against every attribute.
+           // searchFields to the admin-picked columns when set, instead of
+           // matching against every attribute.
            const searchAttributeName = String(l.searchAttribute || '').trim();
-           const searchFieldNames = searchAttributeName ? [searchAttributeName] : displayFieldNames;
+           const configuredSearchFields = Array.isArray(l.searchFields)
+             ? l.searchFields.map((field) => String(field || '').trim()).filter(Boolean)
+             : [];
+           const searchFieldNames = configuredSearchFields.length
+             ? configuredSearchFields
+             : (searchAttributeName ? [searchAttributeName] : displayFieldNames);
            if (l.searchable === true) {
              // Hajk's real Search tool (SearchModel.getFeatureLabels) calls
              // `source.displayFields.reduce(...)` directly on the entries of
@@ -6833,6 +6847,9 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           visible: layerSpec.visible !== false,
           searchable: layerSpec.searchable === true,
           searchAttribute: String(rule?.searchAttribute || layerSpec.searchAttribute || '').trim() || null,
+          searchFields: Array.isArray(rule?.searchFields) && rule.searchFields.length
+            ? rule.searchFields
+            : (Array.isArray(layerSpec.searchFields) ? layerSpec.searchFields : []),
           idAttribute: String(rule?.idAttribute || layerSpec.idAttribute || '').trim() || null,
           hintText: String(rule?.hintText || layerSpec.hintText || '').trim() || null,
           style: styleName,
@@ -8013,6 +8030,11 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
         const fallbackEditable = sourceLayer?.editable === true || qtilerAuthFlags?.wfsEditable === true;
         const fallbackServeAsWfs = sourceLayer?.serveAsWfs === true;
         const fallbackSearchAttribute = String(sourceLayer?.searchAttribute || qtilerAuthSearchable?.searchAttribute || '').trim() || null;
+        const fallbackSearchFields = Array.isArray(sourceLayer?.searchFields) && sourceLayer.searchFields.length
+          ? sourceLayer.searchFields
+          : (Array.isArray(qtilerAuthSearchable?.fields) && qtilerAuthSearchable.fields.length
+            ? qtilerAuthSearchable.fields
+            : (fallbackSearchAttribute ? [fallbackSearchAttribute] : []));
         const fallbackIdAttribute = String(sourceLayer?.idAttribute || qtilerAuthSearchable?.idAttribute || '').trim() || null;
         const fallbackGeometryAttribute = String(sourceLayer?.geometryAttribute || '').trim() || null;
         const fallbackHintText = String(sourceLayer?.hintText || qtilerAuthSearchable?.hintText || '').trim() || null;
@@ -8031,6 +8053,9 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
           editable: isTheme ? false : (typeof rule.editable === 'boolean' ? rule.editable : fallbackEditable),
           serveAsWfs: isTheme ? false : (rule.serveAsWfs === true),
           searchAttribute: String(rule.searchAttribute || '').trim() || fallbackSearchAttribute,
+          searchFields: Array.isArray(rule.searchFields) && rule.searchFields.length
+            ? rule.searchFields
+            : fallbackSearchFields,
           idAttribute: String(rule.idAttribute || '').trim() || fallbackIdAttribute,
           geometryAttribute: String(rule.geometryAttribute || '').trim() || fallbackGeometryAttribute,
           hintText: String(rule.hintText || '').trim() || fallbackHintText
@@ -9391,6 +9416,39 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
   });
 
   const { spawn } = await import('child_process');
+  const ensureSearchProjectsAccess = async (req, res, projectIds) => {
+    if (typeof security?.isEnabled !== 'function' || !security.isEnabled()) return true;
+    if (typeof security.ensureProjectAccess !== 'function') {
+      res.status(503).json({ error: 'project_access_unavailable' });
+      return false;
+    }
+
+    for (const projectId of projectIds) {
+      const allowed = await new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (value, error) => {
+          if (settled) return;
+          settled = true;
+          if (error) reject(error);
+          else resolve(value);
+        };
+        try {
+          const result = security.ensureProjectAccess(req, res, (error) => {
+            finish(!error, error);
+          }, projectId);
+          if (result && typeof result.then === 'function') {
+            result.then(() => finish(false), (error) => finish(false, error));
+          } else {
+            finish(false);
+          }
+        } catch (error) {
+          finish(false, error);
+        }
+      });
+      if (!allowed) return false;
+    }
+    return true;
+  };
   const searchHandler = async (req, res) => {
     try {
       const q = req.query.searchtext || req.query.query || req.query.q;
@@ -9412,6 +9470,7 @@ app.get(`/plugins/${pluginSlug}/hajk/index.json`, async (req, res, next) => {
       for (const pid of extraRaw.split(',').map((s) => sanitizeFileToken(s.trim())).filter(Boolean)) {
         if (!projectIds.includes(pid)) projectIds.push(pid);
       }
+      if (!await ensureSearchProjectsAccess(req, res, projectIds)) return;
 
       const qgisPrefix = process.env.QGIS_PREFIX || process.env.QGIS_PREFIX_PATH || '';
       // Use configured PYTHON_EXE, otherwise fallback to system python

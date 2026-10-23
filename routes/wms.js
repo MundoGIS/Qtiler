@@ -853,7 +853,7 @@ export const registerWmsRoutes = ({
   findProjectById,
   readProjectConfig = () => ({}),
   getServiceMetadata = () => ({}),
-  isPublicLayerExcludedForRequest = () => false
+  isPublicLayerUnavailableForService = () => false
 }) => {
   const legacyWmsTileCacheRoot = path.join(cacheDir, '_wms_tiles');
   const renderWithRetry = async (params, { signal } = {}) => {
@@ -940,7 +940,13 @@ export const registerWmsRoutes = ({
           console.warn('[WMS] Live queryable layer discovery failed:', err?.message || err);
         }
         const layers = Array.from(byName.values())
-          .filter((layer) => !isPublicLayerExcludedForRequest(req, projectId, layer?.name, [layer?.themeName, layer?.title]));
+          .filter((layer) => !isPublicLayerUnavailableForService(
+            req,
+            projectId,
+            layer?.name,
+            'wms',
+            [layer?.themeName, layer?.title]
+          ));
         const supportedCrs = publishedCrs.length ? publishedCrs : readSupportedCrsFromTileGrids({ tileGridDir });
         const mergedLayers = layers.map((layer) => {
           const localCrs = Array.isArray(layer.crs) ? layer.crs : [];
@@ -993,7 +999,7 @@ export const registerWmsRoutes = ({
           res.status(400).type("application/xml").send(wmsExceptionXml("LAYER is required"));
           return;
         }
-        if (isPublicLayerExcludedForRequest(req, projectId, layerName)) {
+        if (isPublicLayerUnavailableForService(req, projectId, layerName, 'wms')) {
           res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
@@ -1094,7 +1100,7 @@ export const registerWmsRoutes = ({
           res.status(400).type("application/xml").send(wmsExceptionXml("QUERY_LAYERS is required"));
           return;
         }
-        if (queryLayers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+        if (queryLayers.some((layerName) => isPublicLayerUnavailableForService(req, projectId, layerName, 'wms'))) {
           res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
@@ -1220,7 +1226,7 @@ export const registerWmsRoutes = ({
         }
 
         const queryLayers = parseCsv(getQueryCI(req, "LAYERS"));
-        if (queryLayers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+        if (queryLayers.some((layerName) => isPublicLayerUnavailableForService(req, projectId, layerName, 'wms'))) {
           res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
           return;
         }
@@ -1318,11 +1324,11 @@ export const registerWmsRoutes = ({
         mapTheme = String(layers[0]).slice('theme:'.length).trim();
         layers = [];
       }
-      if (mapTheme && isPublicLayerExcludedForRequest(req, projectId, `theme:${mapTheme}`, [mapTheme])) {
+      if (mapTheme && isPublicLayerUnavailableForService(req, projectId, `theme:${mapTheme}`, 'wms', [mapTheme])) {
         res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
         return;
       }
-      if (layers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+      if (layers.some((layerName) => isPublicLayerUnavailableForService(req, projectId, layerName, 'wms'))) {
         res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
         return;
       }
@@ -1379,7 +1385,7 @@ export const registerWmsRoutes = ({
       } catch {
         // ignore mapping failures and continue with original layers
       }
-      if (layers.some((layerName) => isPublicLayerExcludedForRequest(req, projectId, layerName))) {
+      if (layers.some((layerName) => isPublicLayerUnavailableForService(req, projectId, layerName, 'wms'))) {
         res.status(403).type("application/xml").send(wmsExceptionXml("Layer is not publicly available", { code: "SecurityError" }));
         return;
       }

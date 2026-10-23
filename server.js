@@ -1824,6 +1824,20 @@ const computeRecachePlan = ({ existingEntry, zoomMin, zoomMax, requestBody = {} 
   } else if (requestBody.recache === "incremental") {
     requestedMode = "incremental";
   }
+  if (requestedMode === "resume") {
+    const requestedTileCrs = requestBody.tile_crs ? String(requestBody.tile_crs).toUpperCase() : null;
+    const previousTileCrs = existingEntry.tile_crs ? String(existingEntry.tile_crs).toUpperCase() : null;
+    if (requestedTileCrs && previousTileCrs && requestedTileCrs !== previousTileCrs) {
+      return plan;
+    }
+    plan.mode = "resume";
+    plan.previousZoom = { min: prevMin, max: prevMax };
+    plan.skipExisting = true;
+    return plan;
+  }
+  if (sameRange) {
+    return plan;
+  }
   if (requestedMode !== "incremental") {
     return plan;
   }
@@ -1831,10 +1845,6 @@ const computeRecachePlan = ({ existingEntry, zoomMin, zoomMax, requestBody = {} 
   const requestedTileCrs = requestBody.tile_crs ? String(requestBody.tile_crs).toUpperCase() : null;
   const previousTileCrs = existingEntry.tile_crs ? String(existingEntry.tile_crs).toUpperCase() : null;
   if (requestedTileCrs && previousTileCrs && requestedTileCrs !== previousTileCrs) {
-    return plan;
-  }
-
-  if (sameRange) {
     return plan;
   }
 
@@ -2698,6 +2708,22 @@ const buildProjectConfigPatch = (input = {}) => {
       if (info.lastRunAt) themePatch.lastRunAt = info.lastRunAt;
       if (Array.isArray(info.sourceLayers)) themePatch.sourceLayers = info.sourceLayers.slice(0, 64);
       if (info.lastJobId) themePatch.lastJobId = info.lastJobId;
+      if (Object.prototype.hasOwnProperty.call(info, "extent")) {
+        themePatch.extent = normalizeExtentPatch(info.extent, { defaultCrs: null });
+      }
+      if (Object.prototype.hasOwnProperty.call(info, "extentWgs84")) {
+        themePatch.extentWgs84 = normalizeExtentPatch(info.extentWgs84, { defaultCrs: "EPSG:4326" });
+      } else if (Object.prototype.hasOwnProperty.call(info, "extent_wgs84")) {
+        themePatch.extentWgs84 = normalizeExtentPatch(info.extent_wgs84, { defaultCrs: "EPSG:4326" });
+      }
+      if (Object.prototype.hasOwnProperty.call(info, "zoom")) {
+        const zoomObj = info.zoom && typeof info.zoom === "object" ? info.zoom : {};
+        themePatch.zoom = {
+          min: Number.isFinite(Number(zoomObj.min)) ? Number(zoomObj.min) : null,
+          max: Number.isFinite(Number(zoomObj.max)) ? Number(zoomObj.max) : null,
+          updatedAt: zoomObj.updatedAt || new Date().toISOString()
+        };
+      }
       if (Object.prototype.hasOwnProperty.call(info, "schedule")) {
         if (info.schedule === null) {
           themePatch.schedule = {
@@ -2847,16 +2873,16 @@ const buildScheduledFallbackParams = (projectId, targetMode, targetName, config,
     return null;
   };
 
-  const resolvedZoomMin = Number.isFinite(Number(zoomMin))
+  const resolvedZoomMin = zoomMin != null && Number.isFinite(Number(zoomMin))
     ? Math.floor(Number(zoomMin))
-    : (Number.isFinite(Number(targetCfg?.zoom?.min))
+    : (targetCfg?.zoom?.min != null && Number.isFinite(Number(targetCfg.zoom.min))
       ? Math.floor(Number(targetCfg.zoom.min))
-      : (Number.isFinite(Number(cfg?.zoom?.min)) ? Math.floor(Number(cfg.zoom.min)) : null));
-  const resolvedZoomMax = Number.isFinite(Number(zoomMax))
+      : (cfg?.zoom?.min != null && Number.isFinite(Number(cfg.zoom.min)) ? Math.floor(Number(cfg.zoom.min)) : null));
+  const resolvedZoomMax = zoomMax != null && Number.isFinite(Number(zoomMax))
     ? Math.floor(Number(zoomMax))
-    : (Number.isFinite(Number(targetCfg?.zoom?.max))
+    : (targetCfg?.zoom?.max != null && Number.isFinite(Number(targetCfg.zoom.max))
       ? Math.floor(Number(targetCfg.zoom.max))
-      : (Number.isFinite(Number(cfg?.zoom?.max)) ? Math.floor(Number(cfg.zoom.max)) : null));
+      : (cfg?.zoom?.max != null && Number.isFinite(Number(cfg.zoom.max)) ? Math.floor(Number(cfg.zoom.max)) : null));
   if (resolvedZoomMin == null || resolvedZoomMax == null) {
     return null;
   }
@@ -5685,6 +5711,65 @@ const isPublicLayerExcludedForRequest = (req, projectId, layerName, aliases = []
     && isProjectLayerPublicExcluded(projectId, layerName, aliases);
 };
 
+const isProjectLayerUnavailableForService = (projectId, layerName, service, aliases = []) => {
+  const serviceFlag = {
+    wms: 'publicWms',
+    wfs: 'publicWfs',
+    wmts: 'publicWmts'
+  }[String(service || '').toLowerCase()];
+  if (!serviceFlag) return false;
+  if (isProjectLayerPublicExcluded(projectId, layerName, aliases)) return true;
+  const config = readProjectConfig(projectId, { useCache: false }) || {};
+  const layers = config.layers && typeof config.layers === 'object' ? config.layers : {};
+  const primaryName = String(layerName || '').trim();
+  const tokens = new Set([primaryName, ...(Array.isArray(aliases) ? aliases : [])]
+    .map(normalizeLayerAccessToken)
+    .filter(Boolean));
+  const restrictedFlags = (entry) => entry && typeof entry === 'object'
+    && (entry.publicExcluded === true || entry.excluded === true || entry[serviceFlag] === false);
+  if (/^theme:/i.test(primaryName)) {
+    const themeName = normalizeThemeName(primaryName);
+    const indexLayers = loadProjectIndexData(projectId)?.layers;
+    const indexEntries = Array.isArray(indexLayers) ? indexLayers : [];
+    const themeEntry = indexEntries.find((entry) => {
+      const kind = String(entry?.kind || (entry?.theme ? 'theme' : 'layer')).toLowerCase();
+      return (kind === 'theme' || /^theme:/i.test(String(entry?.name || '')))
+        && normalizeLayerAccessToken(normalizeThemeName(entry?.name || entry?.theme)) === normalizeLayerAccessToken(themeName);
+    });
+    const themeConfigEntry = Object.entries(layers).find(([name]) =>
+      tokens.has(normalizeLayerAccessToken(name))
+    )?.[1];
+    if (restrictedFlags(themeConfigEntry)) return true;
+    const sourceLayers = Array.isArray(themeEntry?.source_layers)
+      ? themeEntry.source_layers.map((name) => String(name || '').trim()).filter(Boolean)
+      : [];
+    if (sourceLayers.length) {
+      if (sourceLayers.some((sourceName) => {
+        const sourceEntry = Object.entries(layers).find(([name]) =>
+          normalizeLayerAccessToken(name) === normalizeLayerAccessToken(sourceName)
+        )?.[1];
+        return restrictedFlags(sourceEntry) || isProjectLayerPublicExcluded(projectId, sourceName);
+      })) {
+        return true;
+      }
+    } else if (Object.values(layers).some(restrictedFlags)) {
+      // Old theme indexes may not identify their source layers. Fail closed
+      // rather than exposing potentially restricted data through a theme.
+      return true;
+    }
+  }
+  for (const [name, entry] of Object.entries(layers)) {
+    if (!entry || typeof entry !== 'object' || entry[serviceFlag] !== false) continue;
+    if (tokens.has(normalizeLayerAccessToken(name))) return true;
+  }
+  return false;
+};
+
+const isPublicLayerUnavailableForService = (req, projectId, layerName, service, aliases = []) => {
+  if (!shouldApplyPublicLayerExclusionsForRequest(req, projectId)) return false;
+  return isProjectLayerUnavailableForService(projectId, layerName, service, aliases);
+};
+
 const filterPublicProjectLayersForRequest = (req, projectId, layers) => {
   if (!Array.isArray(layers) || !shouldApplyPublicLayerExclusionsForRequest(req, projectId)) return layers;
   return layers.filter((layer) => {
@@ -5716,15 +5801,20 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
     if (!entry || !entry.name) continue;
     const rawKindToken = typeof entry.kind === "string" ? entry.kind.toLowerCase() : (entry.theme ? "theme" : "layer");
     const kindToken = rawKindToken === "theme" || /^theme:/i.test(String(entry.name || '').trim()) ? "theme" : rawKindToken;
-    if (hidePublicExcludedLayers) {
-      const lookupName = kindToken === "theme"
-        ? `theme:${normalizeThemeName(entry.theme || String(entry.name || '').replace(/^theme:/i, ''))}`
-        : entry.name;
-      if (isProjectLayerPublicExcluded(projectId, lookupName, [entry.layer, entry.title, entry.id])) continue;
+    const lookupName = kindToken === "theme"
+      ? `theme:${normalizeThemeName(entry.theme || String(entry.name || '').replace(/^theme:/i, ''))}`
+      : entry.name;
+    const aliases = [entry.layer, entry.title, entry.id];
+    if (hidePublicExcludedLayers && isProjectLayerPublicExcluded(projectId, lookupName, aliases)) {
+      continue;
     }
     const clone = cloneIndexEntry(entry) || {};
     clone.kind = kindToken;
     clone.projectId = projectId;
+    clone.publicWms = !hidePublicExcludedLayers || !isProjectLayerUnavailableForService(projectId, lookupName, 'wms', aliases);
+    clone.publicWmts = !hidePublicExcludedLayers || !isProjectLayerUnavailableForService(projectId, lookupName, 'wmts', aliases);
+    clone.publicWfs = kindToken !== 'theme'
+      && (!hidePublicExcludedLayers || !isProjectLayerUnavailableForService(projectId, lookupName, 'wfs', aliases));
     if (kindToken === "theme") {
       clone.name = normalizeThemeName(clone.name);
       if (!clone.name) continue;
@@ -5754,6 +5844,14 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
     }
   }
 
+  const publicServiceAvailability = hidePublicExcludedLayers
+    ? {
+      wmts: [...layers, ...themes].some((entry) => entry.publicWmts),
+      wms: [...layers, ...themes].some((entry) => entry.publicWms),
+      wfs: layers.some((entry) => entry.publicWfs)
+    }
+    : { wmts: true, wms: true, wfs: true };
+
   return {
     id: projectId,
     name: project.name,
@@ -5765,6 +5863,7 @@ const buildProjectDescriptor = (project, { snapshot, access } = {}) => {
     wmtsUrl,
     wmsUrl,
     wfsUrl,
+    publicServices: publicServiceAvailability,
     cacheUpdatedAt,
     layers,
     themes,
@@ -6247,7 +6346,7 @@ registerWmsRoutes({
   findProjectById,
   readProjectConfig,
   getServiceMetadata: () => serviceMetadata,
-  isPublicLayerExcludedForRequest
+  isPublicLayerUnavailableForService
 });
 
 registerWfsRoutes({
@@ -6260,7 +6359,7 @@ registerWfsRoutes({
   readProjectConfig,
   getServiceMetadata: () => serviceMetadata,
   logProjectEvent,
-  isPublicLayerExcludedForRequest
+  isPublicLayerUnavailableForService
 });
 
 // generate-cache -> spawn para proceso largo (pasar args)
@@ -7522,6 +7621,16 @@ app.get(
     const layer = req.wmtsLayer;
     if (!layer || !layer.tileMatrixSet) {
       return res.status(404).send("Layer not available");
+    }
+    const isTheme = layer.storage?.type === 'theme';
+    if (isPublicLayerUnavailableForService(
+      req,
+      layer.project,
+      isTheme ? `theme:${layer.layerName}` : layer.layerName,
+      'wmts',
+      [layer.storage?.name, layer.layerKey]
+    )) {
+      return res.status(403).send('Layer is not publicly available');
     }
 
     // GIS clients (incl. QGIS) benefit a lot from HTTP caching.
@@ -9378,7 +9487,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
     return res.status(400).send('Invalid WMTS tile template parameters');
   }
   const sid = normalizeViewerSessionId(req.query && req.query.sid);
-  if (isPublicLayerExcludedForRequest(req, project, `theme:${theme}`, [theme])) {
+  if (isPublicLayerUnavailableForService(req, project, `theme:${theme}`, 'wmts', [theme])) {
     return res.status(403).send('Layer is not publicly available');
   }
   
@@ -9415,7 +9524,7 @@ app.get("/wmts/:project/themes/:theme/:z/:x/:y.png", ensureProjectAccess((req) =
 
   // Si no hay temas y existe la capa, usar fallback forzado
   if (!hasThemes && hasLayerWithName) {
-    if (isPublicLayerExcludedForRequest(req, project, theme)) {
+    if (isPublicLayerUnavailableForService(req, project, theme, 'wmts')) {
       return res.status(403).send('Layer is not publicly available');
     }
     const fallbackFile = path.join(cacheDir, project, theme, z, x, `${y}.png`);
@@ -9514,7 +9623,7 @@ app.post('/api/print', requireAdmin, async (req, res) => {
 
 app.get("/wmts/:project/:layer/:z/:x/:y.png", ensureProjectAccess((req) => req.params.project), (req, res) => {
   const { project, layer } = req.params;
-  if (isPublicLayerExcludedForRequest(req, project, layer)) {
+  if (isPublicLayerUnavailableForService(req, project, layer, 'wmts')) {
     return res.status(403).send('Layer is not publicly available');
   }
   const findQ = (name) => {
@@ -9650,7 +9759,13 @@ app.get("/wmts", (req, res, next) => {
           ...(projectAccessFilter ? { projectAccessFilter } : {}),
           excludeLayerFilter: ({ projectId, layerEntry, layerName, storageName, isTheme }) => {
             const publicName = isTheme ? `theme:${layerName}` : layerName;
-            return isPublicLayerExcludedForRequest(req, projectId, publicName, [storageName, layerEntry?.name, layerEntry?.layer, layerEntry?.theme, layerEntry?.title]);
+            return isPublicLayerUnavailableForService(
+              req,
+              projectId,
+              publicName,
+              'wmts',
+              [storageName, layerEntry?.name, layerEntry?.layer, layerEntry?.theme, layerEntry?.title]
+            );
           }
         });
         const { layers, tileMatrixSets } = inventory;
@@ -9921,7 +10036,13 @@ app.get("/wmts", (req, res, next) => {
     const projectId = String(layerEntry.projectId); // Forzar string para path.join
     const targetName = layerEntry.storage ? layerEntry.storage.name : layerEntry.layerName;
     const isTheme = layerEntry.storage ? layerEntry.storage.type === 'theme' : false;
-    if (isPublicLayerExcludedForRequest(req, projectId, isTheme ? `theme:${layerEntry.layerName}` : layerEntry.layerName, [targetName, layerEntry.identifier])) {
+    if (isPublicLayerUnavailableForService(
+      req,
+      projectId,
+      isTheme ? `theme:${layerEntry.layerName}` : layerEntry.layerName,
+      'wmts',
+      [targetName, layerEntry.identifier]
+    )) {
       return res.status(403).send('Layer is not publicly available');
     }
 
